@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Coins, Info, Check } from "lucide-react";
+import { ArrowLeft, Coins, Info, Check, UserPlus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,11 +12,13 @@ import { BottomNav } from "@/components/BottomNav";
 import { useCreateGroup } from "@/hooks/useThriftGroups";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { AddMembersDialog } from "@/components/AddMembersDialog";
 
 export default function CreateGroup() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { createGroup, loading: isLoading } = useCreateGroup();
+  const [createdGroup, setCreatedGroup] = useState<{ id: string; name: string } | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     maxMembers: 5,
@@ -38,7 +40,7 @@ export default function CreateGroup() {
     }
 
     try {
-      await createGroup({
+      const group = await createGroup({
         name: formData.name,
         maxMembers: formData.maxMembers,
         contributionAmount: formData.contributionAmount,
@@ -46,8 +48,8 @@ export default function CreateGroup() {
         autoDebit: formData.autoDebit,
       });
       
+      setCreatedGroup({ id: group.id, name: group.name });
       toast.success("Thrift group created successfully!");
-      navigate("/groups");
     } catch (error) {
       toast.error("Failed to create group. Please try again.");
     }
@@ -239,23 +241,42 @@ export default function CreateGroup() {
           By creating this group, you agree to our Terms of Service and the 2% service fee on all payouts.
         </p>
 
-        {/* Create Button */}
-        <Button
-          variant="hero"
-          size="xl"
-          className="w-full"
-          onClick={handleCreate}
-          disabled={!formData.name || isLoading}
-        >
-          {isLoading ? (
-            <div className="h-5 w-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
-          ) : (
-            <>
-              Create Group
-              <Check className="h-5 w-5" />
-            </>
-          )}
-        </Button>
+        {/* Create Button or Add Members */}
+        {createdGroup ? (
+          <div className="space-y-3">
+            <AddMembersDialog groupId={createdGroup.id} groupName={createdGroup.name}>
+              <Button variant="hero" size="xl" className="w-full">
+                <UserPlus className="h-5 w-5 mr-2" />
+                Add Members
+              </Button>
+            </AddMembersDialog>
+            <Button
+              variant="outline"
+              size="xl"
+              className="w-full"
+              onClick={() => navigate("/groups")}
+            >
+              Go to My Groups
+            </Button>
+          </div>
+        ) : (
+          <Button
+            variant="hero"
+            size="xl"
+            className="w-full"
+            onClick={handleCreate}
+            disabled={!formData.name || isLoading}
+          >
+            {isLoading ? (
+              <div className="h-5 w-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+            ) : (
+              <>
+                Create Group
+                <Check className="h-5 w-5" />
+              </>
+            )}
+          </Button>
+        )}
       </main>
 
       <BottomNav />
