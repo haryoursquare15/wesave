@@ -14,16 +14,377 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      group_memberships: {
+        Row: {
+          group_id: string
+          has_contributed_this_cycle: boolean | null
+          has_received_payout: boolean | null
+          id: string
+          joined_at: string | null
+          payout_position: number | null
+          status: Database["public"]["Enums"]["membership_status"]
+          user_id: string
+        }
+        Insert: {
+          group_id: string
+          has_contributed_this_cycle?: boolean | null
+          has_received_payout?: boolean | null
+          id?: string
+          joined_at?: string | null
+          payout_position?: number | null
+          status?: Database["public"]["Enums"]["membership_status"]
+          user_id: string
+        }
+        Update: {
+          group_id?: string
+          has_contributed_this_cycle?: boolean | null
+          has_received_payout?: boolean | null
+          id?: string
+          joined_at?: string | null
+          payout_position?: number | null
+          status?: Database["public"]["Enums"]["membership_status"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_memberships_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "public_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_memberships_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "thrift_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      group_wallets: {
+        Row: {
+          contribution_balance: number | null
+          created_at: string | null
+          group_id: string
+          id: string
+          updated_at: string | null
+        }
+        Insert: {
+          contribution_balance?: number | null
+          created_at?: string | null
+          group_id: string
+          id?: string
+          updated_at?: string | null
+        }
+        Update: {
+          contribution_balance?: number | null
+          created_at?: string | null
+          group_id?: string
+          id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_wallets_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: true
+            referencedRelation: "public_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_wallets_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: true
+            referencedRelation: "thrift_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pending_join_requests: {
+        Row: {
+          created_at: string | null
+          group_id: string
+          id: string
+          status: Database["public"]["Enums"]["request_status"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          group_id: string
+          id?: string
+          status?: Database["public"]["Enums"]["request_status"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          group_id?: string
+          id?: string
+          status?: Database["public"]["Enums"]["request_status"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pending_join_requests_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "public_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pending_join_requests_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "thrift_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          bank_account: string | null
+          bank_name: string | null
+          bvn: string | null
+          completed_cycles: number | null
+          created_at: string | null
+          credit_score: number | null
+          email: string | null
+          full_name: string | null
+          id: string
+          membership_tier: Database["public"]["Enums"]["membership_tier"]
+          phone: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          bank_account?: string | null
+          bank_name?: string | null
+          bvn?: string | null
+          completed_cycles?: number | null
+          created_at?: string | null
+          credit_score?: number | null
+          email?: string | null
+          full_name?: string | null
+          id: string
+          membership_tier?: Database["public"]["Enums"]["membership_tier"]
+          phone?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          bank_account?: string | null
+          bank_name?: string | null
+          bvn?: string | null
+          completed_cycles?: number | null
+          created_at?: string | null
+          credit_score?: number | null
+          email?: string | null
+          full_name?: string | null
+          id?: string
+          membership_tier?: Database["public"]["Enums"]["membership_tier"]
+          phone?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      thrift_groups: {
+        Row: {
+          admin_id: string
+          auto_debit: boolean | null
+          contribution_amount: number
+          created_at: string | null
+          current_cycle: number | null
+          description: string | null
+          id: string
+          invite_code: string | null
+          max_members: number
+          name: string
+          period: Database["public"]["Enums"]["contribution_period"]
+          rating: number | null
+          status: Database["public"]["Enums"]["group_status"]
+          updated_at: string | null
+        }
+        Insert: {
+          admin_id: string
+          auto_debit?: boolean | null
+          contribution_amount: number
+          created_at?: string | null
+          current_cycle?: number | null
+          description?: string | null
+          id?: string
+          invite_code?: string | null
+          max_members?: number
+          name: string
+          period?: Database["public"]["Enums"]["contribution_period"]
+          rating?: number | null
+          status?: Database["public"]["Enums"]["group_status"]
+          updated_at?: string | null
+        }
+        Update: {
+          admin_id?: string
+          auto_debit?: boolean | null
+          contribution_amount?: number
+          created_at?: string | null
+          current_cycle?: number | null
+          description?: string | null
+          id?: string
+          invite_code?: string | null
+          max_members?: number
+          name?: string
+          period?: Database["public"]["Enums"]["contribution_period"]
+          rating?: number | null
+          status?: Database["public"]["Enums"]["group_status"]
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      transactions: {
+        Row: {
+          amount: number
+          created_at: string | null
+          description: string | null
+          group_id: string | null
+          id: string
+          reference: string | null
+          status: Database["public"]["Enums"]["transaction_status"]
+          type: Database["public"]["Enums"]["transaction_type"]
+          user_id: string
+          wallet_id: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string | null
+          description?: string | null
+          group_id?: string | null
+          id?: string
+          reference?: string | null
+          status?: Database["public"]["Enums"]["transaction_status"]
+          type: Database["public"]["Enums"]["transaction_type"]
+          user_id: string
+          wallet_id?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string | null
+          description?: string | null
+          group_id?: string | null
+          id?: string
+          reference?: string | null
+          status?: Database["public"]["Enums"]["transaction_status"]
+          type?: Database["public"]["Enums"]["transaction_type"]
+          user_id?: string
+          wallet_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transactions_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "public_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "thrift_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_wallet_id_fkey"
+            columns: ["wallet_id"]
+            isOneToOne: false
+            referencedRelation: "wallets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wallets: {
+        Row: {
+          available_balance: number | null
+          created_at: string | null
+          id: string
+          locked_balance: number | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          available_balance?: number | null
+          created_at?: string | null
+          id?: string
+          locked_balance?: number | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          available_balance?: number | null
+          created_at?: string | null
+          id?: string
+          locked_balance?: number | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
-      [_ in never]: never
+      public_groups: {
+        Row: {
+          contribution_amount: number | null
+          id: string | null
+          max_members: number | null
+          member_count: number | null
+          name: string | null
+          pending_requests: number | null
+          period: Database["public"]["Enums"]["contribution_period"] | null
+          rating: number | null
+          status: Database["public"]["Enums"]["group_status"] | null
+        }
+        Insert: {
+          contribution_amount?: number | null
+          id?: string | null
+          max_members?: number | null
+          member_count?: never
+          name?: string | null
+          pending_requests?: never
+          period?: Database["public"]["Enums"]["contribution_period"] | null
+          rating?: number | null
+          status?: Database["public"]["Enums"]["group_status"] | null
+        }
+        Update: {
+          contribution_amount?: number | null
+          id?: string | null
+          max_members?: number | null
+          member_count?: never
+          name?: string | null
+          pending_requests?: never
+          period?: Database["public"]["Enums"]["contribution_period"] | null
+          rating?: number | null
+          status?: Database["public"]["Enums"]["group_status"] | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
-      [_ in never]: never
+      is_group_admin: { Args: { _group_id: string }; Returns: boolean }
+      is_group_member: { Args: { _group_id: string }; Returns: boolean }
     }
     Enums: {
-      [_ in never]: never
+      contribution_period: "daily" | "weekly" | "monthly"
+      group_status: "pending" | "active" | "completed" | "paused"
+      membership_status: "active" | "pending" | "removed"
+      membership_tier: "gold" | "silver" | "bronze" | "newbie"
+      request_status: "pending" | "approved" | "rejected"
+      transaction_status: "pending" | "completed" | "failed"
+      transaction_type:
+        | "contribution"
+        | "payout"
+        | "funding"
+        | "withdrawal"
+        | "lock"
+        | "unlock"
+        | "service_fee"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +511,22 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      contribution_period: ["daily", "weekly", "monthly"],
+      group_status: ["pending", "active", "completed", "paused"],
+      membership_status: ["active", "pending", "removed"],
+      membership_tier: ["gold", "silver", "bronze", "newbie"],
+      request_status: ["pending", "approved", "rejected"],
+      transaction_status: ["pending", "completed", "failed"],
+      transaction_type: [
+        "contribution",
+        "payout",
+        "funding",
+        "withdrawal",
+        "lock",
+        "unlock",
+        "service_fee",
+      ],
+    },
   },
 } as const
