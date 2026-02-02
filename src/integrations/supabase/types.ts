@@ -14,6 +14,54 @@ export type Database = {
   }
   public: {
     Tables: {
+      group_invitations: {
+        Row: {
+          created_at: string
+          created_by: string
+          expires_at: string | null
+          group_id: string
+          id: string
+          invite_token: string
+          max_uses: number | null
+          use_count: number | null
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          expires_at?: string | null
+          group_id: string
+          id?: string
+          invite_token?: string
+          max_uses?: number | null
+          use_count?: number | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          expires_at?: string | null
+          group_id?: string
+          id?: string
+          invite_token?: string
+          max_uses?: number | null
+          use_count?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_invitations_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "public_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_invitations_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "thrift_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       group_memberships: {
         Row: {
           group_id: string
@@ -101,6 +149,45 @@ export type Database = {
           },
         ]
       }
+      pending_invitees: {
+        Row: {
+          created_at: string
+          email: string | null
+          group_id: string
+          id: string
+          invite_token: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          group_id: string
+          id?: string
+          invite_token: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          group_id?: string
+          id?: string
+          invite_token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pending_invitees_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "public_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pending_invitees_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "thrift_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pending_join_requests: {
         Row: {
           created_at: string | null
@@ -155,6 +242,7 @@ export type Database = {
           membership_tier: Database["public"]["Enums"]["membership_tier"]
           phone: string | null
           updated_at: string | null
+          username: string | null
         }
         Insert: {
           avatar_url?: string | null
@@ -170,6 +258,7 @@ export type Database = {
           membership_tier?: Database["public"]["Enums"]["membership_tier"]
           phone?: string | null
           updated_at?: string | null
+          username?: string | null
         }
         Update: {
           avatar_url?: string | null
@@ -185,6 +274,7 @@ export type Database = {
           membership_tier?: Database["public"]["Enums"]["membership_tier"]
           phone?: string | null
           updated_at?: string | null
+          username?: string | null
         }
         Relationships: []
       }
@@ -367,8 +457,37 @@ export type Database = {
       }
     }
     Functions: {
+      add_member_to_group: {
+        Args: { target_group_id: string; target_user_id: string }
+        Returns: Json
+      }
       is_group_admin: { Args: { _group_id: string }; Returns: boolean }
       is_group_member: { Args: { _group_id: string }; Returns: boolean }
+      join_group_via_invite: { Args: { token: string }; Returns: Json }
+      search_users: {
+        Args: { search_term: string }
+        Returns: {
+          avatar_url: string
+          credit_score: number
+          full_name: string
+          id: string
+          membership_tier: Database["public"]["Enums"]["membership_tier"]
+          username: string
+        }[]
+      }
+      validate_invite_token: {
+        Args: { token: string }
+        Returns: {
+          contribution_amount: number
+          error_message: string
+          group_id: string
+          group_name: string
+          max_members: number
+          member_count: number
+          period: Database["public"]["Enums"]["contribution_period"]
+          valid: boolean
+        }[]
+      }
     }
     Enums: {
       contribution_period: "daily" | "weekly" | "monthly"

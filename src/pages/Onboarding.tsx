@@ -1,11 +1,15 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowRight, ArrowLeft, Building2, CreditCard, User, Check, Shield } from "lucide-react";
+import { ArrowRight, ArrowLeft, Building2, CreditCard, User, Check, Shield, AtSign } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { useJoinGroupViaInvite } from "@/hooks/useGroupInvites";
+import { toast } from "sonner";
 
 const banks = [
   "Access Bank",
@@ -21,32 +25,116 @@ const banks = [
 ];
 
 const steps = [
-  { id: 1, title: "Verify Identity", icon: Shield },
-  { id: 2, title: "Bank Details", icon: Building2 },
-  { id: 3, title: "Link Card", icon: CreditCard },
+  { id: 1, title: "Create Username", icon: AtSign },
+  { id: 2, title: "Verify Identity", icon: Shield },
+  { id: 3, title: "Bank Details", icon: Building2 },
+  { id: 4, title: "Link Card", icon: CreditCard },
 ];
 
 export default function Onboarding() {
   const navigate = useNavigate();
+  const { user, refreshProfile } = useAuth();
+  const { joinGroup } = useJoinGroupViaInvite();
   const [currentStep, setCurrentStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
+  const [usernameError, setUsernameError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
+    username: "",
     bvn: "",
     bankName: "",
     accountNumber: "",
     accountName: "",
   });
 
+  // Check for pending invite token
+  const pendingInviteToken = sessionStorage.getItem("pending_invite_token");
+
+  const validateUsername = async (username: string) => {
+    if (!username || username.length < 3) {
+      setUsernameError("Username must be at least 3 characters");
+      return false;
+    }
+
+    if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+      setUsernameError("Username can only contain letters, numbers, and underscores");
+      return false;
+    }
+
+    // Check if username is taken
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("username", username.toLowerCase())
+      .neq("id", user?.id || "")
+      .maybeSingle();
+
+    if (data) {
+      setUsernameError("This username is already taken");
+      return false;
+    }
+
+    setUsernameError(null);
+    return true;
+  };
+
   const handleNext = async () => {
-    if (currentStep < 3) {
+    if (currentStep === 1) {
+      const isValid = await validateUsername(formData.username);
+      if (!isValid) return;
+    }
+
+    if (currentStep < 4) {
       setCurrentStep(currentStep + 1);
     } else {
-      setIsLoading(true);
-      // Simulate API call
-      setTimeout(() => {
-        setIsLoading(false);
-        navigate("/dashboard");
-      }, 2000);
+      await handleComplete();
+    }
+  };
+
+  const handleComplete = async () => {
+    if (!user) {
+      toast.error("Please sign in first");
+      navigate("/auth");
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      // Update profile with onboarding data
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({
+          username: formData.username.toLowerCase(),
+          bvn: formData.bvn || null,
+          bank_name: formData.bankName || null,
+          bank_account: formData.accountNumber || null,
+        })
+        .eq("id", user.id);
+
+      if (updateError) throw updateError;
+
+      // Refresh profile data in context
+      await refreshProfile();
+
+      // Check for pending invite and join group
+      if (pendingInviteToken) {
+        try {
+          const result = await joinGroup(pendingInviteToken);
+          sessionStorage.removeItem("pending_invite_token");
+          toast.success("You've joined the group!");
+        } catch (err) {
+          console.error("Failed to join group via invite:", err);
+          // Still continue to dashboard even if join fails
+        }
+      }
+
+      toast.success("Profile setup complete!");
+      navigate("/dashboard");
+    } catch (error) {
+      console.error("Onboarding error:", error);
+      toast.error("Failed to save profile. Please try again.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -56,12 +144,97 @@ export default function Onboarding() {
     }
   };
 
+  const handleSkip = async () => {
+    if (user) {
+      // Save username if provided
+      if (formData.username) {
+        const isValid = await validateUsername(formData.username);
+        if (isValid) {
+          await supabase
+            .from("profiles")
+            .update({ username: formData.username.toLowerCase() })
+            .eq("id", user.id);
+        }
+      }
+
+      // Handle pending invite
+      if (pendingInviteToken) {
+        try {
+          await joinGroup(pendingInviteToken);
+          sessionStorage.removeItem("pending_invite_token");
+          toast.success("You've joined the group!");
+        } catch (err) {
+          console.error("Failed to join group via invite:", err);
+        }
+      }
+    }
+    navigate("/dashboard");
+  };
+
   const renderStep = () => {
     switch (currentStep) {
       case 1:
         return (
           <motion.div
             key="step1"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            className="space-y-6"
+          >
+            <div className="text-center mb-8">
+              <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                <AtSign className="h-8 w-8 text-primary" />
+              </div>
+              <h2 className="text-2xl font-bold text-foreground mb-2">
+                Choose Your Username
+              </h2>
+              <p className="text-muted-foreground">
+                Pick a unique username so others can find and invite you to groups
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="username">Username</Label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">@</span>
+                <Input
+                  id="username"
+                  type="text"
+                  placeholder="yourname"
+                  className="h-12 pl-8"
+                  value={formData.username}
+                  onChange={(e) => {
+                    setFormData({ ...formData, username: e.target.value.replace(/\s/g, "") });
+                    setUsernameError(null);
+                  }}
+                />
+              </div>
+              {usernameError && (
+                <p className="text-xs text-destructive">{usernameError}</p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Only letters, numbers, and underscores. Minimum 3 characters.
+              </p>
+            </div>
+
+            {pendingInviteToken && (
+              <div className="p-4 rounded-xl bg-primary/10 border border-primary/20">
+                <p className="text-sm text-primary font-medium">
+                  You have a pending group invitation!
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Complete your profile to join the group automatically.
+                </p>
+              </div>
+            )}
+          </motion.div>
+        );
+
+      case 2:
+        return (
+          <motion.div
+            key="step2"
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
@@ -99,10 +272,10 @@ export default function Onboarding() {
           </motion.div>
         );
 
-      case 2:
+      case 3:
         return (
           <motion.div
-            key="step2"
+            key="step3"
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
@@ -177,10 +350,10 @@ export default function Onboarding() {
           </motion.div>
         );
 
-      case 3:
+      case 4:
         return (
           <motion.div
-            key="step3"
+            key="step4"
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
@@ -242,10 +415,10 @@ export default function Onboarding() {
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between mb-4">
             <span className="text-sm text-muted-foreground">
-              Step {currentStep} of 3
+              Step {currentStep} of 4
             </span>
             <button
-              onClick={() => navigate("/dashboard")}
+              onClick={handleSkip}
               className="text-sm text-primary hover:underline"
             >
               Skip for now
@@ -273,7 +446,7 @@ export default function Onboarding() {
                 </div>
                 {index < steps.length - 1 && (
                   <div
-                    className={`w-12 h-1 mx-2 rounded-full transition-colors ${
+                    className={`w-8 h-1 mx-1 rounded-full transition-colors ${
                       currentStep > step.id ? "bg-success" : "bg-muted"
                     }`}
                   />
@@ -302,11 +475,11 @@ export default function Onboarding() {
             variant="hero"
             onClick={handleNext}
             className="flex-1"
-            disabled={isLoading}
+            disabled={isLoading || (currentStep === 1 && !formData.username)}
           >
             {isLoading ? (
               <div className="h-5 w-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
-            ) : currentStep === 3 ? (
+            ) : currentStep === 4 ? (
               <>
                 Complete Setup
                 <Check className="h-4 w-4 ml-2" />
