@@ -1,7 +1,6 @@
 import { Home, Users, Plus, Wallet, User } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { motion } from "framer-motion";
 
 const navItems = [
   { icon: Home, label: "Home", path: "/dashboard" },
@@ -24,13 +23,9 @@ export function BottomNav() {
           if (item.isMain) {
             return (
               <Link key={item.path} to={item.path} className="-mt-6">
-                <motion.div
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="h-14 w-14 rounded-full bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-lg shadow-primary/30"
-                >
+                <div className="h-14 w-14 rounded-full bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-lg shadow-primary/30 hover:scale-105 active:scale-95 transition-transform">
                   <Icon className="h-6 w-6 text-primary-foreground" />
-                </motion.div>
+                </div>
               </Link>
             );
           }
@@ -39,7 +34,7 @@ export function BottomNav() {
             <Link
               key={item.path}
               to={item.path}
-              className="flex flex-col items-center justify-center gap-1 py-2 px-3"
+              className="flex flex-col items-center justify-center gap-1 py-2 px-3 relative"
             >
               <Icon
                 className={cn(
@@ -56,10 +51,7 @@ export function BottomNav() {
                 {item.label}
               </span>
               {isActive && (
-                <motion.div
-                  layoutId="activeTab"
-                  className="absolute -bottom-px h-0.5 w-8 bg-primary rounded-full"
-                />
+                <div className="absolute -bottom-px h-0.5 w-8 bg-primary rounded-full" />
               )}
             </Link>
           );
