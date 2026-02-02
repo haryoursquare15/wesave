@@ -1,80 +1,45 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Search, Filter, Users, TrendingUp } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { ThriftGroupCard } from "@/components/ThriftGroupCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BottomNav } from "@/components/BottomNav";
 import { Badge } from "@/components/ui/badge";
-
-// Mock data
-const myGroups = [
-  {
-    id: "1",
-    name: "Family Savings Circle",
-    rating: 4.5,
-    memberCount: 5,
-    maxMembers: 6,
-    contributionAmount: 50000,
-    period: "weekly" as const,
-    isMember: true,
-    isActive: true,
-    pendingRequests: 2,
-  },
-  {
-    id: "2",
-    name: "Office Thrift Club",
-    rating: 4.8,
-    memberCount: 10,
-    maxMembers: 10,
-    contributionAmount: 25000,
-    period: "monthly" as const,
-    isMember: true,
-    isActive: true,
-    pendingRequests: 0,
-  },
-];
-
-const poolGroups = [
-  {
-    id: "3",
-    name: "Lagos Savers Network",
-    rating: 4.9,
-    memberCount: 15,
-    maxMembers: 15,
-    contributionAmount: 100000,
-    period: "monthly" as const,
-    isMember: false,
-    isActive: false,
-  },
-  {
-    id: "4",
-    name: "Tech Bros Thrift",
-    rating: 4.2,
-    memberCount: 8,
-    maxMembers: 8,
-    contributionAmount: 75000,
-    period: "weekly" as const,
-    isMember: false,
-    isActive: true,
-  },
-  {
-    id: "5",
-    name: "Hustlers Fund",
-    rating: 3.8,
-    memberCount: 12,
-    maxMembers: 12,
-    contributionAmount: 30000,
-    period: "daily" as const,
-    isMember: false,
-    isActive: false,
-  },
-];
+import { useAuth } from "@/contexts/AuthContext";
+import { useMyGroups, usePoolGroups } from "@/hooks/useThriftGroups";
 
 export default function Groups() {
+  const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
+  const { groups: myGroups, loading: myGroupsLoading } = useMyGroups();
+  const { groups: poolGroups, loading: poolGroupsLoading } = usePoolGroups();
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Redirect to auth if not logged in
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate("/auth");
+    }
+  }, [user, authLoading, navigate]);
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="h-8 w-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  const filteredMyGroups = myGroups.filter(group =>
+    group.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const filteredPoolGroups = poolGroups
+    .filter(group => !group.isMember)
+    .filter(group => group.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -116,16 +81,32 @@ export default function Groups() {
             <TabsTrigger value="pool" className="flex items-center gap-2">
               Pool
               <Badge variant="secondary" className="text-xs">
-                {poolGroups.length}
+                {filteredPoolGroups.length}
               </Badge>
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="my-groups" className="space-y-4">
-            {myGroups.length > 0 ? (
-              myGroups.map((group) => (
+            {myGroupsLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="h-6 w-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+              </div>
+            ) : filteredMyGroups.length > 0 ? (
+              filteredMyGroups.map((group) => (
                 <Link key={group.id} to={`/groups/${group.id}`}>
-                  <ThriftGroupCard {...group} onClick={() => {}} />
+                  <ThriftGroupCard
+                    id={group.id}
+                    name={group.name}
+                    rating={Number(group.rating) || 0}
+                    memberCount={group.memberCount}
+                    maxMembers={group.max_members}
+                    contributionAmount={Number(group.contribution_amount)}
+                    period={group.period}
+                    isMember={true}
+                    isActive={group.status === "active"}
+                    pendingRequests={group.pendingRequests}
+                    onClick={() => {}}
+                  />
                 </Link>
               ))
             ) : (
@@ -171,11 +152,34 @@ export default function Groups() {
             </motion.div>
 
             {/* Pool Groups */}
-            <div className="space-y-4">
-              {poolGroups.map((group) => (
-                <ThriftGroupCard key={group.id} {...group} />
-              ))}
-            </div>
+            {poolGroupsLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="h-6 w-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+              </div>
+            ) : filteredPoolGroups.length > 0 ? (
+              <div className="space-y-4">
+                {filteredPoolGroups.map((group) => (
+                  <ThriftGroupCard
+                    key={group.id}
+                    id={group.id}
+                    name={group.name}
+                    rating={Number(group.rating) || 0}
+                    memberCount={group.memberCount}
+                    maxMembers={group.max_members}
+                    contributionAmount={Number(group.contribution_amount)}
+                    period={group.period}
+                    isMember={false}
+                    isActive={group.status === "active"}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <p className="text-muted-foreground">
+                  No groups available in the pool yet
+                </p>
+              </div>
+            )}
           </TabsContent>
         </Tabs>
       </main>

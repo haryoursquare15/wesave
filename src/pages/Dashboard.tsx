@@ -1,48 +1,47 @@
 import { motion } from "framer-motion";
 import { Plus, Bell, Search } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { WalletCard } from "@/components/WalletCard";
 import { ThriftGroupCard } from "@/components/ThriftGroupCard";
 import { UserBadge } from "@/components/UserBadge";
 import { Button } from "@/components/ui/button";
 import { BottomNav } from "@/components/BottomNav";
-
-// Mock data
-const myGroups = [
-  {
-    id: "1",
-    name: "Family Savings Circle",
-    rating: 4.5,
-    memberCount: 5,
-    maxMembers: 6,
-    contributionAmount: 50000,
-    period: "weekly" as const,
-    isMember: true,
-    isActive: true,
-    pendingRequests: 2,
-  },
-  {
-    id: "2",
-    name: "Office Thrift Club",
-    rating: 4.8,
-    memberCount: 10,
-    maxMembers: 10,
-    contributionAmount: 25000,
-    period: "monthly" as const,
-    isMember: true,
-    isActive: true,
-    pendingRequests: 0,
-  },
-];
+import { useAuth } from "@/contexts/AuthContext";
+import { useMyGroups } from "@/hooks/useThriftGroups";
+import { useEffect } from "react";
 
 const quickActions = [
   { label: "Fund Wallet", icon: "💰" },
-  { label: "New Group", icon: "👥" },
+  { label: "New Group", icon: "👥", link: "/create-group" },
   { label: "Invite", icon: "📨" },
   { label: "Lock Funds", icon: "🔒" },
 ];
 
 export default function Dashboard() {
+  const navigate = useNavigate();
+  const { user, profile, wallet, loading: authLoading } = useAuth();
+  const { groups, loading: groupsLoading } = useMyGroups();
+
+  // Redirect to auth if not logged in
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate("/auth");
+    }
+  }, [user, authLoading, navigate]);
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="h-8 w-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  const getInitials = (name: string | null | undefined) => {
+    if (!name) return "U";
+    return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
+  };
+
   return (
     <div className="min-h-screen bg-background pb-20">
       {/* Header */}
@@ -51,19 +50,21 @@ export default function Dashboard() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center text-primary-foreground font-semibold">
-                JD
+                {getInitials(profile?.full_name)}
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Welcome back,</p>
-                <h2 className="font-semibold text-foreground">John Doe</h2>
+                <h2 className="font-semibold text-foreground">
+                  {profile?.full_name || user?.email?.split("@")[0] || "User"}
+                </h2>
               </div>
-              <UserBadge type="silver" size="sm" />
+              <UserBadge type={profile?.membership_tier || "newbie"} size="sm" />
             </div>
             <div className="flex items-center gap-2">
               <Button variant="ghost" size="icon" className="relative">
                 <Bell className="h-5 w-5" />
                 <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-coral text-[10px] text-coral-foreground flex items-center justify-center">
-                  3
+                  0
                 </span>
               </Button>
               <Button variant="ghost" size="icon">
@@ -77,8 +78,8 @@ export default function Dashboard() {
       <main className="container mx-auto px-4 py-6 space-y-6">
         {/* Wallet Card */}
         <WalletCard
-          balance={250000}
-          lockedBalance={50000}
+          balance={Number(wallet?.available_balance) || 0}
+          lockedBalance={Number(wallet?.locked_balance) || 0}
           onFund={() => console.log("Fund")}
           onWithdraw={() => console.log("Withdraw")}
         />
@@ -90,6 +91,7 @@ export default function Dashboard() {
               key={action.label}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
+              onClick={() => action.link && navigate(action.link)}
               className="flex flex-col items-center gap-2 p-4 rounded-xl bg-card border border-border hover:border-primary/30 transition-colors"
             >
               <span className="text-2xl">{action.icon}</span>
@@ -111,11 +113,38 @@ export default function Dashboard() {
             </Link>
           </div>
 
-          <div className="space-y-4">
-            {myGroups.map((group) => (
-              <ThriftGroupCard key={group.id} {...group} />
-            ))}
-          </div>
+          {groupsLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="h-6 w-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+            </div>
+          ) : groups.length > 0 ? (
+            <div className="space-y-4">
+              {groups.slice(0, 3).map((group) => (
+                <ThriftGroupCard
+                  key={group.id}
+                  id={group.id}
+                  name={group.name}
+                  rating={Number(group.rating) || 0}
+                  memberCount={group.memberCount}
+                  maxMembers={group.max_members}
+                  contributionAmount={Number(group.contribution_amount)}
+                  period={group.period}
+                  isMember={group.isMember}
+                  isActive={group.status === "active"}
+                  pendingRequests={group.pendingRequests}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <p>You haven't joined any thrift groups yet.</p>
+              <Link to="/create-group">
+                <Button variant="link" className="mt-2">
+                  Create your first group
+                </Button>
+              </Link>
+            </div>
+          )}
         </section>
 
         {/* Create Group CTA */}

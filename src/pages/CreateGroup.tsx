@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Users, Calendar, Coins, Info, Link2, Check } from "lucide-react";
+import { ArrowLeft, Coins, Info, Check } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,25 +9,48 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { BottomNav } from "@/components/BottomNav";
+import { useCreateGroup } from "@/hooks/useThriftGroups";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 
 export default function CreateGroup() {
   const navigate = useNavigate();
-  const [isLoading, setIsLoading] = useState(false);
+  const { user } = useAuth();
+  const { createGroup, loading: isLoading } = useCreateGroup();
   const [formData, setFormData] = useState({
     name: "",
     maxMembers: 5,
     contributionAmount: 10000,
-    period: "weekly",
+    period: "weekly" as "daily" | "weekly" | "monthly",
     autoDebit: true,
   });
 
   const handleCreate = async () => {
-    setIsLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false);
+    if (!user) {
+      toast.error("You must be logged in to create a group");
+      navigate("/auth");
+      return;
+    }
+
+    if (!formData.name.trim()) {
+      toast.error("Please enter a group name");
+      return;
+    }
+
+    try {
+      await createGroup({
+        name: formData.name,
+        maxMembers: formData.maxMembers,
+        contributionAmount: formData.contributionAmount,
+        period: formData.period,
+        autoDebit: formData.autoDebit,
+      });
+      
+      toast.success("Thrift group created successfully!");
       navigate("/groups");
-    }, 1500);
+    } catch (error) {
+      toast.error("Failed to create group. Please try again.");
+    }
   };
 
   const formatAmount = (amount: number) => {
@@ -139,7 +162,7 @@ export default function CreateGroup() {
           <Label>Contribution Period</Label>
           <Select
             value={formData.period}
-            onValueChange={(value) => setFormData({ ...formData, period: value })}
+            onValueChange={(value: "daily" | "weekly" | "monthly") => setFormData({ ...formData, period: value })}
           >
             <SelectTrigger className="h-12">
               <SelectValue />
