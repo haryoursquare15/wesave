@@ -16,6 +16,68 @@ function getCorsHeaders(origin: string | null): Record<string, string> {
   };
 }
 
+// Decryption helper for AES-256-GCM encrypted data
+async function decrypt(ciphertext: string): Promise<string> {
+  const keyHex = Deno.env.get('ENCRYPTION_KEY');
+  if (!keyHex) {
+    throw new Error('Encryption key not configured');
+  }
+  
+  const keyBytes = new Uint8Array(keyHex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+  const key = await crypto.subtle.importKey(
+    'raw',
+    keyBytes,
+    { name: 'AES-GCM' },
+    false,
+    ['decrypt']
+  );
+  
+  const combined = Uint8Array.from(atob(ciphertext), c => c.charCodeAt(0));
+  const iv = combined.slice(0, 12);
+  const encrypted = combined.slice(12);
+  
+  const decrypted = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv },
+    key,
+    encrypted
+  );
+  
+  return new TextDecoder().decode(decrypted);
+}
+
+// Helper to get decrypted profile data
+async function getDecryptedProfileData(profile: Record<string, unknown>): Promise<{
+  bvn: string | null;
+  bank_account: string | null;
+  bank_name: string | null;
+  phone: string | null;
+}> {
+  // Try encrypted fields first, fall back to plaintext for migration period
+  let bvn = profile.bvn as string | null;
+  let bank_account = profile.bank_account as string | null;
+  let bank_name = profile.bank_name as string | null;
+  let phone = profile.phone as string | null;
+  
+  try {
+    if (profile.bvn_encrypted) {
+      bvn = await decrypt(profile.bvn_encrypted as string);
+    }
+    if (profile.bank_account_encrypted) {
+      bank_account = await decrypt(profile.bank_account_encrypted as string);
+    }
+    if (profile.bank_name_encrypted) {
+      bank_name = await decrypt(profile.bank_name_encrypted as string);
+    }
+    if (profile.phone_encrypted) {
+      phone = await decrypt(profile.phone_encrypted as string);
+    }
+  } catch (error) {
+    console.error('Decryption error, using plaintext fallback:', error);
+  }
+  
+  return { bvn, bank_account, bank_name, phone };
+}
+
 const FLUTTERWAVE_BASE_URL = "https://api.flutterwave.com/v3";
 
 serve(async (req) => {
@@ -54,14 +116,23 @@ serve(async (req) => {
     const { action, ...params } = await req.json();
     console.log(`Processing action: ${action} for user: ${user.id}`);
 
+    // Log audit event for sensitive operations
+    await supabase.rpc('log_audit_event', {
+      _user_id: user.id,
+      _action: action,
+      _resource_type: 'financial',
+      _resource_id: null,
+      _details: { timestamp: new Date().toISOString() }
+    });
+
     let result;
 
     switch (action) {
       case 'create_virtual_account': {
-        // Get user profile
+        // Get user profile with encrypted fields
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
-          .select('*')
+          .select('*, bvn_encrypted, bank_account_encrypted, bank_name_encrypted, phone_encrypted')
           .eq('id', user.id)
           .single();
 
@@ -69,7 +140,10 @@ serve(async (req) => {
           throw new Error('Profile not found');
         }
 
-        if (!profile.bvn || !profile.bank_account || !profile.bank_name) {
+        // Decrypt sensitive data
+        const decryptedData = await getDecryptedProfileData(profile);
+
+        if (!decryptedData.bvn || !decryptedData.bank_account || !decryptedData.bank_name) {
           throw new Error('Please complete onboarding with BVN and bank details');
         }
 
@@ -86,7 +160,7 @@ serve(async (req) => {
           break;
         }
 
-        // Create virtual account via Flutterwave
+        // Create virtual account via Flutterwave using decrypted BVN
         const virtualAccountResponse = await fetch(`${FLUTTERWAVE_BASE_URL}/virtual-account-numbers`, {
           method: 'POST',
           headers: {
@@ -96,9 +170,9 @@ serve(async (req) => {
           body: JSON.stringify({
             email: user.email,
             is_permanent: true,
-            bvn: profile.bvn,
+            bvn: decryptedData.bvn,
             tx_ref: `user-${user.id}-${Date.now()}`,
-            phonenumber: profile.phone || '',
+            phonenumber: decryptedData.phone || '',
             firstname: profile.full_name?.split(' ')[0] || 'User',
             lastname: profile.full_name?.split(' ').slice(1).join(' ') || 'ThriftPal',
             narration: `${profile.full_name || 'ThriftPal User'} Wallet`,
@@ -166,14 +240,17 @@ serve(async (req) => {
           break;
         }
 
-        // Get admin profile for settlement
+        // Get admin profile for settlement with encrypted fields
         const { data: adminProfile } = await supabase
           .from('profiles')
-          .select('*')
+          .select('*, bvn_encrypted, bank_account_encrypted, bank_name_encrypted, phone_encrypted')
           .eq('id', user.id)
           .single();
 
-        // Create subaccount for group
+        // Decrypt admin's sensitive data for Flutterwave
+        const adminDecrypted = adminProfile ? await getDecryptedProfileData(adminProfile) : null;
+
+        // Create subaccount for group using decrypted bank details
         const subaccountResponse = await fetch(`${FLUTTERWAVE_BASE_URL}/subaccounts`, {
           method: 'POST',
           headers: {
@@ -181,13 +258,13 @@ serve(async (req) => {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            account_bank: adminProfile?.bank_name || 'PLACEHOLDER',
-            account_number: adminProfile?.bank_account || '0000000000',
+            account_bank: adminDecrypted?.bank_name || 'PLACEHOLDER',
+            account_number: adminDecrypted?.bank_account || '0000000000',
             business_name: `ThriftPal - ${group.name}`,
             business_email: user.email,
             business_contact: adminProfile?.full_name || 'Admin',
-            business_contact_mobile: adminProfile?.phone || '+234',
-            business_mobile: adminProfile?.phone || '+234',
+            business_contact_mobile: adminDecrypted?.phone || '+234',
+            business_mobile: adminDecrypted?.phone || '+234',
             country: 'NG',
             split_type: 'percentage',
             split_value: 0.02, // 2% platform fee

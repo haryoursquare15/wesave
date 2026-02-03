@@ -1,1 +1,13 @@
 project_id = "sdwkqwmqgpsjrmijkdix"
+
+[functions.flutterwave-payments]
+verify_jwt = false
+
+[functions.flutterwave-subaccount]
+verify_jwt = false
+
+[functions.flutterwave-webhook]
+verify_jwt = false
+
+[functions.encryption-utils]
+verify_jwt = false

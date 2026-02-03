@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      audit_logs: {
+        Row: {
+          action: string
+          created_at: string
+          details: Json | null
+          id: string
+          ip_address: string | null
+          resource_id: string | null
+          resource_type: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          ip_address?: string | null
+          resource_id?: string | null
+          resource_type: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          ip_address?: string | null
+          resource_id?: string | null
+          resource_type?: string
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       chat_messages: {
         Row: {
           created_at: string
@@ -512,8 +548,11 @@ export type Database = {
         Row: {
           avatar_url: string | null
           bank_account: string | null
+          bank_account_encrypted: string | null
           bank_name: string | null
+          bank_name_encrypted: string | null
           bvn: string | null
+          bvn_encrypted: string | null
           completed_cycles: number | null
           created_at: string | null
           credit_score: number | null
@@ -526,14 +565,18 @@ export type Database = {
           id: string
           membership_tier: Database["public"]["Enums"]["membership_tier"]
           phone: string | null
+          phone_encrypted: string | null
           updated_at: string | null
           username: string | null
         }
         Insert: {
           avatar_url?: string | null
           bank_account?: string | null
+          bank_account_encrypted?: string | null
           bank_name?: string | null
+          bank_name_encrypted?: string | null
           bvn?: string | null
+          bvn_encrypted?: string | null
           completed_cycles?: number | null
           created_at?: string | null
           credit_score?: number | null
@@ -546,14 +589,18 @@ export type Database = {
           id: string
           membership_tier?: Database["public"]["Enums"]["membership_tier"]
           phone?: string | null
+          phone_encrypted?: string | null
           updated_at?: string | null
           username?: string | null
         }
         Update: {
           avatar_url?: string | null
           bank_account?: string | null
+          bank_account_encrypted?: string | null
           bank_name?: string | null
+          bank_name_encrypted?: string | null
           bvn?: string | null
+          bvn_encrypted?: string | null
           completed_cycles?: number | null
           created_at?: string | null
           credit_score?: number | null
@@ -566,6 +613,7 @@ export type Database = {
           id?: string
           membership_tier?: Database["public"]["Enums"]["membership_tier"]
           phone?: string | null
+          phone_encrypted?: string | null
           updated_at?: string | null
           username?: string | null
         }
@@ -644,6 +692,7 @@ export type Database = {
           description: string | null
           group_id: string | null
           id: string
+          metadata_encrypted: string | null
           reference: string | null
           status: Database["public"]["Enums"]["transaction_status"]
           type: Database["public"]["Enums"]["transaction_type"]
@@ -656,6 +705,7 @@ export type Database = {
           description?: string | null
           group_id?: string | null
           id?: string
+          metadata_encrypted?: string | null
           reference?: string | null
           status?: Database["public"]["Enums"]["transaction_status"]
           type: Database["public"]["Enums"]["transaction_type"]
@@ -668,6 +718,7 @@ export type Database = {
           description?: string | null
           group_id?: string | null
           id?: string
+          metadata_encrypted?: string | null
           reference?: string | null
           status?: Database["public"]["Enums"]["transaction_status"]
           type?: Database["public"]["Enums"]["transaction_type"]
@@ -722,6 +773,7 @@ export type Database = {
       wallets: {
         Row: {
           available_balance: number | null
+          balance_checksum: string | null
           created_at: string | null
           id: string
           locked_balance: number | null
@@ -730,6 +782,7 @@ export type Database = {
         }
         Insert: {
           available_balance?: number | null
+          balance_checksum?: string | null
           created_at?: string | null
           id?: string
           locked_balance?: number | null
@@ -738,6 +791,7 @@ export type Database = {
         }
         Update: {
           available_balance?: number | null
+          balance_checksum?: string | null
           created_at?: string | null
           id?: string
           locked_balance?: number | null
@@ -967,6 +1021,16 @@ export type Database = {
       is_group_admin: { Args: { _group_id: string }; Returns: boolean }
       is_group_member: { Args: { _group_id: string }; Returns: boolean }
       join_group_via_invite: { Args: { token: string }; Returns: Json }
+      log_audit_event: {
+        Args: {
+          _action: string
+          _details?: Json
+          _resource_id?: string
+          _resource_type: string
+          _user_id: string
+        }
+        Returns: string
+      }
       process_contribution_atomic: {
         Args: { _amount: number; _group_id: string; _user_id: string }
         Returns: Json
