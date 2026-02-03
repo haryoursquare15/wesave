@@ -40,16 +40,27 @@ serve(async (req) => {
       });
     }
 
-    // Verify webhook signature
+    // Verify webhook signature - REQUIRED for production security
     const verifHash = req.headers.get('verif-hash');
-    const secretHash = Deno.env.get('FLUTTERWAVE_WEBHOOK_SECRET') || FLUTTERWAVE_SECRET_KEY;
+    const secretHash = Deno.env.get('FLUTTERWAVE_WEBHOOK_SECRET');
     
-    // For test mode, skip strict signature verification
-    // In production, enable this check
-    // if (verifHash !== secretHash) {
-    //   console.error('Invalid webhook signature');
-    //   return new Response('Unauthorized', { status: 401 });
-    // }
+    if (!secretHash) {
+      console.error('FLUTTERWAVE_WEBHOOK_SECRET is not configured');
+      return new Response(JSON.stringify({ error: 'Webhook secret not configured' }), { 
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    
+    if (!verifHash || verifHash !== secretHash) {
+      console.error('Invalid webhook signature - received:', verifHash);
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { 
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    
+    console.log('Webhook signature verified successfully');
 
     const payload = await req.json();
     console.log('Webhook received:', JSON.stringify(payload));
