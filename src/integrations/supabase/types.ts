@@ -936,6 +936,15 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      credit_wallet_atomic: {
+        Args: {
+          _amount: number
+          _description?: string
+          _tx_ref: string
+          _user_id: string
+        }
+        Returns: Json
+      }
       get_payout_order: {
         Args: { target_group_id: string }
         Returns: {
@@ -958,6 +967,14 @@ export type Database = {
       is_group_admin: { Args: { _group_id: string }; Returns: boolean }
       is_group_member: { Args: { _group_id: string }; Returns: boolean }
       join_group_via_invite: { Args: { token: string }; Returns: Json }
+      process_contribution_atomic: {
+        Args: { _amount: number; _group_id: string; _user_id: string }
+        Returns: Json
+      }
+      process_payout_atomic: {
+        Args: { _admin_id: string; _group_id: string }
+        Returns: Json
+      }
       respond_to_invite: {
         Args: { accept: boolean; invite_id: string }
         Returns: Json
