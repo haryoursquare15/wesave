@@ -698,6 +698,27 @@ export type Database = {
           },
         ]
       }
+      user_roles: {
+        Row: {
+          created_at: string | null
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
       wallets: {
         Row: {
           available_balance: number | null
@@ -757,6 +778,43 @@ export type Database = {
       }
     }
     Views: {
+      profiles_public: {
+        Row: {
+          avatar_url: string | null
+          completed_cycles: number | null
+          created_at: string | null
+          credit_score: number | null
+          full_name: string | null
+          id: string | null
+          membership_tier: Database["public"]["Enums"]["membership_tier"] | null
+          username: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          completed_cycles?: number | null
+          created_at?: string | null
+          credit_score?: number | null
+          full_name?: string | null
+          id?: string | null
+          membership_tier?:
+            | Database["public"]["Enums"]["membership_tier"]
+            | null
+          username?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          completed_cycles?: number | null
+          created_at?: string | null
+          credit_score?: number | null
+          full_name?: string | null
+          id?: string | null
+          membership_tier?:
+            | Database["public"]["Enums"]["membership_tier"]
+            | null
+          username?: string | null
+        }
+        Relationships: []
+      }
       public_groups: {
         Row: {
           contribution_amount: number | null
@@ -797,6 +855,48 @@ export type Database = {
     Functions: {
       add_member_to_group: {
         Args: { target_group_id: string; target_user_id: string }
+        Returns: Json
+      }
+      admin_assign_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: Json
+      }
+      admin_get_all_groups: {
+        Args: never
+        Returns: {
+          admin_id: string
+          admin_name: string
+          contribution_amount: number
+          created_at: string
+          id: string
+          member_count: number
+          name: string
+          period: Database["public"]["Enums"]["contribution_period"]
+          status: Database["public"]["Enums"]["group_status"]
+        }[]
+      }
+      admin_get_all_users: {
+        Args: never
+        Returns: {
+          created_at: string
+          credit_score: number
+          email: string
+          full_name: string
+          id: string
+          membership_tier: Database["public"]["Enums"]["membership_tier"]
+          role: Database["public"]["Enums"]["app_role"]
+          username: string
+        }[]
+      }
+      admin_get_stats: { Args: never; Returns: Json }
+      admin_remove_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
         Returns: Json
       }
       commence_thrift: { Args: { target_group_id: string }; Returns: Json }
@@ -847,6 +947,14 @@ export type Database = {
           payout_position: number
         }[]
       }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      is_admin: { Args: never; Returns: boolean }
       is_group_admin: { Args: { _group_id: string }; Returns: boolean }
       is_group_member: { Args: { _group_id: string }; Returns: boolean }
       join_group_via_invite: { Args: { token: string }; Returns: Json }
@@ -888,6 +996,7 @@ export type Database = {
       }
     }
     Enums: {
+      app_role: "admin" | "moderator" | "user"
       contribution_period: "daily" | "weekly" | "monthly"
       group_status: "pending" | "active" | "completed" | "paused"
       membership_status: "active" | "pending" | "removed"
@@ -1029,6 +1138,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      app_role: ["admin", "moderator", "user"],
       contribution_period: ["daily", "weekly", "monthly"],
       group_status: ["pending", "active", "completed", "paused"],
       membership_status: ["active", "pending", "removed"],

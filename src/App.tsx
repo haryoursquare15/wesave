@@ -15,6 +15,7 @@ import GroupDetail from "./pages/GroupDetail";
 import Profile from "./pages/Profile";
 import Wallet from "./pages/Wallet";
 import Invite from "./pages/Invite";
+import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -37,6 +38,7 @@ const App = () => (
           <Route path="/profile" element={<Profile />} />
           <Route path="/wallet" element={<Wallet />} />
           <Route path="/invite/:token" element={<Invite />} />
+          <Route path="/admin" element={<Admin />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </TooltipProvider>

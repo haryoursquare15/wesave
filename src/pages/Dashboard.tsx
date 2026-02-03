@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, Shield } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { WalletCard } from "@/components/WalletCard";
 import { ThriftGroupCard } from "@/components/ThriftGroupCard";
@@ -9,6 +9,7 @@ import { BottomNav } from "@/components/BottomNav";
 import { PendingInvitesNotification } from "@/components/PendingInvitesNotification";
 import { useAuth } from "@/contexts/AuthContext";
 import { useMyGroups } from "@/hooks/useThriftGroups";
+import { useIsAdmin } from "@/hooks/useAdmin";
 import { useEffect } from "react";
 
 const quickActions = [
@@ -22,6 +23,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { user, profile, wallet, loading: authLoading } = useAuth();
   const { groups, loading: groupsLoading } = useMyGroups();
+  const { isAdmin } = useIsAdmin();
 
   // Redirect to auth if not logged in
   useEffect(() => {
@@ -62,6 +64,11 @@ export default function Dashboard() {
               <UserBadge type={profile?.membership_tier || "newbie"} size="sm" />
             </div>
             <div className="flex items-center gap-2">
+              {isAdmin && (
+                <Button variant="ghost" size="icon" onClick={() => navigate("/admin")} title="Admin Dashboard">
+                  <Shield className="h-5 w-5 text-primary" />
+                </Button>
+              )}
               <PendingInvitesNotification />
               <Button variant="ghost" size="icon">
                 <Search className="h-5 w-5" />
