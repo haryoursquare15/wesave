@@ -1170,6 +1170,7 @@ export type Database = {
         Args: { _admin_id: string; _group_id: string }
         Returns: Json
       }
+      process_payout_internal: { Args: { _group_id: string }; Returns: Json }
       request_position_swap: {
         Args: { _group_id: string; _target_user_id: string }
         Returns: Json

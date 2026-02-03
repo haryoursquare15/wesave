@@ -38,11 +38,20 @@ interface ContributionAudit {
   contribution_type: string;
   status: string;
   created_at: string;
+  cycle_id: string;
   profile?: {
     full_name: string | null;
     username: string | null;
     avatar_url: string | null;
   };
+}
+
+interface CycleInfo {
+  id: string;
+  cycle_number: number;
+  status: string;
+  completed_at: string | null;
+  payout_amount: number | null;
 }
 
 interface MemberContributionStats {
@@ -56,6 +65,7 @@ interface MemberContributionStats {
 
 export function GroupProfile({ groupId, group, memberCount }: GroupProfileProps) {
   const [contributionAudit, setContributionAudit] = useState<ContributionAudit[]>([]);
+  const [cycles, setCycles] = useState<CycleInfo[]>([]);
   const [memberStats, setMemberStats] = useState<MemberContributionStats[]>([]);
   const [groupWalletBalance, setGroupWalletBalance] = useState<number>(0);
   const [loading, setLoading] = useState(true);
@@ -74,13 +84,24 @@ export function GroupProfile({ groupId, group, memberCount }: GroupProfileProps)
           setGroupWalletBalance(Number(wallet.contribution_balance) || 0);
         }
 
+        // Fetch all cycles for this group
+        const { data: cyclesData } = await supabase
+          .from("contribution_cycles")
+          .select("id, cycle_number, status, completed_at, payout_amount")
+          .eq("group_id", groupId)
+          .order("cycle_number", { ascending: false });
+        
+        if (cyclesData) {
+          setCycles(cyclesData);
+        }
+
         // Fetch contribution audit
         const { data: audit } = await supabase
           .from("contribution_audit")
-          .select("*")
+          .select("*, cycle_id")
           .eq("group_id", groupId)
           .order("created_at", { ascending: false })
-          .limit(50);
+          .limit(100);
 
         if (audit && audit.length > 0) {
           const userIds = [...new Set(audit.map((a) => a.user_id))];
@@ -265,7 +286,9 @@ export function GroupProfile({ groupId, group, memberCount }: GroupProfileProps)
                     <AvatarFallback>{getInitials(member.full_name)}</AvatarFallback>
                   </Avatar>
                   <div className="flex-1">
-                    <p className="font-medium">{member.full_name || member.username || "Unknown"}</p>
+                    <p className="font-medium">
+                      {member.username ? `@${member.username}` : member.full_name || "Unknown"}
+                    </p>
                     <p className="text-xs text-muted-foreground">
                       {member.contribution_count} contribution{member.contribution_count !== 1 ? "s" : ""}
                     </p>
@@ -282,7 +305,7 @@ export function GroupProfile({ groupId, group, memberCount }: GroupProfileProps)
         </CardContent>
       </Card>
 
-      {/* Contribution Audit Trail */}
+      {/* Contribution Audit Trail - Grouped by Cycle */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -296,38 +319,69 @@ export function GroupProfile({ groupId, group, memberCount }: GroupProfileProps)
               No contribution history yet.
             </p>
           ) : (
-            <ScrollArea className="h-[300px]">
-              <div className="space-y-3">
-                {contributionAudit.map((audit) => (
-                  <div
-                    key={audit.id}
-                    className="flex items-center gap-3 p-3 rounded-lg bg-muted/50"
-                  >
-                    <Avatar className="h-8 w-8">
-                      <AvatarImage src={audit.profile?.avatar_url || undefined} />
-                      <AvatarFallback className="text-xs">
-                        {getInitials(audit.profile?.full_name || null)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">
-                        {audit.profile?.full_name || audit.profile?.username || "Unknown"}
-                      </p>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span>{format(new Date(audit.created_at), "MMM d, yyyy h:mm a")}</span>
-                        <Badge variant="outline" className="text-[10px]">
-                          {audit.contribution_type}
-                        </Badge>
+            <ScrollArea className="h-[400px]">
+              <div className="space-y-6">
+                {cycles.map((cycle) => {
+                  const cycleContributions = contributionAudit.filter(
+                    (a) => a.cycle_id === cycle.id
+                  );
+                  
+                  if (cycleContributions.length === 0) return null;
+                  
+                  return (
+                    <div key={cycle.id}>
+                      <div className="flex items-center justify-between mb-3 pb-2 border-b border-border">
+                        <div className="flex items-center gap-2">
+                          <Badge variant={cycle.status === "completed" ? "success" : "default"}>
+                            Cycle {cycle.cycle_number}
+                          </Badge>
+                          {cycle.status === "completed" && (
+                            <span className="text-xs text-muted-foreground">
+                              Completed {cycle.completed_at ? format(new Date(cycle.completed_at), "MMM d, yyyy") : ""}
+                            </span>
+                          )}
+                        </div>
+                        {cycle.payout_amount && cycle.payout_amount > 0 && (
+                          <span className="text-xs font-medium text-success">
+                            Payout: ₦{Number(cycle.payout_amount).toLocaleString()}
+                          </span>
+                        )}
+                      </div>
+                      <div className="space-y-2">
+                        {cycleContributions.map((audit) => (
+                          <div
+                            key={audit.id}
+                            className="flex items-center gap-3 p-3 rounded-lg bg-muted/50"
+                          >
+                            <Avatar className="h-8 w-8">
+                              <AvatarImage src={audit.profile?.avatar_url || undefined} />
+                              <AvatarFallback className="text-xs">
+                                {getInitials(audit.profile?.full_name || null)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">
+                                {audit.profile?.username ? `@${audit.profile.username}` : audit.profile?.full_name || "Unknown"}
+                              </p>
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <span>{format(new Date(audit.created_at), "MMM d, h:mm a")}</span>
+                                <Badge variant="outline" className="text-[10px]">
+                                  {audit.contribution_type}
+                                </Badge>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-sm">
+                                ₦{Number(audit.amount).toLocaleString()}
+                              </span>
+                              <CheckCircle className="h-4 w-4 text-success" />
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-sm">
-                        ₦{Number(audit.amount).toLocaleString()}
-                      </span>
-                      <CheckCircle className="h-4 w-4 text-success" />
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </ScrollArea>
           )}

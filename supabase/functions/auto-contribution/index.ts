@@ -120,7 +120,7 @@ serve(async (req) => {
       let failCount = 0;
 
       for (const member of members || []) {
-        // Process contribution atomically
+        // Process contribution atomically - this now auto-triggers payout when all contribute
         const { data: result, error: rpcError } = await supabase.rpc('process_contribution_atomic', {
           _user_id: member.user_id,
           _group_id: group.id,
@@ -163,10 +163,23 @@ serve(async (req) => {
             message: `Auto-contribution of ₦${group.contribution_amount.toLocaleString()} processed`,
             message_type: 'auto_contribution',
           });
+          
+          // Check if auto-payout was triggered (all contributed)
+          if (result.all_contributed && result.auto_payout?.success) {
+            console.log(`Auto-payout triggered for group ${group.name}:`, result.auto_payout);
+            
+            // Send notification about successful payout
+            await supabase.from('chat_messages').insert({
+              group_id: group.id,
+              user_id: member.user_id,
+              message: `🎉 Cycle complete! Payout of ₦${result.auto_payout.net_amount?.toLocaleString() || 'N/A'} sent to recipient.`,
+              message_type: 'payout_notification',
+            });
+          }
         }
       }
 
-      // Check if all contributions are complete for payout processing
+      // Check if all contributions are complete
       const { count: pendingCount } = await supabase
         .from('group_memberships')
         .select('*', { count: 'exact', head: true })
@@ -176,51 +189,11 @@ serve(async (req) => {
 
       const allContributed = (pendingCount || 0) === 0;
 
-      // If all have contributed, automatically process the payout
-      let payoutResult = null;
-      if (allContributed && successCount > 0) {
-        console.log(`All members contributed for group ${group.name}, processing payout...`);
-        
-        // Get admin ID for payout processing
-        const { data: groupData } = await supabase
-          .from('thrift_groups')
-          .select('admin_id')
-          .eq('id', group.id)
-          .single();
-
-        if (groupData?.admin_id) {
-          // Process payout: debit group wallet, credit recipient
-          const { data: payout, error: payoutError } = await supabase.rpc('process_payout_atomic', {
-            _admin_id: groupData.admin_id,
-            _group_id: group.id,
-          });
-
-          if (payoutError) {
-            console.error(`Auto-payout failed for group ${group.name}:`, payoutError);
-            payoutResult = { success: false, error: payoutError.message };
-          } else if (!payout?.success) {
-            console.error(`Auto-payout rejected for group ${group.name}:`, payout?.error);
-            payoutResult = { success: false, error: payout?.error };
-          } else {
-            console.log(`Auto-payout successful for group ${group.name}:`, payout);
-            payoutResult = payout;
-
-            // Send notification about successful payout
-            await supabase.from('chat_messages').insert({
-              group_id: group.id,
-              user_id: groupData.admin_id,
-              message: `🎉 Cycle ${group.current_cycle} complete! Payout of ₦${payout.payout_amount?.toLocaleString() || 'N/A'} sent to the recipient.`,
-              message_type: 'system',
-            });
-          }
-        }
-      }
-
       results.push({
         groupId: group.id,
         groupName: group.name,
         success: true,
-        details: `Processed ${successCount} contributions, ${failCount} failed. All contributed: ${allContributed}. Payout: ${payoutResult ? (payoutResult.success ? 'Success' : payoutResult.error) : 'Not triggered'}`,
+        details: `Processed ${successCount} contributions, ${failCount} failed. All contributed: ${allContributed}. Auto-payout is now integrated into contribution flow.`,
       });
     }
 

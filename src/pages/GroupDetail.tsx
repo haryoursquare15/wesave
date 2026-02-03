@@ -80,7 +80,7 @@ export default function GroupDetail() {
   const [hasContributed, setHasContributed] = useState(false);
   const [contributing, setContributing] = useState(false);
   const [processingPayout, setProcessingPayout] = useState(false);
-  
+  const [cycleHasContributions, setCycleHasContributions] = useState(false);
 
   const isAdmin = group?.admin_id === user?.id;
 
@@ -109,7 +109,7 @@ export default function GroupDetail() {
         
         setMemberCount(count || 0);
 
-        // Check if user has contributed this cycle
+        // Check if user has contributed this cycle and if any contributions exist
         if (groupData.status === "active") {
           const { data: cycle } = await supabase
             .from("contribution_cycles")
@@ -119,6 +119,7 @@ export default function GroupDetail() {
             .single();
 
           if (cycle) {
+            // Check user's contribution
             const { data: contrib } = await supabase
               .from("cycle_contributions")
               .select("*")
@@ -128,6 +129,15 @@ export default function GroupDetail() {
               .single();
             
             setHasContributed(!!contrib);
+            
+            // Check if any member has contributed (to disable swap)
+            const { count: contribCount } = await supabase
+              .from("cycle_contributions")
+              .select("*", { count: "exact", head: true })
+              .eq("cycle_id", cycle.id)
+              .eq("status", "completed");
+            
+            setCycleHasContributions((contribCount || 0) > 0);
           }
         }
 
@@ -304,9 +314,32 @@ export default function GroupDetail() {
       if (data.success) {
         toast.success("Contribution recorded successfully!");
         setHasContributed(true);
+        setCycleHasContributions(true);
         
-        if (data.all_contributed) {
-          toast.info("All members have contributed! Admin can now process payout.");
+        // Check if auto-payout was triggered
+        if (data.all_contributed && data.auto_payout?.success) {
+          toast.success(`🎉 All members contributed! Payout of ₦${data.auto_payout.net_amount?.toLocaleString()} sent to recipient.`);
+          
+          // Refresh group data after payout
+          const { data: updatedGroup } = await supabase
+            .from("thrift_groups")
+            .select("*")
+            .eq("id", groupId)
+            .single();
+          
+          if (updatedGroup) setGroup(updatedGroup);
+
+          // Refresh payout order
+          const { data: orderData } = await supabase.rpc("get_payout_order", {
+            target_group_id: groupId,
+          });
+          if (orderData) setPayoutOrder(orderData as PayoutMember[]);
+          
+          // Reset contribution status for new cycle
+          setHasContributed(false);
+          setCycleHasContributions(false);
+        } else if (data.all_contributed) {
+          toast.info("All members have contributed! Payout processing...");
         }
       } else {
         toast.error(data.error || "Failed to make contribution");
@@ -506,22 +539,7 @@ export default function GroupDetail() {
         </div>
       )}
 
-      {/* Payout Action for Admin */}
-      {isAdmin && group.status === "active" && hasContributed && (
-        <div className="container mx-auto px-4 py-3">
-          <Button
-            onClick={processPayout}
-            disabled={processingPayout}
-            className="w-full"
-            variant="hero"
-          >
-            {processingPayout ? (
-              <div className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin mr-2" />
-            ) : null}
-            Process Payout
-          </Button>
-        </div>
-      )}
+      {/* Remove manual payout button - payouts are now automatic */}
 
       {/* Tabs */}
       <Tabs defaultValue="chat" className="flex-1">
@@ -631,19 +649,26 @@ export default function GroupDetail() {
 
         <TabsContent value="order" className="mt-0">
           <div className="container mx-auto px-4 py-4">
-            {/* Swap Position Button */}
+            {/* Swap Position Button - disabled once contributions start */}
             {group.status === "active" && payoutOrder.length > 0 && user && (
               <div className="mb-4">
-                <SwapPositionDialog
-                  groupId={group.id}
-                  currentUserId={user.id}
-                  payoutOrder={payoutOrder}
-                >
-                  <Button variant="outline" className="w-full">
+                {cycleHasContributions ? (
+                  <Button variant="outline" className="w-full" disabled>
                     <ArrowLeftRight className="h-4 w-4 mr-2" />
-                    Swap Position
+                    Swap Disabled (Contributions Started)
                   </Button>
-                </SwapPositionDialog>
+                ) : (
+                  <SwapPositionDialog
+                    groupId={group.id}
+                    currentUserId={user.id}
+                    payoutOrder={payoutOrder}
+                  >
+                    <Button variant="outline" className="w-full">
+                      <ArrowLeftRight className="h-4 w-4 mr-2" />
+                      Swap Position
+                    </Button>
+                  </SwapPositionDialog>
+                )}
               </div>
             )}
 
