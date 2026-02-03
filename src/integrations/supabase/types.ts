@@ -1075,6 +1075,7 @@ export type Database = {
         Returns: Json
       }
       commence_thrift: { Args: { target_group_id: string }; Returns: Json }
+      confirm_continue_group: { Args: { _group_id: string }; Returns: Json }
       create_thrift_group: {
         Args: {
           _auto_debit: boolean
@@ -1128,6 +1129,7 @@ export type Database = {
         }
         Returns: Json
       }
+      exit_completed_group: { Args: { _group_id: string }; Returns: Json }
       gen_random_bytes: { Args: { n: number }; Returns: string }
       gen_random_uuid: { Args: never; Returns: string }
       get_payout_order: {
@@ -1183,6 +1185,7 @@ export type Database = {
         Args: { _accept: boolean; _request_id: string }
         Returns: Json
       }
+      restart_completed_group: { Args: { _group_id: string }; Returns: Json }
       search_users: {
         Args: { search_term: string }
         Returns: {
