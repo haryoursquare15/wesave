@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { useSearchUsers, useAddMemberToGroup, useCreateInviteLink } from "@/hooks/useGroupInvites";
+import { useSearchUsers, useSendMemberInvite, useCreateInviteLink } from "@/hooks/useGroupInvites";
 import { toast } from "sonner";
 import { useDebounce } from "@/hooks/useDebounce";
 
@@ -32,7 +32,7 @@ export function AddMembersDialog({ groupId, groupName, children, onMemberAdded }
 
   const debouncedSearch = useDebounce(searchTerm, 300);
   const { searchUsers, results, loading: searching, clearResults } = useSearchUsers();
-  const { addMember, loading: adding } = useAddMemberToGroup();
+  const { sendInvite, loading: sending } = useSendMemberInvite();
   const { createInviteLink, loading: creatingLink } = useCreateInviteLink();
 
   useEffect(() => {
@@ -43,14 +43,14 @@ export function AddMembersDialog({ groupId, groupName, children, onMemberAdded }
     }
   }, [debouncedSearch, searchUsers, clearResults]);
 
-  const handleAddMember = async (userId: string) => {
+  const handleSendInvite = async (userId: string) => {
     try {
-      await addMember(groupId, userId);
+      await sendInvite(groupId, userId);
       setAddedUsers(prev => new Set([...prev, userId]));
-      toast.success("Member added successfully!");
+      toast.success("Invite sent! Waiting for user to accept.");
       onMemberAdded?.();
     } catch (err: any) {
-      toast.error(err.message || "Failed to add member");
+      toast.error(err.message || "Failed to send invite");
     }
   };
 
@@ -166,8 +166,8 @@ export function AddMembersDialog({ groupId, groupName, children, onMemberAdded }
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => handleAddMember(user.id)}
-                          disabled={adding}
+                          onClick={() => handleSendInvite(user.id)}
+                          disabled={sending}
                         >
                           <UserPlus className="h-4 w-4" />
                         </Button>

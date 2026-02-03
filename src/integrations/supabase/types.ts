@@ -318,6 +318,51 @@ export type Database = {
           },
         ]
       }
+      member_invites: {
+        Row: {
+          created_at: string
+          group_id: string
+          id: string
+          invitee_id: string
+          inviter_id: string
+          responded_at: string | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          group_id: string
+          id?: string
+          invitee_id: string
+          inviter_id: string
+          responded_at?: string | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          group_id?: string
+          id?: string
+          invitee_id?: string
+          inviter_id?: string
+          responded_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "member_invites_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "public_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_invites_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "thrift_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payouts: {
         Row: {
           created_at: string
@@ -805,6 +850,10 @@ export type Database = {
       is_group_admin: { Args: { _group_id: string }; Returns: boolean }
       is_group_member: { Args: { _group_id: string }; Returns: boolean }
       join_group_via_invite: { Args: { token: string }; Returns: Json }
+      respond_to_invite: {
+        Args: { accept: boolean; invite_id: string }
+        Returns: Json
+      }
       search_users: {
         Args: { search_term: string }
         Returns: {
@@ -815,6 +864,10 @@ export type Database = {
           membership_tier: Database["public"]["Enums"]["membership_tier"]
           username: string
         }[]
+      }
+      send_member_invite: {
+        Args: { target_group_id: string; target_user_id: string }
+        Returns: Json
       }
       validate_invite_token: {
         Args: { token: string }

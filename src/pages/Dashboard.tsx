@@ -1,11 +1,12 @@
 import { motion } from "framer-motion";
-import { Plus, Bell, Search } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { WalletCard } from "@/components/WalletCard";
 import { ThriftGroupCard } from "@/components/ThriftGroupCard";
 import { UserBadge } from "@/components/UserBadge";
 import { Button } from "@/components/ui/button";
 import { BottomNav } from "@/components/BottomNav";
+import { PendingInvitesNotification } from "@/components/PendingInvitesNotification";
 import { useAuth } from "@/contexts/AuthContext";
 import { useMyGroups } from "@/hooks/useThriftGroups";
 import { useEffect } from "react";
@@ -61,12 +62,7 @@ export default function Dashboard() {
               <UserBadge type={profile?.membership_tier || "newbie"} size="sm" />
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="icon" className="relative">
-                <Bell className="h-5 w-5" />
-                <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-coral text-[10px] text-coral-foreground flex items-center justify-center">
-                  0
-                </span>
-              </Button>
+              <PendingInvitesNotification />
               <Button variant="ghost" size="icon">
                 <Search className="h-5 w-5" />
               </Button>
