@@ -101,7 +101,7 @@ export default function Wallet() {
     }
   }, [user, authLoading, navigate]);
 
-  // Fetch transactions
+  // Fetch transactions and setup realtime subscription
   useEffect(() => {
     async function fetchTransactions() {
       if (!user) return;
@@ -124,7 +124,58 @@ export default function Wallet() {
     }
 
     fetchTransactions();
-  }, [user]);
+
+    // Subscribe to wallet changes for real-time balance updates
+    if (user) {
+      const walletChannel = supabase
+        .channel(`wallet-${user.id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "wallets",
+            filter: `user_id=eq.${user.id}`,
+          },
+          () => {
+            // Immediately refresh wallet on any change
+            refreshWallet();
+          }
+        )
+        .subscribe();
+
+      // Subscribe to transaction changes for real-time tx list updates
+      const txChannel = supabase
+        .channel(`transactions-${user.id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "transactions",
+            filter: `user_id=eq.${user.id}`,
+          },
+          async () => {
+            // Refetch transactions on new entry
+            const { data } = await supabase
+              .from("transactions")
+              .select("*")
+              .eq("user_id", user.id)
+              .order("created_at", { ascending: false })
+              .limit(20);
+            if (data) setTransactions(data);
+            // Also refresh wallet balance
+            refreshWallet();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(walletChannel);
+        supabase.removeChannel(txChannel);
+      };
+    }
+  }, [user, refreshWallet]);
 
   const formatAmount = (amount: number) => {
     return new Intl.NumberFormat("en-NG").format(amount);
