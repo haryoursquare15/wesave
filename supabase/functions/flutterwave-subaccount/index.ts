@@ -213,11 +213,30 @@ serve(async (req) => {
     });
 
   } catch (error: unknown) {
-    console.error('Error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Subaccount error:', error);
+    
+    // Map detailed errors to safe user-friendly messages
+    let userMessage = 'An error occurred processing your request';
+    if (error instanceof Error) {
+      const msg = error.message.toLowerCase();
+      if (msg.includes('unauthorized') || msg.includes('no authorization')) {
+        userMessage = 'Authentication required';
+      } else if (msg.includes('profile not found')) {
+        userMessage = 'User profile not found';
+      } else if (msg.includes('onboarding') || msg.includes('bvn')) {
+        userMessage = 'Please complete account verification first';
+      } else if (msg.includes('group not found') || msg.includes('not the admin')) {
+        userMessage = 'Group not found or access denied';
+      } else if (msg.includes('failed to create') || msg.includes('failed to save')) {
+        userMessage = 'Account setup could not be completed';
+      } else if (msg.includes('unknown action')) {
+        userMessage = 'Invalid operation requested';
+      }
+    }
+    
     return new Response(JSON.stringify({ 
       success: false, 
-      error: errorMessage 
+      error: userMessage 
     }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

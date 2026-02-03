@@ -282,10 +282,31 @@ serve(async (req) => {
 
   } catch (error: unknown) {
     console.error('Payment error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    
+    // Map detailed errors to safe user-friendly messages
+    let userMessage = 'An error occurred processing your request';
+    if (error instanceof Error) {
+      const msg = error.message.toLowerCase();
+      if (msg.includes('unauthorized') || msg.includes('no authorization')) {
+        userMessage = 'Authentication required';
+      } else if (msg.includes('group id') || msg.includes('required')) {
+        userMessage = 'Missing required information';
+      } else if (msg.includes('minimum')) {
+        userMessage = 'Amount does not meet minimum requirements';
+      } else if (msg.includes('not found')) {
+        userMessage = 'Resource not found';
+      } else if (msg.includes('insufficient')) {
+        userMessage = 'Insufficient funds';
+      } else if (msg.includes('contribution failed') || msg.includes('payout failed')) {
+        userMessage = 'Operation could not be completed';
+      } else if (msg.includes('unknown action')) {
+        userMessage = 'Invalid operation requested';
+      }
+    }
+    
     return new Response(JSON.stringify({ 
       success: false, 
-      error: errorMessage 
+      error: userMessage 
     }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
