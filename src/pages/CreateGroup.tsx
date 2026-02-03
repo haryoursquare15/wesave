@@ -13,6 +13,7 @@ import { useCreateGroup } from "@/hooks/useThriftGroups";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { AddMembersDialog } from "@/components/AddMembersDialog";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function CreateGroup() {
   const navigate = useNavigate();
@@ -28,8 +29,14 @@ export default function CreateGroup() {
   });
 
   const handleCreate = async () => {
-    if (!user) {
-      toast.error("You must be logged in to create a group");
+    // Use session as the source of truth (AuthContext can be briefly stale).
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession();
+
+    if (sessionError || !session?.user) {
+      toast.error("Your session has expired. Please sign in again.");
       navigate("/auth");
       return;
     }
@@ -51,7 +58,8 @@ export default function CreateGroup() {
       setCreatedGroup({ id: group.id, name: group.name });
       toast.success("Thrift group created successfully!");
     } catch (error) {
-      toast.error("Failed to create group. Please try again.");
+      const message = error instanceof Error ? error.message : "Failed to create group. Please try again.";
+      toast.error(message);
     }
   };
 

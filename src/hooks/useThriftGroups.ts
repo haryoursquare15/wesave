@@ -173,8 +173,20 @@ export function useCreateGroup() {
     period: "daily" | "weekly" | "monthly";
     autoDebit: boolean;
   }) => {
-    if (!user) {
-      throw new Error("You must be logged in to create a group");
+    // Auth context can lag behind the actual auth session (especially right after sign-in/reset).
+    // Always rely on the current session for critical writes.
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession();
+
+    if (sessionError) {
+      throw new Error(sessionError.message || "Unable to verify your session");
+    }
+
+    const effectiveUserId = session?.user?.id ?? user?.id;
+    if (!effectiveUserId) {
+      throw new Error("Your session has expired. Please sign in again and retry.");
     }
 
     setLoading(true);
@@ -191,7 +203,13 @@ export function useCreateGroup() {
           _auto_debit: data.autoDebit,
         });
 
-      if (rpcError) throw rpcError;
+      if (rpcError) {
+        throw new Error(rpcError.message || "Failed to create group");
+      }
+
+      if (!group) {
+        throw new Error("Group creation succeeded but no group was returned.");
+      }
 
       return group;
     } catch (err) {
