@@ -11,3 +11,12 @@ verify_jwt = false
 
 [functions.encryption-utils]
 verify_jwt = false
+
+[functions.security-controls]
+verify_jwt = false
+
+[functions.platform-settlement]
+verify_jwt = false
+
+[functions.auto-contribution]
+verify_jwt = false

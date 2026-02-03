@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_locks: {
+        Row: {
+          email: string | null
+          id: string
+          lock_reason: string
+          locked_at: string
+          locked_until: string | null
+          unlock_code: string | null
+          unlocked_at: string | null
+          unlocked_by: string | null
+          user_id: string | null
+        }
+        Insert: {
+          email?: string | null
+          id?: string
+          lock_reason: string
+          locked_at?: string
+          locked_until?: string | null
+          unlock_code?: string | null
+          unlocked_at?: string | null
+          unlocked_by?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          email?: string | null
+          id?: string
+          lock_reason?: string
+          locked_at?: string
+          locked_until?: string | null
+          unlock_code?: string | null
+          unlocked_at?: string | null
+          unlocked_by?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       audit_logs: {
         Row: {
           action: string
@@ -209,6 +245,45 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      credit_score_history: {
+        Row: {
+          change_amount: number
+          change_reason: string
+          created_at: string
+          id: string
+          metadata: Json | null
+          reference_id: string | null
+          reference_type: string | null
+          score_after: number
+          score_before: number
+          user_id: string
+        }
+        Insert: {
+          change_amount: number
+          change_reason: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          reference_id?: string | null
+          reference_type?: string | null
+          score_after: number
+          score_before: number
+          user_id: string
+        }
+        Update: {
+          change_amount?: number
+          change_reason?: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          reference_id?: string | null
+          reference_type?: string | null
+          score_after?: number
+          score_before?: number
+          user_id?: string
+        }
+        Relationships: []
       }
       cycle_contributions: {
         Row: {
@@ -412,6 +487,95 @@ export type Database = {
           },
         ]
       }
+      ledger_entries: {
+        Row: {
+          amount: number
+          balance_after: number
+          balance_before: number
+          created_at: string
+          description: string | null
+          entry_type: string
+          id: string
+          locked_after: number
+          locked_before: number
+          metadata: Json | null
+          reference_id: string | null
+          reference_type: string
+          user_id: string
+          wallet_id: string
+        }
+        Insert: {
+          amount: number
+          balance_after: number
+          balance_before: number
+          created_at?: string
+          description?: string | null
+          entry_type: string
+          id?: string
+          locked_after?: number
+          locked_before?: number
+          metadata?: Json | null
+          reference_id?: string | null
+          reference_type: string
+          user_id: string
+          wallet_id: string
+        }
+        Update: {
+          amount?: number
+          balance_after?: number
+          balance_before?: number
+          created_at?: string
+          description?: string | null
+          entry_type?: string
+          id?: string
+          locked_after?: number
+          locked_before?: number
+          metadata?: Json | null
+          reference_id?: string | null
+          reference_type?: string
+          user_id?: string
+          wallet_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ledger_entries_wallet_id_fkey"
+            columns: ["wallet_id"]
+            isOneToOne: false
+            referencedRelation: "wallets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      login_attempts: {
+        Row: {
+          created_at: string
+          device_fingerprint: string | null
+          email: string
+          failure_reason: string | null
+          id: string
+          ip_address: string | null
+          success: boolean
+        }
+        Insert: {
+          created_at?: string
+          device_fingerprint?: string | null
+          email: string
+          failure_reason?: string | null
+          id?: string
+          ip_address?: string | null
+          success?: boolean
+        }
+        Update: {
+          created_at?: string
+          device_fingerprint?: string | null
+          email?: string
+          failure_reason?: string | null
+          id?: string
+          ip_address?: string | null
+          success?: boolean
+        }
+        Relationships: []
+      }
       member_invites: {
         Row: {
           created_at: string
@@ -602,6 +766,132 @@ export type Database = {
           },
         ]
       }
+      platform_ledger: {
+        Row: {
+          amount: number
+          balance_after: number
+          balance_before: number
+          created_at: string
+          description: string | null
+          entry_type: string
+          id: string
+          metadata: Json | null
+          settlement_reference: string | null
+          source_group_id: string | null
+          source_id: string | null
+          source_type: string | null
+          source_user_id: string | null
+        }
+        Insert: {
+          amount: number
+          balance_after: number
+          balance_before: number
+          created_at?: string
+          description?: string | null
+          entry_type: string
+          id?: string
+          metadata?: Json | null
+          settlement_reference?: string | null
+          source_group_id?: string | null
+          source_id?: string | null
+          source_type?: string | null
+          source_user_id?: string | null
+        }
+        Update: {
+          amount?: number
+          balance_after?: number
+          balance_before?: number
+          created_at?: string
+          description?: string | null
+          entry_type?: string
+          id?: string
+          metadata?: Json | null
+          settlement_reference?: string | null
+          source_group_id?: string | null
+          source_id?: string | null
+          source_type?: string | null
+          source_user_id?: string | null
+        }
+        Relationships: []
+      }
+      platform_settlements: {
+        Row: {
+          amount: number
+          bank_account: string | null
+          bank_name: string | null
+          completed_at: string | null
+          failure_reason: string | null
+          flw_transfer_id: string | null
+          flw_transfer_ref: string | null
+          id: string
+          initiated_at: string
+          initiated_by: string | null
+          metadata: Json | null
+          status: string
+        }
+        Insert: {
+          amount: number
+          bank_account?: string | null
+          bank_name?: string | null
+          completed_at?: string | null
+          failure_reason?: string | null
+          flw_transfer_id?: string | null
+          flw_transfer_ref?: string | null
+          id?: string
+          initiated_at?: string
+          initiated_by?: string | null
+          metadata?: Json | null
+          status?: string
+        }
+        Update: {
+          amount?: number
+          bank_account?: string | null
+          bank_name?: string | null
+          completed_at?: string | null
+          failure_reason?: string | null
+          flw_transfer_id?: string | null
+          flw_transfer_ref?: string | null
+          id?: string
+          initiated_at?: string
+          initiated_by?: string | null
+          metadata?: Json | null
+          status?: string
+        }
+        Relationships: []
+      }
+      platform_wallet: {
+        Row: {
+          available_balance: number
+          created_at: string
+          id: string
+          last_settlement_at: string | null
+          pending_balance: number
+          total_collected: number
+          updated_at: string
+          wallet_type: string
+        }
+        Insert: {
+          available_balance?: number
+          created_at?: string
+          id?: string
+          last_settlement_at?: string | null
+          pending_balance?: number
+          total_collected?: number
+          updated_at?: string
+          wallet_type: string
+        }
+        Update: {
+          available_balance?: number
+          created_at?: string
+          id?: string
+          last_settlement_at?: string | null
+          pending_balance?: number
+          total_collected?: number
+          updated_at?: string
+          wallet_type?: string
+        }
+        Relationships: []
+      }
       position_swap_requests: {
         Row: {
           created_at: string
@@ -658,6 +948,7 @@ export type Database = {
           avatar_url: string | null
           bank_account: string | null
           bank_account_encrypted: string | null
+          bank_details_changed_at: string | null
           bank_name: string | null
           bank_name_encrypted: string | null
           bvn: string | null
@@ -672,9 +963,11 @@ export type Database = {
           flw_virtual_bank_name: string | null
           full_name: string | null
           id: string
+          last_security_review: string | null
           membership_tier: Database["public"]["Enums"]["membership_tier"]
           phone: string | null
           phone_encrypted: string | null
+          risk_level: string | null
           updated_at: string | null
           username: string | null
         }
@@ -682,6 +975,7 @@ export type Database = {
           avatar_url?: string | null
           bank_account?: string | null
           bank_account_encrypted?: string | null
+          bank_details_changed_at?: string | null
           bank_name?: string | null
           bank_name_encrypted?: string | null
           bvn?: string | null
@@ -696,9 +990,11 @@ export type Database = {
           flw_virtual_bank_name?: string | null
           full_name?: string | null
           id: string
+          last_security_review?: string | null
           membership_tier?: Database["public"]["Enums"]["membership_tier"]
           phone?: string | null
           phone_encrypted?: string | null
+          risk_level?: string | null
           updated_at?: string | null
           username?: string | null
         }
@@ -706,6 +1002,7 @@ export type Database = {
           avatar_url?: string | null
           bank_account?: string | null
           bank_account_encrypted?: string | null
+          bank_details_changed_at?: string | null
           bank_name?: string | null
           bank_name_encrypted?: string | null
           bvn?: string | null
@@ -720,9 +1017,11 @@ export type Database = {
           flw_virtual_bank_name?: string | null
           full_name?: string | null
           id?: string
+          last_security_review?: string | null
           membership_tier?: Database["public"]["Enums"]["membership_tier"]
           phone?: string | null
           phone_encrypted?: string | null
+          risk_level?: string | null
           updated_at?: string | null
           username?: string | null
         }
@@ -870,6 +1169,48 @@ export type Database = {
           },
         ]
       }
+      user_devices: {
+        Row: {
+          browser: string | null
+          created_at: string
+          device_fingerprint: string
+          device_name: string | null
+          id: string
+          ip_address: string | null
+          is_current: boolean
+          is_trusted: boolean
+          last_used_at: string
+          os: string | null
+          user_id: string
+        }
+        Insert: {
+          browser?: string | null
+          created_at?: string
+          device_fingerprint: string
+          device_name?: string | null
+          id?: string
+          ip_address?: string | null
+          is_current?: boolean
+          is_trusted?: boolean
+          last_used_at?: string
+          os?: string | null
+          user_id: string
+        }
+        Update: {
+          browser?: string | null
+          created_at?: string
+          device_fingerprint?: string
+          device_name?: string | null
+          id?: string
+          ip_address?: string | null
+          is_current?: boolean
+          is_trusted?: boolean
+          last_used_at?: string
+          os?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string | null
@@ -887,6 +1228,78 @@ export type Database = {
           created_at?: string | null
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_totp_secrets: {
+        Row: {
+          backup_codes_encrypted: string | null
+          created_at: string
+          id: string
+          is_enabled: boolean
+          secret_encrypted: string
+          updated_at: string
+          user_id: string
+          verified_at: string | null
+        }
+        Insert: {
+          backup_codes_encrypted?: string | null
+          created_at?: string
+          id?: string
+          is_enabled?: boolean
+          secret_encrypted: string
+          updated_at?: string
+          user_id: string
+          verified_at?: string | null
+        }
+        Update: {
+          backup_codes_encrypted?: string | null
+          created_at?: string
+          id?: string
+          is_enabled?: boolean
+          secret_encrypted?: string
+          updated_at?: string
+          user_id?: string
+          verified_at?: string | null
+        }
+        Relationships: []
+      }
+      velocity_events: {
+        Row: {
+          amount: number | null
+          created_at: string
+          device_fingerprint: string | null
+          event_type: string
+          flag_reason: string | null
+          flagged: boolean
+          id: string
+          ip_address: string | null
+          metadata: Json | null
+          user_id: string
+        }
+        Insert: {
+          amount?: number | null
+          created_at?: string
+          device_fingerprint?: string | null
+          event_type: string
+          flag_reason?: string | null
+          flagged?: boolean
+          id?: string
+          ip_address?: string | null
+          metadata?: Json | null
+          user_id: string
+        }
+        Update: {
+          amount?: number | null
+          created_at?: string
+          device_fingerprint?: string | null
+          event_type?: string
+          flag_reason?: string | null
+          flagged?: boolean
+          id?: string
+          ip_address?: string | null
+          metadata?: Json | null
           user_id?: string
         }
         Relationships: []
@@ -948,6 +1361,51 @@ export type Database = {
           payload?: Json
           processed?: boolean | null
           processed_at?: string | null
+        }
+        Relationships: []
+      }
+      withdrawal_limits: {
+        Row: {
+          cooldown_reason: string | null
+          cooldown_until: string | null
+          created_at: string
+          daily_limit: number
+          daily_reset_at: string
+          daily_used: number
+          id: string
+          monthly_limit: number
+          monthly_reset_at: string
+          monthly_used: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cooldown_reason?: string | null
+          cooldown_until?: string | null
+          created_at?: string
+          daily_limit?: number
+          daily_reset_at?: string
+          daily_used?: number
+          id?: string
+          monthly_limit?: number
+          monthly_reset_at?: string
+          monthly_used?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cooldown_reason?: string | null
+          cooldown_until?: string | null
+          created_at?: string
+          daily_limit?: number
+          daily_reset_at?: string
+          daily_used?: number
+          id?: string
+          monthly_limit?: number
+          monthly_reset_at?: string
+          monthly_used?: number
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -1074,6 +1532,18 @@ export type Database = {
         }
         Returns: Json
       }
+      check_login_allowed: {
+        Args: { _email: string; _ip_address?: string }
+        Returns: Json
+      }
+      check_velocity: {
+        Args: { _amount?: number; _event_type: string; _user_id: string }
+        Returns: Json
+      }
+      check_withdrawal_limits: {
+        Args: { _amount: number; _user_id: string }
+        Returns: Json
+      }
       commence_thrift: { Args: { target_group_id: string }; Returns: Json }
       confirm_continue_group: { Args: { _group_id: string }; Returns: Json }
       create_thrift_group: {
@@ -1129,6 +1599,26 @@ export type Database = {
         }
         Returns: Json
       }
+      credit_wallet_via_ledger: {
+        Args: {
+          _amount: number
+          _description?: string
+          _reference_id?: string
+          _reference_type: string
+          _user_id: string
+        }
+        Returns: Json
+      }
+      debit_wallet_via_ledger: {
+        Args: {
+          _amount: number
+          _description?: string
+          _reference_id?: string
+          _reference_type: string
+          _user_id: string
+        }
+        Returns: Json
+      }
       exit_completed_group: { Args: { _group_id: string }; Returns: Json }
       gen_random_bytes: { Args: { n: number }; Returns: string }
       gen_random_uuid: { Args: never; Returns: string }
@@ -1173,6 +1663,26 @@ export type Database = {
         Returns: Json
       }
       process_payout_internal: { Args: { _group_id: string }; Returns: Json }
+      record_login_attempt: {
+        Args: {
+          _device_fingerprint?: string
+          _email: string
+          _failure_reason?: string
+          _ip_address?: string
+          _success: boolean
+        }
+        Returns: undefined
+      }
+      record_platform_fee: {
+        Args: {
+          _amount: number
+          _source_group_id?: string
+          _source_id: string
+          _source_type: string
+          _source_user_id: string
+        }
+        Returns: Json
+      }
       request_position_swap: {
         Args: { _group_id: string; _target_user_id: string }
         Returns: Json
@@ -1199,6 +1709,16 @@ export type Database = {
       }
       send_member_invite: {
         Args: { target_group_id: string; target_user_id: string }
+        Returns: Json
+      }
+      update_credit_score: {
+        Args: {
+          _change_amount: number
+          _change_reason: string
+          _reference_id?: string
+          _reference_type?: string
+          _user_id: string
+        }
         Returns: Json
       }
       validate_invite_token: {
