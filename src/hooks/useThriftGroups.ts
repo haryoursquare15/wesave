@@ -144,6 +144,7 @@ export function usePoolGroups() {
         contribution_day_of_month: null,
         contribution_day_of_week: null,
         contribution_hour: 9,
+        contribution_minute: 0,
         memberCount: Number(group.member_count) || 0,
         pendingRequests: Number(group.pending_requests) || 0,
         isMember: userGroupIds.includes(group.id!),
@@ -176,6 +177,7 @@ export function useCreateGroup() {
     period: "daily" | "weekly" | "monthly";
     autoDebit: boolean;
     contributionHour?: number;
+    contributionMinute?: number;
     contributionDayOfWeek?: number;
     contributionDayOfMonth?: number;
   }) => {
@@ -220,6 +222,7 @@ export function useCreateGroup() {
       // Update the schedule fields separately (RPC doesn't support them yet)
       const scheduleUpdate: Record<string, number | null> = {
         contribution_hour: data.contributionHour ?? 9,
+        contribution_minute: data.contributionMinute ?? 0,
       };
 
       if (data.period === "weekly") {

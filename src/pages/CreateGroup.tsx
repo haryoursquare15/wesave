@@ -25,10 +25,19 @@ const daysOfWeek = [
   { value: 6, label: "Saturday" },
 ];
 
-const hours = Array.from({ length: 24 }, (_, i) => ({
-  value: i,
-  label: `${i === 0 ? 12 : i > 12 ? i - 12 : i}:00 ${i < 12 ? "AM" : "PM"}`,
-}));
+// Generate time slots with 30-minute intervals (48 slots total)
+const timeSlots = Array.from({ length: 48 }, (_, i) => {
+  const hour = Math.floor(i / 2);
+  const minute = (i % 2) * 30;
+  const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+  const amPm = hour < 12 ? "AM" : "PM";
+  return {
+    value: i, // 0-47 representing each 30-min slot
+    hour,
+    minute,
+    label: `${displayHour}:${minute === 0 ? "00" : "30"} ${amPm}`,
+  };
+});
 
 const daysOfMonth = Array.from({ length: 28 }, (_, i) => ({
   value: i + 1,
@@ -46,7 +55,7 @@ export default function CreateGroup() {
     contributionAmount: 10000,
     period: "weekly" as "daily" | "weekly" | "monthly",
     autoDebit: true,
-    contributionHour: 9,
+    contributionTimeSlot: 18, // Default 9:00 AM (slot 18 = 9*2)
     contributionDayOfWeek: 1,
     contributionDayOfMonth: 1,
   });
@@ -70,12 +79,18 @@ export default function CreateGroup() {
     }
 
     try {
+      // Convert time slot to hour and minute
+      const selectedSlot = timeSlots[formData.contributionTimeSlot];
       const group = await createGroup({
         name: formData.name,
         maxMembers: formData.maxMembers,
         contributionAmount: formData.contributionAmount,
         period: formData.period,
         autoDebit: formData.autoDebit,
+        contributionHour: selectedSlot?.hour ?? 9,
+        contributionMinute: selectedSlot?.minute ?? 0,
+        contributionDayOfWeek: formData.contributionDayOfWeek,
+        contributionDayOfMonth: formData.contributionDayOfMonth,
       });
       
       setCreatedGroup({ id: group.id, name: group.name });
@@ -251,16 +266,16 @@ export default function CreateGroup() {
               <div className="space-y-2">
                 <Label>Contribution Time</Label>
                 <Select
-                  value={String(formData.contributionHour)}
-                  onValueChange={(value) => setFormData({ ...formData, contributionHour: Number(value) })}
+                  value={String(formData.contributionTimeSlot)}
+                  onValueChange={(value) => setFormData({ ...formData, contributionTimeSlot: Number(value) })}
                 >
                   <SelectTrigger className="h-12">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {hours.map((hour) => (
-                      <SelectItem key={hour.value} value={String(hour.value)}>
-                        {hour.label}
+                    {timeSlots.map((slot) => (
+                      <SelectItem key={slot.value} value={String(slot.value)}>
+                        {slot.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -291,16 +306,16 @@ export default function CreateGroup() {
                 <div className="space-y-2">
                   <Label>Contribution Time</Label>
                   <Select
-                    value={String(formData.contributionHour)}
-                    onValueChange={(value) => setFormData({ ...formData, contributionHour: Number(value) })}
+                    value={String(formData.contributionTimeSlot)}
+                    onValueChange={(value) => setFormData({ ...formData, contributionTimeSlot: Number(value) })}
                   >
                     <SelectTrigger className="h-12">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {hours.map((hour) => (
-                        <SelectItem key={hour.value} value={String(hour.value)}>
-                          {hour.label}
+                      {timeSlots.map((slot) => (
+                        <SelectItem key={slot.value} value={String(slot.value)}>
+                          {slot.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
