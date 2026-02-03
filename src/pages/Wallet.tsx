@@ -144,7 +144,7 @@ export default function Wallet() {
         )
         .subscribe();
 
-      // Subscribe to transaction changes for real-time tx list updates
+      // Subscribe to transaction changes for real-time tx list updates with notifications
       const txChannel = supabase
         .channel(`transactions-${user.id}`)
         .on(
@@ -155,7 +155,38 @@ export default function Wallet() {
             table: "transactions",
             filter: `user_id=eq.${user.id}`,
           },
-          async () => {
+          async (payload) => {
+            // Show toast notification for new transactions
+            const newTx = payload.new as Transaction;
+            if (newTx) {
+              const amount = Number(newTx.amount).toLocaleString();
+              switch (newTx.type) {
+                case "funding":
+                  toast.success(`💰 ₦${amount} added to your wallet!`);
+                  break;
+                case "payout":
+                  toast.success(`🎉 You received a payout of ₦${amount}!`);
+                  break;
+                case "contribution":
+                  toast.info(`📤 Contribution of ₦${amount} made successfully`);
+                  break;
+                case "withdrawal":
+                  toast.info(`💸 Withdrawal of ₦${amount} processed`);
+                  break;
+                case "lock":
+                  toast.info(`🔒 ₦${amount} locked in savings`);
+                  break;
+                case "unlock":
+                  toast.info(`🔓 ₦${amount} unlocked from savings`);
+                  break;
+                case "service_fee":
+                  // Don't show notification for service fees
+                  break;
+                default:
+                  toast.info(`Transaction: ₦${amount}`);
+              }
+            }
+            
             // Refetch transactions on new entry
             const { data } = await supabase
               .from("transactions")
