@@ -115,37 +115,20 @@ serve(async (req) => {
             break;
           }
 
-          // Get user wallet
-          const { data: wallet, error: walletError } = await supabase
-            .from('wallets')
-            .select('*')
-            .eq('user_id', userId)
-            .single();
+          // Use atomic function to credit wallet
+          const { data: creditResult, error: creditError } = await supabase.rpc('credit_wallet_atomic', {
+            _user_id: userId,
+            _amount: data.amount,
+            _tx_ref: txRef,
+            _description: 'Wallet funding',
+          });
 
-          if (walletError || !wallet) {
-            console.error('Wallet not found for user:', userId);
+          if (creditError || !creditResult?.success) {
+            console.error('Failed to credit wallet:', creditError || creditResult?.error);
             break;
           }
 
-          // Credit wallet
-          const newBalance = Number(wallet.available_balance) + data.amount;
-          await supabase
-            .from('wallets')
-            .update({ 
-              available_balance: newBalance,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', wallet.id);
-
-          // Update transaction status
-          await supabase
-            .from('transactions')
-            .update({
-              status: 'completed',
-            })
-            .eq('reference', txRef);
-
-          console.log(`Wallet funded: ${userId}, Amount: ${data.amount}`);
+          console.log(`Wallet funded: ${userId}, Amount: ${data.amount}, New Balance: ${creditResult.new_balance}`);
         }
         break;
       }
