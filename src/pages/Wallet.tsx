@@ -1,27 +1,191 @@
 import { motion } from "framer-motion";
-import { ArrowLeft, Eye, EyeOff, ArrowUpRight, ArrowDownLeft, Lock, History, Plus, Percent } from "lucide-react";
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { ArrowLeft, Eye, EyeOff, ArrowUpRight, ArrowDownLeft, Lock, History, Percent, Copy, Check, CreditCard } from "lucide-react";
+import { useState, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { BottomNav } from "@/components/BottomNav";
-import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import { format } from "date-fns";
 
-const transactions = [
-  { id: 1, type: "credit", description: "Payout - Family Savings", amount: 250000, date: "Today, 2:30 PM" },
-  { id: 2, type: "debit", description: "Contribution - Office Thrift", amount: 25000, date: "Yesterday" },
-  { id: 3, type: "credit", description: "Wallet Fund", amount: 100000, date: "Jan 15, 2024" },
-  { id: 4, type: "debit", description: "Contribution - Family Savings", amount: 50000, date: "Jan 14, 2024" },
-];
+interface Transaction {
+  id: string;
+  type: string;
+  description: string | null;
+  amount: number;
+  status: string;
+  created_at: string;
+}
 
 export default function Wallet() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const { user, wallet, profile, refreshWallet, loading: authLoading } = useAuth();
   const [showBalance, setShowBalance] = useState(true);
-  const balance = 275000;
-  const lockedBalance = 50000;
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [loadingTx, setLoadingTx] = useState(true);
+  const [fundDialogOpen, setFundDialogOpen] = useState(false);
+  const [fundAmount, setFundAmount] = useState("");
+  const [funding, setFunding] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [creatingVA, setCreatingVA] = useState(false);
+
+  const balance = Number(wallet?.available_balance) || 0;
+  const lockedBalance = Number(wallet?.locked_balance) || 0;
+
+  // Check for funding redirect status
+  useEffect(() => {
+    const fundingStatus = searchParams.get("funding");
+    if (fundingStatus === "success") {
+      toast.success("Wallet funded successfully!");
+      refreshWallet();
+    } else if (fundingStatus === "failed") {
+      toast.error("Wallet funding failed. Please try again.");
+    }
+  }, [searchParams, refreshWallet]);
+
+  // Redirect if not logged in
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate("/auth");
+    }
+  }, [user, authLoading, navigate]);
+
+  // Fetch transactions
+  useEffect(() => {
+    async function fetchTransactions() {
+      if (!user) return;
+
+      try {
+        const { data, error } = await supabase
+          .from("transactions")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(20);
+
+        if (error) throw error;
+        setTransactions(data || []);
+      } catch (err) {
+        console.error("Error fetching transactions:", err);
+      } finally {
+        setLoadingTx(false);
+      }
+    }
+
+    fetchTransactions();
+  }, [user]);
 
   const formatAmount = (amount: number) => {
     return new Intl.NumberFormat("en-NG").format(amount);
   };
+
+  const createVirtualAccount = async () => {
+    if (!profile?.bvn || !profile?.bank_account) {
+      toast.error("Please complete onboarding with your BVN and bank details first.");
+      navigate("/onboarding");
+      return;
+    }
+
+    setCreatingVA(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("flutterwave-subaccount", {
+        body: { action: "create_virtual_account" },
+      });
+
+      if (error) throw error;
+
+      if (data.success) {
+        toast.success("Virtual account created successfully!");
+        refreshWallet();
+      } else {
+        toast.error(data.error || "Failed to create virtual account");
+      }
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to create virtual account";
+      toast.error(errorMessage);
+    } finally {
+      setCreatingVA(false);
+    }
+  };
+
+  const handleFund = async () => {
+    const amount = Number(fundAmount);
+    if (!amount || amount < 100) {
+      toast.error("Minimum funding amount is ₦100");
+      return;
+    }
+
+    setFunding(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("flutterwave-payments", {
+        body: { action: "fund_wallet", amount },
+      });
+
+      if (error) throw error;
+
+      if (data.success && data.payment_link) {
+        // Redirect to payment page
+        window.location.href = data.payment_link;
+      } else {
+        toast.error(data.error || "Failed to initiate payment");
+      }
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to initiate payment";
+      toast.error(errorMessage);
+    } finally {
+      setFunding(false);
+    }
+  };
+
+  const copyAccountNumber = () => {
+    if (profile?.flw_virtual_account_number) {
+      navigator.clipboard.writeText(profile.flw_virtual_account_number);
+      setCopied(true);
+      toast.success("Account number copied!");
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const getTransactionIcon = (type: string) => {
+    switch (type) {
+      case "funding":
+      case "payout":
+        return <ArrowDownLeft className="h-5 w-5" />;
+      case "contribution":
+      case "withdrawal":
+        return <ArrowUpRight className="h-5 w-5" />;
+      case "lock":
+        return <Lock className="h-4 w-4" />;
+      default:
+        return <CreditCard className="h-5 w-5" />;
+    }
+  };
+
+  const getTransactionColor = (type: string) => {
+    switch (type) {
+      case "funding":
+      case "payout":
+        return "bg-success/10 text-success";
+      case "contribution":
+      case "withdrawal":
+        return "bg-coral/10 text-coral";
+      default:
+        return "bg-muted text-muted-foreground";
+    }
+  };
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="h-8 w-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -64,7 +228,10 @@ export default function Wallet() {
 
             {/* Action Buttons */}
             <div className="flex gap-3 max-w-xs mx-auto">
-              <Button className="flex-1 bg-white/20 hover:bg-white/30 text-primary-foreground border-0">
+              <Button 
+                className="flex-1 bg-white/20 hover:bg-white/30 text-primary-foreground border-0"
+                onClick={() => setFundDialogOpen(true)}
+              >
                 <ArrowDownLeft className="h-4 w-4 mr-2" />
                 Fund
               </Button>
@@ -78,6 +245,58 @@ export default function Wallet() {
       </div>
 
       <main className="container mx-auto px-4 py-6 space-y-6">
+        {/* Virtual Account Card */}
+        {profile?.flw_virtual_account_number ? (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-4 rounded-xl bg-card border border-border"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm text-muted-foreground">Your Virtual Account</p>
+              <button
+                onClick={copyAccountNumber}
+                className="text-primary hover:text-primary/80 transition-colors"
+              >
+                {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              </button>
+            </div>
+            <p className="text-lg font-mono font-semibold text-foreground">
+              {profile.flw_virtual_account_number}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {profile.flw_virtual_bank_name}
+            </p>
+            <p className="text-xs text-muted-foreground mt-2">
+              Transfer to this account to fund your wallet instantly
+            </p>
+          </motion.div>
+        ) : (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-4 rounded-xl bg-gold/10 border border-gold/20"
+          >
+            <p className="text-sm font-medium text-foreground mb-2">
+              Create a Virtual Account
+            </p>
+            <p className="text-xs text-muted-foreground mb-3">
+              Get a dedicated account number for instant wallet funding
+            </p>
+            <Button 
+              variant="gold" 
+              size="sm" 
+              onClick={createVirtualAccount}
+              disabled={creatingVA}
+            >
+              {creatingVA ? (
+                <div className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin mr-2" />
+              ) : null}
+              Create Now
+            </Button>
+          </motion.div>
+        )}
+
         {/* Quick Actions */}
         <div className="grid grid-cols-2 gap-4">
           <motion.button
@@ -119,51 +338,86 @@ export default function Wallet() {
               <History className="h-4 w-4" />
               Recent Transactions
             </h3>
-            <Button variant="ghost" size="sm">
-              View All
-            </Button>
           </div>
 
-          <div className="space-y-3">
-            {transactions.map((tx, index) => (
-              <motion.div
-                key={tx.id}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.1 }}
-                className="flex items-center justify-between p-4 rounded-xl bg-card border border-border"
-              >
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`h-10 w-10 rounded-full flex items-center justify-center ${
-                      tx.type === "credit"
-                        ? "bg-success/10 text-success"
-                        : "bg-coral/10 text-coral"
-                    }`}
-                  >
-                    {tx.type === "credit" ? (
-                      <ArrowDownLeft className="h-5 w-5" />
-                    ) : (
-                      <ArrowUpRight className="h-5 w-5" />
-                    )}
-                  </div>
-                  <div>
-                    <p className="font-medium text-foreground text-sm">{tx.description}</p>
-                    <p className="text-xs text-muted-foreground">{tx.date}</p>
-                  </div>
-                </div>
-                <span
-                  className={`font-semibold ${
-                    tx.type === "credit" ? "text-success" : "text-foreground"
-                  }`}
+          {loadingTx ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="h-6 w-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+            </div>
+          ) : transactions.length > 0 ? (
+            <div className="space-y-3">
+              {transactions.map((tx, index) => (
+                <motion.div
+                  key={tx.id}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                  className="flex items-center justify-between p-4 rounded-xl bg-card border border-border"
                 >
-                  {tx.type === "credit" ? "+" : "-"}₦{formatAmount(tx.amount)}
-                </span>
-              </motion.div>
-            ))}
-          </div>
+                  <div className="flex items-center gap-3">
+                    <div className={`h-10 w-10 rounded-full flex items-center justify-center ${getTransactionColor(tx.type)}`}>
+                      {getTransactionIcon(tx.type)}
+                    </div>
+                    <div>
+                      <p className="font-medium text-foreground text-sm capitalize">
+                        {tx.description || tx.type.replace("_", " ")}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {format(new Date(tx.created_at), "MMM d, h:mm a")}
+                      </p>
+                    </div>
+                  </div>
+                  <span className={`font-semibold ${
+                    tx.type === "funding" || tx.type === "payout" 
+                      ? "text-success" 
+                      : "text-foreground"
+                  }`}>
+                    {tx.type === "funding" || tx.type === "payout" ? "+" : "-"}₦{formatAmount(tx.amount)}
+                  </span>
+                </motion.div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <History className="h-12 w-12 mx-auto mb-2 opacity-50" />
+              <p>No transactions yet</p>
+            </div>
+          )}
         </section>
       </main>
+
+      {/* Fund Dialog */}
+      <Dialog open={fundDialogOpen} onOpenChange={setFundDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Fund Your Wallet</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <div className="space-y-2">
+              <Label htmlFor="amount">Amount (₦)</Label>
+              <Input
+                id="amount"
+                type="number"
+                placeholder="Enter amount"
+                value={fundAmount}
+                onChange={(e) => setFundAmount(e.target.value)}
+                min={100}
+              />
+              <p className="text-xs text-muted-foreground">Minimum: ₦100</p>
+            </div>
+            <Button 
+              onClick={handleFund} 
+              disabled={funding || !fundAmount}
+              className="w-full"
+            >
+              {funding ? (
+                <div className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin mr-2" />
+              ) : null}
+              Continue to Payment
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <BottomNav />
     </div>
