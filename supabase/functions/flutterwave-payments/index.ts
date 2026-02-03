@@ -19,6 +19,92 @@ function getCorsHeaders(origin: string | null): Record<string, string> {
 const FLUTTERWAVE_BASE_URL = "https://api.flutterwave.com/v3";
 const PLATFORM_FEE_PERCENTAGE = 0.02; // 2%
 
+// Platform bank account for service fee collection
+// This should be configured with your actual Flutterwave settlement account
+const PLATFORM_BANK_CODE = "044"; // Access Bank (example)
+const PLATFORM_ACCOUNT_NUMBER = Deno.env.get('PLATFORM_BANK_ACCOUNT') || ""; // Platform's bank account
+
+// Transfer service fee to platform account
+async function transferServiceFee(
+  secretKey: string, 
+  amount: number, 
+  groupId: string,
+  supabaseClient: any
+) {
+  try {
+    // Skip if no platform account configured or amount too small
+    if (!PLATFORM_ACCOUNT_NUMBER || amount < 100) {
+      console.log(`Service fee transfer skipped: amount=${amount}, accountConfigured=${!!PLATFORM_ACCOUNT_NUMBER}`);
+      // Mark the service fee transaction as completed anyway (internal ledger tracking)
+      await supabaseClient
+        .from('transactions')
+        .update({ 
+          status: 'completed',
+          description: 'Platform service fee (ledger tracked)'
+        })
+        .eq('group_id', groupId)
+        .eq('type', 'service_fee')
+        .eq('status', 'pending');
+      return { success: true, skipped: true };
+    }
+
+    const transferRef = `fee-${groupId}-${Date.now()}`;
+
+    const transferResponse = await fetch(`${FLUTTERWAVE_BASE_URL}/transfers`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${secretKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        account_bank: PLATFORM_BANK_CODE,
+        account_number: PLATFORM_ACCOUNT_NUMBER,
+        amount: amount,
+        currency: 'NGN',
+        narration: `ThriftPal service fee - ${groupId}`,
+        reference: transferRef,
+        debit_currency: 'NGN',
+      }),
+    });
+
+    const transferData = await transferResponse.json();
+    console.log('Service fee transfer response:', JSON.stringify(transferData));
+
+    if (transferData.status === 'success') {
+      // Update the pending service fee transaction to completed
+      await supabaseClient
+        .from('transactions')
+        .update({ 
+          status: 'completed',
+          reference: transferRef,
+          description: 'Platform service fee (transferred)'
+        })
+        .eq('group_id', groupId)
+        .eq('type', 'service_fee')
+        .eq('status', 'pending');
+      
+      return { success: true, reference: transferRef };
+    } else {
+      console.error('Service fee transfer failed:', transferData);
+      // Mark as failed but don't throw - payout was already processed
+      await supabaseClient
+        .from('transactions')
+        .update({ 
+          status: 'failed',
+          description: `Platform service fee (transfer failed: ${transferData.message || 'Unknown error'})`
+        })
+        .eq('group_id', groupId)
+        .eq('type', 'service_fee')
+        .eq('status', 'pending');
+      
+      return { success: false, error: transferData.message };
+    }
+  } catch (error) {
+    console.error('Error transferring service fee:', error);
+    return { success: false, error: 'Transfer failed' };
+  }
+}
+
 serve(async (req) => {
   const origin = req.headers.get('origin');
   const corsHeaders = getCorsHeaders(origin);
@@ -125,7 +211,81 @@ serve(async (req) => {
           throw new Error(payoutResult.error || 'Payout failed');
         }
 
+        // Transfer service fee to platform Flutterwave account
+        if (payoutResult.platform_fee > 0) {
+          await transferServiceFee(FLUTTERWAVE_SECRET_KEY, payoutResult.platform_fee, groupId, supabase);
+        }
+
         result = payoutResult;
+        break;
+      }
+
+      case 'exit_group': {
+        const { groupId } = params;
+        if (!groupId) {
+          throw new Error('Group ID is required');
+        }
+
+        const { data: exitResult, error: rpcError } = await supabase.rpc('exit_completed_group', {
+          _group_id: groupId,
+        });
+
+        if (rpcError) {
+          console.error('Exit group RPC error:', rpcError);
+          throw new Error('Failed to exit group');
+        }
+
+        if (!exitResult.success) {
+          throw new Error(exitResult.error || 'Failed to exit group');
+        }
+
+        result = exitResult;
+        break;
+      }
+
+      case 'restart_group': {
+        const { groupId } = params;
+        if (!groupId) {
+          throw new Error('Group ID is required');
+        }
+
+        const { data: restartResult, error: rpcError } = await supabase.rpc('restart_completed_group', {
+          _group_id: groupId,
+        });
+
+        if (rpcError) {
+          console.error('Restart group RPC error:', rpcError);
+          throw new Error('Failed to restart group');
+        }
+
+        if (!restartResult.success) {
+          throw new Error(restartResult.error || 'Failed to restart group');
+        }
+
+        result = restartResult;
+        break;
+      }
+
+      case 'confirm_continue': {
+        const { groupId } = params;
+        if (!groupId) {
+          throw new Error('Group ID is required');
+        }
+
+        const { data: confirmResult, error: rpcError } = await supabase.rpc('confirm_continue_group', {
+          _group_id: groupId,
+        });
+
+        if (rpcError) {
+          console.error('Confirm continue RPC error:', rpcError);
+          throw new Error('Failed to confirm continuation');
+        }
+
+        if (!confirmResult.success) {
+          throw new Error(confirmResult.error || 'Failed to confirm continuation');
+        }
+
+        result = confirmResult;
         break;
       }
 
