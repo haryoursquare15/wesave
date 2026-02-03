@@ -37,16 +37,62 @@ export default function Wallet() {
   const balance = Number(wallet?.available_balance) || 0;
   const lockedBalance = Number(wallet?.locked_balance) || 0;
 
-  // Check for funding redirect status
+  // Check for funding redirect status and verify pending transactions
   useEffect(() => {
-    const fundingStatus = searchParams.get("funding");
-    if (fundingStatus === "success") {
-      toast.success("Wallet funded successfully!");
-      refreshWallet();
-    } else if (fundingStatus === "failed") {
-      toast.error("Wallet funding failed. Please try again.");
-    }
-  }, [searchParams, refreshWallet]);
+    const verifyPendingTransactions = async () => {
+      if (!user) return;
+      
+      const fundingStatus = searchParams.get("funding");
+      
+      // Get pending funding transactions and verify them
+      try {
+        const { data: pendingTxs } = await supabase
+          .from("transactions")
+          .select("reference")
+          .eq("user_id", user.id)
+          .eq("type", "funding")
+          .eq("status", "pending")
+          .order("created_at", { ascending: false })
+          .limit(5);
+
+        if (pendingTxs && pendingTxs.length > 0) {
+          // Verify each pending transaction
+          for (const tx of pendingTxs) {
+            if (tx.reference) {
+              const { data } = await supabase.functions.invoke("flutterwave-payments", {
+                body: { action: "verify_transaction", tx_ref: tx.reference },
+              });
+              
+              if (data?.success && data?.verified && !data?.already_completed) {
+                toast.success(`₦${data.amount?.toLocaleString()} added to wallet!`);
+              }
+            }
+          }
+          // Refresh wallet and transactions
+          refreshWallet();
+          // Refetch transactions
+          const { data: txData } = await supabase
+            .from("transactions")
+            .select("*")
+            .eq("user_id", user.id)
+            .order("created_at", { ascending: false })
+            .limit(20);
+          if (txData) setTransactions(txData);
+        }
+      } catch (err) {
+        console.error("Error verifying transactions:", err);
+      }
+
+      // Show appropriate toast based on redirect status
+      if (fundingStatus === "success") {
+        // Transaction will be verified above
+      } else if (fundingStatus === "failed") {
+        toast.error("Wallet funding failed. Please try again.");
+      }
+    };
+
+    verifyPendingTransactions();
+  }, [searchParams, user, refreshWallet]);
 
   // Redirect if not logged in
   useEffect(() => {
