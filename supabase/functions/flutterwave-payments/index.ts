@@ -69,11 +69,23 @@ serve(async (req) => {
         });
 
         if (rpcError) {
+          console.error('RPC error:', rpcError);
           throw new Error('Failed to process contribution');
         }
 
         if (!result.success) {
-          throw new Error(result.error || 'Contribution failed');
+          // Return clearer error messages
+          const errorMsg = result.error || 'Contribution failed';
+          if (errorMsg === 'No active cycle') {
+            throw new Error('No active contribution cycle. Please wait for the next cycle to begin.');
+          }
+          if (errorMsg === 'Already contributed') {
+            throw new Error('You have already contributed to this cycle.');
+          }
+          if (errorMsg === 'Insufficient funds') {
+            throw new Error('Insufficient wallet balance. Please fund your wallet first.');
+          }
+          throw new Error(errorMsg);
         }
 
         // Add chat message
@@ -282,7 +294,14 @@ serve(async (req) => {
     let userMessage = 'An error occurred processing your request';
     if (error instanceof Error) {
       const msg = error.message.toLowerCase();
-      if (msg.includes('unauthorized') || msg.includes('no authorization')) {
+      // Preserve clear error messages for the user
+      if (msg.includes('no active contribution cycle') || msg.includes('no active cycle')) {
+        userMessage = 'No active contribution cycle. Please wait for the next cycle to begin.';
+      } else if (msg.includes('already contributed')) {
+        userMessage = 'You have already contributed to this cycle.';
+      } else if (msg.includes('insufficient') || msg.includes('wallet balance')) {
+        userMessage = 'Insufficient wallet balance. Please fund your wallet first.';
+      } else if (msg.includes('unauthorized') || msg.includes('no authorization')) {
         userMessage = 'Authentication required';
       } else if (msg.includes('group id') || msg.includes('required')) {
         userMessage = 'Missing required information';
@@ -290,8 +309,8 @@ serve(async (req) => {
         userMessage = 'Amount does not meet minimum requirements';
       } else if (msg.includes('not found')) {
         userMessage = 'Resource not found';
-      } else if (msg.includes('insufficient')) {
-        userMessage = 'Insufficient funds';
+      } else if (msg.includes('not a member')) {
+        userMessage = 'You are not a member of this group';
       } else if (msg.includes('contribution failed') || msg.includes('payout failed')) {
         userMessage = 'Operation could not be completed';
       } else if (msg.includes('unknown action')) {
