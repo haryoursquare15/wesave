@@ -85,12 +85,27 @@ export default function Auth() {
     };
   }, [isPasswordReset]);
 
-  // Redirect if already logged in
+  // Handle session enforcement: if fresh browser session but user has old auth, clear it
+  // Otherwise redirect logged-in users to dashboard
   useEffect(() => {
-    if (user && !loading) {
-      navigate("/dashboard");
-    }
-  }, [user, loading, navigate]);
+    if (loading) return;
+    
+    const checkSession = async () => {
+      const sessionMarker = sessionStorage.getItem("thrift_session_active");
+      
+      if (!sessionMarker && user) {
+        // Fresh browser session but old auth exists - sign out
+        await supabase.auth.signOut();
+        return;
+      }
+      
+      if (user && !isPasswordReset) {
+        navigate("/dashboard");
+      }
+    };
+    
+    checkSession();
+  }, [user, loading, navigate, isPasswordReset]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

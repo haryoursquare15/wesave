@@ -220,18 +220,16 @@ export default function Profile() {
               ) : (
                 <div className="flex items-center gap-2">
                   <p className="text-primary-foreground/70 text-sm">
-                    @{profile?.username || "user"} • Member since {profile?.created_at ? new Date(profile.created_at).toLocaleDateString("en-US", { month: "short", year: "numeric" }) : ""}
+                    @{profile?.username || "set username"} • Member since {profile?.created_at ? new Date(profile.created_at).toLocaleDateString("en-US", { month: "short", year: "numeric" }) : ""}
                   </p>
-                  {(!profile?.username || profile.username === "user") && (
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-6 w-6 text-primary-foreground hover:bg-white/20"
-                      onClick={handleEditUsername}
-                    >
-                      <Pencil className="h-3 w-3" />
-                    </Button>
-                  )}
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6 text-primary-foreground hover:bg-white/20"
+                    onClick={handleEditUsername}
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </Button>
                 </div>
               )}
             </div>

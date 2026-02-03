@@ -31,6 +31,7 @@ interface ChatMessage {
   profiles?: {
     full_name: string | null;
     avatar_url: string | null;
+    username: string | null;
   };
 }
 
@@ -168,14 +169,14 @@ export default function GroupDetail() {
         const userIds = [...new Set(messagesData.map(m => m.user_id))];
         const { data: profiles } = await supabase
           .from("profiles")
-          .select("id, full_name, avatar_url")
+          .select("id, full_name, avatar_url, username")
           .in("id", userIds);
         
         const profileMap = new Map(profiles?.map(p => [p.id, p]) || []);
         
         const messagesWithProfiles = messagesData.map(msg => ({
           ...msg,
-          profiles: profileMap.get(msg.user_id) || { full_name: null, avatar_url: null },
+          profiles: profileMap.get(msg.user_id) || { full_name: null, avatar_url: null, username: null },
         }));
         
         setMessages(messagesWithProfiles);
@@ -204,13 +205,13 @@ export default function GroupDetail() {
           const newMsg = payload.new as { id: string; user_id: string; message: string; message_type: string; created_at: string };
           const { data: profile } = await supabase
             .from("profiles")
-            .select("id, full_name, avatar_url")
+            .select("id, full_name, avatar_url, username")
             .eq("id", newMsg.user_id)
             .single();
           
           const messageWithProfile: ChatMessage = {
             ...newMsg,
-            profiles: profile || { full_name: null, avatar_url: null },
+            profiles: profile || { full_name: null, avatar_url: null, username: null },
           };
           
           setMessages((prev) => [...prev, messageWithProfile]);
@@ -578,7 +579,7 @@ export default function GroupDetail() {
                           </Avatar>
                           <div className={`max-w-[75%] ${msg.user_id === user?.id ? "text-right" : ""}`}>
                             <p className="text-xs text-muted-foreground mb-1">
-                              {msg.profiles?.full_name || "Unknown"}
+                              {msg.profiles?.username ? `@${msg.profiles.username}` : msg.profiles?.full_name || "Unknown"}
                             </p>
                             <div
                               className={`rounded-2xl px-4 py-2 ${
