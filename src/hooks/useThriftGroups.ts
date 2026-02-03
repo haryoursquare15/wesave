@@ -181,21 +181,17 @@ export function useCreateGroup() {
     setError(null);
 
     try {
-      const { data: group, error: insertError } = await supabase
-        .from("thrift_groups")
-        .insert({
-          name: data.name,
-          max_members: data.maxMembers,
-          contribution_amount: data.contributionAmount,
-          period: data.period,
-          auto_debit: data.autoDebit,
-          admin_id: user.id,
-          status: "pending",
-        })
-        .select()
-        .single();
+      // Use the RPC function to bypass RLS insert issues
+      const { data: group, error: rpcError } = await supabase
+        .rpc("create_thrift_group", {
+          _name: data.name,
+          _max_members: data.maxMembers,
+          _contribution_amount: data.contributionAmount,
+          _period: data.period,
+          _auto_debit: data.autoDebit,
+        });
 
-      if (insertError) throw insertError;
+      if (rpcError) throw rpcError;
 
       return group;
     } catch (err) {
