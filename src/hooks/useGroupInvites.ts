@@ -54,25 +54,25 @@ export function useSearchUsers() {
   return { searchUsers, results, loading, error, clearResults: () => setResults([]) };
 }
 
-export function useAddMemberToGroup() {
+export function useSendMemberInvite() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  const addMember = useCallback(async (groupId: string, userId: string) => {
+  const sendInvite = useCallback(async (groupId: string, userId: string) => {
     setLoading(true);
     setError(null);
 
     try {
-      const { data, error: addError } = await supabase.rpc("add_member_to_group", {
+      const { data, error: inviteError } = await supabase.rpc("send_member_invite", {
         target_group_id: groupId,
         target_user_id: userId,
       });
 
-      if (addError) throw addError;
+      if (inviteError) throw inviteError;
 
       const result = data as { success: boolean; error?: string; message?: string };
       if (!result.success) {
-        throw new Error(result.error || "Failed to add member");
+        throw new Error(result.error || "Failed to send invite");
       }
 
       return result;
@@ -84,7 +84,116 @@ export function useAddMemberToGroup() {
     }
   }, []);
 
-  return { addMember, loading, error };
+  return { sendInvite, loading, error };
+}
+
+export function useRespondToInvite() {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+
+  const respond = useCallback(async (inviteId: string, accept: boolean) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const { data, error: respondError } = await supabase.rpc("respond_to_invite", {
+        invite_id: inviteId,
+        accept,
+      });
+
+      if (respondError) throw respondError;
+
+      const result = data as { success: boolean; error?: string; message?: string; group_id?: string };
+      if (!result.success) {
+        throw new Error(result.error || "Failed to respond to invite");
+      }
+
+      return result;
+    } catch (err) {
+      setError(err as Error);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  return { respond, loading, error };
+}
+
+export function usePendingInvites() {
+  const { user } = useAuth();
+  const [invites, setInvites] = useState<Array<{
+    id: string;
+    group_id: string;
+    inviter_id: string;
+    created_at: string;
+    group_name: string;
+    inviter_name: string;
+    contribution_amount: number;
+    period: string;
+  }>>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchInvites = useCallback(async () => {
+    if (!user) {
+      setInvites([]);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("member_invites")
+        .select(`
+          id,
+          group_id,
+          inviter_id,
+          created_at
+        `)
+        .eq("invitee_id", user.id)
+        .eq("status", "pending")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      // Fetch group and inviter details
+      if (data && data.length > 0) {
+        const groupIds = [...new Set(data.map(i => i.group_id))];
+        const inviterIds = [...new Set(data.map(i => i.inviter_id))];
+
+        const [groupsRes, profilesRes] = await Promise.all([
+          supabase.from("thrift_groups").select("id, name, contribution_amount, period").in("id", groupIds),
+          supabase.from("profiles").select("id, full_name").in("id", inviterIds),
+        ]);
+
+        const groupMap = new Map(groupsRes.data?.map(g => [g.id, g]) || []);
+        const profileMap = new Map(profilesRes.data?.map(p => [p.id, p]) || []);
+
+        const enrichedInvites = data.map(invite => {
+          const group = groupMap.get(invite.group_id);
+          const inviter = profileMap.get(invite.inviter_id);
+          return {
+            ...invite,
+            group_name: group?.name || "Unknown Group",
+            inviter_name: inviter?.full_name || "Someone",
+            contribution_amount: group?.contribution_amount || 0,
+            period: group?.period || "weekly",
+          };
+        });
+
+        setInvites(enrichedInvites);
+      } else {
+        setInvites([]);
+      }
+    } catch (err) {
+      console.error("Error fetching invites:", err);
+      setInvites([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
+
+  return { invites, loading, refetch: fetchInvites };
 }
 
 export function useCreateInviteLink() {

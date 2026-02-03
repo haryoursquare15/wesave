@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Dialog } from "@/components/ui/dialog";
+
 import { BottomNav } from "@/components/BottomNav";
 import { AddMembersDialog } from "@/components/AddMembersDialog";
 import { useAuth } from "@/contexts/AuthContext";
@@ -72,7 +72,7 @@ export default function GroupDetail() {
   const [hasContributed, setHasContributed] = useState(false);
   const [contributing, setContributing] = useState(false);
   const [processingPayout, setProcessingPayout] = useState(false);
-  const [showAddMembers, setShowAddMembers] = useState(false);
+  
 
   const isAdmin = group?.admin_id === user?.id;
 
@@ -396,9 +396,22 @@ export default function GroupDetail() {
               {group.status}
             </Badge>
             {isAdmin && (
-              <Button variant="ghost" size="icon" onClick={() => setShowAddMembers(true)}>
-                <Share2 className="h-5 w-5" />
-              </Button>
+              <AddMembersDialog
+                groupId={group.id}
+                groupName={group.name}
+                onMemberAdded={() => {
+                  supabase
+                    .from("group_memberships")
+                    .select("*", { count: "exact", head: true })
+                    .eq("group_id", group.id)
+                    .eq("status", "active")
+                    .then(({ count }) => setMemberCount(count || 0));
+                }}
+              >
+                <Button variant="ghost" size="icon">
+                  <Share2 className="h-5 w-5" />
+                </Button>
+              </AddMembersDialog>
             )}
           </div>
         </div>
@@ -659,19 +672,6 @@ export default function GroupDetail() {
           </div>
         </TabsContent>
       </Tabs>
-
-      {/* Add Members Dialog */}
-      {showAddMembers && group && (
-        <Dialog open={showAddMembers} onOpenChange={setShowAddMembers}>
-          <AddMembersDialog
-            groupId={group.id}
-            groupName={group.name}
-          >
-            <span />
-          </AddMembersDialog>
-        </Dialog>
-      )}
-
       <BottomNav />
     </div>
   );
