@@ -168,22 +168,52 @@ serve(async (req) => {
 
       const allContributed = (pendingCount || 0) === 0;
 
+      // If all have contributed, automatically process the payout
+      let payoutResult = null;
+      if (allContributed && successCount > 0) {
+        console.log(`All members contributed for group ${group.name}, processing payout...`);
+        
+        // Get admin ID for payout processing
+        const { data: groupData } = await supabase
+          .from('thrift_groups')
+          .select('admin_id')
+          .eq('id', group.id)
+          .single();
+
+        if (groupData?.admin_id) {
+          // Process payout: debit group wallet, credit recipient
+          const { data: payout, error: payoutError } = await supabase.rpc('process_payout_atomic', {
+            _admin_id: groupData.admin_id,
+            _group_id: group.id,
+          });
+
+          if (payoutError) {
+            console.error(`Auto-payout failed for group ${group.name}:`, payoutError);
+            payoutResult = { success: false, error: payoutError.message };
+          } else if (!payout?.success) {
+            console.error(`Auto-payout rejected for group ${group.name}:`, payout?.error);
+            payoutResult = { success: false, error: payout?.error };
+          } else {
+            console.log(`Auto-payout successful for group ${group.name}:`, payout);
+            payoutResult = payout;
+
+            // Send notification about successful payout
+            await supabase.from('chat_messages').insert({
+              group_id: group.id,
+              user_id: groupData.admin_id,
+              message: `🎉 Cycle ${group.current_cycle} complete! Payout of ₦${payout.payout_amount?.toLocaleString() || 'N/A'} sent to the recipient.`,
+              message_type: 'system',
+            });
+          }
+        }
+      }
+
       results.push({
         groupId: group.id,
         groupName: group.name,
         success: true,
-        details: `Processed ${successCount} contributions, ${failCount} failed. All contributed: ${allContributed}`,
+        details: `Processed ${successCount} contributions, ${failCount} failed. All contributed: ${allContributed}. Payout: ${payoutResult ? (payoutResult.success ? 'Success' : payoutResult.error) : 'Not triggered'}`,
       });
-
-      // If all have contributed, send notification about payout readiness
-      if (allContributed) {
-        await supabase.from('chat_messages').insert({
-          group_id: group.id,
-          user_id: (await supabase.from('thrift_groups').select('admin_id').eq('id', group.id).single()).data?.admin_id,
-          message: '🎉 All members have contributed! The payout is ready to be processed.',
-          message_type: 'system',
-        });
-      }
     }
 
     console.log('Auto-contribution job completed:', JSON.stringify(results, null, 2));
