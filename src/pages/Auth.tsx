@@ -17,6 +17,7 @@ export default function Auth() {
   const { signIn, signUp, user, loading } = useAuth();
   const [isSignUp, setIsSignUp] = useState(searchParams.get("mode") === "signup");
   const [isPasswordReset, setIsPasswordReset] = useState(searchParams.get("mode") === "reset");
+  const [resetSessionReady, setResetSessionReady] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [passwordResetSuccess, setPasswordResetSuccess] = useState(false);
@@ -27,6 +28,62 @@ export default function Auth() {
   });
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+
+  // Keep UI mode in sync with URL
+  useEffect(() => {
+    setIsSignUp(searchParams.get("mode") === "signup");
+    setIsPasswordReset(searchParams.get("mode") === "reset");
+  }, [searchParams]);
+
+  // Ensure we have a valid auth session when arriving from a password-recovery email.
+  // Some flows require exchanging `?code=...` for a session before updateUser() works.
+  useEffect(() => {
+    let cancelled = false;
+
+    const ensureResetSession = async () => {
+      if (!isPasswordReset) {
+        setResetSessionReady(false);
+        return;
+      }
+
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (cancelled) return;
+
+        if (session) {
+          setResetSessionReady(true);
+          return;
+        }
+
+        const url = new URL(window.location.href);
+        const code = url.searchParams.get("code");
+
+        if (code) {
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          if (cancelled) return;
+          if (error) {
+            setResetSessionReady(false);
+            toast.error("Reset link is invalid or expired. Please request a new one.");
+            return;
+          }
+
+          setResetSessionReady(true);
+          return;
+        }
+
+        // No session and no code in URL → cannot proceed
+        setResetSessionReady(false);
+      } catch {
+        if (cancelled) return;
+        setResetSessionReady(false);
+      }
+    };
+
+    ensureResetSession();
+    return () => {
+      cancelled = true;
+    };
+  }, [isPasswordReset]);
 
   // Redirect if already logged in
   useEffect(() => {
@@ -88,6 +145,12 @@ export default function Auth() {
     setIsLoading(true);
     
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error("Reset session missing. Please request a new reset link.");
+        return;
+      }
+
       const { error } = await supabase.auth.updateUser({
         password: newPassword,
       });
@@ -194,6 +257,12 @@ export default function Auth() {
                   </p>
                 </div>
 
+                {!resetSessionReady && (
+                  <div className="rounded-lg border border-border bg-muted/40 p-4 text-sm text-muted-foreground">
+                    Opening your reset link… If this takes more than a few seconds, request a new reset link.
+                  </div>
+                )}
+
                 <form onSubmit={handlePasswordReset} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="newPassword">New Password</Label>
@@ -244,7 +313,7 @@ export default function Auth() {
                     type="submit"
                     variant="hero"
                     className="w-full h-12"
-                    disabled={isLoading}
+                    disabled={isLoading || !resetSessionReady}
                   >
                     {isLoading ? (
                       <div className="h-5 w-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
