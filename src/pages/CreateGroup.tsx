@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Coins, Info, Check, UserPlus } from "lucide-react";
+import { ArrowLeft, Coins, Info, Check, UserPlus, Calendar, Clock } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,26 @@ import { toast } from "sonner";
 import { AddMembersDialog } from "@/components/AddMembersDialog";
 import { supabase } from "@/integrations/supabase/client";
 
+const daysOfWeek = [
+  { value: 0, label: "Sunday" },
+  { value: 1, label: "Monday" },
+  { value: 2, label: "Tuesday" },
+  { value: 3, label: "Wednesday" },
+  { value: 4, label: "Thursday" },
+  { value: 5, label: "Friday" },
+  { value: 6, label: "Saturday" },
+];
+
+const hours = Array.from({ length: 24 }, (_, i) => ({
+  value: i,
+  label: `${i === 0 ? 12 : i > 12 ? i - 12 : i}:00 ${i < 12 ? "AM" : "PM"}`,
+}));
+
+const daysOfMonth = Array.from({ length: 28 }, (_, i) => ({
+  value: i + 1,
+  label: `${i + 1}${["st", "nd", "rd"][i] || "th"}`,
+}));
+
 export default function CreateGroup() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -26,6 +46,9 @@ export default function CreateGroup() {
     contributionAmount: 10000,
     period: "weekly" as "daily" | "weekly" | "monthly",
     autoDebit: true,
+    contributionHour: 9,
+    contributionDayOfWeek: 1,
+    contributionDayOfMonth: 1,
   });
 
   const handleCreate = async () => {
@@ -199,7 +222,7 @@ export default function CreateGroup() {
             <div>
               <p className="font-medium text-foreground">Enable Auto-Debit</p>
               <p className="text-xs text-muted-foreground">
-                Automatically collect contributions
+                Automatically collect contributions on schedule
               </p>
             </div>
           </div>
@@ -210,6 +233,107 @@ export default function CreateGroup() {
             }
           />
         </motion.div>
+
+        {/* Contribution Schedule */}
+        {formData.autoDebit && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.45 }}
+            className="space-y-4 p-4 rounded-xl bg-card border border-border"
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <Calendar className="h-5 w-5 text-primary" />
+              <h3 className="font-medium">Auto-Contribution Schedule</h3>
+            </div>
+
+            {formData.period === "daily" && (
+              <div className="space-y-2">
+                <Label>Contribution Time</Label>
+                <Select
+                  value={String(formData.contributionHour)}
+                  onValueChange={(value) => setFormData({ ...formData, contributionHour: Number(value) })}
+                >
+                  <SelectTrigger className="h-12">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {hours.map((hour) => (
+                      <SelectItem key={hour.value} value={String(hour.value)}>
+                        {hour.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {formData.period === "weekly" && (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Day of Week</Label>
+                  <Select
+                    value={String(formData.contributionDayOfWeek)}
+                    onValueChange={(value) => setFormData({ ...formData, contributionDayOfWeek: Number(value) })}
+                  >
+                    <SelectTrigger className="h-12">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {daysOfWeek.map((day) => (
+                        <SelectItem key={day.value} value={String(day.value)}>
+                          {day.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Contribution Time</Label>
+                  <Select
+                    value={String(formData.contributionHour)}
+                    onValueChange={(value) => setFormData({ ...formData, contributionHour: Number(value) })}
+                  >
+                    <SelectTrigger className="h-12">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {hours.map((hour) => (
+                        <SelectItem key={hour.value} value={String(hour.value)}>
+                          {hour.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+
+            {formData.period === "monthly" && (
+              <div className="space-y-2">
+                <Label>Day of Month</Label>
+                <Select
+                  value={String(formData.contributionDayOfMonth)}
+                  onValueChange={(value) => setFormData({ ...formData, contributionDayOfMonth: Number(value) })}
+                >
+                  <SelectTrigger className="h-12">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {daysOfMonth.map((day) => (
+                      <SelectItem key={day.value} value={String(day.value)}>
+                        {day.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Contributions will be triggered on this day each month
+                </p>
+              </div>
+            )}
+          </motion.div>
+        )}
 
         {/* Summary Card */}
         <motion.div

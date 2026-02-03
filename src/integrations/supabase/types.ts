@@ -95,6 +95,61 @@ export type Database = {
           },
         ]
       }
+      contribution_audit: {
+        Row: {
+          amount: number
+          contribution_type: string
+          created_at: string
+          cycle_id: string
+          group_id: string
+          id: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          contribution_type?: string
+          created_at?: string
+          cycle_id: string
+          group_id: string
+          id?: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          contribution_type?: string
+          created_at?: string
+          cycle_id?: string
+          group_id?: string
+          id?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contribution_audit_cycle_id_fkey"
+            columns: ["cycle_id"]
+            isOneToOne: false
+            referencedRelation: "contribution_cycles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contribution_audit_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "public_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contribution_audit_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "thrift_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contribution_cycles: {
         Row: {
           completed_at: string | null
@@ -267,6 +322,7 @@ export type Database = {
           group_id: string
           has_contributed_this_cycle: boolean | null
           has_received_payout: boolean | null
+          has_used_swap: boolean | null
           id: string
           joined_at: string | null
           mandate_status: string | null
@@ -279,6 +335,7 @@ export type Database = {
           group_id: string
           has_contributed_this_cycle?: boolean | null
           has_received_payout?: boolean | null
+          has_used_swap?: boolean | null
           id?: string
           joined_at?: string | null
           mandate_status?: string | null
@@ -291,6 +348,7 @@ export type Database = {
           group_id?: string
           has_contributed_this_cycle?: boolean | null
           has_received_payout?: boolean | null
+          has_used_swap?: boolean | null
           id?: string
           joined_at?: string | null
           mandate_status?: string | null
@@ -544,6 +602,57 @@ export type Database = {
           },
         ]
       }
+      position_swap_requests: {
+        Row: {
+          created_at: string
+          group_id: string
+          id: string
+          requester_id: string
+          requester_position: number
+          responded_at: string | null
+          status: string
+          target_id: string
+          target_position: number
+        }
+        Insert: {
+          created_at?: string
+          group_id: string
+          id?: string
+          requester_id: string
+          requester_position: number
+          responded_at?: string | null
+          status?: string
+          target_id: string
+          target_position: number
+        }
+        Update: {
+          created_at?: string
+          group_id?: string
+          id?: string
+          requester_id?: string
+          requester_position?: number
+          responded_at?: string | null
+          status?: string
+          target_id?: string
+          target_position?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "position_swap_requests_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "public_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "position_swap_requests_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "thrift_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -624,6 +733,9 @@ export type Database = {
           admin_id: string
           auto_debit: boolean | null
           contribution_amount: number
+          contribution_day_of_month: number | null
+          contribution_day_of_week: number | null
+          contribution_hour: number | null
           created_at: string | null
           current_cycle: number | null
           current_payout_position: number | null
@@ -645,6 +757,9 @@ export type Database = {
           admin_id: string
           auto_debit?: boolean | null
           contribution_amount: number
+          contribution_day_of_month?: number | null
+          contribution_day_of_week?: number | null
+          contribution_hour?: number | null
           created_at?: string | null
           current_cycle?: number | null
           current_payout_position?: number | null
@@ -666,6 +781,9 @@ export type Database = {
           admin_id?: string
           auto_debit?: boolean | null
           contribution_amount?: number
+          contribution_day_of_month?: number | null
+          contribution_day_of_week?: number | null
+          contribution_hour?: number | null
           created_at?: string | null
           current_cycle?: number | null
           current_payout_position?: number | null
@@ -966,6 +1084,9 @@ export type Database = {
           admin_id: string
           auto_debit: boolean | null
           contribution_amount: number
+          contribution_day_of_month: number | null
+          contribution_day_of_week: number | null
+          contribution_hour: number | null
           created_at: string | null
           current_cycle: number | null
           current_payout_position: number | null
@@ -1039,8 +1160,16 @@ export type Database = {
         Args: { _admin_id: string; _group_id: string }
         Returns: Json
       }
+      request_position_swap: {
+        Args: { _group_id: string; _target_user_id: string }
+        Returns: Json
+      }
       respond_to_invite: {
         Args: { accept: boolean; invite_id: string }
+        Returns: Json
+      }
+      respond_to_swap_request: {
+        Args: { _accept: boolean; _request_id: string }
         Returns: Json
       }
       search_users: {
