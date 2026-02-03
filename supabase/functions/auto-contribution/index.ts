@@ -1,0 +1,210 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    console.log('Auto-contribution job started at:', new Date().toISOString());
+
+    // Get current time in UTC
+    const now = new Date();
+    const currentHour = now.getUTCHours();
+    const currentDayOfWeek = now.getUTCDay(); // 0 = Sunday, 1 = Monday, etc.
+    const currentDayOfMonth = now.getUTCDate();
+
+    console.log(`Current UTC time: Hour=${currentHour}, DayOfWeek=${currentDayOfWeek}, DayOfMonth=${currentDayOfMonth}`);
+
+    // Find active groups that are due for contribution
+    // For daily: match hour
+    // For weekly: match hour AND day of week
+    // For monthly: match hour AND day of month
+    const { data: dueGroups, error: groupsError } = await supabase
+      .from('thrift_groups')
+      .select(`
+        id, name, contribution_amount, period, max_members,
+        contribution_hour, contribution_day_of_week, contribution_day_of_month,
+        current_cycle
+      `)
+      .eq('status', 'active')
+      .eq('contribution_hour', currentHour);
+
+    if (groupsError) {
+      console.error('Error fetching groups:', groupsError);
+      throw groupsError;
+    }
+
+    console.log(`Found ${dueGroups?.length || 0} groups with matching hour`);
+
+    const results: { groupId: string; groupName: string; success: boolean; details: string }[] = [];
+
+    for (const group of dueGroups || []) {
+      // Check if the contribution is due based on period
+      let isDue = false;
+
+      if (group.period === 'daily') {
+        isDue = true;
+      } else if (group.period === 'weekly') {
+        isDue = group.contribution_day_of_week === currentDayOfWeek;
+      } else if (group.period === 'monthly') {
+        isDue = group.contribution_day_of_month === currentDayOfMonth;
+      }
+
+      if (!isDue) {
+        console.log(`Skipping group ${group.name}: Not due (period=${group.period}, dayOfWeek=${group.contribution_day_of_week}, dayOfMonth=${group.contribution_day_of_month})`);
+        continue;
+      }
+
+      console.log(`Processing auto-contribution for group: ${group.name} (${group.id})`);
+
+      // Get active cycle for this group
+      const { data: activeCycle } = await supabase
+        .from('contribution_cycles')
+        .select('id')
+        .eq('group_id', group.id)
+        .eq('status', 'active')
+        .single();
+
+      if (!activeCycle) {
+        console.log(`No active cycle for group ${group.name}, skipping`);
+        results.push({
+          groupId: group.id,
+          groupName: group.name,
+          success: false,
+          details: 'No active cycle',
+        });
+        continue;
+      }
+
+      // Get all active members who haven't contributed this cycle
+      const { data: members, error: membersError } = await supabase
+        .from('group_memberships')
+        .select('user_id')
+        .eq('group_id', group.id)
+        .eq('status', 'active')
+        .eq('has_contributed_this_cycle', false);
+
+      if (membersError) {
+        console.error(`Error fetching members for group ${group.name}:`, membersError);
+        results.push({
+          groupId: group.id,
+          groupName: group.name,
+          success: false,
+          details: `Error fetching members: ${membersError.message}`,
+        });
+        continue;
+      }
+
+      console.log(`Found ${members?.length || 0} members who haven't contributed in group ${group.name}`);
+
+      let successCount = 0;
+      let failCount = 0;
+
+      for (const member of members || []) {
+        // Process contribution atomically
+        const { data: result, error: rpcError } = await supabase.rpc('process_contribution_atomic', {
+          _user_id: member.user_id,
+          _group_id: group.id,
+          _amount: group.contribution_amount,
+        });
+
+        if (rpcError) {
+          console.error(`Auto-contribution failed for user ${member.user_id}:`, rpcError);
+          failCount++;
+          
+          // Log failed auto-contribution
+          await supabase.from('contribution_audit').insert({
+            user_id: member.user_id,
+            group_id: group.id,
+            cycle_id: activeCycle.id,
+            amount: group.contribution_amount,
+            contribution_type: 'auto',
+            status: 'failed',
+          });
+        } else if (!result.success) {
+          console.error(`Auto-contribution rejected for user ${member.user_id}:`, result.error);
+          failCount++;
+          
+          await supabase.from('contribution_audit').insert({
+            user_id: member.user_id,
+            group_id: group.id,
+            cycle_id: activeCycle.id,
+            amount: group.contribution_amount,
+            contribution_type: 'auto',
+            status: 'failed',
+          });
+        } else {
+          console.log(`Auto-contribution successful for user ${member.user_id}`);
+          successCount++;
+
+          // Add system message to chat
+          await supabase.from('chat_messages').insert({
+            group_id: group.id,
+            user_id: member.user_id,
+            message: `Auto-contribution of ₦${group.contribution_amount.toLocaleString()} processed`,
+            message_type: 'auto_contribution',
+          });
+        }
+      }
+
+      // Check if all contributions are complete for payout processing
+      const { count: pendingCount } = await supabase
+        .from('group_memberships')
+        .select('*', { count: 'exact', head: true })
+        .eq('group_id', group.id)
+        .eq('status', 'active')
+        .eq('has_contributed_this_cycle', false);
+
+      const allContributed = (pendingCount || 0) === 0;
+
+      results.push({
+        groupId: group.id,
+        groupName: group.name,
+        success: true,
+        details: `Processed ${successCount} contributions, ${failCount} failed. All contributed: ${allContributed}`,
+      });
+
+      // If all have contributed, send notification about payout readiness
+      if (allContributed) {
+        await supabase.from('chat_messages').insert({
+          group_id: group.id,
+          user_id: (await supabase.from('thrift_groups').select('admin_id').eq('id', group.id).single()).data?.admin_id,
+          message: '🎉 All members have contributed! The payout is ready to be processed.',
+          message_type: 'system',
+        });
+      }
+    }
+
+    console.log('Auto-contribution job completed:', JSON.stringify(results, null, 2));
+
+    return new Response(JSON.stringify({
+      success: true,
+      processed_at: now.toISOString(),
+      results,
+    }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+
+  } catch (error: unknown) {
+    console.error('Auto-contribution error:', error);
+    
+    return new Response(JSON.stringify({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+});
