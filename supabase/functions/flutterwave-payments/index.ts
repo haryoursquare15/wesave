@@ -189,30 +189,13 @@ serve(async (req) => {
 
       case 'verify_transaction': {
         // Verify a pending transaction with Flutterwave
+        // SECURITY FIX: Use atomic function to prevent race condition double-credit
         const { tx_ref } = params;
         if (!tx_ref) {
           throw new Error('Transaction reference is required');
         }
 
-        // Get the pending transaction
-        const { data: pendingTx } = await supabase
-          .from('transactions')
-          .select('*')
-          .eq('reference', tx_ref)
-          .eq('user_id', user.id)
-          .single();
-
-        if (!pendingTx) {
-          result = { success: false, error: 'Transaction not found' };
-          break;
-        }
-
-        if (pendingTx.status === 'completed') {
-          result = { success: true, message: 'Transaction already completed', already_completed: true };
-          break;
-        }
-
-        // Verify with Flutterwave
+        // Verify with Flutterwave FIRST (before any database operations)
         const verifyResponse = await fetch(
           `${FLUTTERWAVE_BASE_URL}/transactions/verify_by_reference?tx_ref=${tx_ref}`,
           {
@@ -227,42 +210,41 @@ serve(async (req) => {
         console.log('Verification response:', JSON.stringify(verifyData));
 
         if (verifyData.status === 'success' && verifyData.data?.status === 'successful') {
-          // Payment was successful - update wallet
-          const amount = verifyData.data.amount;
-          
-          const { data: wallet } = await supabase
-            .from('wallets')
-            .select('*')
-            .eq('user_id', user.id)
-            .single();
+          // Payment was successful - use atomic function to credit wallet
+          // This prevents race conditions where multiple requests could double-credit
+          const { data: creditResult, error: creditError } = await supabase.rpc('credit_wallet_atomic', {
+            _user_id: user.id,
+            _amount: verifyData.data.amount,
+            _tx_ref: tx_ref,
+            _description: 'Wallet funding',
+          });
 
-          if (wallet) {
-            const newBalance = Number(wallet.available_balance) + amount;
-            await supabase
-              .from('wallets')
-              .update({ 
-                available_balance: newBalance,
-                updated_at: new Date().toISOString(),
-              })
-              .eq('id', wallet.id);
-
-            // Update transaction status
-            await supabase
-              .from('transactions')
-              .update({ status: 'completed' })
-              .eq('reference', tx_ref);
-
-            console.log(`Wallet updated: ${user.id}, Amount: ${amount}, New Balance: ${newBalance}`);
+          if (creditError) {
+            console.error('Credit wallet error:', creditError);
+            result = { 
+              success: false, 
+              error: 'Failed to credit wallet' 
+            };
+          } else if (!creditResult?.success) {
+            result = { 
+              success: false, 
+              error: creditResult?.error || 'Failed to credit wallet' 
+            };
+          } else {
+            result = {
+              success: true,
+              message: creditResult.duplicate 
+                ? 'Transaction already processed' 
+                : 'Payment verified and wallet credited',
+              amount: verifyData.data.amount,
+              new_balance: creditResult.new_balance,
+              verified: true,
+              already_completed: creditResult.duplicate || false,
+            };
+            console.log(`Wallet credited atomically: ${user.id}, Amount: ${verifyData.data.amount}, New Balance: ${creditResult.new_balance}`);
           }
-
-          result = {
-            success: true,
-            message: 'Payment verified and wallet credited',
-            amount: amount,
-            verified: true,
-          };
         } else if (verifyData.data?.status === 'failed') {
-          // Payment failed
+          // Payment failed - mark transaction as failed
           await supabase
             .from('transactions')
             .update({ status: 'failed' })
