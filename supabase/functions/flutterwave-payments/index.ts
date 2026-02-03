@@ -484,6 +484,104 @@ serve(async (req) => {
         break;
       }
 
+      case 'verify_transaction': {
+        // Verify a pending transaction with Flutterwave
+        const { tx_ref } = params;
+        if (!tx_ref) {
+          throw new Error('Transaction reference is required');
+        }
+
+        // Get the pending transaction
+        const { data: pendingTx } = await supabase
+          .from('transactions')
+          .select('*')
+          .eq('reference', tx_ref)
+          .eq('user_id', user.id)
+          .single();
+
+        if (!pendingTx) {
+          result = { success: false, error: 'Transaction not found' };
+          break;
+        }
+
+        if (pendingTx.status === 'completed') {
+          result = { success: true, message: 'Transaction already completed', already_completed: true };
+          break;
+        }
+
+        // Verify with Flutterwave
+        const verifyResponse = await fetch(
+          `${FLUTTERWAVE_BASE_URL}/transactions/verify_by_reference?tx_ref=${tx_ref}`,
+          {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${FLUTTERWAVE_SECRET_KEY}`,
+            },
+          }
+        );
+
+        const verifyData = await verifyResponse.json();
+        console.log('Verification response:', JSON.stringify(verifyData));
+
+        if (verifyData.status === 'success' && verifyData.data?.status === 'successful') {
+          // Payment was successful - update wallet
+          const amount = verifyData.data.amount;
+          
+          const { data: wallet } = await supabase
+            .from('wallets')
+            .select('*')
+            .eq('user_id', user.id)
+            .single();
+
+          if (wallet) {
+            const newBalance = Number(wallet.available_balance) + amount;
+            await supabase
+              .from('wallets')
+              .update({ 
+                available_balance: newBalance,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', wallet.id);
+
+            // Update transaction status
+            await supabase
+              .from('transactions')
+              .update({ status: 'completed' })
+              .eq('reference', tx_ref);
+
+            console.log(`Wallet updated: ${user.id}, Amount: ${amount}, New Balance: ${newBalance}`);
+          }
+
+          result = {
+            success: true,
+            message: 'Payment verified and wallet credited',
+            amount: amount,
+            verified: true,
+          };
+        } else if (verifyData.data?.status === 'failed') {
+          // Payment failed
+          await supabase
+            .from('transactions')
+            .update({ status: 'failed' })
+            .eq('reference', tx_ref);
+
+          result = {
+            success: false,
+            error: 'Payment failed',
+            verified: true,
+          };
+        } else {
+          // Still pending or error
+          result = {
+            success: false,
+            error: 'Payment verification pending or failed',
+            status: verifyData.data?.status || 'unknown',
+            verified: false,
+          };
+        }
+        break;
+      }
+
       default:
         throw new Error(`Unknown action: ${action}`);
     }

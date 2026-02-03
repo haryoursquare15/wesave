@@ -793,6 +793,10 @@ export type Database = {
           valid: boolean
         }[]
       }
+      verify_pending_transaction: {
+        Args: { amount: number; tx_ref: string }
+        Returns: boolean
+      }
     }
     Enums: {
       contribution_period: "daily" | "weekly" | "monthly"
