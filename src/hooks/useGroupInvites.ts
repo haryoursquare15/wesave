@@ -42,8 +42,20 @@ export function useSearchUsers() {
       });
 
       if (searchError) throw searchError;
-      setResults(data || []);
+      
+      // Map database results to ensure correct types
+      const mappedResults: UserSearchResult[] = (data || []).map((user: any) => ({
+        id: user.id,
+        username: user.username,
+        full_name: user.full_name,
+        avatar_url: user.avatar_url,
+        membership_tier: user.membership_tier || "newbie",
+        credit_score: user.credit_score,
+      }));
+      
+      setResults(mappedResults);
     } catch (err) {
+      console.error("Search users error:", err);
       setError(err as Error);
       setResults([]);
     } finally {
@@ -51,7 +63,9 @@ export function useSearchUsers() {
     }
   }, []);
 
-  return { searchUsers, results, loading, error, clearResults: () => setResults([]) };
+  const clearResults = useCallback(() => setResults([]), []);
+
+  return { searchUsers, results, loading, error, clearResults };
 }
 
 export function useSendMemberInvite() {
