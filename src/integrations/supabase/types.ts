@@ -1128,6 +1128,8 @@ export type Database = {
         }
         Returns: Json
       }
+      gen_random_bytes: { Args: { n: number }; Returns: string }
+      gen_random_uuid: { Args: never; Returns: string }
       get_payout_order: {
         Args: { target_group_id: string }
         Returns: {
