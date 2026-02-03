@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Settings, ChevronRight, Shield, CreditCard, Bell, HelpCircle, LogOut, Award } from "lucide-react";
+import { Settings, ChevronRight, Shield, CreditCard, Bell, HelpCircle, LogOut, Award, User, Check, X, Pencil } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { UserBadge } from "@/components/UserBadge";
 import { StarRating } from "@/components/StarRating";
@@ -7,12 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { BottomNav } from "@/components/BottomNav";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 const menuItems = [
+  { icon: User, label: "Edit Profile", path: "/settings/profile" },
   { icon: Shield, label: "Security & Privacy", path: "/settings/security" },
   { icon: CreditCard, label: "Payment Methods", path: "/settings/payments" },
   { icon: Bell, label: "Notifications", path: "/settings/notifications" },
@@ -21,9 +23,12 @@ const menuItems = [
 
 export default function Profile() {
   const navigate = useNavigate();
-  const { user, profile, wallet, signOut, loading: authLoading } = useAuth();
+  const { user, profile, wallet, signOut, refreshProfile, loading: authLoading } = useAuth();
   const [stats, setStats] = useState({ groupCount: 0, cyclesCompleted: 0, totalSaved: 0 });
   const [signingOut, setSigningOut] = useState(false);
+  const [editingUsername, setEditingUsername] = useState(false);
+  const [newUsername, setNewUsername] = useState("");
+  const [savingUsername, setSavingUsername] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -73,6 +78,53 @@ export default function Profile() {
     } finally {
       setSigningOut(false);
     }
+  };
+
+  const handleEditUsername = () => {
+    setNewUsername(profile?.username || "");
+    setEditingUsername(true);
+  };
+
+  const handleSaveUsername = async () => {
+    if (!user || !newUsername.trim()) return;
+    
+    // Validate username format
+    const usernameRegex = /^[a-zA-Z0-9_]{3,20}$/;
+    if (!usernameRegex.test(newUsername.trim())) {
+      toast.error("Username must be 3-20 characters, letters, numbers, and underscores only");
+      return;
+    }
+
+    setSavingUsername(true);
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ username: newUsername.trim().toLowerCase() })
+        .eq("id", user.id);
+
+      if (error) {
+        if (error.code === "23505") {
+          toast.error("This username is already taken");
+        } else {
+          throw error;
+        }
+        return;
+      }
+
+      toast.success("Username updated successfully");
+      setEditingUsername(false);
+      refreshProfile();
+    } catch (err) {
+      console.error("Error updating username:", err);
+      toast.error("Failed to update username");
+    } finally {
+      setSavingUsername(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingUsername(false);
+    setNewUsername("");
   };
 
   const creditScore = profile?.credit_score || 0;
@@ -128,9 +180,62 @@ export default function Profile() {
             <h2 className="text-xl font-bold text-primary-foreground mb-1">
               {profile?.full_name || "User"}
             </h2>
-            <p className="text-primary-foreground/70 text-sm mb-3">
-              @{profile?.username || "user"} • Member since {profile?.created_at ? new Date(profile.created_at).toLocaleDateString("en-US", { month: "short", year: "numeric" }) : ""}
-            </p>
+            
+            {/* Username with inline edit */}
+            <div className="flex items-center justify-center gap-2 mb-3">
+              {editingUsername ? (
+                <div className="flex items-center gap-2 bg-white/10 rounded-lg px-2 py-1">
+                  <span className="text-primary-foreground/70">@</span>
+                  <Input
+                    value={newUsername}
+                    onChange={(e) => setNewUsername(e.target.value)}
+                    className="h-7 w-32 bg-white/20 border-white/30 text-primary-foreground placeholder:text-primary-foreground/50 text-sm"
+                    placeholder="username"
+                    autoFocus
+                    disabled={savingUsername}
+                  />
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6 text-primary-foreground hover:bg-white/20"
+                    onClick={handleSaveUsername}
+                    disabled={savingUsername}
+                  >
+                    {savingUsername ? (
+                      <div className="h-3 w-3 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+                    ) : (
+                      <Check className="h-4 w-4" />
+                    )}
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6 text-primary-foreground hover:bg-white/20"
+                    onClick={handleCancelEdit}
+                    disabled={savingUsername}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <p className="text-primary-foreground/70 text-sm">
+                    @{profile?.username || "user"} • Member since {profile?.created_at ? new Date(profile.created_at).toLocaleDateString("en-US", { month: "short", year: "numeric" }) : ""}
+                  </p>
+                  {(!profile?.username || profile.username === "user") && (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-6 w-6 text-primary-foreground hover:bg-white/20"
+                      onClick={handleEditUsername}
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+            
             <div className="flex items-center justify-center gap-1">
               <StarRating rating={4.5} size="sm" />
               <span className="text-sm text-primary-foreground/70 ml-1">4.5</span>
