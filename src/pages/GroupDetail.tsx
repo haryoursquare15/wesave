@@ -4,7 +4,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { 
   ArrowLeft, Users, Send, Play, Crown, Check, Clock, 
   MessageSquare, ListOrdered, Settings, Share2, AlertCircle,
-  ArrowLeftRight, Info
+  ArrowLeftRight, Info, LogOut, RefreshCw, ThumbsUp, Trophy
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -81,6 +81,9 @@ export default function GroupDetail() {
   const [contributing, setContributing] = useState(false);
   const [processingPayout, setProcessingPayout] = useState(false);
   const [cycleHasContributions, setCycleHasContributions] = useState(false);
+  const [exitingGroup, setExitingGroup] = useState(false);
+  const [restartingGroup, setRestartingGroup] = useState(false);
+  const [confirmingContinue, setConfirmingContinue] = useState(false);
 
   const isAdmin = group?.admin_id === user?.id;
 
@@ -394,6 +397,114 @@ export default function GroupDetail() {
     }
   };
 
+  // Exit a completed group
+  const exitGroup = async () => {
+    if (!groupId) return;
+
+    setExitingGroup(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("flutterwave-payments", {
+        body: {
+          action: "exit_group",
+          groupId,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data.success) {
+        toast.success("You have left the group");
+        navigate("/groups");
+      } else {
+        toast.error(data.error || "Failed to exit group");
+      }
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to exit group";
+      toast.error(errorMessage);
+    } finally {
+      setExitingGroup(false);
+    }
+  };
+
+  // Confirm continuing in a completed group
+  const confirmContinue = async () => {
+    if (!groupId) return;
+
+    setConfirmingContinue(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("flutterwave-payments", {
+        body: {
+          action: "confirm_continue",
+          groupId,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data.success) {
+        toast.success("Your decision to continue has been recorded");
+      } else {
+        toast.error(data.error || "Failed to confirm");
+      }
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to confirm";
+      toast.error(errorMessage);
+    } finally {
+      setConfirmingContinue(false);
+    }
+  };
+
+  // Admin restart a completed group
+  const restartGroup = async () => {
+    if (!groupId) return;
+
+    setRestartingGroup(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("flutterwave-payments", {
+        body: {
+          action: "restart_group",
+          groupId,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data.success) {
+        toast.success("Group restarted! New cycle has begun.");
+        
+        // Refresh group data
+        const { data: updatedGroup } = await supabase
+          .from("thrift_groups")
+          .select("*")
+          .eq("id", groupId)
+          .single();
+        
+        if (updatedGroup) setGroup(updatedGroup);
+
+        // Refresh payout order
+        const { data: orderData } = await supabase.rpc("get_payout_order", {
+          target_group_id: groupId,
+        });
+        if (orderData) setPayoutOrder(orderData as PayoutMember[]);
+
+        // Refresh member count
+        const { count } = await supabase
+          .from("group_memberships")
+          .select("*", { count: "exact", head: true })
+          .eq("group_id", groupId)
+          .eq("status", "active");
+        setMemberCount(count || 0);
+      } else {
+        toast.error(data.error || "Failed to restart group");
+      }
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to restart group";
+      toast.error(errorMessage);
+    } finally {
+      setRestartingGroup(false);
+    }
+  };
+
   const getInitials = (name: string | null) => {
     if (!name) return "?";
     return name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
@@ -502,6 +613,90 @@ export default function GroupDetail() {
                   {memberCount}/{group.max_members} members joined. Group must be full to commence.
                 </p>
               </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Group Completed - Continue or Exit Decision */}
+      {group.status === "completed" && (
+        <div className="container mx-auto px-4 py-3">
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-gradient-to-r from-success/10 to-gold/10 rounded-xl p-4 border border-success/30"
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <Trophy className="h-6 w-6 text-gold" />
+              <div>
+                <h3 className="font-semibold text-foreground">🎉 All Cycles Complete!</h3>
+                <p className="text-sm text-muted-foreground">
+                  Everyone has received their payout. What would you like to do next?
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex flex-col sm:flex-row gap-3">
+              {/* Admin can restart if group has enough members */}
+              {isAdmin && memberCount >= group.max_members && (
+                <Button 
+                  onClick={restartGroup} 
+                  disabled={restartingGroup}
+                  variant="hero"
+                  className="flex-1"
+                >
+                  {restartingGroup ? (
+                    <div className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Restart Group
+                    </>
+                  )}
+                </Button>
+              )}
+              
+              {isAdmin && memberCount < group.max_members && (
+                <div className="flex-1 text-center p-2 bg-muted rounded-lg">
+                  <p className="text-sm text-muted-foreground">
+                    Waiting for {group.max_members - memberCount} more member(s) to restart
+                  </p>
+                </div>
+              )}
+
+              {!isAdmin && (
+                <Button 
+                  onClick={confirmContinue} 
+                  disabled={confirmingContinue}
+                  variant="default"
+                  className="flex-1"
+                >
+                  {confirmingContinue ? (
+                    <div className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <ThumbsUp className="h-4 w-4 mr-2" />
+                      Continue
+                    </>
+                  )}
+                </Button>
+              )}
+
+              <Button 
+                onClick={exitGroup} 
+                disabled={exitingGroup}
+                variant="outline"
+                className="flex-1 border-destructive text-destructive hover:bg-destructive/10"
+              >
+                {exitingGroup ? (
+                  <div className="h-4 w-4 border-2 border-destructive/30 border-t-destructive rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <LogOut className="h-4 w-4 mr-2" />
+                    Exit Group
+                  </>
+                )}
+              </Button>
             </div>
           </motion.div>
         </div>

@@ -67,6 +67,32 @@ export default function Profile() {
     fetchStats();
   }, [user, profile]);
 
+  // Real-time subscription for profile updates
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel(`profile-${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "profiles",
+          filter: `id=eq.${user.id}`,
+        },
+        () => {
+          // Refresh profile when it's updated
+          refreshProfile();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, refreshProfile]);
+
   const handleSignOut = async () => {
     setSigningOut(true);
     try {
