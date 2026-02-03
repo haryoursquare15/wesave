@@ -21,20 +21,21 @@ serve(async (req) => {
     // Get current time in UTC
     const now = new Date();
     const currentHour = now.getUTCHours();
+    const currentMinute = now.getUTCMinutes();
+    // Round to nearest 30-minute slot (0 or 30)
+    const currentMinuteSlot = currentMinute < 30 ? 0 : 30;
     const currentDayOfWeek = now.getUTCDay(); // 0 = Sunday, 1 = Monday, etc.
     const currentDayOfMonth = now.getUTCDate();
 
-    console.log(`Current UTC time: Hour=${currentHour}, DayOfWeek=${currentDayOfWeek}, DayOfMonth=${currentDayOfMonth}`);
+    console.log(`Current UTC time: Hour=${currentHour}, Minute=${currentMinuteSlot}, DayOfWeek=${currentDayOfWeek}, DayOfMonth=${currentDayOfMonth}`);
 
     // Find active groups that are due for contribution
-    // For daily: match hour
-    // For weekly: match hour AND day of week
-    // For monthly: match hour AND day of month
+    // Match hour AND minute (with null/0 minute treated as :00)
     const { data: dueGroups, error: groupsError } = await supabase
       .from('thrift_groups')
       .select(`
         id, name, contribution_amount, period, max_members,
-        contribution_hour, contribution_day_of_week, contribution_day_of_month,
+        contribution_hour, contribution_minute, contribution_day_of_week, contribution_day_of_month,
         current_cycle
       `)
       .eq('status', 'active')
@@ -50,6 +51,13 @@ serve(async (req) => {
     const results: { groupId: string; groupName: string; success: boolean; details: string }[] = [];
 
     for (const group of dueGroups || []) {
+      // Check if the minute matches (null or 0 = :00, 30 = :30)
+      const groupMinute = group.contribution_minute ?? 0;
+      if (groupMinute !== currentMinuteSlot) {
+        console.log(`Skipping group ${group.name}: Minute mismatch (group=${groupMinute}, current=${currentMinuteSlot})`);
+        continue;
+      }
+
       // Check if the contribution is due based on period
       let isDue = false;
 
