@@ -141,6 +141,9 @@ export function usePoolGroups() {
         current_payout_position: 0,
         next_contribution_date: null,
         next_payout_date: null,
+        contribution_day_of_month: null,
+        contribution_day_of_week: null,
+        contribution_hour: 9,
         memberCount: Number(group.member_count) || 0,
         pendingRequests: Number(group.pending_requests) || 0,
         isMember: userGroupIds.includes(group.id!),
@@ -172,6 +175,9 @@ export function useCreateGroup() {
     contributionAmount: number;
     period: "daily" | "weekly" | "monthly";
     autoDebit: boolean;
+    contributionHour?: number;
+    contributionDayOfWeek?: number;
+    contributionDayOfMonth?: number;
   }) => {
     // Auth context can lag behind the actual auth session (especially right after sign-in/reset).
     // Always rely on the current session for critical writes.
@@ -210,6 +216,27 @@ export function useCreateGroup() {
       if (!group) {
         throw new Error("Group creation succeeded but no group was returned.");
       }
+
+      // Update the schedule fields separately (RPC doesn't support them yet)
+      const scheduleUpdate: Record<string, number | null> = {
+        contribution_hour: data.contributionHour ?? 9,
+      };
+
+      if (data.period === "weekly") {
+        scheduleUpdate.contribution_day_of_week = data.contributionDayOfWeek ?? 1;
+        scheduleUpdate.contribution_day_of_month = null;
+      } else if (data.period === "monthly") {
+        scheduleUpdate.contribution_day_of_month = data.contributionDayOfMonth ?? 1;
+        scheduleUpdate.contribution_day_of_week = null;
+      } else {
+        scheduleUpdate.contribution_day_of_week = null;
+        scheduleUpdate.contribution_day_of_month = null;
+      }
+
+      await supabase
+        .from("thrift_groups")
+        .update(scheduleUpdate)
+        .eq("id", group.id);
 
       return group;
     } catch (err) {

@@ -3,7 +3,8 @@ import { motion } from "framer-motion";
 import { useParams, useNavigate } from "react-router-dom";
 import { 
   ArrowLeft, Users, Send, Play, Crown, Check, Clock, 
-  MessageSquare, ListOrdered, Settings, Share2, AlertCircle
+  MessageSquare, ListOrdered, Settings, Share2, AlertCircle,
+  ArrowLeftRight, Info
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +15,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 import { BottomNav } from "@/components/BottomNav";
 import { AddMembersDialog } from "@/components/AddMembersDialog";
+import { SwapPositionDialog, SwapRequestNotification } from "@/components/SwapPositionDialog";
+import { GroupProfile } from "@/components/GroupProfile";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -53,6 +56,10 @@ interface GroupData {
   payout_order: string[];
   current_payout_position: number;
   next_contribution_date: string | null;
+  created_at: string | null;
+  contribution_day_of_month: number | null;
+  contribution_day_of_week: number | null;
+  contribution_hour: number | null;
 }
 
 export default function GroupDetail() {
@@ -417,8 +424,8 @@ export default function GroupDetail() {
         </div>
       </header>
 
-      {/* Admin Actions */}
-      {isAdmin && group.status === "pending" && memberCount >= 2 && (
+      {/* Admin Actions - Only show if group is full */}
+      {isAdmin && group.status === "pending" && memberCount === group.max_members && (
         <div className="container mx-auto px-4 py-3">
           <motion.div
             initial={{ opacity: 0, y: -10 }}
@@ -426,9 +433,9 @@ export default function GroupDetail() {
             className="bg-primary/10 rounded-xl p-4 flex items-center justify-between"
           >
             <div>
-              <h3 className="font-medium text-foreground">Ready to start?</h3>
+              <h3 className="font-medium text-foreground">Ready to start!</h3>
               <p className="text-sm text-muted-foreground">
-                {memberCount} members joined. Click to commence thrift.
+                Group is full ({memberCount}/{group.max_members}). Click to commence thrift.
               </p>
             </div>
             <Button onClick={commenceThrift} disabled={commencing} variant="hero">
@@ -442,6 +449,34 @@ export default function GroupDetail() {
               )}
             </Button>
           </motion.div>
+        </div>
+      )}
+
+      {/* Waiting for more members */}
+      {isAdmin && group.status === "pending" && memberCount < group.max_members && (
+        <div className="container mx-auto px-4 py-3">
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-muted rounded-xl p-4"
+          >
+            <div className="flex items-center gap-3">
+              <Users className="h-5 w-5 text-muted-foreground" />
+              <div>
+                <h3 className="font-medium text-foreground">Waiting for members</h3>
+                <p className="text-sm text-muted-foreground">
+                  {memberCount}/{group.max_members} members joined. Group must be full to commence.
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Swap Request Notifications */}
+      {group.status === "active" && (
+        <div className="container mx-auto px-4">
+          <SwapRequestNotification groupId={group.id} />
         </div>
       )}
 
@@ -490,14 +525,18 @@ export default function GroupDetail() {
       {/* Tabs */}
       <Tabs defaultValue="chat" className="flex-1">
         <div className="container mx-auto px-4">
-          <TabsList className="w-full">
+          <TabsList className="w-full grid grid-cols-3">
             <TabsTrigger value="chat" className="flex-1">
               <MessageSquare className="h-4 w-4 mr-2" />
               Chat
             </TabsTrigger>
             <TabsTrigger value="order" className="flex-1">
               <ListOrdered className="h-4 w-4 mr-2" />
-              Payout Order
+              Order
+            </TabsTrigger>
+            <TabsTrigger value="profile" className="flex-1">
+              <Info className="h-4 w-4 mr-2" />
+              Profile
             </TabsTrigger>
           </TabsList>
         </div>
@@ -591,6 +630,22 @@ export default function GroupDetail() {
 
         <TabsContent value="order" className="mt-0">
           <div className="container mx-auto px-4 py-4">
+            {/* Swap Position Button */}
+            {group.status === "active" && payoutOrder.length > 0 && user && (
+              <div className="mb-4">
+                <SwapPositionDialog
+                  groupId={group.id}
+                  currentUserId={user.id}
+                  payoutOrder={payoutOrder}
+                >
+                  <Button variant="outline" className="w-full">
+                    <ArrowLeftRight className="h-4 w-4 mr-2" />
+                    Swap Position
+                  </Button>
+                </SwapPositionDialog>
+              </div>
+            )}
+
             {payoutOrder.length === 0 ? (
               <div className="text-center text-muted-foreground py-8">
                 <ListOrdered className="h-12 w-12 mx-auto mb-2 opacity-50" />
@@ -669,6 +724,17 @@ export default function GroupDetail() {
                 A 2% platform service fee is deducted from each payout.
               </p>
             </div>
+          </div>
+        </TabsContent>
+
+        {/* Group Profile Tab */}
+        <TabsContent value="profile" className="mt-0">
+          <div className="container mx-auto px-4 py-4">
+            <GroupProfile
+              groupId={group.id}
+              group={group}
+              memberCount={memberCount}
+            />
           </div>
         </TabsContent>
       </Tabs>
