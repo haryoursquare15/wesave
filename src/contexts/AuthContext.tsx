@@ -28,15 +28,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Note: Excludes sensitive banking fields (bvn, bank_account, bank_name, phone, flw_* fields)
+  // Fetch those separately only when needed in banking/payout settings pages
   const fetchProfile = async (userId: string) => {
     const { data, error } = await supabase
       .from("profiles")
-      .select("*")
+      .select("id, username, full_name, email, avatar_url, membership_tier, credit_score, completed_cycles, created_at, updated_at")
       .eq("id", userId)
       .maybeSingle();
     
     if (!error && data) {
-      setProfile(data);
+      // Cast to Profile type - sensitive fields will be null/undefined
+      setProfile(data as Profile);
     }
   };
 
