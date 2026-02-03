@@ -755,6 +755,42 @@ export type Database = {
         Returns: Json
       }
       commence_thrift: { Args: { target_group_id: string }; Returns: Json }
+      create_thrift_group: {
+        Args: {
+          _auto_debit: boolean
+          _contribution_amount: number
+          _max_members: number
+          _name: string
+          _period: Database["public"]["Enums"]["contribution_period"]
+        }
+        Returns: {
+          admin_id: string
+          auto_debit: boolean | null
+          contribution_amount: number
+          created_at: string | null
+          current_cycle: number | null
+          current_payout_position: number | null
+          description: string | null
+          flw_subaccount_id: string | null
+          id: string
+          invite_code: string | null
+          max_members: number
+          name: string
+          next_contribution_date: string | null
+          next_payout_date: string | null
+          payout_order: string[] | null
+          period: Database["public"]["Enums"]["contribution_period"]
+          rating: number | null
+          status: Database["public"]["Enums"]["group_status"]
+          updated_at: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "thrift_groups"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       get_payout_order: {
         Args: { target_group_id: string }
         Returns: {
