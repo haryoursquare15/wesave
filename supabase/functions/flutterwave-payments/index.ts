@@ -24,28 +24,46 @@ const PLATFORM_FEE_PERCENTAGE = 0.02; // 2%
 const PLATFORM_BANK_CODE = "044"; // Access Bank (example)
 const PLATFORM_ACCOUNT_NUMBER = Deno.env.get('PLATFORM_BANK_ACCOUNT') || ""; // Platform's bank account
 
-// Transfer service fee to platform account
-async function transferServiceFee(
+// Record service fee in platform ledger and optionally transfer to bank
+async function recordAndTransferServiceFee(
   secretKey: string, 
   amount: number, 
   groupId: string,
+  recipientId: string,
   supabaseClient: any
 ) {
   try {
-    // Skip if no platform account configured or amount too small
+    // Record fee in platform ledger (immutable)
+    const { data: feeResult, error: feeError } = await supabaseClient.rpc('record_platform_fee', {
+      _amount: amount,
+      _source_type: 'payout',
+      _source_id: groupId,
+      _source_user_id: recipientId,
+      _source_group_id: groupId,
+    });
+
+    if (feeError) {
+      console.error('Failed to record platform fee:', feeError);
+    } else {
+      console.log('Platform fee recorded in ledger:', feeResult);
+    }
+
+    // Mark the service fee transaction as completed
+    await supabaseClient
+      .from('transactions')
+      .update({ 
+        status: 'completed',
+        description: 'Platform service fee (ledger tracked)'
+      })
+      .eq('group_id', groupId)
+      .eq('type', 'service_fee')
+      .eq('status', 'pending');
+
+    // Fees accumulate in platform wallet and are auto-settled daily
+    // Skip immediate transfer if no account configured or amount too small
     if (!PLATFORM_ACCOUNT_NUMBER || amount < 100) {
-      console.log(`Service fee transfer skipped: amount=${amount}, accountConfigured=${!!PLATFORM_ACCOUNT_NUMBER}`);
-      // Mark the service fee transaction as completed anyway (internal ledger tracking)
-      await supabaseClient
-        .from('transactions')
-        .update({ 
-          status: 'completed',
-          description: 'Platform service fee (ledger tracked)'
-        })
-        .eq('group_id', groupId)
-        .eq('type', 'service_fee')
-        .eq('status', 'pending');
-      return { success: true, skipped: true };
+      console.log(`Service fee transfer deferred: amount=${amount}, will be included in daily settlement`);
+      return { success: true, recorded: true, transferred: false };
     }
 
     const transferRef = `fee-${groupId}-${Date.now()}`;
@@ -71,37 +89,14 @@ async function transferServiceFee(
     console.log('Service fee transfer response:', JSON.stringify(transferData));
 
     if (transferData.status === 'success') {
-      // Update the pending service fee transaction to completed
-      await supabaseClient
-        .from('transactions')
-        .update({ 
-          status: 'completed',
-          reference: transferRef,
-          description: 'Platform service fee (transferred)'
-        })
-        .eq('group_id', groupId)
-        .eq('type', 'service_fee')
-        .eq('status', 'pending');
-      
-      return { success: true, reference: transferRef };
+      return { success: true, recorded: true, transferred: true, reference: transferRef };
     } else {
-      console.error('Service fee transfer failed:', transferData);
-      // Mark as failed but don't throw - payout was already processed
-      await supabaseClient
-        .from('transactions')
-        .update({ 
-          status: 'failed',
-          description: `Platform service fee (transfer failed: ${transferData.message || 'Unknown error'})`
-        })
-        .eq('group_id', groupId)
-        .eq('type', 'service_fee')
-        .eq('status', 'pending');
-      
-      return { success: false, error: transferData.message };
+      console.error('Service fee transfer failed (fee still recorded in ledger):', transferData);
+      return { success: true, recorded: true, transferred: false, error: transferData.message };
     }
   } catch (error) {
-    console.error('Error transferring service fee:', error);
-    return { success: false, error: 'Transfer failed' };
+    console.error('Error in service fee processing:', error);
+    return { success: false, recorded: false, error: 'Processing failed' };
   }
 }
 
@@ -211,9 +206,15 @@ serve(async (req) => {
           throw new Error(payoutResult.error || 'Payout failed');
         }
 
-        // Transfer service fee to platform Flutterwave account
+        // Record service fee in platform ledger and transfer to Flutterwave account
         if (payoutResult.platform_fee > 0) {
-          await transferServiceFee(FLUTTERWAVE_SECRET_KEY, payoutResult.platform_fee, groupId, supabase);
+          await recordAndTransferServiceFee(
+            FLUTTERWAVE_SECRET_KEY, 
+            payoutResult.platform_fee, 
+            groupId, 
+            payoutResult.recipient_id,
+            supabase
+          );
         }
 
         result = payoutResult;
