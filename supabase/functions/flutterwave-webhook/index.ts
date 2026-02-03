@@ -170,10 +170,11 @@ serve(async (req) => {
 
   } catch (error: unknown) {
     console.error('Webhook error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    
+    // Return generic error to external callers - keep details in server logs only
     return new Response(JSON.stringify({ 
       status: 'error',
-      error: errorMessage 
+      error: 'Webhook processing failed'
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
