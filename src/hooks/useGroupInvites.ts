@@ -177,7 +177,7 @@ export function usePendingInvites() {
 
         const [groupsRes, profilesRes] = await Promise.all([
           supabase.from("thrift_groups").select("id, name, contribution_amount, period").in("id", groupIds),
-          supabase.from("profiles").select("id, full_name").in("id", inviterIds),
+          supabase.from("profiles").select("id, full_name, username").in("id", inviterIds),
         ]);
 
         const groupMap = new Map(groupsRes.data?.map(g => [g.id, g]) || []);
@@ -186,10 +186,14 @@ export function usePendingInvites() {
         const enrichedInvites = data.map(invite => {
           const group = groupMap.get(invite.group_id);
           const inviter = profileMap.get(invite.inviter_id);
+          // Prefer username, fallback to full_name, then "Someone"
+          const inviterDisplay = inviter?.username 
+            ? `@${inviter.username}` 
+            : (inviter?.full_name || "Someone");
           return {
             ...invite,
             group_name: group?.name || "Unknown Group",
-            inviter_name: inviter?.full_name || "Someone",
+            inviter_name: inviterDisplay,
             contribution_amount: group?.contribution_amount || 0,
             period: group?.period || "weekly",
           };
