@@ -201,7 +201,17 @@ export function useCreateGroup() {
     setError(null);
 
     try {
-      // Use the RPC function to bypass RLS insert issues
+      // Prepare schedule parameters based on period
+      let dayOfWeek = 1;
+      let dayOfMonth = 1;
+      
+      if (data.period === "weekly") {
+        dayOfWeek = data.contributionDayOfWeek ?? 1;
+      } else if (data.period === "monthly") {
+        dayOfMonth = data.contributionDayOfMonth ?? 1;
+      }
+
+      // Use the RPC function with all parameters
       const { data: group, error: rpcError } = await supabase
         .rpc("create_thrift_group", {
           _name: data.name,
@@ -209,6 +219,10 @@ export function useCreateGroup() {
           _contribution_amount: data.contributionAmount,
           _period: data.period,
           _auto_debit: data.autoDebit,
+          _contribution_hour: data.contributionHour ?? 9,
+          _contribution_minute: data.contributionMinute ?? 0,
+          _contribution_day_of_week: dayOfWeek,
+          _contribution_day_of_month: dayOfMonth,
         });
 
       if (rpcError) {
@@ -218,28 +232,6 @@ export function useCreateGroup() {
       if (!group) {
         throw new Error("Group creation succeeded but no group was returned.");
       }
-
-      // Update the schedule fields separately (RPC doesn't support them yet)
-      const scheduleUpdate: Record<string, number | null> = {
-        contribution_hour: data.contributionHour ?? 9,
-        contribution_minute: data.contributionMinute ?? 0,
-      };
-
-      if (data.period === "weekly") {
-        scheduleUpdate.contribution_day_of_week = data.contributionDayOfWeek ?? 1;
-        scheduleUpdate.contribution_day_of_month = null;
-      } else if (data.period === "monthly") {
-        scheduleUpdate.contribution_day_of_month = data.contributionDayOfMonth ?? 1;
-        scheduleUpdate.contribution_day_of_week = null;
-      } else {
-        scheduleUpdate.contribution_day_of_week = null;
-        scheduleUpdate.contribution_day_of_month = null;
-      }
-
-      await supabase
-        .from("thrift_groups")
-        .update(scheduleUpdate)
-        .eq("id", group.id);
 
       return group;
     } catch (err) {
