@@ -10,6 +10,7 @@ import Onboarding from "./pages/Onboarding";
 import Dashboard from "./pages/Dashboard";
 import Groups from "./pages/Groups";
 import CreateGroup from "./pages/CreateGroup";
+import GroupDetail from "./pages/GroupDetail";
 import Profile from "./pages/Profile";
 import Wallet from "./pages/Wallet";
 import Invite from "./pages/Invite";
@@ -30,6 +31,7 @@ const App = () => (
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/groups" element={<Groups />} />
           <Route path="/create-group" element={<CreateGroup />} />
+          <Route path="/groups/:groupId" element={<GroupDetail />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/wallet" element={<Wallet />} />
           <Route path="/invite/:token" element={<Invite />} />

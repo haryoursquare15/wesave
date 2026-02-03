@@ -14,6 +14,169 @@ export type Database = {
   }
   public: {
     Tables: {
+      chat_messages: {
+        Row: {
+          created_at: string
+          group_id: string
+          id: string
+          message: string
+          message_type: string | null
+          metadata: Json | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          group_id: string
+          id?: string
+          message: string
+          message_type?: string | null
+          metadata?: Json | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          group_id?: string
+          id?: string
+          message?: string
+          message_type?: string | null
+          metadata?: Json | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_messages_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "public_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_messages_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "thrift_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contribution_cycles: {
+        Row: {
+          completed_at: string | null
+          contribution_deadline: string | null
+          created_at: string
+          cycle_number: number
+          group_id: string
+          id: string
+          payout_amount: number | null
+          payout_date: string | null
+          payout_recipient_id: string | null
+          platform_fee: number | null
+          status: string | null
+          total_contributions: number | null
+        }
+        Insert: {
+          completed_at?: string | null
+          contribution_deadline?: string | null
+          created_at?: string
+          cycle_number: number
+          group_id: string
+          id?: string
+          payout_amount?: number | null
+          payout_date?: string | null
+          payout_recipient_id?: string | null
+          platform_fee?: number | null
+          status?: string | null
+          total_contributions?: number | null
+        }
+        Update: {
+          completed_at?: string | null
+          contribution_deadline?: string | null
+          created_at?: string
+          cycle_number?: number
+          group_id?: string
+          id?: string
+          payout_amount?: number | null
+          payout_date?: string | null
+          payout_recipient_id?: string | null
+          platform_fee?: number | null
+          status?: string | null
+          total_contributions?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contribution_cycles_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "public_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contribution_cycles_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "thrift_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cycle_contributions: {
+        Row: {
+          amount: number
+          contributed_at: string | null
+          created_at: string
+          cycle_id: string
+          flw_transaction_ref: string | null
+          group_id: string
+          id: string
+          status: string | null
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          contributed_at?: string | null
+          created_at?: string
+          cycle_id: string
+          flw_transaction_ref?: string | null
+          group_id: string
+          id?: string
+          status?: string | null
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          contributed_at?: string | null
+          created_at?: string
+          cycle_id?: string
+          flw_transaction_ref?: string | null
+          group_id?: string
+          id?: string
+          status?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cycle_contributions_cycle_id_fkey"
+            columns: ["cycle_id"]
+            isOneToOne: false
+            referencedRelation: "contribution_cycles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cycle_contributions_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "public_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cycle_contributions_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "thrift_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       group_invitations: {
         Row: {
           created_at: string
@@ -64,31 +227,37 @@ export type Database = {
       }
       group_memberships: {
         Row: {
+          flw_mandate_id: string | null
           group_id: string
           has_contributed_this_cycle: boolean | null
           has_received_payout: boolean | null
           id: string
           joined_at: string | null
+          mandate_status: string | null
           payout_position: number | null
           status: Database["public"]["Enums"]["membership_status"]
           user_id: string
         }
         Insert: {
+          flw_mandate_id?: string | null
           group_id: string
           has_contributed_this_cycle?: boolean | null
           has_received_payout?: boolean | null
           id?: string
           joined_at?: string | null
+          mandate_status?: string | null
           payout_position?: number | null
           status?: Database["public"]["Enums"]["membership_status"]
           user_id: string
         }
         Update: {
+          flw_mandate_id?: string | null
           group_id?: string
           has_contributed_this_cycle?: boolean | null
           has_received_payout?: boolean | null
           id?: string
           joined_at?: string | null
+          mandate_status?: string | null
           payout_position?: number | null
           status?: Database["public"]["Enums"]["membership_status"]
           user_id?: string
@@ -144,6 +313,73 @@ export type Database = {
             foreignKeyName: "group_wallets_group_id_fkey"
             columns: ["group_id"]
             isOneToOne: true
+            referencedRelation: "thrift_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payouts: {
+        Row: {
+          created_at: string
+          cycle_id: string
+          flw_transfer_id: string | null
+          flw_transfer_ref: string | null
+          gross_amount: number
+          group_id: string
+          id: string
+          net_amount: number
+          platform_fee: number
+          processed_at: string | null
+          recipient_id: string
+          status: string | null
+        }
+        Insert: {
+          created_at?: string
+          cycle_id: string
+          flw_transfer_id?: string | null
+          flw_transfer_ref?: string | null
+          gross_amount: number
+          group_id: string
+          id?: string
+          net_amount: number
+          platform_fee: number
+          processed_at?: string | null
+          recipient_id: string
+          status?: string | null
+        }
+        Update: {
+          created_at?: string
+          cycle_id?: string
+          flw_transfer_id?: string | null
+          flw_transfer_ref?: string | null
+          gross_amount?: number
+          group_id?: string
+          id?: string
+          net_amount?: number
+          platform_fee?: number
+          processed_at?: string | null
+          recipient_id?: string
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payouts_cycle_id_fkey"
+            columns: ["cycle_id"]
+            isOneToOne: false
+            referencedRelation: "contribution_cycles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payouts_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "public_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payouts_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
             referencedRelation: "thrift_groups"
             referencedColumns: ["id"]
           },
@@ -237,6 +473,10 @@ export type Database = {
           created_at: string | null
           credit_score: number | null
           email: string | null
+          flw_account_reference: string | null
+          flw_subaccount_id: string | null
+          flw_virtual_account_number: string | null
+          flw_virtual_bank_name: string | null
           full_name: string | null
           id: string
           membership_tier: Database["public"]["Enums"]["membership_tier"]
@@ -253,6 +493,10 @@ export type Database = {
           created_at?: string | null
           credit_score?: number | null
           email?: string | null
+          flw_account_reference?: string | null
+          flw_subaccount_id?: string | null
+          flw_virtual_account_number?: string | null
+          flw_virtual_bank_name?: string | null
           full_name?: string | null
           id: string
           membership_tier?: Database["public"]["Enums"]["membership_tier"]
@@ -269,6 +513,10 @@ export type Database = {
           created_at?: string | null
           credit_score?: number | null
           email?: string | null
+          flw_account_reference?: string | null
+          flw_subaccount_id?: string | null
+          flw_virtual_account_number?: string | null
+          flw_virtual_bank_name?: string | null
           full_name?: string | null
           id?: string
           membership_tier?: Database["public"]["Enums"]["membership_tier"]
@@ -285,11 +533,16 @@ export type Database = {
           contribution_amount: number
           created_at: string | null
           current_cycle: number | null
+          current_payout_position: number | null
           description: string | null
+          flw_subaccount_id: string | null
           id: string
           invite_code: string | null
           max_members: number
           name: string
+          next_contribution_date: string | null
+          next_payout_date: string | null
+          payout_order: string[] | null
           period: Database["public"]["Enums"]["contribution_period"]
           rating: number | null
           status: Database["public"]["Enums"]["group_status"]
@@ -301,11 +554,16 @@ export type Database = {
           contribution_amount: number
           created_at?: string | null
           current_cycle?: number | null
+          current_payout_position?: number | null
           description?: string | null
+          flw_subaccount_id?: string | null
           id?: string
           invite_code?: string | null
           max_members?: number
           name: string
+          next_contribution_date?: string | null
+          next_payout_date?: string | null
+          payout_order?: string[] | null
           period?: Database["public"]["Enums"]["contribution_period"]
           rating?: number | null
           status?: Database["public"]["Enums"]["group_status"]
@@ -317,11 +575,16 @@ export type Database = {
           contribution_amount?: number
           created_at?: string | null
           current_cycle?: number | null
+          current_payout_position?: number | null
           description?: string | null
+          flw_subaccount_id?: string | null
           id?: string
           invite_code?: string | null
           max_members?: number
           name?: string
+          next_contribution_date?: string | null
+          next_payout_date?: string | null
+          payout_order?: string[] | null
           period?: Database["public"]["Enums"]["contribution_period"]
           rating?: number | null
           status?: Database["public"]["Enums"]["group_status"]
@@ -417,6 +680,36 @@ export type Database = {
         }
         Relationships: []
       }
+      webhook_events: {
+        Row: {
+          created_at: string
+          event_id: string
+          event_type: string
+          id: string
+          payload: Json
+          processed: boolean | null
+          processed_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          event_id: string
+          event_type: string
+          id?: string
+          payload: Json
+          processed?: boolean | null
+          processed_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          event_id?: string
+          event_type?: string
+          id?: string
+          payload?: Json
+          processed?: boolean | null
+          processed_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       public_groups: {
@@ -460,6 +753,18 @@ export type Database = {
       add_member_to_group: {
         Args: { target_group_id: string; target_user_id: string }
         Returns: Json
+      }
+      commence_thrift: { Args: { target_group_id: string }; Returns: Json }
+      get_payout_order: {
+        Args: { target_group_id: string }
+        Returns: {
+          member_avatar_url: string
+          member_full_name: string
+          member_has_received_payout: boolean
+          member_user_id: string
+          member_username: string
+          payout_position: number
+        }[]
       }
       is_group_admin: { Args: { _group_id: string }; Returns: boolean }
       is_group_member: { Args: { _group_id: string }; Returns: boolean }

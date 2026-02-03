@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { Users, Calendar, Coins, Lock, ChevronRight } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { StarRating } from "./StarRating";
 import { Badge } from "./ui/badge";
 import { cn } from "@/lib/utils";
@@ -25,6 +26,7 @@ const periodLabels = {
 };
 
 export function ThriftGroupCard({
+  id,
   name,
   rating,
   memberCount,
@@ -36,8 +38,20 @@ export function ThriftGroupCard({
   pendingRequests = 0,
   onClick,
 }: ThriftGroupCardProps) {
+  const navigate = useNavigate();
+
   const formatAmount = (amount: number) => {
     return new Intl.NumberFormat("en-NG").format(amount);
+  };
+
+  const handleClick = () => {
+    if (isMember) {
+      if (onClick) {
+        onClick();
+      } else {
+        navigate(`/groups/${id}`);
+      }
+    }
   };
 
   return (
@@ -46,7 +60,7 @@ export function ThriftGroupCard({
       animate={{ opacity: 1, scale: 1 }}
       whileHover={{ scale: isMember ? 1.02 : 1 }}
       whileTap={{ scale: isMember ? 0.98 : 1 }}
-      onClick={isMember ? onClick : undefined}
+      onClick={handleClick}
       className={cn(
         "relative overflow-hidden rounded-xl border bg-card p-5 shadow-md transition-all duration-200",
         isMember
