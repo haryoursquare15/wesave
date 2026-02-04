@@ -10,8 +10,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Users, UsersRound, Activity, Wallet, Shield, ArrowLeft, RefreshCw } from "lucide-react";
+import { Users, UsersRound, Activity, Wallet, Shield, ArrowLeft, RefreshCw, Banknote } from "lucide-react";
 import { format } from "date-fns";
+import { PlatformRevenueTab } from "@/components/admin/PlatformRevenueTab";
 
 export default function Admin() {
   const navigate = useNavigate();
@@ -176,11 +177,15 @@ export default function Admin() {
           </Card>
         </div>
 
-        {/* Tabs for Users and Groups */}
+        {/* Tabs for Users, Groups, and Platform Revenue */}
         <Tabs defaultValue="users" className="space-y-4">
           <TabsList>
             <TabsTrigger value="users">Users</TabsTrigger>
             <TabsTrigger value="groups">Groups</TabsTrigger>
+            <TabsTrigger value="revenue" className="flex items-center gap-1">
+              <Banknote className="h-4 w-4" />
+              Platform Revenue
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="users">
@@ -328,6 +333,10 @@ export default function Admin() {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="revenue">
+            <PlatformRevenueTab />
           </TabsContent>
         </Tabs>
       </div>
