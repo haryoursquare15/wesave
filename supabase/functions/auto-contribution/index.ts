@@ -30,16 +30,23 @@ serve(async (req) => {
       // No body or invalid JSON - that's fine for scheduled calls
     }
 
-    // Get current time in UTC
+    // Get current time in West African Time (WAT = UTC+1)
     const now = new Date();
-    const currentHour = now.getUTCHours();
-    const currentMinute = now.getUTCMinutes();
+    const watOffset = 1; // WAT is UTC+1
+    const watHour = (now.getUTCHours() + watOffset) % 24;
+    const watMinute = now.getUTCMinutes();
     // Round to nearest 30-minute slot (0 or 30)
-    const currentMinuteSlot = currentMinute < 30 ? 0 : 30;
-    const currentDayOfWeek = now.getUTCDay(); // 0 = Sunday, 1 = Monday, etc.
-    const currentDayOfMonth = now.getUTCDate();
+    const currentMinuteSlot = watMinute < 30 ? 0 : 30;
+    
+    // Adjust day if hour overflow crosses midnight
+    let watDate = new Date(now);
+    if (now.getUTCHours() + watOffset >= 24) {
+      watDate.setUTCDate(watDate.getUTCDate() + 1);
+    }
+    const currentDayOfWeek = watDate.getUTCDay(); // 0 = Sunday, 1 = Monday, etc.
+    const currentDayOfMonth = watDate.getUTCDate();
 
-    console.log(`Current UTC time: Hour=${currentHour}, Minute=${currentMinuteSlot}, DayOfWeek=${currentDayOfWeek}, DayOfMonth=${currentDayOfMonth}`);
+    console.log(`Current WAT (Nigerian) time: Hour=${watHour}, Minute=${currentMinuteSlot}, DayOfWeek=${currentDayOfWeek}, DayOfMonth=${currentDayOfMonth}`);
 
     let dueGroups;
     let groupsError;
@@ -70,7 +77,7 @@ serve(async (req) => {
           current_cycle
         `)
         .eq('status', 'active')
-        .eq('contribution_hour', currentHour);
+        .eq('contribution_hour', watHour);
       
       dueGroups = result.data;
       groupsError = result.error;
