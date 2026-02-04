@@ -18,6 +18,18 @@ serve(async (req) => {
 
     console.log('Auto-contribution job started at:', new Date().toISOString());
 
+    // Parse request body for optional force_group_id (for manual testing)
+    let forceGroupId: string | null = null;
+    try {
+      const body = await req.json();
+      forceGroupId = body.force_group_id || null;
+      if (forceGroupId) {
+        console.log(`Manual trigger requested for group: ${forceGroupId}`);
+      }
+    } catch {
+      // No body or invalid JSON - that's fine for scheduled calls
+    }
+
     // Get current time in UTC
     const now = new Date();
     const currentHour = now.getUTCHours();
@@ -29,17 +41,40 @@ serve(async (req) => {
 
     console.log(`Current UTC time: Hour=${currentHour}, Minute=${currentMinuteSlot}, DayOfWeek=${currentDayOfWeek}, DayOfMonth=${currentDayOfMonth}`);
 
-    // Find active groups that are due for contribution
-    // Match hour AND minute (with null/0 minute treated as :00)
-    const { data: dueGroups, error: groupsError } = await supabase
-      .from('thrift_groups')
-      .select(`
-        id, name, contribution_amount, period, max_members,
-        contribution_hour, contribution_minute, contribution_day_of_week, contribution_day_of_month,
-        current_cycle
-      `)
-      .eq('status', 'active')
-      .eq('contribution_hour', currentHour);
+    let dueGroups;
+    let groupsError;
+
+    // If force_group_id is provided, process that specific group regardless of schedule
+    if (forceGroupId) {
+      const result = await supabase
+        .from('thrift_groups')
+        .select(`
+          id, name, contribution_amount, period, max_members,
+          contribution_hour, contribution_minute, contribution_day_of_week, contribution_day_of_month,
+          current_cycle
+        `)
+        .eq('status', 'active')
+        .eq('id', forceGroupId);
+      
+      dueGroups = result.data;
+      groupsError = result.error;
+      console.log(`Force processing group: ${forceGroupId}, found: ${dueGroups?.length || 0}`);
+    } else {
+      // Normal scheduled flow - find active groups that are due for contribution
+      // Match hour AND minute (with null/0 minute treated as :00)
+      const result = await supabase
+        .from('thrift_groups')
+        .select(`
+          id, name, contribution_amount, period, max_members,
+          contribution_hour, contribution_minute, contribution_day_of_week, contribution_day_of_month,
+          current_cycle
+        `)
+        .eq('status', 'active')
+        .eq('contribution_hour', currentHour);
+      
+      dueGroups = result.data;
+      groupsError = result.error;
+    }
 
     if (groupsError) {
       console.error('Error fetching groups:', groupsError);
@@ -51,27 +86,32 @@ serve(async (req) => {
     const results: { groupId: string; groupName: string; success: boolean; details: string }[] = [];
 
     for (const group of dueGroups || []) {
-      // Check if the minute matches (null or 0 = :00, 30 = :30)
-      const groupMinute = group.contribution_minute ?? 0;
-      if (groupMinute !== currentMinuteSlot) {
-        console.log(`Skipping group ${group.name}: Minute mismatch (group=${groupMinute}, current=${currentMinuteSlot})`);
-        continue;
-      }
+      // Skip schedule checks if force_group_id is provided
+      if (!forceGroupId) {
+        // Check if the minute matches (null or 0 = :00, 30 = :30)
+        const groupMinute = group.contribution_minute ?? 0;
+        if (groupMinute !== currentMinuteSlot) {
+          console.log(`Skipping group ${group.name}: Minute mismatch (group=${groupMinute}, current=${currentMinuteSlot})`);
+          continue;
+        }
 
-      // Check if the contribution is due based on period
-      let isDue = false;
+        // Check if the contribution is due based on period
+        let isDue = false;
 
-      if (group.period === 'daily') {
-        isDue = true;
-      } else if (group.period === 'weekly') {
-        isDue = group.contribution_day_of_week === currentDayOfWeek;
-      } else if (group.period === 'monthly') {
-        isDue = group.contribution_day_of_month === currentDayOfMonth;
-      }
+        if (group.period === 'daily') {
+          isDue = true;
+        } else if (group.period === 'weekly') {
+          isDue = group.contribution_day_of_week === currentDayOfWeek;
+        } else if (group.period === 'monthly') {
+          isDue = group.contribution_day_of_month === currentDayOfMonth;
+        }
 
-      if (!isDue) {
-        console.log(`Skipping group ${group.name}: Not due (period=${group.period}, dayOfWeek=${group.contribution_day_of_week}, dayOfMonth=${group.contribution_day_of_month})`);
-        continue;
+        if (!isDue) {
+          console.log(`Skipping group ${group.name}: Not due (period=${group.period}, dayOfWeek=${group.contribution_day_of_week}, dayOfMonth=${group.contribution_day_of_month})`);
+          continue;
+        }
+      } else {
+        console.log(`Force processing group ${group.name} - skipping schedule checks`);
       }
 
       console.log(`Processing auto-contribution for group: ${group.name} (${group.id})`);
