@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Users, Calendar, Coins, Lock, ChevronRight } from "lucide-react";
+import { Users, Calendar, Coins, Lock, ChevronRight, Trophy } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { StarRating } from "./StarRating";
 import { Badge } from "./ui/badge";
@@ -15,6 +15,7 @@ interface ThriftGroupCardProps {
   period: "daily" | "weekly" | "monthly";
   isMember?: boolean;
   isActive?: boolean;
+  isCompleted?: boolean;
   pendingRequests?: number;
   onClick?: () => void;
 }
@@ -35,6 +36,7 @@ export function ThriftGroupCard({
   period,
   isMember = false,
   isActive = true,
+  isCompleted = false,
   pendingRequests = 0,
   onClick,
 }: ThriftGroupCardProps) {
@@ -54,6 +56,17 @@ export function ThriftGroupCard({
     }
   };
 
+  // Determine card styling based on status
+  const getCardStyle = () => {
+    if (isCompleted) {
+      return "border-success/50 bg-success/5"; // Completed cycle - green tint
+    }
+    if (!isActive) {
+      return "border-dashed border-muted-foreground/30"; // Pending
+    }
+    return ""; // Active
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
@@ -66,9 +79,19 @@ export function ThriftGroupCard({
         isMember
           ? "cursor-pointer hover:shadow-lg hover:border-primary/30"
           : "opacity-80",
-        !isActive && "border-dashed"
+        getCardStyle()
       )}
     >
+      {/* Completed Badge Overlay */}
+      {isCompleted && (
+        <div className="absolute top-3 right-3">
+          <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-success/20 text-success text-xs font-medium">
+            <Trophy className="h-3 w-3" />
+            Completed
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex-1">
@@ -78,7 +101,7 @@ export function ThriftGroupCard({
           </div>
           <StarRating rating={rating} size="sm" showValue />
         </div>
-        {isMember && pendingRequests > 0 && (
+        {isMember && pendingRequests > 0 && !isCompleted && (
           <Badge variant="warning" className="ml-2">
             {pendingRequests} pending
           </Badge>
@@ -105,8 +128,11 @@ export function ThriftGroupCard({
 
       {/* Footer */}
       <div className="flex items-center justify-between">
-        <Badge variant={isActive ? "success" : "secondary"}>
-          {isActive ? "Active Cycle" : "Cycle Complete"}
+        <Badge 
+          variant={isCompleted ? "success" : isActive ? "default" : "secondary"}
+          className={isCompleted ? "bg-success text-success-foreground" : ""}
+        >
+          {isCompleted ? "All Cycles Complete" : isActive ? "Active Cycle" : "Pending"}
         </Badge>
         {isMember && (
           <ChevronRight className="h-5 w-5 text-muted-foreground" />

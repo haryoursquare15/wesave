@@ -29,10 +29,12 @@ export default function Wallet() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loadingTx, setLoadingTx] = useState(true);
   const [fundDialogOpen, setFundDialogOpen] = useState(false);
+  const [withdrawDialogOpen, setWithdrawDialogOpen] = useState(false);
   const [fundAmount, setFundAmount] = useState("");
+  const [withdrawAmount, setWithdrawAmount] = useState("");
   const [funding, setFunding] = useState(false);
+  const [withdrawing, setWithdrawing] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [creatingVA, setCreatingVA] = useState(false);
 
   const balance = Number(wallet?.available_balance) || 0;
   const lockedBalance = Number(wallet?.locked_balance) || 0;
@@ -212,32 +214,27 @@ export default function Wallet() {
     return new Intl.NumberFormat("en-NG").format(amount);
   };
 
-  const createVirtualAccount = async () => {
-    if (!profile?.bvn || !profile?.bank_account) {
-      toast.error("Please complete onboarding with your BVN and bank details first.");
-      navigate("/onboarding");
+  const handleWithdraw = async () => {
+    const amount = Number(withdrawAmount);
+    if (!amount || amount < 100) {
+      toast.error("Minimum withdrawal amount is ₦100");
+      return;
+    }
+    if (amount > balance) {
+      toast.error("Insufficient balance");
       return;
     }
 
-    setCreatingVA(true);
+    setWithdrawing(true);
     try {
-      const { data, error } = await supabase.functions.invoke("flutterwave-subaccount", {
-        body: { action: "create_virtual_account" },
-      });
-
-      if (error) throw error;
-
-      if (data.success) {
-        toast.success("Virtual account created successfully!");
-        refreshWallet();
-      } else {
-        toast.error(data.error || "Failed to create virtual account");
-      }
+      // Navigate to security settings for 2FA verification before withdrawal
+      // The actual withdrawal will be processed after 2FA verification
+      navigate("/settings/security?action=withdraw&amount=" + amount);
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : "Failed to create virtual account";
+      const errorMessage = err instanceof Error ? err.message : "Failed to initiate withdrawal";
       toast.error(errorMessage);
     } finally {
-      setCreatingVA(false);
+      setWithdrawing(false);
     }
   };
 
@@ -307,6 +304,41 @@ export default function Wallet() {
     }
   };
 
+  const formatTransactionDescription = (tx: Transaction) => {
+    // Custom descriptions based on type and existing description
+    if (tx.description) {
+      // If it's a contribution with a group reference
+      if (tx.type === "contribution" && tx.description.includes("Contribution")) {
+        return tx.description.replace("Contribution for", "Group contribution for");
+      }
+      // If it's a payout
+      if (tx.type === "payout") {
+        return tx.description.replace("Payout from", "Group payout from");
+      }
+      return tx.description;
+    }
+    
+    // Default descriptions by type
+    switch (tx.type) {
+      case "funding":
+        return "Wallet funding";
+      case "payout":
+        return "Group payout";
+      case "contribution":
+        return "Group contribution";
+      case "withdrawal":
+        return "Withdrawal to bank";
+      case "lock":
+        return "Locked savings";
+      case "unlock":
+        return "Unlocked savings";
+      case "service_fee":
+        return "Platform service fee";
+      default:
+        return tx.type.replace("_", " ");
+    }
+  };
+
   if (authLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -363,7 +395,10 @@ export default function Wallet() {
                 <ArrowDownLeft className="h-4 w-4 mr-2" />
                 Fund
               </Button>
-              <Button className="flex-1 bg-white/20 hover:bg-white/30 text-primary-foreground border-0">
+              <Button 
+                className="flex-1 bg-white/20 hover:bg-white/30 text-primary-foreground border-0"
+                onClick={() => setWithdrawDialogOpen(true)}
+              >
                 <ArrowUpRight className="h-4 w-4 mr-2" />
                 Withdraw
               </Button>
@@ -373,8 +408,8 @@ export default function Wallet() {
       </div>
 
       <main className="container mx-auto px-4 py-6 space-y-6">
-        {/* Virtual Account Card */}
-        {profile?.flw_virtual_account_number ? (
+        {/* Virtual Account Card - Show if exists */}
+        {profile?.flw_virtual_account_number && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -398,30 +433,6 @@ export default function Wallet() {
             <p className="text-xs text-muted-foreground mt-2">
               Transfer to this account to fund your wallet instantly
             </p>
-          </motion.div>
-        ) : (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="p-4 rounded-xl bg-gold/10 border border-gold/20"
-          >
-            <p className="text-sm font-medium text-foreground mb-2">
-              Create a Virtual Account
-            </p>
-            <p className="text-xs text-muted-foreground mb-3">
-              Get a dedicated account number for instant wallet funding
-            </p>
-            <Button 
-              variant="gold" 
-              size="sm" 
-              onClick={createVirtualAccount}
-              disabled={creatingVA}
-            >
-              {creatingVA ? (
-                <div className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin mr-2" />
-              ) : null}
-              Create Now
-            </Button>
           </motion.div>
         )}
 
@@ -487,8 +498,8 @@ export default function Wallet() {
                       {getTransactionIcon(tx.type)}
                     </div>
                     <div>
-                      <p className="font-medium text-foreground text-sm capitalize">
-                        {tx.description || tx.type.replace("_", " ")}
+                      <p className="font-medium text-foreground text-sm">
+                        {formatTransactionDescription(tx)}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {format(new Date(tx.created_at), "MMM d, h:mm a")}
@@ -542,6 +553,52 @@ export default function Wallet() {
                 <div className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin mr-2" />
               ) : null}
               Continue to Payment
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Withdraw Dialog */}
+      <Dialog open={withdrawDialogOpen} onOpenChange={setWithdrawDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Withdraw Funds</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <div className="p-3 rounded-lg bg-muted">
+              <p className="text-sm text-muted-foreground">Available Balance</p>
+              <p className="text-xl font-bold text-foreground">₦{formatAmount(balance)}</p>
+            </div>
+            
+            <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
+              <p className="text-sm text-muted-foreground">Withdrawal Bank</p>
+              <p className="font-medium text-foreground">
+                {profile?.bank_name || "Not set"} - {profile?.bank_account ? `****${profile.bank_account.slice(-4)}` : "N/A"}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="withdrawAmount">Amount (₦)</Label>
+              <Input
+                id="withdrawAmount"
+                type="number"
+                placeholder="Enter amount"
+                value={withdrawAmount}
+                onChange={(e) => setWithdrawAmount(e.target.value)}
+                min={100}
+                max={balance}
+              />
+              <p className="text-xs text-muted-foreground">Minimum: ₦100 • 2FA required</p>
+            </div>
+            <Button 
+              onClick={handleWithdraw} 
+              disabled={withdrawing || !withdrawAmount || Number(withdrawAmount) > balance}
+              className="w-full"
+            >
+              {withdrawing ? (
+                <div className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin mr-2" />
+              ) : null}
+              Proceed to Verify
             </Button>
           </div>
         </DialogContent>

@@ -12,6 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 
 import { BottomNav } from "@/components/BottomNav";
 import { AddMembersDialog } from "@/components/AddMembersDialog";
@@ -84,6 +86,8 @@ export default function GroupDetail() {
   const [exitingGroup, setExitingGroup] = useState(false);
   const [restartingGroup, setRestartingGroup] = useState(false);
   const [confirmingContinue, setConfirmingContinue] = useState(false);
+  const [showRestartTerms, setShowRestartTerms] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   const isAdmin = group?.admin_id === user?.id;
 
@@ -454,9 +458,15 @@ export default function GroupDetail() {
     }
   };
 
+  // Show restart terms dialog
+  const handleRestartClick = () => {
+    setShowRestartTerms(true);
+    setTermsAccepted(false);
+  };
+
   // Admin restart a completed group
   const restartGroup = async () => {
-    if (!groupId) return;
+    if (!groupId || !termsAccepted) return;
 
     setRestartingGroup(true);
     try {
@@ -464,6 +474,7 @@ export default function GroupDetail() {
         body: {
           action: "restart_group",
           groupId,
+          termsAccepted: true,
         },
       });
 
@@ -471,6 +482,7 @@ export default function GroupDetail() {
 
       if (data.success) {
         toast.success("Group restarted! New cycle has begun.");
+        setShowRestartTerms(false);
         
         // Refresh group data
         const { data: updatedGroup } = await supabase
@@ -640,19 +652,12 @@ export default function GroupDetail() {
               {/* Admin can restart if group has enough members */}
               {isAdmin && memberCount >= group.max_members && (
                 <Button 
-                  onClick={restartGroup} 
-                  disabled={restartingGroup}
+                  onClick={handleRestartClick} 
                   variant="hero"
                   className="flex-1"
                 >
-                  {restartingGroup ? (
-                    <div className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
-                  ) : (
-                    <>
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      Restart Group
-                    </>
-                  )}
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Restart Group
                 </Button>
               )}
               
@@ -959,6 +964,67 @@ export default function GroupDetail() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Restart Terms Dialog */}
+      <Dialog open={showRestartTerms} onOpenChange={setShowRestartTerms}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Restart Group - Terms & Conditions</DialogTitle>
+            <DialogDescription>
+              Please review and accept the terms before restarting the group.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <div className="p-4 rounded-lg bg-muted/50 space-y-3 text-sm">
+              <p>By restarting this thrift group, you agree to:</p>
+              <ul className="list-disc pl-5 space-y-2 text-muted-foreground">
+                <li>A new payout order will be randomized for all members</li>
+                <li>All members must contribute according to the schedule</li>
+                <li>A 2% platform service fee applies to all payouts</li>
+                <li>Members who fail to contribute may be penalized</li>
+                <li>The group admin is responsible for managing disputes</li>
+              </ul>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Checkbox 
+                id="terms" 
+                checked={termsAccepted}
+                onCheckedChange={(checked) => setTermsAccepted(checked === true)}
+              />
+              <label
+                htmlFor="terms"
+                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
+                I accept the terms and conditions
+              </label>
+            </div>
+
+            <div className="flex gap-3">
+              <Button 
+                variant="outline" 
+                onClick={() => setShowRestartTerms(false)}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={restartGroup}
+                disabled={!termsAccepted || restartingGroup}
+                className="flex-1"
+              >
+                {restartingGroup ? (
+                  <div className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin mr-2" />
+                ) : (
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                )}
+                Restart Group
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <BottomNav />
     </div>
   );

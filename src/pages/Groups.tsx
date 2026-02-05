@@ -104,6 +104,7 @@ export default function Groups() {
                     period={group.period}
                     isMember={true}
                     isActive={group.status === "active"}
+                    isCompleted={group.status === "completed"}
                     pendingRequests={group.pendingRequests}
                     onClick={() => {}}
                   />
@@ -170,6 +171,7 @@ export default function Groups() {
                     period={group.period}
                     isMember={false}
                     isActive={group.status === "active"}
+                    isCompleted={group.status === "completed"}
                   />
                 ))}
               </div>

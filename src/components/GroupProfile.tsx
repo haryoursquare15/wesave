@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { 
   Users, Calendar, Coins, Crown, Clock, 
-  TrendingUp, CheckCircle, AlertCircle, Wallet
+  TrendingUp, CheckCircle, AlertCircle, Wallet, Trophy
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -328,12 +328,25 @@ export function GroupProfile({ groupId, group, memberCount }: GroupProfileProps)
                   
                   if (cycleContributions.length === 0) return null;
                   
+                  // Find the payout recipient for this cycle
+                  const payoutRecipient = memberStats.find(m => {
+                    // Check if there was a payout recorded for this cycle
+                    const payoutAudit = cycleContributions.find(
+                      a => a.contribution_type === 'payout' || cycle.payout_amount
+                    );
+                    return payoutAudit && cycle.payout_amount;
+                  });
+                  
                   return (
                     <div key={cycle.id}>
                       <div className="flex items-center justify-between mb-3 pb-2 border-b border-border">
                         <div className="flex items-center gap-2">
-                          <Badge variant={cycle.status === "completed" ? "success" : "default"}>
+                          <Badge 
+                            variant={cycle.status === "completed" ? "success" : "default"}
+                            className={cycle.status === "completed" ? "bg-success/20 text-success border-success/30" : ""}
+                          >
                             Cycle {cycle.cycle_number}
+                            {cycle.status === "completed" && " ✓"}
                           </Badge>
                           {cycle.status === "completed" && (
                             <span className="text-xs text-muted-foreground">
@@ -342,11 +355,27 @@ export function GroupProfile({ groupId, group, memberCount }: GroupProfileProps)
                           )}
                         </div>
                         {cycle.payout_amount && cycle.payout_amount > 0 && (
-                          <span className="text-xs font-medium text-success">
-                            Payout: ₦{Number(cycle.payout_amount).toLocaleString()}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <Crown className="h-4 w-4 text-gold" />
+                            <span className="text-xs font-medium text-success">
+                              Payout: ₦{Number(cycle.payout_amount).toLocaleString()}
+                            </span>
+                          </div>
                         )}
                       </div>
+                      
+                      {/* Payout Recipient Highlight */}
+                      {cycle.status === "completed" && cycle.payout_amount && cycle.payout_amount > 0 && (
+                        <div className="mb-3 p-3 rounded-lg bg-gold/10 border border-gold/20">
+                          <div className="flex items-center gap-2">
+                            <Crown className="h-4 w-4 text-gold" />
+                            <span className="text-sm font-medium text-foreground">
+                              Payout Recipient: ₦{Number(cycle.payout_amount).toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                      
                       <div className="space-y-2">
                         {cycleContributions.map((audit) => (
                           <div
