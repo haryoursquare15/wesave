@@ -19,6 +19,10 @@ import Wallet from "./pages/Wallet";
 import Invite from "./pages/Invite";
 import Admin from "./pages/Admin";
 import SecuritySettings from "./pages/SecuritySettings";
+import Settings from "./pages/Settings";
+import Support from "./pages/Support";
+import Crowdfunding from "./pages/Crowdfunding";
+import Associations from "./pages/Associations";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -86,7 +90,15 @@ const App = () => (
               <Route path="/wallet" element={<Wallet />} />
               <Route path="/invite/:token" element={<Invite />} />
               <Route path="/admin" element={<Admin />} />
+              <Route path="/settings" element={<Settings />} />
               <Route path="/settings/security" element={<SecuritySettings />} />
+              <Route path="/settings/profile" element={<Profile />} />
+              <Route path="/settings/payments" element={<Wallet />} />
+              <Route path="/settings/notifications" element={<Settings />} />
+              <Route path="/support/new" element={<Support />} />
+              <Route path="/help" element={<Support />} />
+              <Route path="/crowdfunding" element={<Crowdfunding />} />
+              <Route path="/associations" element={<Associations />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </OnboardingRedirect>

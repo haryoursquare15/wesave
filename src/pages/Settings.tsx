@@ -1,0 +1,131 @@
+import { motion } from "framer-motion";
+import { 
+  ArrowLeft, User, Shield, CreditCard, Bell, HelpCircle, 
+  ChevronRight, MessageSquare, ExternalLink 
+} from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { BottomNav } from "@/components/BottomNav";
+import { useAuth } from "@/contexts/AuthContext";
+import { useEffect } from "react";
+
+const settingsItems = [
+  { icon: User, label: "Edit Profile", path: "/settings/profile", description: "Update your personal information" },
+  { icon: Shield, label: "Security & Privacy", path: "/settings/security", description: "Manage 2FA, devices, and privacy" },
+  { icon: CreditCard, label: "Payment Methods", path: "/settings/payments", description: "Bank accounts and payment options" },
+  { icon: Bell, label: "Notifications", path: "/settings/notifications", description: "Control how you receive updates" },
+];
+
+const supportItems = [
+  { icon: HelpCircle, label: "Help Center", path: "/help", description: "FAQs and how-to guides" },
+  { icon: MessageSquare, label: "Contact Support", path: "/support/new", description: "Lodge a complaint or get help" },
+];
+
+export default function Settings() {
+  const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
+
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate("/auth");
+    }
+  }, [user, authLoading, navigate]);
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="h-8 w-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-background pb-20">
+      {/* Header */}
+      <header className="bg-card border-b border-border sticky top-0 z-40">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <h1 className="text-xl font-bold text-foreground">Settings</h1>
+          </div>
+        </div>
+      </header>
+
+      <main className="container mx-auto px-4 py-6 space-y-6">
+        {/* Account Settings */}
+        <section>
+          <h2 className="text-sm font-medium text-muted-foreground mb-3 px-1">Account Settings</h2>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-card rounded-2xl border border-border divide-y divide-border"
+          >
+            {settingsItems.map((item, index) => (
+              <Link
+                key={item.path}
+                to={item.path}
+                className="flex items-center justify-between p-4 hover:bg-muted/50 transition-colors first:rounded-t-2xl last:rounded-b-2xl"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <item.icon className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground">{item.label}</p>
+                    <p className="text-xs text-muted-foreground">{item.description}</p>
+                  </div>
+                </div>
+                <ChevronRight className="h-5 w-5 text-muted-foreground" />
+              </Link>
+            ))}
+          </motion.div>
+        </section>
+
+        {/* Support */}
+        <section>
+          <h2 className="text-sm font-medium text-muted-foreground mb-3 px-1">Support</h2>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="bg-card rounded-2xl border border-border divide-y divide-border"
+          >
+            {supportItems.map((item) => (
+              <Link
+                key={item.path}
+                to={item.path}
+                className="flex items-center justify-between p-4 hover:bg-muted/50 transition-colors first:rounded-t-2xl last:rounded-b-2xl"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-lg bg-gold/10 flex items-center justify-center">
+                    <item.icon className="h-5 w-5 text-gold" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground">{item.label}</p>
+                    <p className="text-xs text-muted-foreground">{item.description}</p>
+                  </div>
+                </div>
+                <ChevronRight className="h-5 w-5 text-muted-foreground" />
+              </Link>
+            ))}
+          </motion.div>
+        </section>
+
+        {/* App Info */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="text-center text-sm text-muted-foreground pt-4"
+        >
+          <p>ThriftPal v1.0.0</p>
+          <p className="mt-1">© 2024 ThriftPal. All rights reserved.</p>
+        </motion.div>
+      </main>
+
+      <BottomNav />
+    </div>
+  );
+}

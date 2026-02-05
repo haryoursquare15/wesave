@@ -227,6 +227,13 @@ serve(async (req) => {
           throw new Error('Group ID is required');
         }
 
+        // Get user profile for notification
+        const { data: userProfile } = await supabase
+          .from('profiles')
+          .select('full_name, username')
+          .eq('id', user.id)
+          .single();
+
         const { data: exitResult, error: rpcError } = await supabase.rpc('exit_completed_group', {
           _group_id: groupId,
         });
@@ -240,15 +247,39 @@ serve(async (req) => {
           throw new Error(exitResult.error || 'Failed to exit group');
         }
 
+        // Send notification to group chat about member exit
+        const displayName = userProfile?.username 
+          ? `@${userProfile.username}` 
+          : userProfile?.full_name || 'A member';
+          
+        await supabase.from('chat_messages').insert({
+          group_id: groupId,
+          user_id: user.id,
+          message: `${displayName} has exited the group`,
+          message_type: 'system',
+        });
+
         result = exitResult;
         break;
       }
 
       case 'restart_group': {
-        const { groupId } = params;
+        const { groupId, termsAccepted } = params;
         if (!groupId) {
           throw new Error('Group ID is required');
         }
+        
+        // Terms must be accepted to restart
+        if (!termsAccepted) {
+          throw new Error('You must accept the terms and conditions to restart the group');
+        }
+
+        // Get admin profile for notification
+        const { data: adminProfile } = await supabase
+          .from('profiles')
+          .select('full_name, username')
+          .eq('id', user.id)
+          .single();
 
         const { data: restartResult, error: rpcError } = await supabase.rpc('restart_completed_group', {
           _group_id: groupId,
@@ -262,6 +293,18 @@ serve(async (req) => {
         if (!restartResult.success) {
           throw new Error(restartResult.error || 'Failed to restart group');
         }
+
+        // Notify group about restart
+        const adminName = adminProfile?.username 
+          ? `@${adminProfile.username}` 
+          : adminProfile?.full_name || 'The admin';
+          
+        await supabase.from('chat_messages').insert({
+          group_id: groupId,
+          user_id: user.id,
+          message: `${adminName} has restarted the group. A new cycle has begun!`,
+          message_type: 'system',
+        });
 
         result = restartResult;
         break;

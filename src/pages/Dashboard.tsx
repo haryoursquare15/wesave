@@ -13,10 +13,10 @@ import { useIsAdmin } from "@/hooks/useAdmin";
 import { useEffect } from "react";
 
 const quickActions = [
-  { label: "Fund Wallet", icon: "💰" },
+  { label: "Fund Wallet", icon: "💰", link: "/wallet" },
   { label: "New Group", icon: "👥", link: "/create-group" },
-  { label: "Invite", icon: "📨" },
-  { label: "Lock Funds", icon: "🔒" },
+  { label: "Groups", icon: "📨", link: "/groups" },
+  { label: "Support", icon: "💬", link: "/support/new" },
 ];
 
 export default function Dashboard() {
@@ -134,6 +134,7 @@ export default function Dashboard() {
                   period={group.period}
                   isMember={group.isMember}
                   isActive={group.status === "active"}
+                  isCompleted={group.status === "completed"}
                   pendingRequests={group.pendingRequests}
                 />
               ))}

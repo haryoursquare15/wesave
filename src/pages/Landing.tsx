@@ -116,7 +116,7 @@ export default function Landing() {
                   <ArrowRight className="h-5 w-5" />
                 </Button>
               </Link>
-              <Link to="/pool">
+              <Link to="/groups">
                 <Button variant="outline" size="xl" className="w-full sm:w-auto">
                   Explore Groups
                 </Button>
