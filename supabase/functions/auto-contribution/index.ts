@@ -6,6 +6,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// UUID validation regex
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -23,8 +26,68 @@ serve(async (req) => {
     try {
       const body = await req.json();
       forceGroupId = body.force_group_id || null;
+      
+      // SECURITY: Manual triggers require authentication and admin verification
       if (forceGroupId) {
         console.log(`Manual trigger requested for group: ${forceGroupId}`);
+        
+        // Validate UUID format to prevent injection
+        if (!UUID_REGEX.test(forceGroupId)) {
+          return new Response(JSON.stringify({
+            success: false,
+            error: 'Invalid group ID format',
+          }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        
+        // Check for authorization header
+        const authHeader = req.headers.get('Authorization');
+        if (!authHeader) {
+          return new Response(JSON.stringify({
+            success: false,
+            error: 'Authentication required for manual trigger',
+          }), {
+            status: 401,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        
+        // Verify the user's JWT and check if they're a group admin or platform admin
+        const token = authHeader.replace('Bearer ', '');
+        const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+        
+        if (authError || !user) {
+          return new Response(JSON.stringify({
+            success: false,
+            error: 'Unauthorized - invalid token',
+          }), {
+            status: 401,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        
+        // Check if user is the group admin or a platform admin
+        const { data: isGroupAdmin } = await supabase.rpc('is_group_admin', {
+          _group_id: forceGroupId,
+        });
+        
+        const { data: isPlatformAdmin } = await supabase.rpc('is_any_admin', {
+          _user_id: user.id,
+        });
+        
+        if (!isGroupAdmin && !isPlatformAdmin) {
+          return new Response(JSON.stringify({
+            success: false,
+            error: 'Not authorized - must be group admin or platform admin',
+          }), {
+            status: 403,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        
+        console.log(`Manual trigger authorized for user ${user.id} (group admin: ${isGroupAdmin}, platform admin: ${isPlatformAdmin})`);
       }
     } catch {
       // No body or invalid JSON - that's fine for scheduled calls

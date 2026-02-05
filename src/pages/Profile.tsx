@@ -12,6 +12,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { usernameSchema, validateInput } from "@/lib/validation";
 
 const menuItems = [
   { icon: User, label: "Edit Profile", path: "/settings/profile" },
@@ -114,18 +115,21 @@ export default function Profile() {
   const handleSaveUsername = async () => {
     if (!user || !newUsername.trim()) return;
     
-    // Validate username format
-    const usernameRegex = /^[a-zA-Z0-9_]{3,20}$/;
-    if (!usernameRegex.test(newUsername.trim())) {
-      toast.error("Username must be 3-20 characters, letters, numbers, and underscores only");
+    // Validate username using zod schema
+    const validation = validateInput(usernameSchema, newUsername.trim());
+    
+    if (validation.success === false) {
+      toast.error(validation.error);
       return;
     }
 
     setSavingUsername(true);
+    const validatedUsername = validation.data;
+
     try {
       const { error } = await supabase
         .from("profiles")
-        .update({ username: newUsername.trim().toLowerCase() })
+        .update({ username: validatedUsername })
         .eq("id", user.id);
 
       if (error) {

@@ -58,30 +58,73 @@ const ChartContainer = React.forwardRef<
 });
 ChartContainer.displayName = "Chart";
 
+// Validate and sanitize CSS color value - only allow safe patterns
+const isValidCssColor = (color: string): boolean => {
+  // Allow: hex colors, rgb/rgba, hsl/hsla, named colors (alphanumeric only)
+  const safeColorPattern = /^(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)|hsla?\([^)]+\)|[a-zA-Z]+)$/;
+  return safeColorPattern.test(color.trim());
+};
+
+// Validate chart ID - alphanumeric, dashes, underscores only
+const isValidChartId = (id: string): boolean => {
+  return /^[a-zA-Z0-9_-]+$/.test(id);
+};
+
+// Validate config key - alphanumeric, dashes, underscores only
+const isValidConfigKey = (key: string): boolean => {
+  return /^[a-zA-Z0-9_-]+$/.test(key);
+};
+
 const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
-  const colorConfig = Object.entries(config).filter(([_, config]) => config.theme || config.color);
+  // Validate chart ID to prevent CSS injection
+  if (!isValidChartId(id)) {
+    console.error('Invalid chart id format');
+    return null;
+  }
+
+  const colorConfig = Object.entries(config).filter(([key, itemConfig]) => {
+    // Validate the key format
+    if (!isValidConfigKey(key)) {
+      console.error(`Invalid config key format: ${key}`);
+      return false;
+    }
+    
+    // Only include items with valid color values
+    const color = itemConfig.theme?.light || itemConfig.theme?.dark || itemConfig.color;
+    if (color && !isValidCssColor(color)) {
+      console.error(`Invalid color value for ${key}: ${color}`);
+      return false;
+    }
+    
+    return itemConfig.theme || itemConfig.color;
+  });
 
   if (!colorConfig.length) {
     return null;
   }
 
+  // Build CSS string with validated values only
+  const cssContent = Object.entries(THEMES)
+    .map(([theme, prefix]) => {
+      const colorRules = colorConfig
+        .map(([key, itemConfig]) => {
+          const color = itemConfig.theme?.[theme as keyof typeof itemConfig.theme] || itemConfig.color;
+          if (color && isValidCssColor(color)) {
+            return `  --color-${key}: ${color};`;
+          }
+          return null;
+        })
+        .filter(Boolean)
+        .join("\n");
+      
+      return `${prefix} [data-chart=${id}] {\n${colorRules}\n}`;
+    })
+    .join("\n");
+
   return (
     <style
       dangerouslySetInnerHTML={{
-        __html: Object.entries(THEMES)
-          .map(
-            ([theme, prefix]) => `
-${prefix} [data-chart=${id}] {
-${colorConfig
-  .map(([key, itemConfig]) => {
-    const color = itemConfig.theme?.[theme as keyof typeof itemConfig.theme] || itemConfig.color;
-    return color ? `  --color-${key}: ${color};` : null;
-  })
-  .join("\n")}
-}
-`,
-          )
-          .join("\n"),
+        __html: cssContent,
       }}
     />
   );
