@@ -5,12 +5,16 @@ import { toast } from "sonner";
 
 const INACTIVITY_TIMEOUT = 5 * 60 * 1000; // 5 minutes
 
+interface UseSessionEnforcementOptions {
+  enabled?: boolean;
+}
+
 /**
  * Hook to enforce session sign-out when:
  * 1. Browser is closed completely (via beforeunload + sessionStorage check)
  * 2. App is in background for more than 5 minutes
  */
-export function useSessionEnforcement() {
+export function useSessionEnforcement({ enabled = true }: UseSessionEnforcementOptions = {}) {
   const navigate = useNavigate();
   const lastActiveRef = useRef<number>(Date.now());
   const visibilityTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -26,6 +30,9 @@ export function useSessionEnforcement() {
   }, [navigate]);
 
   useEffect(() => {
+    // Skip all enforcement logic if disabled
+    if (!enabled) return;
+
     // Check if this is a fresh browser session
     const sessionMarker = sessionStorage.getItem("thrift_session_active");
     
@@ -84,5 +91,5 @@ export function useSessionEnforcement() {
         clearTimeout(visibilityTimeoutRef.current);
       }
     };
-  }, [signOutAndRedirect]);
+  }, [enabled, signOutAndRedirect]);
 }
