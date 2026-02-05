@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { Database } from "@/integrations/supabase/types";
+
+type AppRole = Database["public"]["Enums"]["app_role"];
 
 interface AdminStats {
   total_users: number;
@@ -147,7 +150,7 @@ export function useAdminRoles() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  const assignRole = useCallback(async (userId: string, role: "admin" | "moderator" | "user") => {
+  const assignRole = useCallback(async (userId: string, role: AppRole) => {
     setLoading(true);
     setError(null);
     try {
@@ -165,7 +168,7 @@ export function useAdminRoles() {
     }
   }, []);
 
-  const removeRole = useCallback(async (userId: string, role: "admin" | "moderator" | "user") => {
+  const removeRole = useCallback(async (userId: string, role: AppRole) => {
     setLoading(true);
     setError(null);
     try {

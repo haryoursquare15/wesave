@@ -50,6 +50,175 @@ export type Database = {
         }
         Relationships: []
       }
+      admin_permissions: {
+        Row: {
+          created_at: string
+          id: string
+          permission: string
+          role: Database["public"]["Enums"]["app_role"]
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          permission: string
+          role: Database["public"]["Enums"]["app_role"]
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          permission?: string
+          role?: Database["public"]["Enums"]["app_role"]
+        }
+        Relationships: []
+      }
+      admin_requests: {
+        Row: {
+          created_at: string
+          id: string
+          internal_notes: string | null
+          metadata: Json | null
+          recommended_action: string | null
+          request_type: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          risk_score: number | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          internal_notes?: string | null
+          metadata?: Json | null
+          recommended_action?: string | null
+          request_type: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          risk_score?: number | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          internal_notes?: string | null
+          metadata?: Json | null
+          recommended_action?: string | null
+          request_type?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          risk_score?: number | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      association_memberships: {
+        Row: {
+          association_id: string
+          id: string
+          joined_at: string
+          role: string
+          user_id: string
+        }
+        Insert: {
+          association_id: string
+          id?: string
+          joined_at?: string
+          role?: string
+          user_id: string
+        }
+        Update: {
+          association_id?: string
+          id?: string
+          joined_at?: string
+          role?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "association_memberships_association_id_fkey"
+            columns: ["association_id"]
+            isOneToOne: false
+            referencedRelation: "associations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      association_wallets: {
+        Row: {
+          association_id: string
+          available_balance: number
+          created_at: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          association_id: string
+          available_balance?: number
+          created_at?: string
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          association_id?: string
+          available_balance?: number
+          created_at?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "association_wallets_association_id_fkey"
+            columns: ["association_id"]
+            isOneToOne: true
+            referencedRelation: "associations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      associations: {
+        Row: {
+          admin_id: string
+          created_at: string
+          description: string | null
+          flw_subaccount_id: string | null
+          id: string
+          max_members: number
+          member_count: number
+          name: string
+          status: string
+          terms_accepted_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          admin_id: string
+          created_at?: string
+          description?: string | null
+          flw_subaccount_id?: string | null
+          id?: string
+          max_members?: number
+          member_count?: number
+          name: string
+          status?: string
+          terms_accepted_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          admin_id?: string
+          created_at?: string
+          description?: string | null
+          flw_subaccount_id?: string | null
+          id?: string
+          max_members?: number
+          member_count?: number
+          name?: string
+          status?: string
+          terms_accepted_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       audit_logs: {
         Row: {
           action: string
@@ -284,6 +453,98 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      crowdfunding_campaigns: {
+        Row: {
+          category: string | null
+          contributor_count: number
+          created_at: string
+          creator_id: string
+          deadline: string | null
+          description: string | null
+          flw_subaccount_id: string | null
+          id: string
+          image_url: string | null
+          raised_amount: number
+          status: string
+          target_amount: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          category?: string | null
+          contributor_count?: number
+          created_at?: string
+          creator_id: string
+          deadline?: string | null
+          description?: string | null
+          flw_subaccount_id?: string | null
+          id?: string
+          image_url?: string | null
+          raised_amount?: number
+          status?: string
+          target_amount: number
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string | null
+          contributor_count?: number
+          created_at?: string
+          creator_id?: string
+          deadline?: string | null
+          description?: string | null
+          flw_subaccount_id?: string | null
+          id?: string
+          image_url?: string | null
+          raised_amount?: number
+          status?: string
+          target_amount?: number
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      crowdfunding_contributions: {
+        Row: {
+          amount: number
+          anonymous: boolean
+          campaign_id: string
+          contributor_id: string
+          created_at: string
+          id: string
+          message: string | null
+          status: string
+        }
+        Insert: {
+          amount: number
+          anonymous?: boolean
+          campaign_id: string
+          contributor_id: string
+          created_at?: string
+          id?: string
+          message?: string | null
+          status?: string
+        }
+        Update: {
+          amount?: number
+          anonymous?: boolean
+          campaign_id?: string
+          contributor_id?: string
+          created_at?: string
+          id?: string
+          message?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crowdfunding_contributions_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "crowdfunding_campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       cycle_contributions: {
         Row: {
@@ -945,6 +1206,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          account_status: string | null
           avatar_url: string | null
           bank_account: string | null
           bank_account_encrypted: string | null
@@ -961,10 +1223,15 @@ export type Database = {
           flw_subaccount_id: string | null
           flw_virtual_account_number: string | null
           flw_virtual_bank_name: string | null
+          freeze_reason: string | null
+          frozen_at: string | null
+          frozen_by: string | null
           full_name: string | null
           id: string
+          kyc_status: string | null
           last_security_review: string | null
           membership_tier: Database["public"]["Enums"]["membership_tier"]
+          onboarding_completed: boolean | null
           phone: string | null
           phone_encrypted: string | null
           risk_level: string | null
@@ -972,6 +1239,7 @@ export type Database = {
           username: string | null
         }
         Insert: {
+          account_status?: string | null
           avatar_url?: string | null
           bank_account?: string | null
           bank_account_encrypted?: string | null
@@ -988,10 +1256,15 @@ export type Database = {
           flw_subaccount_id?: string | null
           flw_virtual_account_number?: string | null
           flw_virtual_bank_name?: string | null
+          freeze_reason?: string | null
+          frozen_at?: string | null
+          frozen_by?: string | null
           full_name?: string | null
           id: string
+          kyc_status?: string | null
           last_security_review?: string | null
           membership_tier?: Database["public"]["Enums"]["membership_tier"]
+          onboarding_completed?: boolean | null
           phone?: string | null
           phone_encrypted?: string | null
           risk_level?: string | null
@@ -999,6 +1272,7 @@ export type Database = {
           username?: string | null
         }
         Update: {
+          account_status?: string | null
           avatar_url?: string | null
           bank_account?: string | null
           bank_account_encrypted?: string | null
@@ -1015,15 +1289,103 @@ export type Database = {
           flw_subaccount_id?: string | null
           flw_virtual_account_number?: string | null
           flw_virtual_bank_name?: string | null
+          freeze_reason?: string | null
+          frozen_at?: string | null
+          frozen_by?: string | null
           full_name?: string | null
           id?: string
+          kyc_status?: string | null
           last_security_review?: string | null
           membership_tier?: Database["public"]["Enums"]["membership_tier"]
+          onboarding_completed?: boolean | null
           phone?: string | null
           phone_encrypted?: string | null
           risk_level?: string | null
           updated_at?: string | null
           username?: string | null
+        }
+        Relationships: []
+      }
+      support_ticket_comments: {
+        Row: {
+          author_id: string
+          comment: string
+          created_at: string
+          id: string
+          is_internal: boolean
+          ticket_id: string
+        }
+        Insert: {
+          author_id: string
+          comment: string
+          created_at?: string
+          id?: string
+          is_internal?: boolean
+          ticket_id: string
+        }
+        Update: {
+          author_id?: string
+          comment?: string
+          created_at?: string
+          id?: string
+          is_internal?: boolean
+          ticket_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_ticket_comments_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "support_tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      support_tickets: {
+        Row: {
+          assigned_to: string | null
+          category: string
+          created_at: string
+          description: string
+          id: string
+          priority: string
+          related_group_id: string | null
+          related_transaction_id: string | null
+          resolved_at: string | null
+          status: string
+          subject: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          category: string
+          created_at?: string
+          description: string
+          id?: string
+          priority?: string
+          related_group_id?: string | null
+          related_transaction_id?: string | null
+          resolved_at?: string | null
+          status?: string
+          subject: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          assigned_to?: string | null
+          category?: string
+          created_at?: string
+          description?: string
+          id?: string
+          priority?: string
+          related_group_id?: string | null
+          related_transaction_id?: string | null
+          resolved_at?: string | null
+          status?: string
+          subject?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -1524,6 +1886,10 @@ export type Database = {
           username: string
         }[]
       }
+      admin_get_enhanced_stats: {
+        Args: { _time_filter?: string }
+        Returns: Json
+      }
       admin_get_stats: { Args: never; Returns: Json }
       admin_remove_role: {
         Args: {
@@ -1633,6 +1999,10 @@ export type Database = {
           payout_position: number
         }[]
       }
+      has_permission: {
+        Args: { _permission: string; _user_id: string }
+        Returns: boolean
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -1641,6 +2011,7 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: never; Returns: boolean }
+      is_any_admin: { Args: { _user_id?: string }; Returns: boolean }
       is_group_admin: { Args: { _group_id: string }; Returns: boolean }
       is_group_member: { Args: { _group_id: string }; Returns: boolean }
       join_group_via_invite: { Args: { token: string }; Returns: Json }
@@ -1740,7 +2111,15 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "moderator" | "user"
+      app_role:
+        | "admin"
+        | "moderator"
+        | "user"
+        | "super_admin"
+        | "operations_admin"
+        | "support_officer"
+        | "finance_admin"
+        | "compliance_admin"
       contribution_period: "daily" | "weekly" | "monthly"
       group_status: "pending" | "active" | "completed" | "paused"
       membership_status: "active" | "pending" | "removed"
@@ -1882,7 +2261,16 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "moderator", "user"],
+      app_role: [
+        "admin",
+        "moderator",
+        "user",
+        "super_admin",
+        "operations_admin",
+        "support_officer",
+        "finance_admin",
+        "compliance_admin",
+      ],
       contribution_period: ["daily", "weekly", "monthly"],
       group_status: ["pending", "active", "completed", "paused"],
       membership_status: ["active", "pending", "removed"],

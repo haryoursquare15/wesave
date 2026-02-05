@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowRight, ArrowLeft, Building2, CreditCard, User, Check, Shield, AtSign } from "lucide-react";
+import { ArrowRight, ArrowLeft, Building2, CreditCard, User, Check, Shield, AtSign, AlertCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,10 +25,10 @@ const banks = [
 ];
 
 const steps = [
-  { id: 1, title: "Create Username", icon: AtSign },
-  { id: 2, title: "Verify Identity", icon: Shield },
-  { id: 3, title: "Bank Details", icon: Building2 },
-  { id: 4, title: "Link Card", icon: CreditCard },
+  { id: 1, title: "Personal Info", icon: User },
+  { id: 2, title: "Create Username", icon: AtSign },
+  { id: 3, title: "Verify Identity", icon: Shield },
+  { id: 4, title: "Bank Details", icon: Building2 },
 ];
 
 export default function Onboarding() {
@@ -38,7 +38,9 @@ export default function Onboarding() {
   const [currentStep, setCurrentStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [usernameError, setUsernameError] = useState<string | null>(null);
+  const [fullNameError, setFullNameError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
+    fullName: "",
     username: "",
     bvn: "",
     bankName: "",
@@ -48,6 +50,39 @@ export default function Onboarding() {
 
   // Check for pending invite token
   const pendingInviteToken = sessionStorage.getItem("pending_invite_token");
+
+  // Redirect if already completed onboarding
+  useEffect(() => {
+    const checkOnboarding = async () => {
+      if (user) {
+        const { data } = await supabase
+          .from("profiles")
+          .select("onboarding_completed, full_name")
+          .eq("id", user.id)
+          .single();
+        
+        if (data?.onboarding_completed) {
+          navigate("/dashboard");
+        } else if (data?.full_name) {
+          setFormData(prev => ({ ...prev, fullName: data.full_name || "" }));
+        }
+      }
+    };
+    checkOnboarding();
+  }, [user, navigate]);
+
+  const validateFullName = (name: string) => {
+    if (!name || name.trim().length < 3) {
+      setFullNameError("Full legal name is required (minimum 3 characters)");
+      return false;
+    }
+    if (!/^[a-zA-Z\s'-]+$/.test(name.trim())) {
+      setFullNameError("Name can only contain letters, spaces, hyphens, and apostrophes");
+      return false;
+    }
+    setFullNameError(null);
+    return true;
+  };
 
   const validateUsername = async (username: string) => {
     if (!username || username.length < 3) {
@@ -79,11 +114,15 @@ export default function Onboarding() {
 
   const handleNext = async () => {
     if (currentStep === 1) {
+      if (!validateFullName(formData.fullName)) return;
+    }
+
+    if (currentStep === 2) {
       const isValid = await validateUsername(formData.username);
       if (!isValid) return;
     }
 
-    if (currentStep < 4) {
+    if (currentStep < steps.length) {
       setCurrentStep(currentStep + 1);
     } else {
       await handleComplete();
@@ -104,10 +143,12 @@ export default function Onboarding() {
       const { error: updateError } = await supabase
         .from("profiles")
         .update({
+          full_name: formData.fullName.trim(),
           username: formData.username.toLowerCase(),
           bvn: formData.bvn || null,
           bank_name: formData.bankName || null,
           bank_account: formData.accountNumber || null,
+          onboarding_completed: true,
         })
         .eq("id", user.id);
 
@@ -144,39 +185,70 @@ export default function Onboarding() {
     }
   };
 
-  const handleSkip = async () => {
-    if (user) {
-      // Save username if provided
-      if (formData.username) {
-        const isValid = await validateUsername(formData.username);
-        if (isValid) {
-          await supabase
-            .from("profiles")
-            .update({ username: formData.username.toLowerCase() })
-            .eq("id", user.id);
-        }
-      }
-
-      // Handle pending invite
-      if (pendingInviteToken) {
-        try {
-          await joinGroup(pendingInviteToken);
-          sessionStorage.removeItem("pending_invite_token");
-          toast.success("You've joined the group!");
-        } catch (err) {
-          console.error("Failed to join group via invite:", err);
-        }
-      }
-    }
-    navigate("/dashboard");
-  };
-
   const renderStep = () => {
     switch (currentStep) {
       case 1:
         return (
           <motion.div
             key="step1"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            className="space-y-6"
+          >
+            <div className="text-center mb-8">
+              <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                <User className="h-8 w-8 text-primary" />
+              </div>
+              <h2 className="text-2xl font-bold text-foreground mb-2">
+                Your Legal Name
+              </h2>
+              <p className="text-muted-foreground">
+                Enter your full legal name as it appears on your ID
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="fullName">Full Legal Name</Label>
+              <Input
+                id="fullName"
+                type="text"
+                placeholder="Enter your full name"
+                className="h-12"
+                value={formData.fullName}
+                onChange={(e) => {
+                  setFormData({ ...formData, fullName: e.target.value });
+                  setFullNameError(null);
+                }}
+              />
+              {fullNameError && (
+                <p className="text-xs text-destructive flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  {fullNameError}
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                This name will be used for KYC verification and payouts.
+              </p>
+            </div>
+
+            {pendingInviteToken && (
+              <div className="p-4 rounded-xl bg-primary/10 border border-primary/20">
+                <p className="text-sm text-primary font-medium">
+                  You have a pending group invitation!
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Complete your profile to join the group automatically.
+                </p>
+              </div>
+            )}
+          </motion.div>
+        );
+
+      case 2:
+        return (
+          <motion.div
+            key="step2"
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
@@ -217,24 +289,13 @@ export default function Onboarding() {
                 Only letters, numbers, and underscores. Minimum 3 characters.
               </p>
             </div>
-
-            {pendingInviteToken && (
-              <div className="p-4 rounded-xl bg-primary/10 border border-primary/20">
-                <p className="text-sm text-primary font-medium">
-                  You have a pending group invitation!
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Complete your profile to join the group automatically.
-                </p>
-              </div>
-            )}
           </motion.div>
         );
 
-      case 2:
+      case 3:
         return (
           <motion.div
-            key="step2"
+            key="step3"
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
@@ -272,10 +333,10 @@ export default function Onboarding() {
           </motion.div>
         );
 
-      case 3:
+      case 4:
         return (
           <motion.div
-            key="step3"
+            key="step4"
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
@@ -350,59 +411,6 @@ export default function Onboarding() {
           </motion.div>
         );
 
-      case 4:
-        return (
-          <motion.div
-            key="step4"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            className="space-y-6"
-          >
-            <div className="text-center mb-8">
-              <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                <CreditCard className="h-8 w-8 text-primary" />
-              </div>
-              <h2 className="text-2xl font-bold text-foreground mb-2">
-                Link Debit Card
-              </h2>
-              <p className="text-muted-foreground">
-                Link a card for auto-debit contributions (you can skip for now)
-              </p>
-            </div>
-
-            <div className="p-6 rounded-xl border-2 border-dashed border-border hover:border-primary/50 transition-colors cursor-pointer text-center">
-              <CreditCard className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-              <p className="text-sm font-medium text-foreground mb-1">
-                Add Debit Card
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Powered by Flutterwave - Secure & Fast
-              </p>
-            </div>
-
-            <div className="bg-muted/50 rounded-xl p-4">
-              <h4 className="font-medium text-sm text-foreground mb-2">
-                Why link a card?
-              </h4>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li className="flex items-start gap-2">
-                  <Check className="h-4 w-4 text-success mt-0.5" />
-                  <span>Auto-debit for seamless contributions</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <Check className="h-4 w-4 text-success mt-0.5" />
-                  <span>Never miss a payment deadline</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <Check className="h-4 w-4 text-success mt-0.5" />
-                  <span>Build better credit scores faster</span>
-                </li>
-              </ul>
-            </div>
-          </motion.div>
-        );
-
       default:
         return null;
     }
@@ -415,14 +423,11 @@ export default function Onboarding() {
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between mb-4">
             <span className="text-sm text-muted-foreground">
-              Step {currentStep} of 4
+              Step {currentStep} of {steps.length}
             </span>
-            <button
-              onClick={handleSkip}
-              className="text-sm text-primary hover:underline"
-            >
-              Skip for now
-            </button>
+            <span className="text-sm font-medium text-primary">
+              Required
+            </span>
           </div>
           
           {/* Progress Steps */}
@@ -475,11 +480,11 @@ export default function Onboarding() {
             variant="hero"
             onClick={handleNext}
             className="flex-1"
-            disabled={isLoading || (currentStep === 1 && !formData.username)}
+            disabled={isLoading || (currentStep === 1 && !formData.fullName) || (currentStep === 2 && !formData.username)}
           >
             {isLoading ? (
               <div className="h-5 w-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
-            ) : currentStep === 4 ? (
+            ) : currentStep === steps.length ? (
               <>
                 Complete Setup
                 <Check className="h-4 w-4 ml-2" />
