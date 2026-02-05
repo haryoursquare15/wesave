@@ -3,7 +3,9 @@ import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { Tables } from "@/integrations/supabase/types";
 
-type Profile = Tables<"profiles">;
+type Profile = Tables<"profiles"> & {
+  onboarding_completed?: boolean;
+};
 type Wallet = Tables<"wallets">;
 
 interface AuthContextType {
@@ -17,6 +19,7 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   refreshWallet: () => Promise<void>;
+  isOnboardingComplete: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -33,7 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const fetchProfile = async (userId: string) => {
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, username, full_name, email, avatar_url, membership_tier, credit_score, completed_cycles, created_at, updated_at")
+      .select("id, username, full_name, email, avatar_url, membership_tier, credit_score, completed_cycles, created_at, updated_at, onboarding_completed")
       .eq("id", userId)
       .maybeSingle();
     
@@ -137,6 +140,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setWallet(null);
   };
 
+  const isOnboardingComplete = profile?.onboarding_completed === true;
+
   return (
     <AuthContext.Provider
       value={{
@@ -150,6 +155,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signOut,
         refreshProfile,
         refreshWallet,
+        isOnboardingComplete,
       }}
     >
       {children}
