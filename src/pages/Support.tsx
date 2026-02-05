@@ -13,6 +13,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { supportTicketSchema, validateInput } from "@/lib/validation";
 
 const categories = [
   { value: "payment", label: "Payment Issues" },
@@ -39,6 +40,7 @@ export default function Support() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   
   const [subject, setSubject] = useState("");
   const [category, setCategory] = useState("");
@@ -74,20 +76,31 @@ export default function Support() {
   }, [user]);
 
   const handleSubmit = async () => {
-    if (!user || !subject.trim() || !category || !description.trim()) {
-      toast.error("Please fill in all fields");
+    if (!user) {
+      toast.error("Please sign in first");
       return;
     }
 
+    // Validate input using zod schema
+    const validation = validateInput(supportTicketSchema, { subject, category, description });
+    
+    if (validation.success === false) {
+      toast.error(validation.error);
+      return;
+    }
+
+    const validatedData = validation.data;
+    setValidationErrors({});
     setSubmitting(true);
+
     try {
       const { data, error } = await supabase
         .from("support_tickets")
         .insert({
           user_id: user.id,
-          subject: subject.trim(),
-          category,
-          description: description.trim(),
+          subject: validatedData.subject,
+          category: validatedData.category,
+          description: validatedData.description,
           status: "open",
           priority: "normal",
         })

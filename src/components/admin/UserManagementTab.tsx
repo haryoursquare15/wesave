@@ -14,6 +14,7 @@ import { Database } from "@/integrations/supabase/types";
  import { supabase } from "@/integrations/supabase/client";
  import { format } from "date-fns";
  import { Search, Eye, Snowflake, KeyRound, LogOut, AlertTriangle, Shield } from "lucide-react";
+ import { adminActionReasonSchema, validateInput } from "@/lib/validation";
  
 type AppRole = Database["public"]["Enums"]["app_role"];
 
@@ -35,57 +36,70 @@ type AppRole = Database["public"]["Enums"]["app_role"];
    const { toast } = useToast();
    const { hasPermission } = useAdminPermissions();
  
-   const handleAction = async () => {
-     if (!action) return;
-     setLoading(true);
-     
-     try {
-       // Log the action in audit_logs
-       await supabase.from("audit_logs").insert({
-         user_id: user.id,
-         action: action,
-         resource_type: "user",
-         resource_id: user.id,
-         details: { reason, target_email: user.email },
-       });
- 
-       switch (action) {
-         case "freeze":
-           await supabase.from("profiles").update({
-             account_status: "frozen",
-             frozen_at: new Date().toISOString(),
-             freeze_reason: reason,
-           }).eq("id", user.id);
-           toast({ title: "User Frozen", description: `${user.full_name || user.email}'s account has been frozen.` });
-           break;
-         case "unfreeze":
-           await supabase.from("profiles").update({
-             account_status: "active",
-             frozen_at: null,
-             frozen_by: null,
-             freeze_reason: null,
-           }).eq("id", user.id);
-           toast({ title: "User Unfrozen", description: `${user.full_name || user.email}'s account has been unfrozen.` });
-           break;
-         case "flag_risk":
-           await supabase.from("profiles").update({
-             risk_level: "high",
-           }).eq("id", user.id);
-           toast({ title: "User Flagged", description: `${user.full_name || user.email} has been flagged for risk review.` });
-           break;
-         default:
-           break;
-       }
- 
-       onAction();
-       onClose();
-     } catch (err) {
-       console.error("Action error:", err);
-       toast({ title: "Error", description: "Failed to perform action.", variant: "destructive" });
-     } finally {
-       setLoading(false);
-     }
-   };
+    const handleAction = async () => {
+      if (!action) return;
+      
+      // Validate reason input if provided
+      if (reason) {
+        const validation = validateInput(adminActionReasonSchema, reason);
+        if (validation.success === false) {
+          toast({ title: "Validation Error", description: validation.error, variant: "destructive" });
+          return;
+        }
+      }
+      
+      setLoading(true);
+      
+      try {
+        // Sanitize the reason
+        const sanitizedReason = reason.trim().slice(0, 500);
+        
+        // Log the action in audit_logs
+        await supabase.from("audit_logs").insert({
+          user_id: user.id,
+          action: action,
+          resource_type: "user",
+          resource_id: user.id,
+          details: { reason: sanitizedReason, target_email: user.email },
+        });
+  
+        switch (action) {
+          case "freeze":
+            await supabase.from("profiles").update({
+              account_status: "frozen",
+              frozen_at: new Date().toISOString(),
+              freeze_reason: sanitizedReason,
+            }).eq("id", user.id);
+            toast({ title: "User Frozen", description: `${user.full_name || user.email}'s account has been frozen.` });
+            break;
+          case "unfreeze":
+            await supabase.from("profiles").update({
+              account_status: "active",
+              frozen_at: null,
+              frozen_by: null,
+              freeze_reason: null,
+            }).eq("id", user.id);
+            toast({ title: "User Unfrozen", description: `${user.full_name || user.email}'s account has been unfrozen.` });
+            break;
+          case "flag_risk":
+            await supabase.from("profiles").update({
+              risk_level: "high",
+            }).eq("id", user.id);
+            toast({ title: "User Flagged", description: `${user.full_name || user.email} has been flagged for risk review.` });
+            break;
+          default:
+            break;
+        }
+  
+        onAction();
+        onClose();
+      } catch (err) {
+        console.error("Action error:", err);
+        toast({ title: "Error", description: "Failed to perform action.", variant: "destructive" });
+      } finally {
+        setLoading(false);
+      }
+    };
  
    return (
      <DialogContent>
