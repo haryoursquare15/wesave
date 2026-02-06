@@ -8,6 +8,7 @@ import { BottomNav } from "@/components/BottomNav";
 import { TwoFactorSetup } from "@/components/security/TwoFactorSetup";
 import { TwoFactorVerify } from "@/components/security/TwoFactorVerify";
 import { DeviceManagement } from "@/components/security/DeviceManagement";
+import { ChangePasswordDialog } from "@/components/security/ChangePasswordDialog";
 import { useSecurity } from "@/hooks/useSecurity";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -22,6 +23,7 @@ export default function SecuritySettings() {
   const [showSetup2FA, setShowSetup2FA] = useState(false);
   const [showDisable2FA, setShowDisable2FA] = useState(false);
   const [showDevices, setShowDevices] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState(true);
 
   useEffect(() => {
@@ -163,7 +165,7 @@ export default function SecuritySettings() {
           transition={{ delay: 0.2 }}
         >
           <button
-            onClick={() => toast.info("Password change coming soon")}
+            onClick={() => setShowChangePassword(true)}
             className="w-full bg-card rounded-xl border border-border p-4 flex items-center justify-between hover:bg-muted/50 transition-colors"
           >
             <div className="flex items-center gap-3">
@@ -249,6 +251,11 @@ export default function SecuritySettings() {
       <DeviceManagement
         open={showDevices}
         onOpenChange={setShowDevices}
+      />
+
+      <ChangePasswordDialog
+        open={showChangePassword}
+        onOpenChange={setShowChangePassword}
       />
     </div>
   );

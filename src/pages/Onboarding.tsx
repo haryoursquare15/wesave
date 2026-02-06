@@ -10,19 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useJoinGroupViaInvite } from "@/hooks/useGroupInvites";
 import { toast } from "sonner";
-
-const banks = [
-  "Access Bank",
-  "First Bank",
-  "GTBank",
-  "UBA",
-  "Zenith Bank",
-  "Sterling Bank",
-  "Fidelity Bank",
-  "FCMB",
-  "Wema Bank",
-  "Union Bank",
-];
+import { nigerianBanks } from "@/lib/nigerianBanks";
 
 const steps = [
   { id: 1, title: "Personal Info", icon: User },
@@ -366,8 +354,8 @@ export default function Onboarding() {
                   <SelectTrigger className="h-12">
                     <SelectValue placeholder="Choose your bank" />
                   </SelectTrigger>
-                  <SelectContent>
-                    {banks.map((bank) => (
+                  <SelectContent className="max-h-[300px]">
+                    {nigerianBanks.map((bank) => (
                       <SelectItem key={bank} value={bank}>
                         {bank}
                       </SelectItem>

@@ -445,7 +445,11 @@ serve(async (req) => {
             _event_type: 'device_login',
           });
           
-          // Register new device
+          // Auto-trust the device if it's during registration/login
+          // This ensures the current device is always trusted
+          const shouldAutoTrust = true;
+          
+          // Register new device as trusted by default
           await supabase
             .from('user_devices')
             .insert({
@@ -455,7 +459,7 @@ serve(async (req) => {
               browser: browser || null,
               os: os || null,
               ip_address: ip_address || null,
-              is_trusted: false,
+              is_trusted: shouldAutoTrust,
               is_current: true,
             });
           
@@ -471,14 +475,14 @@ serve(async (req) => {
             _user_id: user.id,
             _action: 'new_device_login',
             _resource_type: 'device',
-            _details: { fingerprint, device_name, browser, os },
+            _details: { fingerprint, device_name, browser, os, auto_trusted: shouldAutoTrust },
           });
           
           result = { 
             success: true, 
             is_new_device: true, 
-            is_trusted: false,
-            requires_verification: true,
+            is_trusted: shouldAutoTrust,
+            requires_verification: !shouldAutoTrust,
             velocity_flagged: velocityResult?.flagged || false,
           };
         }
@@ -544,7 +548,7 @@ serve(async (req) => {
         
         const { data: devices } = await supabase
           .from('user_devices')
-          .select('id, device_name, browser, os, is_trusted, is_current, last_used_at, created_at')
+          .select('id, device_fingerprint, device_name, browser, os, is_trusted, is_current, last_used_at, created_at')
           .eq('user_id', user.id)
           .order('last_used_at', { ascending: false });
         

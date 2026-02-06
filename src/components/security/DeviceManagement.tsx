@@ -17,6 +17,7 @@ interface DeviceInfo {
   is_current: boolean;
   last_used_at: string;
   created_at: string;
+  device_fingerprint?: string;
 }
 
 interface DeviceManagementProps {
@@ -53,7 +54,8 @@ export function DeviceManagement({ open, onOpenChange }: DeviceManagementProps) 
     }
   };
 
-  const handleTrustDevice = async (fingerprint: string) => {
+  const handleTrustDevice = async (deviceId: string, fingerprint: string) => {
+    // The trust_device action in security-controls expects fingerprint
     const result = await trustDevice(fingerprint);
     if (result.success) {
       toast.success("Device marked as trusted");
@@ -142,7 +144,7 @@ export function DeviceManagement({ open, onOpenChange }: DeviceManagementProps) 
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleTrustDevice(device.id)}
+                          onClick={() => handleTrustDevice(device.id, device.device_fingerprint || device.id)}
                           disabled={loading}
                         >
                           <Check className="h-4 w-4" />
