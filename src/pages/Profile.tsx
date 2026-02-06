@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Settings, ChevronRight, Shield, CreditCard, Bell, HelpCircle, LogOut, Award, User, Check, X, Pencil } from "lucide-react";
+import { Settings, ChevronRight, Shield, CreditCard, Bell, HelpCircle, LogOut, Award, User, Check, X, Pencil, Camera } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { UserBadge } from "@/components/UserBadge";
 import { StarRating } from "@/components/StarRating";
@@ -8,11 +8,13 @@ import { Progress } from "@/components/ui/progress";
 import { BottomNav } from "@/components/BottomNav";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { usernameSchema, validateInput } from "@/lib/validation";
+import { ProfilePictureUpload } from "@/components/settings/ProfilePictureUpload";
 
 const menuItems = [
   { icon: User, label: "Edit Profile", path: "/settings/profile" },
@@ -30,6 +32,7 @@ export default function Profile() {
   const [editingUsername, setEditingUsername] = useState(false);
   const [newUsername, setNewUsername] = useState("");
   const [savingUsername, setSavingUsername] = useState(false);
+  const [showPictureUpload, setShowPictureUpload] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -200,9 +203,20 @@ export default function Profile() {
           {/* Profile Info */}
           <div className="text-center">
             <div className="relative inline-block mb-4">
-              <div className="h-24 w-24 rounded-full bg-white/20 flex items-center justify-center text-3xl font-bold text-primary-foreground">
-                {getInitials(profile?.full_name)}
-              </div>
+              <button 
+                onClick={() => setShowPictureUpload(true)}
+                className="relative group"
+              >
+                <Avatar className="h-24 w-24 border-4 border-white/20">
+                  <AvatarImage src={profile?.avatar_url || undefined} />
+                  <AvatarFallback className="text-3xl bg-white/20 text-primary-foreground">
+                    {getInitials(profile?.full_name)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="absolute inset-0 bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  <Camera className="h-6 w-6 text-white" />
+                </div>
+              </button>
               <div className="absolute -bottom-2 -right-2">
                 <UserBadge type={profile?.membership_tier || "newbie"} size="md" />
               </div>
@@ -382,11 +396,16 @@ export default function Profile() {
           ) : (
             <LogOut className="h-4 w-4 mr-2" />
           )}
-          Sign Out
+        Sign Out
         </Button>
       </main>
 
       <BottomNav />
+
+      <ProfilePictureUpload
+        open={showPictureUpload}
+        onOpenChange={setShowPictureUpload}
+      />
     </div>
   );
 }

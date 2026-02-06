@@ -19,6 +19,7 @@ interface DeviceInfo {
   is_current: boolean;
   last_used_at: string;
   created_at: string;
+  device_fingerprint?: string;
 }
 
 interface WithdrawalCheckResult {

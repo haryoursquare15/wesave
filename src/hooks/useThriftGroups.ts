@@ -102,12 +102,17 @@ export function usePoolGroups() {
     try {
       setLoading(true);
       
-      // Fetch active/completed groups from pool view
-      const { data: poolGroups, error: poolError } = await supabase
-        .from("public_groups")
-        .select("*");
+      // Fetch groups from pool view (active/completed) AND pending groups that need more members
+      const [poolResult, pendingResult] = await Promise.all([
+        supabase.from("public_groups").select("*"),
+        // Also fetch pending groups that haven't reached max members
+        supabase
+          .from("thrift_groups")
+          .select("id, name, max_members, contribution_amount, period, status, rating")
+          .eq("status", "pending")
+      ]);
 
-      if (poolError) throw poolError;
+      if (poolResult.error) throw poolResult.error;
 
       // Get user's memberships to mark which ones they're in
       let userGroupIds: string[] = [];
@@ -121,7 +126,8 @@ export function usePoolGroups() {
         userGroupIds = memberships?.map(m => m.group_id) || [];
       }
 
-      const groupsWithInfo = (poolGroups || []).map(group => ({
+      // Process pool groups
+      const poolGroups = (poolResult.data || []).map(group => ({
         id: group.id!,
         name: group.name!,
         description: null,
@@ -150,7 +156,61 @@ export function usePoolGroups() {
         isMember: userGroupIds.includes(group.id!),
       }));
 
-      setGroups(groupsWithInfo);
+      // Fetch member counts for pending groups
+      const pendingGroupsWithInfo = await Promise.all(
+        (pendingResult.data || []).map(async (group) => {
+          const { count } = await supabase
+            .from("group_memberships")
+            .select("*", { count: "exact", head: true })
+            .eq("group_id", group.id)
+            .eq("status", "active");
+
+          const memberCount = count || 0;
+
+          // Only include groups that need more members (not yet full)
+          if (memberCount >= group.max_members) return null;
+
+          return {
+            id: group.id,
+            name: group.name,
+            description: null,
+            max_members: group.max_members,
+            contribution_amount: group.contribution_amount,
+            period: group.period,
+            auto_debit: true,
+            admin_id: "",
+            status: group.status,
+            rating: group.rating,
+            current_cycle: 1,
+            invite_code: null,
+            created_at: null,
+            updated_at: null,
+            flw_subaccount_id: null,
+            payout_order: [],
+            current_payout_position: 0,
+            next_contribution_date: null,
+            next_payout_date: null,
+            contribution_day_of_month: null,
+            contribution_day_of_week: null,
+            contribution_hour: 9,
+            contribution_minute: 0,
+            memberCount,
+            pendingRequests: 0,
+            isMember: userGroupIds.includes(group.id),
+          };
+        })
+      );
+
+      // Filter out nulls and already present groups
+      const validPendingGroups = pendingGroupsWithInfo.filter(
+        (g): g is NonNullable<typeof g> => g !== null
+      );
+
+      // Combine and remove duplicates (some pending might also be in public_groups)
+      const poolGroupIds = new Set(poolGroups.map(g => g.id));
+      const uniquePendingGroups = validPendingGroups.filter(g => !poolGroupIds.has(g.id));
+
+      setGroups([...poolGroups, ...uniquePendingGroups]);
     } catch (err) {
       setError(err as Error);
     } finally {

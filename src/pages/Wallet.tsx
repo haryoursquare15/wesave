@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { ArrowLeft, Eye, EyeOff, ArrowUpRight, ArrowDownLeft, Lock, History, Percent, Copy, Check, CreditCard } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, ArrowUpRight, ArrowDownLeft, Lock, History, Percent, Copy, Check, CreditCard, Building2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { WithdrawalBankForm } from "@/components/settings/WithdrawalBankForm";
 
 interface Transaction {
   id: string;
@@ -35,6 +36,7 @@ export default function Wallet() {
   const [funding, setFunding] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showBankForm, setShowBankForm] = useState(false);
 
   const balance = Number(wallet?.available_balance) || 0;
   const lockedBalance = Number(wallet?.locked_balance) || 0;
@@ -570,12 +572,18 @@ export default function Wallet() {
               <p className="text-xl font-bold text-foreground">₦{formatAmount(balance)}</p>
             </div>
             
-            <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
+            <button 
+              onClick={() => {
+                setWithdrawDialogOpen(false);
+                setShowBankForm(true);
+              }}
+              className="w-full p-3 rounded-lg bg-primary/5 border border-primary/20 hover:bg-primary/10 transition-colors text-left"
+            >
               <p className="text-sm text-muted-foreground">Withdrawal Bank</p>
               <p className="font-medium text-foreground">
-                {profile?.bank_name || "Not set"} - {profile?.bank_account ? `****${profile.bank_account.slice(-4)}` : "N/A"}
+                {profile?.bank_name || "Not set"} - {profile?.bank_account ? `****${profile.bank_account.slice(-4)}` : "Click to set up"}
               </p>
-            </div>
+            </button>
 
             <div className="space-y-2">
               <Label htmlFor="withdrawAmount">Amount (₦)</Label>
@@ -603,6 +611,11 @@ export default function Wallet() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <WithdrawalBankForm
+        open={showBankForm}
+        onOpenChange={setShowBankForm}
+      />
 
       <BottomNav />
     </div>
