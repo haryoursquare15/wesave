@@ -53,15 +53,12 @@ export function usePositionSwap(groupId: string) {
 
       if (error) throw error;
 
-      // Fetch requester profiles
+      // Fetch requester profiles using secure RPC function
       if (requests && requests.length > 0) {
         const requesterIds = requests.map(r => r.requester_id);
-        const { data: profiles } = await supabase
-          .from("profiles")
-          .select("id, full_name, username, avatar_url")
-          .in("id", requesterIds);
+        const { data: profiles } = await supabase.rpc("get_public_profiles", { user_ids: requesterIds });
 
-        const profileMap = new Map(profiles?.map(p => [p.id, p]) || []);
+        const profileMap = new Map(profiles?.map((p: { id: string; full_name: string | null; username: string | null; avatar_url: string | null }) => [p.id, p]) || []);
 
         const requestsWithProfiles = requests.map(r => ({
           ...r,

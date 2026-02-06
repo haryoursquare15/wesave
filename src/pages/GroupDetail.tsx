@@ -182,14 +182,11 @@ export default function GroupDetail() {
         .limit(100);
       
       if (messagesData) {
-        // Fetch profiles for each unique user
+        // Fetch profiles for each unique user using secure RPC function
         const userIds = [...new Set(messagesData.map(m => m.user_id))];
-        const { data: profiles } = await supabase
-          .from("profiles")
-          .select("id, full_name, avatar_url, username")
-          .in("id", userIds);
+        const { data: profiles } = await supabase.rpc("get_public_profiles", { user_ids: userIds });
         
-        const profileMap = new Map(profiles?.map(p => [p.id, p]) || []);
+        const profileMap = new Map(profiles?.map((p: { id: string; full_name: string | null; avatar_url: string | null; username: string | null }) => [p.id, p]) || []);
         
         const messagesWithProfiles = messagesData.map(msg => ({
           ...msg,
@@ -218,13 +215,10 @@ export default function GroupDetail() {
           filter: `group_id=eq.${groupId}`,
         },
         async (payload) => {
-          // Fetch the message with profile
+          // Fetch the message with profile using secure RPC function
           const newMsg = payload.new as { id: string; user_id: string; message: string; message_type: string; created_at: string };
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("id, full_name, avatar_url, username")
-            .eq("id", newMsg.user_id)
-            .single();
+          const { data: profiles } = await supabase.rpc("get_public_profile", { target_user_id: newMsg.user_id });
+          const profile = profiles?.[0] || null;
           
           const messageWithProfile: ChatMessage = {
             ...newMsg,

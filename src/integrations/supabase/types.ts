@@ -1999,6 +1999,30 @@ export type Database = {
           payout_position: number
         }[]
       }
+      get_public_profile: {
+        Args: { target_user_id: string }
+        Returns: {
+          avatar_url: string
+          completed_cycles: number
+          credit_score: number
+          full_name: string
+          id: string
+          membership_tier: Database["public"]["Enums"]["membership_tier"]
+          username: string
+        }[]
+      }
+      get_public_profiles: {
+        Args: { user_ids: string[] }
+        Returns: {
+          avatar_url: string
+          completed_cycles: number
+          credit_score: number
+          full_name: string
+          id: string
+          membership_tier: Database["public"]["Enums"]["membership_tier"]
+          username: string
+        }[]
+      }
       has_permission: {
         Args: { _permission: string; _user_id: string }
         Returns: boolean

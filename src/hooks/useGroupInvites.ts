@@ -170,18 +170,20 @@ export function usePendingInvites() {
 
       if (error) throw error;
 
-      // Fetch group and inviter details
+      // Fetch group and inviter details using secure methods
       if (data && data.length > 0) {
         const groupIds = [...new Set(data.map(i => i.group_id))];
         const inviterIds = [...new Set(data.map(i => i.inviter_id))];
 
+        // Use public_groups view for group data (accessible to all authenticated users)
+        // Use get_public_profiles RPC for inviter data (SECURITY DEFINER function)
         const [groupsRes, profilesRes] = await Promise.all([
-          supabase.from("thrift_groups").select("id, name, contribution_amount, period").in("id", groupIds),
-          supabase.from("profiles").select("id, full_name, username").in("id", inviterIds),
+          supabase.from("public_groups").select("id, name, contribution_amount, period").in("id", groupIds),
+          supabase.rpc("get_public_profiles", { user_ids: inviterIds }),
         ]);
 
         const groupMap = new Map(groupsRes.data?.map(g => [g.id, g]) || []);
-        const profileMap = new Map(profilesRes.data?.map(p => [p.id, p]) || []);
+        const profileMap = new Map(profilesRes.data?.map((p: { id: string; full_name: string | null; username: string | null }) => [p.id, p]) || []);
 
         const enrichedInvites = data.map(invite => {
           const group = groupMap.get(invite.group_id);
