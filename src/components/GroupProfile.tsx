@@ -105,12 +105,10 @@ export function GroupProfile({ groupId, group, memberCount }: GroupProfileProps)
 
         if (audit && audit.length > 0) {
           const userIds = [...new Set(audit.map((a) => a.user_id))];
-          const { data: profiles } = await supabase
-            .from("profiles")
-            .select("id, full_name, username, avatar_url")
-            .in("id", userIds);
+          // Use secure RPC function to fetch public profile data
+          const { data: profiles } = await supabase.rpc("get_public_profiles", { user_ids: userIds });
 
-          const profileMap = new Map(profiles?.map((p) => [p.id, p]) || []);
+          const profileMap = new Map(profiles?.map((p: { id: string; full_name: string | null; username: string | null; avatar_url: string | null }) => [p.id, p]) || []);
 
           const auditWithProfiles = audit.map((a) => ({
             ...a,
