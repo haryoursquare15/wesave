@@ -80,13 +80,10 @@ async function getEncryptionKey(): Promise<CryptoKey> {
   }
   
   // Validate key length: AES-256 requires 32 bytes = 64 hex characters
-  const cleanHex = keyHex.trim();
-  if (!/^[0-9a-fA-F]+$/.test(cleanHex)) {
-    console.error('ENCRYPTION_KEY contains invalid (non-hex) characters');
-    throw new Error('Encryption key format invalid');
-  }
+  const cleanHex = keyHex.replace(/[^0-9a-fA-F]/g, ''); // Strip non-hex (whitespace, dashes, quotes)
+  console.info(`ENCRYPTION_KEY: len=${keyHex.length}, cleanLen=${cleanHex.length}, first10=${cleanHex.slice(0,10)}`);
   if (cleanHex.length !== 64) {
-    console.error(`ENCRYPTION_KEY has incorrect length: ${cleanHex.length} hex chars (need 64 for AES-256)`);
+    console.error(`ENCRYPTION_KEY invalid: cleanLen=${cleanHex.length} (need 64 for AES-256)`);
     throw new Error('Encryption key length invalid');
   }
   

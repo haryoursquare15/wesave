@@ -14,14 +14,11 @@ async function getEncryptionKey(): Promise<CryptoKey> {
   const keyHex = Deno.env.get('ENCRYPTION_KEY');
   if (!keyHex) throw new Error('ENCRYPTION_KEY is not configured');
 
-  // Validate key length: AES-256 requires 32 bytes = 64 hex characters
-  const cleanHex = keyHex.trim();
-  if (!/^[0-9a-fA-F]+$/.test(cleanHex)) {
-    console.error('ENCRYPTION_KEY contains invalid (non-hex) characters');
-    throw new Error('Encryption key format invalid');
-  }
+  // Strip non-hex (quotes, whitespace, dashes)
+  const cleanHex = keyHex.replace(/[^0-9a-fA-F]/g, '');
+  console.info(`ENCRYPTION_KEY: len=${keyHex.length}, cleanLen=${cleanHex.length}`);
   if (cleanHex.length !== 64) {
-    console.error(`ENCRYPTION_KEY has incorrect length: ${cleanHex.length} hex chars (need 64 for AES-256)`);
+    console.error(`ENCRYPTION_KEY invalid: cleanLen=${cleanHex.length} (need 64 for AES-256)`);
     throw new Error('Encryption key length invalid');
   }
 
