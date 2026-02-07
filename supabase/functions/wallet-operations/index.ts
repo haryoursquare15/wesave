@@ -17,10 +17,54 @@ function getCorsHeaders(origin: string | null): Record<string, string> {
 
 const FLUTTERWAVE_BASE_URL = "https://api.flutterwave.com/v3";
 
+// AES-256-GCM decryption (same approach as encryption-utils)
+async function getEncryptionKey(): Promise<CryptoKey> {
+  const keyHex = Deno.env.get('ENCRYPTION_KEY');
+  if (!keyHex) throw new Error('ENCRYPTION_KEY is not configured');
+
+  const keyBytes = new Uint8Array(keyHex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+  return await crypto.subtle.importKey('raw', keyBytes, { name: 'AES-GCM' }, false, ['decrypt']);
+}
+
+async function decrypt(ciphertext: string): Promise<string> {
+  const key = await getEncryptionKey();
+  const combined = Uint8Array.from(atob(ciphertext), c => c.charCodeAt(0));
+  const iv = combined.slice(0, 12);
+  const encrypted = combined.slice(12);
+
+  const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, encrypted);
+  return new TextDecoder().decode(decrypted);
+}
+
+function isGoogleAuthenticated(user: any): boolean {
+  const provider = user?.app_metadata?.provider;
+  if (provider === 'google') return true;
+
+  const identities = user?.identities as Array<{ provider?: string }> | undefined;
+  return Array.isArray(identities) && identities.some(i => i.provider === 'google');
+}
+
+async function resolveFlutterwaveBankCode(flutterwaveKey: string, bankName: string): Promise<string | null> {
+  const res = await fetch(`${FLUTTERWAVE_BASE_URL}/banks/NG`, {
+    method: 'GET',
+    headers: { 'Authorization': `Bearer ${flutterwaveKey}` },
+  });
+
+  const payload = await res.json();
+  const banks: Array<{ name?: string; code?: string }> = payload?.data || [];
+
+  const normalized = bankName.trim().toLowerCase();
+  const exact = banks.find(b => (b.name || '').trim().toLowerCase() === normalized);
+  if (exact?.code) return exact.code;
+
+  const contains = banks.find(b => (b.name || '').trim().toLowerCase().includes(normalized));
+  return contains?.code || null;
+}
+
 serve(async (req) => {
   const origin = req.headers.get('origin');
   const corsHeaders = getCorsHeaders(origin);
-  
+
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -40,9 +84,8 @@ serve(async (req) => {
       throw new Error('No authorization header');
     }
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser(
-      authHeader.replace('Bearer ', '')
-    );
+    const jwt = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(jwt);
     if (authError || !user) {
       throw new Error('Unauthorized');
     }
@@ -172,6 +215,155 @@ serve(async (req) => {
         break;
       }
 
+      case 'withdraw_to_bank': {
+        const { amount, token } = params as { amount?: number; token?: string };
+
+        if (!amount || amount < 100) {
+          throw new Error('Minimum withdrawal amount is ₦100');
+        }
+
+        // Enforce Google auth for withdrawals
+        if (!isGoogleAuthenticated(user)) {
+          result = { success: false, code: 'google_required', error: 'Google sign-in is required for withdrawals' };
+          break;
+        }
+
+        if (!token) {
+          throw new Error('2FA token is required');
+        }
+
+        // Verify 2FA (if enabled) using the same security function
+        const { data: verify2FAData, error: verify2FAError } = await supabase.functions.invoke('security-controls', {
+          body: { action: 'verify_2fa', token, purpose: 'withdrawal' },
+          headers: { Authorization: authHeader },
+        });
+
+        if (verify2FAError) {
+          throw new Error('Failed to verify 2FA');
+        }
+
+        if (!verify2FAData?.verified) {
+          throw new Error(verify2FAData?.error || 'Invalid 2FA code');
+        }
+
+        // Confirm balance is sufficient (quick check before atomic debit)
+        const { data: walletRow, error: walletError } = await supabase
+          .from('wallets')
+          .select('available_balance')
+          .eq('user_id', user.id)
+          .single();
+
+        if (walletError || !walletRow) {
+          throw new Error('Unable to read wallet balance');
+        }
+
+        const available = Number(walletRow.available_balance || 0);
+        if (amount > available) {
+          throw new Error('Insufficient wallet balance');
+        }
+
+        // Fetch bank details (encrypted preferred)
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('bank_name, bank_account, bank_name_encrypted, bank_account_encrypted')
+          .eq('id', user.id)
+          .single();
+
+        if (profileError || !profile) {
+          throw new Error('Profile not found');
+        }
+
+        let bankName = profile.bank_name as string | null;
+        let accountNumber = profile.bank_account as string | null;
+
+        if (profile.bank_name_encrypted) {
+          bankName = await decrypt(profile.bank_name_encrypted as string);
+        }
+        if (profile.bank_account_encrypted) {
+          accountNumber = await decrypt(profile.bank_account_encrypted as string);
+        }
+
+        if (!bankName || !accountNumber) {
+          throw new Error('Withdrawal bank details are missing. Please set your bank details first.');
+        }
+
+        const bankCode = await resolveFlutterwaveBankCode(FLUTTERWAVE_SECRET_KEY, bankName);
+        if (!bankCode) {
+          throw new Error('Unable to resolve bank code for your selected bank');
+        }
+
+        const withdrawRef = `wd-${user.id}-${Date.now()}`;
+
+        // Create a pending transaction record up-front
+        await supabase.from('transactions').insert({
+          user_id: user.id,
+          type: 'withdrawal',
+          amount,
+          status: 'pending',
+          reference: withdrawRef,
+          description: 'Withdrawal to bank',
+        });
+
+        // Atomic debit via ledger (prevents double-spend)
+        const { data: debitResult, error: debitError } = await supabase.rpc('debit_wallet_via_ledger', {
+          _user_id: user.id,
+          _amount: amount,
+          _reference_type: 'withdrawal',
+          _reference_id: withdrawRef,
+          _description: 'Withdrawal to bank',
+        });
+
+        if (debitError || !debitResult?.success) {
+          await supabase.from('transactions').update({ status: 'failed', description: 'Withdrawal failed - debit rejected' }).eq('reference', withdrawRef);
+          throw new Error(debitResult?.error || 'Unable to debit wallet');
+        }
+
+        // Trigger Flutterwave transfer
+        const transferResponse = await fetch(`${FLUTTERWAVE_BASE_URL}/transfers`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${FLUTTERWAVE_SECRET_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            account_bank: bankCode,
+            account_number: accountNumber,
+            amount,
+            currency: 'NGN',
+            narration: 'ThriftPal withdrawal',
+            reference: withdrawRef,
+            debit_currency: 'NGN',
+          }),
+        });
+
+        const transferData = await transferResponse.json();
+        console.log('Withdrawal transfer response:', JSON.stringify(transferData));
+
+        if (transferData?.status !== 'success') {
+          // Compensate debit if transfer failed
+          await supabase.rpc('credit_wallet_via_ledger', {
+            _user_id: user.id,
+            _amount: amount,
+            _reference_type: 'withdrawal_reversal',
+            _reference_id: withdrawRef,
+            _description: 'Withdrawal reversal (transfer failed)',
+          });
+
+          await supabase.from('transactions').update({ status: 'failed', description: 'Withdrawal failed - transfer rejected' }).eq('reference', withdrawRef);
+
+          throw new Error(transferData?.message || 'Transfer failed');
+        }
+
+        await supabase.from('transactions').update({ status: 'completed' }).eq('reference', withdrawRef);
+
+        result = {
+          success: true,
+          reference: withdrawRef,
+          message: 'Withdrawal processed',
+        };
+        break;
+      }
+
       default:
         throw new Error(`Unknown action: ${action}`);
     }
@@ -187,6 +379,7 @@ serve(async (req) => {
       const msg = error.message.toLowerCase();
       if (msg.includes('unauthorized')) userMessage = 'Authentication required';
       else if (msg.includes('minimum')) userMessage = 'Amount does not meet minimum requirements';
+      else userMessage = error.message;
     }
     return new Response(JSON.stringify({ success: false, error: userMessage }), {
       status: 400,

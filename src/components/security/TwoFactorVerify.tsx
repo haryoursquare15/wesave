@@ -10,7 +10,7 @@ interface TwoFactorVerifyProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   purpose: string;
-  onVerified: () => void;
+  onVerified: (token: string) => void;
   onCancel?: () => void;
 }
 
@@ -34,7 +34,7 @@ export function TwoFactorVerify({
     if (result.verified) {
       toast.success("Verified successfully");
       onOpenChange(false);
-      onVerified();
+      onVerified(code);
     } else {
       toast.error(result.error || "Invalid code. Please try again.");
     }

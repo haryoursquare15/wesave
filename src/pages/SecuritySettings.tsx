@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import { ArrowLeft, Shield, Smartphone, Key, Lock, AlertTriangle, ChevronRight, Check } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { BottomNav } from "@/components/BottomNav";
@@ -11,17 +11,28 @@ import { DeviceManagement } from "@/components/security/DeviceManagement";
 import { ChangePasswordDialog } from "@/components/security/ChangePasswordDialog";
 import { useSecurity } from "@/hooks/useSecurity";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { lovable } from "@/integrations/lovable";
 import { toast } from "sonner";
 
 export default function SecuritySettings() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user, loading: authLoading } = useAuth();
   const { get2FAStatus, disable2FA, loading } = useSecurity();
-  
+
+  const withdrawalIntent = useMemo(() => {
+    const action = searchParams.get("action");
+    const amount = Number(searchParams.get("amount") || 0);
+    if (action !== "withdraw" || !amount || amount <= 0) return null;
+    return { amount };
+  }, [searchParams]);
+
   const [twoFAEnabled, setTwoFAEnabled] = useState(false);
   const [twoFAVerifiedAt, setTwoFAVerifiedAt] = useState<string | null>(null);
   const [showSetup2FA, setShowSetup2FA] = useState(false);
   const [showDisable2FA, setShowDisable2FA] = useState(false);
+  const [showWithdrawVerify, setShowWithdrawVerify] = useState(false);
   const [showDevices, setShowDevices] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState(true);
@@ -39,11 +50,19 @@ export default function SecuritySettings() {
       setTwoFAVerifiedAt(status.verified_at);
       setLoadingStatus(false);
     };
-    
+
     if (user) {
       fetchStatus();
     }
   }, [user, get2FAStatus]);
+
+  // If we arrived here to confirm a withdrawal, open the 2FA verify dialog.
+  useEffect(() => {
+    if (!user) return;
+    if (withdrawalIntent) {
+      setShowWithdrawVerify(true);
+    }
+  }, [user, withdrawalIntent]);
 
   const handleToggle2FA = () => {
     if (twoFAEnabled) {
@@ -59,11 +78,50 @@ export default function SecuritySettings() {
     setTwoFAVerifiedAt(status.verified_at);
   };
 
-  const handleDisable2FA = async () => {
-    // This is called after successful 2FA verification in the disable flow
-    setTwoFAEnabled(false);
-    setTwoFAVerifiedAt(null);
-    toast.success("2FA has been disabled");
+  const handleDisable2FA = async (token: string) => {
+    // Disable requires server-side action (verified token is passed)
+    try {
+      const result = await disable2FA(token);
+      if (!result.success) throw new Error(result.error);
+      setTwoFAEnabled(false);
+      setTwoFAVerifiedAt(null);
+      toast.success("2FA has been disabled");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to disable 2FA");
+    }
+  };
+
+  const processWithdrawal = async (token: string) => {
+    if (!withdrawalIntent) return;
+
+    try {
+      const { data, error } = await supabase.functions.invoke("flutterwave-payments", {
+        body: {
+          action: "withdraw_to_bank",
+          amount: withdrawalIntent.amount,
+          token,
+        },
+      });
+
+      if (error) throw error;
+
+      if (!data?.success) {
+        // Encourage OAuth upgrade when required
+        if (data?.code === "google_required") {
+          toast.error("Google sign-in is required for withdrawals. Redirecting…");
+          await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin });
+          return;
+        }
+
+        throw new Error(data?.error || "Withdrawal failed");
+      }
+
+      toast.success("Withdrawal initiated successfully");
+      setShowWithdrawVerify(false);
+      navigate("/wallet");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Withdrawal failed");
+    }
   };
 
   if (authLoading || loadingStatus) {
@@ -246,6 +304,14 @@ export default function SecuritySettings() {
         onOpenChange={setShowDisable2FA}
         purpose="disable_2fa"
         onVerified={handleDisable2FA}
+      />
+
+      <TwoFactorVerify
+        open={showWithdrawVerify}
+        onOpenChange={setShowWithdrawVerify}
+        purpose="withdrawal"
+        onVerified={processWithdrawal}
+        onCancel={() => navigate("/wallet")}
       />
 
       <DeviceManagement
