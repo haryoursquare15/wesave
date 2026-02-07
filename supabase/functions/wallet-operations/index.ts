@@ -90,6 +90,58 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    const { action, ...params } = await req.json();
+    console.log(`Processing wallet action: ${action}`);
+
+    // Bank validation doesn't require auth (needed during onboarding before full session)
+    if (action === 'validate_bank_account') {
+      const { bank_name, account_number } = params;
+      if (!bank_name || !account_number) {
+        throw new Error('Bank name and account number are required');
+      }
+
+      if (account_number.length !== 10) {
+        throw new Error('Account number must be 10 digits');
+      }
+
+      // Resolve bank code from Flutterwave
+      const bankCode = await resolveFlutterwaveBankCode(FLUTTERWAVE_SECRET_KEY, bank_name);
+      if (!bankCode) {
+        throw new Error('Unable to find bank. Please select a valid Nigerian bank.');
+      }
+
+      // Verify account with Flutterwave
+      const verifyRes = await fetch(`${FLUTTERWAVE_BASE_URL}/accounts/resolve`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${FLUTTERWAVE_SECRET_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          account_number,
+          account_bank: bankCode,
+        }),
+      });
+
+      const verifyData = await verifyRes.json();
+      console.log('Bank verification response:', JSON.stringify(verifyData));
+
+      if (verifyData.status !== 'success') {
+        throw new Error(verifyData.message || 'Unable to verify bank account');
+      }
+
+      return new Response(JSON.stringify({
+        success: true,
+        account_name: verifyData.data?.account_name || '',
+        bank_name: bank_name,
+        account_number: account_number,
+        verified: true,
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // All other actions require authentication
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       throw new Error('No authorization header');
@@ -101,8 +153,7 @@ serve(async (req) => {
       throw new Error('Unauthorized');
     }
 
-    const { action, ...params } = await req.json();
-    console.log(`Processing wallet action: ${action} for user: ${user.id}`);
+    console.log(`Authenticated user: ${user.id}`);
 
     let result;
 
@@ -375,51 +426,7 @@ serve(async (req) => {
         break;
       }
 
-      case 'validate_bank_account': {
-        const { bank_name, account_number } = params;
-        if (!bank_name || !account_number) {
-          throw new Error('Bank name and account number are required');
-        }
-
-        if (account_number.length !== 10) {
-          throw new Error('Account number must be 10 digits');
-        }
-
-        // Resolve bank code from Flutterwave
-        const bankCode = await resolveFlutterwaveBankCode(FLUTTERWAVE_SECRET_KEY, bank_name);
-        if (!bankCode) {
-          throw new Error('Unable to find bank. Please select a valid Nigerian bank.');
-        }
-
-        // Verify account with Flutterwave
-        const verifyRes = await fetch(`${FLUTTERWAVE_BASE_URL}/accounts/resolve`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${FLUTTERWAVE_SECRET_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            account_number,
-            account_bank: bankCode,
-          }),
-        });
-
-        const verifyData = await verifyRes.json();
-        console.log('Bank verification response:', JSON.stringify(verifyData));
-
-        if (verifyData.status !== 'success') {
-          throw new Error(verifyData.message || 'Unable to verify bank account');
-        }
-
-        result = {
-          success: true,
-          account_name: verifyData.data?.account_name || '',
-          bank_name: bank_name,
-          account_number: account_number,
-          verified: true,
-        };
-        break;
-      }
+      // validate_bank_account is handled before auth check above
 
       default:
         throw new Error(`Unknown action: ${action}`);
