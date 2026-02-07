@@ -44,11 +44,12 @@ export function useMyGroups() {
 
       const groupIds = memberships.map(m => m.group_id);
 
-      // Fetch group details
+      // Fetch group details - sort by newest first
       const { data: groupsData, error: groupsError } = await supabase
         .from("thrift_groups")
         .select("*")
-        .in("id", groupIds);
+        .in("id", groupIds)
+        .order("created_at", { ascending: false });
 
       if (groupsError) throw groupsError;
 
@@ -105,11 +106,12 @@ export function usePoolGroups() {
       // Fetch groups from pool view (active/completed) AND pending groups that need more members
       const [poolResult, pendingResult] = await Promise.all([
         supabase.from("public_groups").select("*"),
-        // Also fetch pending groups that haven't reached max members
+        // Also fetch pending groups that haven't reached max members - newest first
         supabase
           .from("thrift_groups")
-          .select("id, name, max_members, contribution_amount, period, status, rating")
+          .select("id, name, max_members, contribution_amount, period, status, rating, created_at")
           .eq("status", "pending")
+          .order("created_at", { ascending: false })
       ]);
 
       if (poolResult.error) throw poolResult.error;
@@ -183,7 +185,7 @@ export function usePoolGroups() {
             rating: group.rating,
             current_cycle: 1,
             invite_code: null,
-            created_at: null,
+            created_at: (group as unknown as { created_at: string | null }).created_at,
             updated_at: null,
             flw_subaccount_id: null,
             payout_order: [],
@@ -210,7 +212,14 @@ export function usePoolGroups() {
       const poolGroupIds = new Set(poolGroups.map(g => g.id));
       const uniquePendingGroups = validPendingGroups.filter(g => !poolGroupIds.has(g.id));
 
-      setGroups([...poolGroups, ...uniquePendingGroups]);
+      // Combine all groups and sort by created_at DESC (newest first)
+      const allGroups = [...poolGroups, ...uniquePendingGroups].sort((a, b) => {
+        const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return dateB - dateA;
+      });
+
+      setGroups(allGroups);
     } catch (err) {
       setError(err as Error);
     } finally {

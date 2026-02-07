@@ -9,6 +9,7 @@ const ACTION_ROUTES: Record<string, string> = {
   'fund_wallet': 'wallet-operations',
   'verify_transaction': 'wallet-operations',
   'withdraw_to_bank': 'wallet-operations',
+  'validate_bank_account': 'wallet-operations',
   'exit_group': 'group-actions',
   'restart_group': 'group-actions',
   'confirm_continue': 'group-actions',

@@ -1,9 +1,10 @@
 import { motion } from "framer-motion";
-import { Users, Calendar, Coins, Lock, ChevronRight, Trophy } from "lucide-react";
+import { Users, Calendar, Coins, Lock, ChevronRight, Trophy, Star } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { StarRating } from "./StarRating";
 import { Badge } from "./ui/badge";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface ThriftGroupCardProps {
   id: string;
@@ -16,6 +17,7 @@ interface ThriftGroupCardProps {
   isMember?: boolean;
   isActive?: boolean;
   isCompleted?: boolean;
+  isPending?: boolean;
   pendingRequests?: number;
   onClick?: () => void;
 }
@@ -37,14 +39,23 @@ export function ThriftGroupCard({
   isMember = false,
   isActive = true,
   isCompleted = false,
+  isPending = false,
   pendingRequests = 0,
   onClick,
 }: ThriftGroupCardProps) {
   const navigate = useNavigate();
+  const { profile } = useAuth();
 
   const formatAmount = (amount: number) => {
     return new Intl.NumberFormat("en-NG").format(amount);
   };
+
+  // Check if user has excellent badge (credit score >= 750)
+  const hasExcellentBadge = (profile?.credit_score ?? 0) >= 750;
+  
+  // Groups in pool that need members - only excellent badge users can join
+  const isPoolGroup = !isMember && memberCount < maxMembers;
+  const canRequestToJoin = isPoolGroup && hasExcellentBadge;
 
   const handleClick = () => {
     if (isMember) {
@@ -61,6 +72,9 @@ export function ThriftGroupCard({
     if (isCompleted) {
       return "border-success/50 bg-success/5"; // Completed cycle - green tint
     }
+    if (isPending || (!isActive && memberCount < maxMembers)) {
+      return "border-dashed border-muted-foreground/30"; // Pending/needs members
+    }
     if (!isActive) {
       return "border-dashed border-muted-foreground/30"; // Pending
     }
@@ -71,14 +85,16 @@ export function ThriftGroupCard({
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      whileHover={{ scale: isMember ? 1.02 : 1 }}
-      whileTap={{ scale: isMember ? 0.98 : 1 }}
+      whileHover={{ scale: isMember || canRequestToJoin ? 1.02 : 1 }}
+      whileTap={{ scale: isMember || canRequestToJoin ? 0.98 : 1 }}
       onClick={handleClick}
       className={cn(
         "relative overflow-hidden rounded-xl border bg-card p-5 shadow-md transition-all duration-200",
         isMember
           ? "cursor-pointer hover:shadow-lg hover:border-primary/30"
-          : "opacity-80",
+          : canRequestToJoin 
+            ? "cursor-pointer hover:shadow-lg hover:border-primary/30"
+            : "opacity-80",
         getCardStyle()
       )}
     >
@@ -97,7 +113,13 @@ export function ThriftGroupCard({
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
             <h3 className="font-semibold text-lg text-foreground truncate">{name}</h3>
-            {!isMember && <Lock className="h-4 w-4 text-muted-foreground" />}
+            {!isMember && !canRequestToJoin && <Lock className="h-4 w-4 text-muted-foreground" />}
+            {isPoolGroup && !canRequestToJoin && (
+              <Badge variant="outline" className="text-xs gap-1">
+                <Star className="h-3 w-3" />
+                Excellent only
+              </Badge>
+            )}
           </div>
           <StarRating rating={rating} size="sm" showValue />
         </div>
@@ -128,13 +150,20 @@ export function ThriftGroupCard({
 
       {/* Footer */}
       <div className="flex items-center justify-between">
-        <Badge 
-          variant={isCompleted ? "success" : isActive ? "default" : "secondary"}
-          className={isCompleted ? "bg-success text-success-foreground" : ""}
-        >
-          {isCompleted ? "All Cycles Complete" : isActive ? "Active Cycle" : "Pending"}
-        </Badge>
-        {isMember && (
+        <div className="flex items-center gap-2">
+          <Badge 
+            variant={isCompleted ? "success" : isActive ? "default" : "secondary"}
+            className={isCompleted ? "bg-success text-success-foreground" : ""}
+          >
+            {isCompleted ? "All Cycles Complete" : isActive ? "Active Cycle" : memberCount < maxMembers ? "Needs Members" : "Pending"}
+          </Badge>
+          {isPoolGroup && memberCount < maxMembers && (
+            <Badge variant="outline" className="text-xs">
+              {maxMembers - memberCount} spots left
+            </Badge>
+          )}
+        </div>
+        {(isMember || canRequestToJoin) && (
           <ChevronRight className="h-5 w-5 text-muted-foreground" />
         )}
       </div>

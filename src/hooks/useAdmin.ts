@@ -75,13 +75,29 @@ export function useAdminStats() {
 
   const fetchStats = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
+      // Add timeout to prevent hanging
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      
       const { data, error: rpcError } = await supabase.rpc("admin_get_stats");
+      clearTimeout(timeoutId);
+      
       if (rpcError) throw rpcError;
       setStats(data as unknown as AdminStats);
     } catch (err) {
       console.error("Error fetching admin stats:", err);
       setError(err as Error);
+      // Set default stats on error
+      setStats({
+        total_users: 0,
+        total_groups: 0,
+        active_groups: 0,
+        pending_groups: 0,
+        total_transactions: 0,
+        total_volume: 0,
+      });
     } finally {
       setLoading(false);
     }

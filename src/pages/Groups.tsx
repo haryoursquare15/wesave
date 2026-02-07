@@ -143,10 +143,10 @@ export default function Groups() {
                 <TrendingUp className="h-5 w-5 text-primary mt-0.5" />
                 <div>
                   <p className="text-sm font-medium text-foreground">
-                    Gold members can request to join groups
+                    Gold &amp; Silver members can request to join groups
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Complete 2 successful thrift cycles to earn your Gold badge
+                    Earn an excellent badge (credit score ≥750) to join groups from the pool
                   </p>
                 </div>
               </div>
