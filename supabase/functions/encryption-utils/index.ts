@@ -14,27 +14,17 @@ async function getEncryptionKey(): Promise<CryptoKey> {
     throw new Error('Encryption key not configured');
   }
   
-  // Validate key length: AES-256 requires 32 bytes = 64 hex characters
-  const cleanHex = keyHex.trim();
-  if (!/^[0-9a-fA-F]+$/.test(cleanHex)) {
-    console.error('ENCRYPTION_KEY contains invalid (non-hex) characters');
-    throw new Error('Encryption key format invalid');
-  }
+  // Strip any non-hex chars (quotes, whitespace, dashes) for safety
+  const cleanHex = keyHex.replace(/[^0-9a-fA-F]/g, '');
+  console.info(`ENCRYPTION_KEY: len=${keyHex.length}, cleanLen=${cleanHex.length}, first10=${cleanHex.slice(0,10)}`);
   if (cleanHex.length !== 64) {
-    console.error(`ENCRYPTION_KEY has incorrect length: ${cleanHex.length} hex chars (need 64 for AES-256)`);
+    console.error(`ENCRYPTION_KEY invalid: cleanLen=${cleanHex.length} (need 64 for AES-256)`);
     throw new Error('Encryption key length invalid');
   }
   
-  // Convert hex string to Uint8Array (expecting 64 hex chars = 32 bytes)
   const keyBytes = new Uint8Array(cleanHex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
   
-  return await crypto.subtle.importKey(
-    'raw',
-    keyBytes,
-    { name: 'AES-GCM' },
-    false,
-    ['encrypt', 'decrypt']
-  );
+  return await crypto.subtle.importKey('raw', keyBytes, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
 }
 
 async function encrypt(plaintext: string): Promise<string> {
