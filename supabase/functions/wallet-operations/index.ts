@@ -53,11 +53,25 @@ async function resolveFlutterwaveBankCode(flutterwaveKey: string, bankName: stri
   const payload = await res.json();
   const banks: Array<{ name?: string; code?: string }> = payload?.data || [];
 
-  const normalized = bankName.trim().toLowerCase();
-  const exact = banks.find(b => (b.name || '').trim().toLowerCase() === normalized);
+  const normalize = (s: string) =>
+    s
+      .trim()
+      .toLowerCase()
+      .replace(/\b(plc|limited|ltd|microfinance|mfb|mfbank)\b/g, "")
+      .replace(/[^a-z0-9]/g, "");
+
+  const target = normalize(bankName);
+
+  // Try strict normalized match first
+  const exact = banks.find((b) => normalize(b.name || "") === target);
   if (exact?.code) return exact.code;
 
-  const contains = banks.find(b => (b.name || '').trim().toLowerCase().includes(normalized));
+  // Then try partial matches (in either direction)
+  const contains = banks.find((b) => {
+    const candidate = normalize(b.name || "");
+    return candidate.includes(target) || target.includes(candidate);
+  });
+
   return contains?.code || null;
 }
 

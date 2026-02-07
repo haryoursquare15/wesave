@@ -108,7 +108,9 @@ export default function Auth() {
           }
         } else {
           toast.success("Account created! Please check your email to verify your account.");
-          navigate("/onboarding");
+          // Stay on /auth after sign-up since email verification may be required before a session exists.
+          // Redirecting immediately can break onboarding actions that require authentication.
+          navigate("/auth?mode=signin");
         }
       } else {
         const { error } = await signIn(formData.email, formData.password);
