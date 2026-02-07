@@ -88,6 +88,10 @@ serve(async (req) => {
       const msg = error.message.toLowerCase();
       if (msg.includes('unauthorized')) userMessage = 'Authentication required';
       else if (msg.includes('terms')) userMessage = 'You must accept the terms and conditions';
+      else if (msg.includes('only admin')) userMessage = 'Only the group admin can perform this action';
+      else if (msg.includes('not member')) userMessage = 'You are not a member of this group';
+      else if (msg.includes('not completed')) userMessage = 'This action is only available for completed groups';
+      else userMessage = error.message;
     }
     return new Response(JSON.stringify({ success: false, error: userMessage }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }

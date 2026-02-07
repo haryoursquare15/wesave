@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -33,21 +32,38 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const authHeader = req.headers.get('Authorization');
     
-    const { data, error } = await supabase.functions.invoke(targetFunction, {
-      body: body,
-      headers: authHeader ? { Authorization: authHeader } : undefined,
+    // Use direct fetch to preserve the response status and body
+    const targetUrl = `${supabaseUrl}/functions/v1/${targetFunction}`;
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${supabaseServiceKey}`,
+    };
+    
+    // Forward the user's auth token if present
+    if (authHeader) {
+      headers['Authorization'] = authHeader;
+    }
+    
+    const response = await fetch(targetUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
     });
 
-    if (error) throw new Error(error.message || 'Failed to process request');
-
-    return new Response(JSON.stringify(data), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    const responseData = await response.text();
+    
+    // Forward the response status and body as-is
+    return new Response(responseData, {
+      status: response.status,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
 
   } catch (error: unknown) {
     console.error('Router error:', error);
-    return new Response(JSON.stringify({ success: false, error: 'An error occurred' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    const errorMessage = error instanceof Error ? error.message : 'An error occurred';
+    return new Response(JSON.stringify({ success: false, error: errorMessage }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 });
