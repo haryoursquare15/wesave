@@ -81,7 +81,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const {
           data: { session },
+          error: sessionError,
         } = await supabase.auth.getSession();
+
+        // Handle stale/invalid refresh tokens gracefully
+        if (sessionError) {
+          console.warn("Session error:", sessionError.message);
+          // Clear any stale tokens and continue as logged out
+          await supabase.auth.signOut();
+          if (isMounted) {
+            setSession(null);
+            setUser(null);
+            setProfile(null);
+            setWallet(null);
+          }
+          return;
+        }
 
         if (!isMounted) return;
 
@@ -91,6 +106,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (session?.user) {
           await fetchAll(session.user.id);
         } else {
+          setProfile(null);
+          setWallet(null);
+        }
+      } catch (err) {
+        console.error("Auth initialization error:", err);
+        // Fail gracefully - user will see logged out state
+        if (isMounted) {
+          setSession(null);
+          setUser(null);
           setProfile(null);
           setWallet(null);
         }
@@ -105,8 +129,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Listener for ongoing auth changes (does not toggle loading)
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, nextSession) => {
+    } = supabase.auth.onAuthStateChange(async (event, nextSession) => {
       if (!isMounted) return;
+
+      // Handle token refresh failures silently
+      if (event === "TOKEN_REFRESHED" && !nextSession) {
+        console.warn("Token refresh failed, signing out");
+        setSession(null);
+        setUser(null);
+        setProfile(null);
+        setWallet(null);
+        return;
+      }
 
       setSession(nextSession);
       setUser(nextSession?.user ?? null);

@@ -361,6 +361,52 @@ serve(async (req) => {
         break;
       }
 
+      case 'validate_bank_account': {
+        const { bank_name, account_number } = params;
+        if (!bank_name || !account_number) {
+          throw new Error('Bank name and account number are required');
+        }
+
+        if (account_number.length !== 10) {
+          throw new Error('Account number must be 10 digits');
+        }
+
+        // Resolve bank code from Flutterwave
+        const bankCode = await resolveFlutterwaveBankCode(FLUTTERWAVE_SECRET_KEY, bank_name);
+        if (!bankCode) {
+          throw new Error('Unable to find bank. Please select a valid Nigerian bank.');
+        }
+
+        // Verify account with Flutterwave
+        const verifyRes = await fetch(`${FLUTTERWAVE_BASE_URL}/accounts/resolve`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${FLUTTERWAVE_SECRET_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            account_number,
+            account_bank: bankCode,
+          }),
+        });
+
+        const verifyData = await verifyRes.json();
+        console.log('Bank verification response:', JSON.stringify(verifyData));
+
+        if (verifyData.status !== 'success') {
+          throw new Error(verifyData.message || 'Unable to verify bank account');
+        }
+
+        result = {
+          success: true,
+          account_name: verifyData.data?.account_name || '',
+          bank_name: bank_name,
+          account_number: account_number,
+          verified: true,
+        };
+        break;
+      }
+
       default:
         throw new Error(`Unknown action: ${action}`);
     }
