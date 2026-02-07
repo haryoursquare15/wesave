@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowRight, ArrowLeft, Building2, CreditCard, User, Check, Shield, AtSign, AlertCircle } from "lucide-react";
+import { ArrowRight, ArrowLeft, Building2, CreditCard, User, Check, Shield, AtSign, AlertCircle, Loader2, CheckCircle2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useJoinGroupViaInvite } from "@/hooks/useGroupInvites";
 import { toast } from "sonner";
 import { nigerianBanks } from "@/lib/nigerianBanks";
+import { useDebounce } from "@/hooks/useDebounce";
 
 const steps = [
   { id: 1, title: "Personal Info", icon: User },
@@ -27,6 +28,9 @@ export default function Onboarding() {
   const [isLoading, setIsLoading] = useState(false);
   const [usernameError, setUsernameError] = useState<string | null>(null);
   const [fullNameError, setFullNameError] = useState<string | null>(null);
+  const [bankValidating, setBankValidating] = useState(false);
+  const [bankValidated, setBankValidated] = useState(false);
+  const [bankError, setBankError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     fullName: "",
     username: "",
@@ -35,6 +39,9 @@ export default function Onboarding() {
     accountNumber: "",
     accountName: "",
   });
+
+  // Debounce account number for validation
+  const debouncedAccountNumber = useDebounce(formData.accountNumber, 800);
 
   // Check for pending invite token
   const pendingInviteToken = sessionStorage.getItem("pending_invite_token");
@@ -58,6 +65,53 @@ export default function Onboarding() {
     };
     checkOnboarding();
   }, [user, navigate]);
+
+  // Auto-validate bank account when bank name and account number are complete
+  const validateBankAccount = useCallback(async () => {
+    if (!formData.bankName || debouncedAccountNumber.length !== 10) {
+      setBankValidated(false);
+      setBankError(null);
+      setFormData(prev => ({ ...prev, accountName: "" }));
+      return;
+    }
+
+    setBankValidating(true);
+    setBankError(null);
+    setBankValidated(false);
+
+    try {
+      const { data, error } = await supabase.functions.invoke("wallet-operations", {
+        body: {
+          action: "validate_bank_account",
+          bank_name: formData.bankName,
+          account_number: debouncedAccountNumber,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.success && data?.verified) {
+        setFormData(prev => ({ ...prev, accountName: data.account_name || "" }));
+        setBankValidated(true);
+        setBankError(null);
+      } else {
+        setBankError(data?.error || "Unable to verify account");
+        setFormData(prev => ({ ...prev, accountName: "" }));
+      }
+    } catch (err) {
+      console.error("Bank validation error:", err);
+      setBankError("Failed to validate account. Please check your details.");
+      setFormData(prev => ({ ...prev, accountName: "" }));
+    } finally {
+      setBankValidating(false);
+    }
+  }, [formData.bankName, debouncedAccountNumber]);
+
+  useEffect(() => {
+    if (currentStep === 4) {
+      validateBankAccount();
+    }
+  }, [currentStep, validateBankAccount]);
 
   const validateFullName = (name: string) => {
     if (!name || name.trim().length < 3) {
@@ -347,9 +401,11 @@ export default function Onboarding() {
                 <Label>Select Bank</Label>
                 <Select
                   value={formData.bankName}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, bankName: value })
-                  }
+                  onValueChange={(value) => {
+                    setFormData({ ...formData, bankName: value, accountName: "" });
+                    setBankValidated(false);
+                    setBankError(null);
+                  }}
                 >
                   <SelectTrigger className="h-12">
                     <SelectValue placeholder="Choose your bank" />
@@ -366,20 +422,37 @@ export default function Onboarding() {
 
               <div className="space-y-2">
                 <Label htmlFor="accountNumber">Account Number</Label>
-                <Input
-                  id="accountNumber"
-                  type="text"
-                  placeholder="Enter 10-digit account number"
-                  maxLength={10}
-                  className="h-12"
-                  value={formData.accountNumber}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      accountNumber: e.target.value.replace(/\D/g, ""),
-                    })
-                  }
-                />
+                <div className="relative">
+                  <Input
+                    id="accountNumber"
+                    type="text"
+                    placeholder="Enter 10-digit account number"
+                    maxLength={10}
+                    className={`h-12 pr-10 ${bankValidated ? 'border-success' : bankError ? 'border-destructive' : ''}`}
+                    value={formData.accountNumber}
+                    onChange={(e) => {
+                      setFormData({
+                        ...formData,
+                        accountNumber: e.target.value.replace(/\D/g, ""),
+                        accountName: "",
+                      });
+                      setBankValidated(false);
+                      setBankError(null);
+                    }}
+                  />
+                  {bankValidating && (
+                    <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 animate-spin text-primary" />
+                  )}
+                  {bankValidated && !bankValidating && (
+                    <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-success" />
+                  )}
+                </div>
+                {bankError && (
+                  <p className="text-xs text-destructive flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3" />
+                    {bankError}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -387,13 +460,18 @@ export default function Onboarding() {
                 <Input
                   id="accountName"
                   type="text"
-                  placeholder="Account holder name"
-                  className="h-12"
+                  placeholder={bankValidating ? "Verifying..." : bankValidated ? formData.accountName : "Auto-filled after verification"}
+                  className={`h-12 ${bankValidated ? 'bg-muted' : ''}`}
                   value={formData.accountName}
-                  onChange={(e) =>
-                    setFormData({ ...formData, accountName: e.target.value })
-                  }
+                  readOnly
+                  disabled
                 />
+                {bankValidated && formData.accountName && (
+                  <p className="text-xs text-success flex items-center gap-1">
+                    <CheckCircle2 className="h-3 w-3" />
+                    Account verified successfully
+                  </p>
+                )}
               </div>
             </div>
           </motion.div>
@@ -468,7 +546,13 @@ export default function Onboarding() {
             variant="hero"
             onClick={handleNext}
             className="flex-1"
-            disabled={isLoading || (currentStep === 1 && !formData.fullName) || (currentStep === 2 && !formData.username)}
+            disabled={
+              isLoading || 
+              bankValidating ||
+              (currentStep === 1 && !formData.fullName) || 
+              (currentStep === 2 && !formData.username) ||
+              (currentStep === 4 && formData.bankName && formData.accountNumber.length === 10 && !bankValidated)
+            }
           >
             {isLoading ? (
               <div className="h-5 w-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
