@@ -1,20 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-// Allowed origins for CORS - restrict to application domains
-const ALLOWED_ORIGINS = [
-  'https://thrift-harmony-hub.lovable.app',
-  'https://id-preview--52f5b582-a468-4659-81c8-2245803e62d4.lovable.app',
-];
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
+};
 
-function getCorsHeaders(origin: string | null): Record<string, string> {
-  const allowedOrigin = ALLOWED_ORIGINS.includes(origin || '') ? origin! : ALLOWED_ORIGINS[0];
-  return {
-    'Access-Control-Allow-Origin': allowedOrigin,
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
-    'Access-Control-Allow-Credentials': 'true',
-  };
-}
 
 // AES-256-GCM encryption using Web Crypto API
 async function getEncryptionKey(): Promise<CryptoKey> {
@@ -93,9 +84,6 @@ function maskSensitive(value: string, showLast = 4): string {
 }
 
 serve(async (req) => {
-  const origin = req.headers.get('origin');
-  const corsHeaders = getCorsHeaders(origin);
-  
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -267,7 +255,7 @@ serve(async (req) => {
       error: userMessage 
     }), {
       status: 400,
-      headers: { ...getCorsHeaders(null), 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 });
