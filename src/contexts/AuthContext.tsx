@@ -129,7 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Listener for ongoing auth changes (does not toggle loading)
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, nextSession) => {
+    } = supabase.auth.onAuthStateChange((event, nextSession) => {
       if (!isMounted) return;
 
       // Handle token refresh failures silently
@@ -142,11 +142,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      // Only synchronous state updates here (avoid deadlocks)
       setSession(nextSession);
       setUser(nextSession?.user ?? null);
 
       if (nextSession?.user) {
-        await fetchAll(nextSession.user.id);
+        // Defer any Supabase calls outside the auth callback
+        setTimeout(() => {
+          fetchAll(nextSession.user.id).catch((err) => {
+            console.error("Post-auth fetch error:", err);
+          });
+        }, 0);
       } else {
         setProfile(null);
         setWallet(null);
