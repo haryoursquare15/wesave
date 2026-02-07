@@ -49,7 +49,7 @@ export const supportTicketSchema = z.object({
     .max(50, "Invalid category"),
   description: z
     .string()
-    .min(20, "Description must be at least 20 characters")
+    .min(10, "Description must be at least 10 characters")
     .max(2000, "Description must be at most 2000 characters")
     .transform((val) => val.trim()),
 });

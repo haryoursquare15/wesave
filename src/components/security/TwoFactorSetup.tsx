@@ -42,7 +42,13 @@ export function TwoFactorSetup({ open, onOpenChange, onComplete }: TwoFactorSetu
       setBackupCodes(result.backup_codes || []);
       setStep("setup");
     } else {
-      toast.error(result.error || "Failed to start 2FA setup");
+      const errorMsg = result.error || "Failed to start 2FA setup";
+      // Show user-friendly error for common issues
+      if (errorMsg.includes("key") || errorMsg.includes("Encryption") || errorMsg.includes("configuration")) {
+        toast.error("Security configuration error. Please contact support.");
+      } else {
+        toast.error(errorMsg);
+      }
     }
   };
 

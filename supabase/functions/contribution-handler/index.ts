@@ -49,20 +49,37 @@ serve(async (req) => {
         const { groupId, amount } = params;
         if (!groupId || !amount) throw new Error('Group ID and amount are required');
 
-        const { data: contribResult, error: rpcError } = await supabase.rpc('process_contribution_atomic', { _user_id: user.id, _group_id: groupId, _amount: amount });
+        // Use ledger-based atomic contribution processor to ensure wallet debit + ledger entry
+        const { data: contribResult, error: rpcError } = await supabase.rpc('process_contribution_ledger_atomic', {
+          _user_id: user.id,
+          _group_id: groupId,
+          _amount: amount,
+        });
 
-        if (rpcError) throw new Error('Failed to process contribution');
-        if (!contribResult.success) {
-          const errorMsg = contribResult.error || 'Contribution failed';
+        if (rpcError) {
+          console.error('Contribution RPC error:', rpcError);
+          throw new Error('Failed to process contribution');
+        }
+
+        if (!contribResult || !contribResult.success) {
+          const errorMsg = contribResult?.error || 'Contribution failed';
           if (errorMsg === 'No active cycle') throw new Error('No active contribution cycle.');
           if (errorMsg === 'Already contributed') throw new Error('You have already contributed to this cycle.');
           if (errorMsg === 'Insufficient funds') throw new Error('Insufficient wallet balance.');
           throw new Error(errorMsg);
         }
 
-        await supabase.from('chat_messages').insert({ group_id: groupId, user_id: user.id, message: `has contributed ₦${amount.toLocaleString()} to the pool`, message_type: 'contribution_status' });
+        await supabase.from('chat_messages').insert({
+          group_id: groupId,
+          user_id: user.id,
+          message: `has contributed ₦${Number(amount).toLocaleString()} to the pool`,
+          message_type: 'contribution_status',
+        });
 
-        result = { ...contribResult, message: contribResult.all_contributed ? 'All members have contributed!' : 'Contribution recorded successfully' };
+        result = {
+          ...contribResult,
+          message: contribResult.all_contributed ? 'All members have contributed!' : 'Contribution recorded successfully',
+        };
         break;
       }
 
