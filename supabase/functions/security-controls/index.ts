@@ -56,9 +56,10 @@ async function generateTOTP(secret: Uint8Array, timeStep = 30): Promise<string> 
   return generateHOTP(secret, counter);
 }
 
-async function verifyTOTP(secret: Uint8Array, token: string, window = 1): Promise<boolean> {
+async function verifyTOTP(secret: Uint8Array, token: string, window = 2): Promise<boolean> {
   const counter = Math.floor(Date.now() / 1000 / 30);
   
+  // Widen search window to ±60 seconds to accommodate clock drift
   for (let i = -window; i <= window; i++) {
     const expectedToken = await generateHOTP(secret, counter + i);
     if (expectedToken === token) {
