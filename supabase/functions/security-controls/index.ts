@@ -7,7 +7,17 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
+function normalizeBase32ForDecode(input: string) {
+  const cleaned = String(input)
+    .trim()
+    .replace(/\s+/g, "")
+    .replace(/=+$/g, "")
+    .toUpperCase();
 
+  // base32 strings are typically padded to a multiple of 8
+  const padLen = (8 - (cleaned.length % 8)) % 8;
+  return cleaned + "=".repeat(padLen);
+}
 // TOTP Implementation using HMAC-SHA1
 async function generateHOTP(secret: Uint8Array, counter: number): Promise<string> {
   const counterBytes = new Uint8Array(8);
@@ -179,16 +189,19 @@ serve(async (req) => {
         
         // Generate new TOTP secret
         const secretBytes = generateSecret();
-        const secretBase32 = base32Encode(secretBytes);
-        
+
+        // Base32 secrets for authenticator apps should be uppercase and typically without padding.
+        // We'll store without padding, and add padding back only when decoding.
+        const secretBase32 = base32Encode(secretBytes).replace(/=+$/g, "").toUpperCase();
+
         // Generate backup codes
         const backupCodes = generateBackupCodes();
         const hashedCodes = await Promise.all(backupCodes.map(hashCode));
-        
+
         // Encrypt secret and backup codes
         const encryptedSecret = await encrypt(secretBase32);
         const encryptedBackupCodes = await encrypt(JSON.stringify(hashedCodes));
-        
+
         // Upsert TOTP record (not enabled yet - requires verification)
         await supabase
           .from('user_totp_secrets')
@@ -199,12 +212,12 @@ serve(async (req) => {
             is_enabled: false,
             updated_at: new Date().toISOString(),
           }, { onConflict: 'user_id' });
-        
+
         // Generate QR code URL (otpauth URI)
         const issuer = 'ThriftPal';
         const accountName = encodeURIComponent(user.email || user.id);
         const otpauthUrl = `otpauth://totp/${issuer}:${accountName}?secret=${secretBase32}&issuer=${issuer}&algorithm=SHA1&digits=6&period=30`;
-        
+
         result = {
           success: true,
           secret: secretBase32, // User needs this to add to authenticator app
@@ -240,9 +253,9 @@ serve(async (req) => {
         
         // Decrypt and verify
         const secretBase32 = await decrypt(totpRecord.secret_encrypted);
-        const secretBytes = base32Decode(secretBase32);
-        
-        const isValid = await verifyTOTP(secretBytes, token);
+        const secretBytes = base32Decode(normalizeBase32ForDecode(secretBase32));
+
+        const isValid = await verifyTOTP(secretBytes, String(token).trim());
         
         if (!isValid) {
           throw new Error('Invalid verification code. Please try again.');
@@ -296,9 +309,10 @@ serve(async (req) => {
         
         // Try TOTP first
         const secretBase32 = await decrypt(totpRecord.secret_encrypted);
-        const secretBytes = base32Decode(secretBase32);
-        
-        let isValid = await verifyTOTP(secretBytes, token);
+        const secretBytes = base32Decode(normalizeBase32ForDecode(secretBase32));
+
+        const normalizedToken = String(token).trim().replace(/\s+/g, "");
+        let isValid = await verifyTOTP(secretBytes, normalizedToken);
         
         // If TOTP fails, try backup codes
         if (!isValid && token.length === 8) {
@@ -355,9 +369,9 @@ serve(async (req) => {
         }
         
         const secretBase32 = await decrypt(totpRecord.secret_encrypted);
-        const secretBytes = base32Decode(secretBase32);
-        const isValid = await verifyTOTP(secretBytes, token);
-        
+        const secretBytes = base32Decode(normalizeBase32ForDecode(secretBase32));
+        const isValid = await verifyTOTP(secretBytes, String(token).trim().replace(/\s+/g, ""));
+
         if (!isValid) {
           throw new Error('Invalid verification code');
         }

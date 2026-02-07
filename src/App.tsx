@@ -69,43 +69,57 @@ function OnboardingRedirect({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <AuthProvider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <ProtectedRouteEnforcement>
-          <OnboardingRedirect>
-            <Routes>
-              <Route path="/" element={<Landing />} />
-              <Route path="/auth" element={<Auth />} />
-              <Route path="/forgot-password" element={<ForgotPassword />} />
-              <Route path="/onboarding" element={<Onboarding />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/groups" element={<Groups />} />
-              <Route path="/create-group" element={<CreateGroup />} />
-              <Route path="/groups/:groupId" element={<GroupDetail />} />
-              <Route path="/profile" element={<Profile />} />
-              <Route path="/wallet" element={<Wallet />} />
-              <Route path="/invite/:token" element={<Invite />} />
-              <Route path="/admin" element={<Admin />} />
-              <Route path="/settings" element={<Settings />} />
-              <Route path="/settings/security" element={<SecuritySettings />} />
-              <Route path="/settings/profile" element={<Profile />} />
-              <Route path="/settings/payments" element={<Wallet />} />
-              <Route path="/settings/notifications" element={<Settings />} />
-              <Route path="/support/new" element={<Support />} />
-              <Route path="/help" element={<Support />} />
-              <Route path="/crowdfunding" element={<Crowdfunding />} />
-              <Route path="/associations" element={<Associations />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </OnboardingRedirect>
-        </ProtectedRouteEnforcement>
-      </TooltipProvider>
-    </AuthProvider>
-  </QueryClientProvider>
-);
+const App = () => {
+  useEffect(() => {
+    const handleRejection = (event: PromiseRejectionEvent) => {
+      // Prevent blank-screen issues from unhandled async errors in event handlers
+      // (these bypass React error boundaries)
+      console.error("Unhandled promise rejection:", event.reason);
+      event.preventDefault();
+    };
+
+    window.addEventListener("unhandledrejection", handleRejection);
+    return () => window.removeEventListener("unhandledrejection", handleRejection);
+  }, []);
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <ProtectedRouteEnforcement>
+            <OnboardingRedirect>
+              <Routes>
+                <Route path="/" element={<Landing />} />
+                <Route path="/auth" element={<Auth />} />
+                <Route path="/forgot-password" element={<ForgotPassword />} />
+                <Route path="/onboarding" element={<Onboarding />} />
+                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/groups" element={<Groups />} />
+                <Route path="/create-group" element={<CreateGroup />} />
+                <Route path="/groups/:groupId" element={<GroupDetail />} />
+                <Route path="/profile" element={<Profile />} />
+                <Route path="/wallet" element={<Wallet />} />
+                <Route path="/invite/:token" element={<Invite />} />
+                <Route path="/admin" element={<Admin />} />
+                <Route path="/settings" element={<Settings />} />
+                <Route path="/settings/security" element={<SecuritySettings />} />
+                <Route path="/settings/profile" element={<Profile />} />
+                <Route path="/settings/payments" element={<Wallet />} />
+                <Route path="/settings/notifications" element={<Settings />} />
+                <Route path="/support/new" element={<Support />} />
+                <Route path="/help" element={<Support />} />
+                <Route path="/crowdfunding" element={<Crowdfunding />} />
+                <Route path="/associations" element={<Associations />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </OnboardingRedirect>
+          </ProtectedRouteEnforcement>
+        </TooltipProvider>
+      </AuthProvider>
+    </QueryClientProvider>
+  );
+};
 
 export default App;
