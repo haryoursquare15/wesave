@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Mail, Lock, User, Eye, EyeOff, ArrowRight, Users, CheckCircle } from "lucide-react";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
@@ -10,6 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { lovable } from "@/integrations/lovable";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { TwoFactorEnforcement } from "@/components/security/TwoFactorEnforcement";
 
 export default function Auth() {
   const [searchParams] = useSearchParams();
@@ -21,6 +22,8 @@ export default function Auth() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [passwordResetSuccess, setPasswordResetSuccess] = useState(false);
+  const [show2FAEnforcement, setShow2FAEnforcement] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -122,7 +125,9 @@ export default function Auth() {
           }
         } else {
           toast.success("Welcome back!");
-          navigate("/dashboard");
+          // Show 2FA enforcement check before navigating
+          setPendingNavigation("/dashboard");
+          setShow2FAEnforcement(true);
         }
       }
     } catch (err) {
@@ -171,12 +176,26 @@ export default function Auth() {
     }
   };
 
+  // Handler for 2FA enforcement completion
+  const handle2FAComplete = useCallback(() => {
+    setShow2FAEnforcement(false);
+    if (pendingNavigation) {
+      navigate(pendingNavigation);
+      setPendingNavigation(null);
+    }
+  }, [pendingNavigation, navigate]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="h-8 w-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
       </div>
     );
+  }
+
+  // Show 2FA enforcement if needed
+  if (show2FAEnforcement) {
+    return <TwoFactorEnforcement onComplete={handle2FAComplete} />;
   }
 
   return (

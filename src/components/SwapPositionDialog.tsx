@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { ArrowLeftRight, Check, X, AlertCircle } from "lucide-react";
 import {
   Dialog,
@@ -10,7 +10,6 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { usePositionSwap } from "@/hooks/usePositionSwap";
 
@@ -133,6 +132,65 @@ export function SwapPositionDialog({
   );
 }
 
+interface SwapResponseButtonProps {
+  requestId: string;
+  accept: boolean;
+  onRespond: (requestId: string, accept: boolean) => Promise<{ success: boolean; error?: string }>;
+}
+
+function SwapResponseButton({ requestId, accept, onRespond }: SwapResponseButtonProps) {
+  const [loading, setLoading] = useState(false);
+
+  const handleClick = useCallback(async () => {
+    setLoading(true);
+    try {
+      await onRespond(requestId, accept);
+    } finally {
+      setLoading(false);
+    }
+  }, [requestId, accept, onRespond]);
+
+  if (accept) {
+    return (
+      <Button
+        size="sm"
+        variant="hero"
+        onClick={handleClick}
+        disabled={loading}
+        className="flex-1"
+      >
+        {loading ? (
+          <div className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+        ) : (
+          <>
+            <Check className="h-4 w-4 mr-1" />
+            Accept
+          </>
+        )}
+      </Button>
+    );
+  }
+
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      onClick={handleClick}
+      disabled={loading}
+      className="flex-1"
+    >
+      {loading ? (
+        <div className="h-4 w-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+      ) : (
+        <>
+          <X className="h-4 w-4 mr-1" />
+          Decline
+        </>
+      )}
+    </Button>
+  );
+}
+
 interface SwapRequestNotificationProps {
   groupId: string;
 }
@@ -152,7 +210,7 @@ export function SwapRequestNotification({ groupId }: SwapRequestNotificationProp
       {pendingRequests.map((request) => (
         <div
           key={request.id}
-          className="p-4 rounded-xl bg-gold/10 border border-gold/30"
+          className="p-4 rounded-xl bg-primary/10 border border-primary/30"
         >
           <div className="flex items-start gap-3">
             <Avatar className="h-10 w-10">
@@ -169,24 +227,16 @@ export function SwapRequestNotification({ groupId }: SwapRequestNotificationProp
                 Their position #{request.requester_position} ↔ Your position #{request.target_position}
               </p>
               <div className="flex gap-2 mt-3">
-                <Button
-                  size="sm"
-                  variant="hero"
-                  onClick={() => respondToSwap(request.id, true)}
-                  className="flex-1"
-                >
-                  <Check className="h-4 w-4 mr-1" />
-                  Accept
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => respondToSwap(request.id, false)}
-                  className="flex-1"
-                >
-                  <X className="h-4 w-4 mr-1" />
-                  Decline
-                </Button>
+                <SwapResponseButton
+                  requestId={request.id}
+                  accept={true}
+                  onRespond={respondToSwap}
+                />
+                <SwapResponseButton
+                  requestId={request.id}
+                  accept={false}
+                  onRespond={respondToSwap}
+                />
               </div>
             </div>
           </div>
