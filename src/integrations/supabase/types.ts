@@ -2053,6 +2053,10 @@ export type Database = {
         Args: { _amount: number; _group_id: string; _user_id: string }
         Returns: Json
       }
+      process_contribution_ledger_atomic: {
+        Args: { _amount: number; _group_id: string; _user_id: string }
+        Returns: Json
+      }
       process_payout_atomic: {
         Args: { _admin_id: string; _group_id: string }
         Returns: Json
