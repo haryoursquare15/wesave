@@ -88,7 +88,18 @@ async function getEncryptionKey(): Promise<CryptoKey> {
     throw new Error('Encryption key not configured');
   }
   
-  const keyBytes = new Uint8Array(keyHex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+  // Validate key length: AES-256 requires 32 bytes = 64 hex characters
+  const cleanHex = keyHex.trim();
+  if (!/^[0-9a-fA-F]+$/.test(cleanHex)) {
+    console.error('ENCRYPTION_KEY contains invalid (non-hex) characters');
+    throw new Error('Encryption key format invalid');
+  }
+  if (cleanHex.length !== 64) {
+    console.error(`ENCRYPTION_KEY has incorrect length: ${cleanHex.length} hex chars (need 64 for AES-256)`);
+    throw new Error('Encryption key length invalid');
+  }
+  
+  const keyBytes = new Uint8Array(cleanHex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
   
   return await crypto.subtle.importKey(
     'raw',

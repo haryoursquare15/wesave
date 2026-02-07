@@ -230,8 +230,8 @@ serve(async (req) => {
       let failCount = 0;
 
       for (const member of members || []) {
-        // Process contribution atomically - this now auto-triggers payout when all contribute
-        const { data: result, error: rpcError } = await supabase.rpc('process_contribution_atomic', {
+        // Process contribution via ledger-based atomic function to ensure debit + ledger entry
+        const { data: result, error: rpcError } = await supabase.rpc('process_contribution_ledger_atomic', {
           _user_id: member.user_id,
           _group_id: group.id,
           _amount: group.contribution_amount,
