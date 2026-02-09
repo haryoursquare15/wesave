@@ -1,14 +1,23 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // Allowed origins for CORS
 const ALLOWED_ORIGINS = [
   'https://thrift-harmony-hub.lovable.app',
   'https://id-preview--52f5b582-a468-4659-81c8-2245803e62d4.lovable.app',
+  'https://wesave.lovable.app',
 ];
 
+function isAllowedOrigin(origin: string | null): boolean {
+  if (!origin) return false;
+  if (ALLOWED_ORIGINS.includes(origin)) return true;
+  if (origin.endsWith('.lovableproject.com')) return true;
+  if (origin.endsWith('.lovable.app')) return true;
+  return false;
+}
+
 function getCorsHeaders(origin: string | null): Record<string, string> {
-  const allowedOrigin = ALLOWED_ORIGINS.includes(origin || '') ? origin! : ALLOWED_ORIGINS[0];
+  const allowedOrigin = isAllowedOrigin(origin) ? origin! : ALLOWED_ORIGINS[0];
   return {
     'Access-Control-Allow-Origin': allowedOrigin,
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
@@ -29,7 +38,7 @@ serve(async (req) => {
   try {
     const FLUTTERWAVE_SECRET_KEY = Deno.env.get('FLUTTERWAVE_SECRET_KEY');
     const PLATFORM_BANK_ACCOUNT = Deno.env.get('PLATFORM_BANK_ACCOUNT');
-    const PLATFORM_BANK_CODE = Deno.env.get('PLATFORM_BANK_CODE') || '044'; // Access Bank default
+    const PLATFORM_BANK_CODE = Deno.env.get('PLATFORM_BANK_CODE') || '044';
     
     if (!FLUTTERWAVE_SECRET_KEY) {
       throw new Error('FLUTTERWAVE_SECRET_KEY is not configured');
@@ -39,6 +48,23 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // Helper function to check admin access
+    const checkAdminAccess = async () => {
+      const authHeader = req.headers.get('Authorization');
+      if (!authHeader) {
+        throw new Error('Authentication required');
+      }
+      const { data: { user } } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
+      if (!user) {
+        throw new Error('Invalid authentication');
+      }
+      const { data: isAdmin } = await supabase.rpc('is_any_admin', { _user_id: user.id });
+      if (!isAdmin) {
+        throw new Error('Admin access required');
+      }
+      return user;
+    };
+
     const body = await req.json();
     const { action, ...params } = body;
     console.log(`Platform settlement action: ${action}`);
@@ -47,17 +73,7 @@ serve(async (req) => {
 
     switch (action) {
       case 'get_platform_balance': {
-        // Check if admin
-        const authHeader = req.headers.get('Authorization');
-        if (authHeader) {
-          const { data: { user } } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
-          if (user) {
-            const { data: isAdmin } = await supabase.rpc('is_admin');
-            if (!isAdmin) {
-              throw new Error('Admin access required');
-            }
-          }
-        }
+        await checkAdminAccess();
 
         const { data: wallet, error } = await supabase
           .from('platform_wallet')
@@ -78,16 +94,7 @@ serve(async (req) => {
       }
 
       case 'get_platform_ledger': {
-        const authHeader = req.headers.get('Authorization');
-        if (authHeader) {
-          const { data: { user } } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
-          if (user) {
-            const { data: isAdmin } = await supabase.rpc('is_admin');
-            if (!isAdmin) {
-              throw new Error('Admin access required');
-            }
-          }
-        }
+        await checkAdminAccess();
 
         const { limit = 50, offset = 0 } = params;
 
@@ -104,8 +111,11 @@ serve(async (req) => {
       }
 
       case 'auto_settle': {
-        // This is called by a scheduled job (Cron) or manually by admin
-        // It transfers accumulated platform fees to the platform bank account
+        // Can be called by admin or scheduled job
+        const authHeader = req.headers.get('Authorization');
+        if (authHeader) {
+          await checkAdminAccess();
+        }
 
         if (!PLATFORM_BANK_ACCOUNT) {
           console.log('Platform bank account not configured, skipping settlement');
@@ -113,7 +123,6 @@ serve(async (req) => {
           break;
         }
 
-        // Get current platform balance
         const { data: wallet, error: walletError } = await supabase
           .from('platform_wallet')
           .select('*')
@@ -126,7 +135,6 @@ serve(async (req) => {
 
         const settleAmount = wallet.available_balance;
 
-        // Only settle if balance is significant (e.g., > ₦1000)
         if (settleAmount < 1000) {
           console.log(`Settlement skipped: balance too low (₦${settleAmount})`);
           result = {
@@ -140,14 +148,13 @@ serve(async (req) => {
 
         const transferRef = `settle-${Date.now()}`;
 
-        // Create settlement record
         const { data: settlement, error: insertError } = await supabase
           .from('platform_settlements')
           .insert({
             amount: settleAmount,
             status: 'processing',
-            bank_account: PLATFORM_BANK_ACCOUNT.slice(-4), // Last 4 digits only
-            bank_name: 'Access Bank', // TODO: Make configurable
+            bank_account: PLATFORM_BANK_ACCOUNT.slice(-4),
+            bank_name: 'Access Bank',
             flw_transfer_ref: transferRef,
           })
           .select()
@@ -155,7 +162,6 @@ serve(async (req) => {
 
         if (insertError) throw insertError;
 
-        // Execute Flutterwave transfer
         try {
           const transferResponse = await fetch(`${FLUTTERWAVE_BASE_URL}/transfers`, {
             method: 'POST',
@@ -168,7 +174,7 @@ serve(async (req) => {
               account_number: PLATFORM_BANK_ACCOUNT,
               amount: settleAmount,
               currency: 'NGN',
-              narration: `ThriftPal platform settlement - ${transferRef}`,
+              narration: `WeSave platform settlement - ${transferRef}`,
               reference: transferRef,
               debit_currency: 'NGN',
             }),
@@ -178,10 +184,8 @@ serve(async (req) => {
           console.log('Settlement transfer response:', JSON.stringify(transferData));
 
           if (transferData.status === 'success') {
-            // Update platform wallet
-            const newBalance = 0; // Clear available balance after settlement
+            const newBalance = 0;
             
-            // Record in platform ledger
             await supabase
               .from('platform_ledger')
               .insert({
@@ -193,7 +197,6 @@ serve(async (req) => {
                 description: `Auto-settlement to platform bank account`,
               });
 
-            // Update platform wallet
             await supabase
               .from('platform_wallet')
               .update({
@@ -203,7 +206,6 @@ serve(async (req) => {
               })
               .eq('wallet_type', 'revenue');
 
-            // Update settlement record
             await supabase
               .from('platform_settlements')
               .update({
@@ -220,7 +222,6 @@ serve(async (req) => {
               message: `Successfully settled ₦${settleAmount.toLocaleString()} to platform account`,
             };
           } else {
-            // Mark settlement as failed
             await supabase
               .from('platform_settlements')
               .update({
@@ -248,16 +249,7 @@ serve(async (req) => {
       }
 
       case 'get_settlement_history': {
-        const authHeader = req.headers.get('Authorization');
-        if (authHeader) {
-          const { data: { user } } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
-          if (user) {
-            const { data: isAdmin } = await supabase.rpc('is_admin');
-            if (!isAdmin) {
-              throw new Error('Admin access required');
-            }
-          }
-        }
+        await checkAdminAccess();
 
         const { limit = 50 } = params;
 
@@ -274,20 +266,10 @@ serve(async (req) => {
       }
 
       case 'get_fee_report': {
-        const authHeader = req.headers.get('Authorization');
-        if (authHeader) {
-          const { data: { user } } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
-          if (user) {
-            const { data: isAdmin } = await supabase.rpc('is_admin');
-            if (!isAdmin) {
-              throw new Error('Admin access required');
-            }
-          }
-        }
+        await checkAdminAccess();
 
         const { start_date, end_date } = params;
 
-        // Get fee entries within date range
         let query = supabase
           .from('platform_ledger')
           .select('*')
@@ -304,11 +286,9 @@ serve(async (req) => {
 
         if (error) throw error;
 
-        // Calculate totals
         const totalFees = entries?.reduce((sum, e) => sum + Number(e.amount), 0) || 0;
         const feeCount = entries?.length || 0;
 
-        // Get payout volume from payouts table for same period
         let payoutQuery = supabase
           .from('payouts')
           .select('gross_amount')
@@ -324,7 +304,6 @@ serve(async (req) => {
         const { data: payouts } = await payoutQuery;
         const totalPayoutVolume = payouts?.reduce((sum, p) => sum + Number(p.gross_amount), 0) || 0;
 
-        // Get settlements for same period
         let settlementQuery = supabase
           .from('platform_settlements')
           .select('amount')
@@ -350,7 +329,7 @@ serve(async (req) => {
             unsettled_balance: totalFees - totalSettled,
             effective_rate: totalPayoutVolume > 0 ? ((totalFees / totalPayoutVolume) * 100).toFixed(2) + '%' : '0%',
           },
-          entries: entries?.slice(0, 100) || [], // Last 100 entries
+          entries: entries?.slice(0, 100) || [],
         };
         break;
       }
