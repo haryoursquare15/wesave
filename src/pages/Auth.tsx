@@ -203,10 +203,8 @@ export default function Auth() {
       {/* Left Panel - Branding */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-primary via-primary to-primary/80 p-12 flex-col justify-between">
         <div className="flex items-center gap-2">
-          <div className="h-10 w-10 rounded-xl bg-white/20 flex items-center justify-center">
-            <Users className="h-5 w-5 text-primary-foreground" />
-          </div>
-          <span className="text-xl font-bold text-primary-foreground">ThriftPal</span>
+          <img src="/wesave-logo.jpg" alt="WeSave" className="h-10 bg-white/90 rounded-lg p-1" />
+          <span className="text-xl font-bold text-primary-foreground">WeSave</span>
         </div>
 
         <motion.div
@@ -238,10 +236,8 @@ export default function Auth() {
         >
           {/* Mobile Logo */}
           <div className="flex lg:hidden items-center gap-2 mb-8">
-            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center">
-              <Users className="h-5 w-5 text-primary-foreground" />
-            </div>
-            <span className="text-xl font-bold text-foreground">ThriftPal</span>
+            <img src="/wesave-logo.jpg" alt="WeSave" className="h-10 rounded-lg" />
+            <span className="text-xl font-bold text-foreground">WeSave</span>
           </div>
 
           {/* Password Reset Mode */}

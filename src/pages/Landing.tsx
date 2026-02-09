@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { ArrowRight, Shield, Users, Wallet, TrendingUp, Star, Check } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { WeSaveLogo } from "@/components/WeSaveLogo";
 
 const features = [
   {
@@ -47,12 +48,8 @@ export default function Landing() {
             <motion.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
-              className="flex items-center gap-2"
             >
-              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center">
-                <Users className="h-5 w-5 text-primary-foreground" />
-              </div>
-              <span className="text-xl font-bold text-foreground">ThriftPal</span>
+              <WeSaveLogo className="h-12" />
             </motion.div>
             <motion.div
               initial={{ opacity: 0, x: 20 }}
@@ -217,7 +214,7 @@ export default function Landing() {
       {/* Footer */}
       <footer className="border-t border-border py-8">
         <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
-          <p>© 2024 ThriftPal. All rights reserved. 2% service fee applies on payouts.</p>
+          <p>© 2025 WeSave. All rights reserved. 2% service fee applies on payouts.</p>
         </div>
       </footer>
     </div>

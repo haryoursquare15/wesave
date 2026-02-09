@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Coins, Info, Check, UserPlus, Calendar, Clock } from "lucide-react";
+import { ArrowLeft, Coins, Info, Check, UserPlus, Calendar, Clock, AlertCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { BottomNav } from "@/components/BottomNav";
 import { useCreateGroup } from "@/hooks/useThriftGroups";
+import { useUserGroupCount } from "@/hooks/useUserGroupCount";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { AddMembersDialog } from "@/components/AddMembersDialog";
@@ -48,6 +49,7 @@ export default function CreateGroup() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { createGroup, loading: isLoading } = useCreateGroup();
+  const { canCreateGroup, groupCount, loading: groupCountLoading } = useUserGroupCount();
   const [createdGroup, setCreatedGroup] = useState<{ id: string; name: string } | null>(null);
   const [formData, setFormData] = useState({
     name: "",
@@ -61,6 +63,12 @@ export default function CreateGroup() {
   });
 
   const handleCreate = async () => {
+    // Check group limit first
+    if (!canCreateGroup) {
+      toast.error("You can only be a member of up to 2 active groups at a time");
+      return;
+    }
+
     // Use session as the source of truth (AuthContext can be briefly stale).
     const {
       data: { session },
@@ -126,6 +134,25 @@ export default function CreateGroup() {
       </header>
 
       <main className="container mx-auto px-4 py-6 space-y-6 max-w-lg">
+        {/* Group Limit Warning */}
+        {!groupCountLoading && !canCreateGroup && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-4 rounded-xl bg-destructive/10 border border-destructive/30"
+          >
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-destructive mt-0.5" />
+              <div>
+                <p className="font-medium text-foreground">Group Limit Reached</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  You are already a member of {groupCount} groups. You can only be a member of up to 2 active groups at a time.
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
         {/* Group Name */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -139,6 +166,7 @@ export default function CreateGroup() {
             className="h-12"
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            disabled={!canCreateGroup}
           />
         </motion.div>
 
@@ -412,7 +440,7 @@ export default function CreateGroup() {
             size="xl"
             className="w-full"
             onClick={handleCreate}
-            disabled={!formData.name || isLoading}
+            disabled={!formData.name || isLoading || !canCreateGroup}
           >
             {isLoading ? (
               <div className="h-5 w-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />

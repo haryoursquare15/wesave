@@ -97,7 +97,7 @@ serve(async (req) => {
             await fetch(`${FLUTTERWAVE_BASE_URL}/transfers`, {
               method: 'POST',
               headers: { 'Authorization': `Bearer ${FLUTTERWAVE_SECRET_KEY}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify({ account_bank: PLATFORM_BANK_CODE, account_number: PLATFORM_ACCOUNT_NUMBER, amount: payoutResult.platform_fee, currency: 'NGN', narration: `ThriftPal fee - ${groupId}`, reference: transferRef, debit_currency: 'NGN' }),
+              body: JSON.stringify({ account_bank: PLATFORM_BANK_CODE, account_number: PLATFORM_ACCOUNT_NUMBER, amount: payoutResult.platform_fee, currency: 'NGN', narration: `WeSave fee - ${groupId}`, reference: transferRef, debit_currency: 'NGN' }),
             });
           }
         }
