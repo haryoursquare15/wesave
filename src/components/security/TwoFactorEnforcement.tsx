@@ -8,8 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { useSecurity } from "@/hooks/useSecurity";
-import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import { TwoFactorSetup } from "./TwoFactorSetup";
 
 interface TwoFactorEnforcementProps {
@@ -17,22 +16,50 @@ interface TwoFactorEnforcementProps {
 }
 
 export function TwoFactorEnforcement({ onComplete }: TwoFactorEnforcementProps) {
-  const { user } = useAuth();
-  const { get2FAStatus } = useSecurity();
   const [checking, setChecking] = useState(true);
   const [needs2FA, setNeeds2FA] = useState(false);
   const [showSetup, setShowSetup] = useState(false);
 
   useEffect(() => {
-    const check2FAStatus = async () => {
-      if (!user) {
-        setChecking(false);
-        return;
-      }
+    let cancelled = false;
+    let retryCount = 0;
+    const maxRetries = 5;
 
+    const check2FAStatus = async () => {
       try {
-        const status = await get2FAStatus();
-        if (!status.is_enabled) {
+        // Get session directly from Supabase client
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (!session?.access_token) {
+          // Session not available yet, retry with backoff
+          retryCount++;
+          if (retryCount < maxRetries && !cancelled) {
+            setTimeout(check2FAStatus, 500 * retryCount);
+            return;
+          }
+          // Max retries reached, proceed anyway
+          if (!cancelled) {
+            setChecking(false);
+            onComplete();
+          }
+          return;
+        }
+
+        // Session is available, invoke the function
+        const { data, error } = await supabase.functions.invoke("security-controls", {
+          body: { action: "get_2fa_status" },
+        });
+
+        if (cancelled) return;
+
+        if (error) {
+          console.error("Error checking 2FA status:", error);
+          // On error, allow through but log it
+          onComplete();
+          return;
+        }
+
+        if (!data?.is_enabled) {
           setNeeds2FA(true);
         } else {
           // 2FA is already enabled, proceed
@@ -40,15 +67,23 @@ export function TwoFactorEnforcement({ onComplete }: TwoFactorEnforcementProps) 
         }
       } catch (err) {
         console.error("Error checking 2FA status:", err);
-        // On error, allow through but log it
-        onComplete();
+        if (!cancelled) {
+          // On error, allow through but log it
+          onComplete();
+        }
       } finally {
-        setChecking(false);
+        if (!cancelled) {
+          setChecking(false);
+        }
       }
     };
 
     check2FAStatus();
-  }, [user, get2FAStatus, onComplete]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [onComplete]);
 
   const handleSetupComplete = useCallback(() => {
     setShowSetup(false);
