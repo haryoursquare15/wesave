@@ -56,12 +56,6 @@ export function TwoFactorEnforcement({ onComplete }: TwoFactorEnforcementProps) 
     onComplete();
   }, [onComplete]);
 
-  const handleSkipForNow = useCallback(() => {
-    // Allow skip but remind user
-    setNeeds2FA(false);
-    onComplete();
-  }, [onComplete]);
-
   if (checking) {
     return (
       <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-50">
@@ -94,7 +88,7 @@ export function TwoFactorEnforcement({ onComplete }: TwoFactorEnforcementProps) 
               Secure Your Account
             </DialogTitle>
             <DialogDescription className="text-center">
-              ThriftPal is a wallet-based platform. To protect your funds, we strongly recommend enabling two-factor authentication.
+              WeSave is a wallet-based platform. Two-factor authentication is required to protect your funds.
             </DialogDescription>
           </DialogHeader>
 
@@ -124,9 +118,6 @@ export function TwoFactorEnforcement({ onComplete }: TwoFactorEnforcementProps) 
             <Button variant="hero" className="w-full" onClick={() => setShowSetup(true)}>
               <Shield className="h-4 w-4 mr-2" />
               Set Up 2FA Now
-            </Button>
-            <Button variant="ghost" className="w-full text-muted-foreground" onClick={handleSkipForNow}>
-              Skip for now (not recommended)
             </Button>
           </div>
         </DialogContent>

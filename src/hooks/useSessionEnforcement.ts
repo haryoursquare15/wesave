@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 const INACTIVITY_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+const SESSION_MARKER_KEY = "wesave_session_active";
 
 interface UseSessionEnforcementOptions {
   enabled?: boolean;
@@ -34,7 +35,7 @@ export function useSessionEnforcement({ enabled = true }: UseSessionEnforcementO
     if (!enabled) return;
 
     // Check if this is a fresh browser session
-    const sessionMarker = sessionStorage.getItem("thrift_session_active");
+    const sessionMarker = sessionStorage.getItem(SESSION_MARKER_KEY);
     
     if (!sessionMarker) {
       // Fresh browser session - clear any existing auth
@@ -43,13 +44,15 @@ export function useSessionEnforcement({ enabled = true }: UseSessionEnforcementO
         if (session) {
           // User had a session from before browser was closed
           await supabase.auth.signOut();
+          toast.info("Session expired. Please sign in again.");
+          navigate("/auth");
         }
       };
       checkAndClearSession();
     }
     
     // Mark session as active
-    sessionStorage.setItem("thrift_session_active", "true");
+    sessionStorage.setItem(SESSION_MARKER_KEY, "true");
 
     // Handle visibility change (app goes to background)
     const handleVisibilityChange = () => {
@@ -77,8 +80,7 @@ export function useSessionEnforcement({ enabled = true }: UseSessionEnforcementO
     // Handle page unload (browser close)
     const handleBeforeUnload = () => {
       // Clear session marker on browser close
-      // Note: This won't work for all cases but helps with normal closure
-      sessionStorage.removeItem("thrift_session_active");
+      sessionStorage.removeItem(SESSION_MARKER_KEY);
     };
 
     document.addEventListener("visibilitychange", handleVisibilityChange);

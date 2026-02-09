@@ -120,8 +120,8 @@ export default function Settings() {
           transition={{ delay: 0.2 }}
           className="text-center text-sm text-muted-foreground pt-4"
         >
-          <p>ThriftPal v1.0.0</p>
-          <p className="mt-1">© 2024 ThriftPal. All rights reserved.</p>
+          <p>WeSave v1.0.0</p>
+          <p className="mt-1">© 2025 WeSave. All rights reserved.</p>
         </motion.div>
       </main>
 

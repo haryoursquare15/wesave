@@ -192,6 +192,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    // Clear session marker to prevent re-authentication issues
+    sessionStorage.removeItem("wesave_session_active");
     await supabase.auth.signOut();
     setUser(null);
     setSession(null);

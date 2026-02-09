@@ -1898,6 +1898,10 @@ export type Database = {
         }
         Returns: Json
       }
+      award_cycle_completion: {
+        Args: { _group_id: string; _user_id: string }
+        Returns: undefined
+      }
       check_login_allowed: {
         Args: { _email: string; _ip_address?: string }
         Returns: Json
@@ -2061,7 +2065,19 @@ export type Database = {
         Args: { _admin_id: string; _group_id: string }
         Returns: Json
       }
-      process_payout_internal: { Args: { _group_id: string }; Returns: Json }
+      process_payout_internal:
+        | { Args: { _group_id: string }; Returns: Json }
+        | {
+            Args: {
+              _cycle_id: string
+              _gross_amount: number
+              _group_id: string
+              _net_amount: number
+              _platform_fee: number
+              _recipient_id: string
+            }
+            Returns: Json
+          }
       record_login_attempt: {
         Args: {
           _device_fingerprint?: string
