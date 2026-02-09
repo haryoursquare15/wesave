@@ -1,4 +1,4 @@
-import wesaveLogo from "@/assets/wesave-logo.jpg";
+import wesaveLogo from "@/assets/wesave-logo.png";
 
 interface WeSaveLogoProps {
   className?: string;
