@@ -13,7 +13,7 @@ import { Database } from "@/integrations/supabase/types";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
-import { Search, Snowflake, AlertTriangle, Shield, ChevronDown, ChevronRight, Wallet, Users } from "lucide-react";
+import { Search, Snowflake, AlertTriangle, Shield, ChevronDown, ChevronRight, Wallet, Users, Trash2, UserX } from "lucide-react";
 import { adminActionReasonSchema, validateInput } from "@/lib/validation";
 
 type AppRole = Database["public"]["Enums"]["app_role"];
@@ -54,7 +54,7 @@ function UserActionsDialog({ user, onClose, onAction }: UserActionsDialogProps) 
       
       await supabase.from("audit_logs").insert({
         user_id: user.id,
-        action: action,
+        action: `admin_${action}`,
         resource_type: "user",
         resource_id: user.id,
         details: { reason: sanitizedReason, target_email: user.email },
@@ -79,10 +79,27 @@ function UserActionsDialog({ user, onClose, onAction }: UserActionsDialogProps) 
           toast({ title: "User Unfrozen", description: `${user.full_name || user.email}'s account has been unfrozen.` });
           break;
         case "flag_risk":
-          await supabase.from("profiles").update({
-            risk_level: "high",
-          }).eq("id", user.id);
+          await supabase.from("profiles").update({ risk_level: "high" }).eq("id", user.id);
           toast({ title: "User Flagged", description: `${user.full_name || user.email} has been flagged for risk review.` });
+          break;
+        case "clear_risk":
+          await supabase.from("profiles").update({ risk_level: "low" }).eq("id", user.id);
+          toast({ title: "Risk Cleared", description: `${user.full_name || user.email}'s risk flag has been cleared.` });
+          break;
+        case "remove_from_groups":
+          await supabase.from("group_memberships")
+            .update({ status: "removed" as any })
+            .eq("user_id", user.id)
+            .eq("status", "active");
+          toast({ title: "Removed from Groups", description: `${user.full_name || user.email} has been removed from all active groups.` });
+          break;
+        case "suspend":
+          await supabase.from("profiles").update({
+            account_status: "suspended",
+            frozen_at: new Date().toISOString(),
+            freeze_reason: sanitizedReason || "Suspended by admin",
+          }).eq("id", user.id);
+          toast({ title: "User Suspended", description: `${user.full_name || user.email}'s account has been suspended.` });
           break;
         default:
           break;
@@ -111,35 +128,32 @@ function UserActionsDialog({ user, onClose, onAction }: UserActionsDialogProps) 
         <div className="grid grid-cols-2 gap-2">
           {hasPermission("users.freeze") && (
             <>
-              <Button
-                variant={action === "freeze" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setAction("freeze")}
-                className="flex items-center gap-2"
-              >
-                <Snowflake className="h-4 w-4" />
-                Freeze Account
+              <Button variant={action === "freeze" ? "default" : "outline"} size="sm" onClick={() => setAction("freeze")} className="flex items-center gap-2">
+                <Snowflake className="h-4 w-4" /> Freeze Account
               </Button>
-              <Button
-                variant={action === "unfreeze" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setAction("unfreeze")}
-                className="flex items-center gap-2"
-              >
-                <Snowflake className="h-4 w-4" />
-                Unfreeze
+              <Button variant={action === "unfreeze" ? "default" : "outline"} size="sm" onClick={() => setAction("unfreeze")} className="flex items-center gap-2">
+                <Snowflake className="h-4 w-4" /> Unfreeze
               </Button>
             </>
           )}
+          {hasPermission("users.freeze") && (
+            <Button variant={action === "suspend" ? "destructive" : "outline"} size="sm" onClick={() => setAction("suspend")} className="flex items-center gap-2">
+              <UserX className="h-4 w-4" /> Suspend User
+            </Button>
+          )}
           {hasPermission("compliance.restrict") && (
-            <Button
-              variant={action === "flag_risk" ? "destructive" : "outline"}
-              size="sm"
-              onClick={() => setAction("flag_risk")}
-              className="flex items-center gap-2"
-            >
-              <AlertTriangle className="h-4 w-4" />
-              Flag for Risk
+            <>
+              <Button variant={action === "flag_risk" ? "destructive" : "outline"} size="sm" onClick={() => setAction("flag_risk")} className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4" /> Flag for Risk
+              </Button>
+              <Button variant={action === "clear_risk" ? "default" : "outline"} size="sm" onClick={() => setAction("clear_risk")} className="flex items-center gap-2">
+                <Shield className="h-4 w-4" /> Clear Risk Flag
+              </Button>
+            </>
+          )}
+          {hasPermission("groups.resolve_disputes") && (
+            <Button variant={action === "remove_from_groups" ? "destructive" : "outline"} size="sm" onClick={() => setAction("remove_from_groups")} className="flex items-center gap-2">
+              <Trash2 className="h-4 w-4" /> Remove from All Groups
             </Button>
           )}
         </div>
@@ -147,18 +161,18 @@ function UserActionsDialog({ user, onClose, onAction }: UserActionsDialogProps) 
         {action && (
           <div className="space-y-2">
             <label className="text-sm font-medium">Reason</label>
-            <Input
-              placeholder="Enter reason for this action..."
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-            />
+            <Input placeholder="Enter reason for this action..." value={reason} onChange={(e) => setReason(e.target.value)} />
           </div>
         )}
       </div>
 
       <DialogFooter>
         <Button variant="outline" onClick={onClose}>Cancel</Button>
-        <Button onClick={handleAction} disabled={!action || loading}>
+        <Button
+          variant={["flag_risk", "suspend", "remove_from_groups"].includes(action || "") ? "destructive" : "default"}
+          onClick={handleAction}
+          disabled={!action || loading}
+        >
           {loading ? "Processing..." : "Confirm Action"}
         </Button>
       </DialogFooter>
@@ -183,11 +197,7 @@ function UserDetailsRow({ userId }: UserDetailsRowProps) {
             .select("*, thrift_groups(name, status, contribution_amount)")
             .eq("user_id", userId)
         ]);
-        
-        setData({
-          wallet: walletRes.data,
-          groups: groupsRes.data || []
-        });
+        setData({ wallet: walletRes.data, groups: groupsRes.data || [] });
       } catch (err) {
         console.error("Error fetching user details:", err);
       } finally {
@@ -200,9 +210,7 @@ function UserDetailsRow({ userId }: UserDetailsRowProps) {
   if (loading) {
     return (
       <TableRow>
-        <TableCell colSpan={8} className="p-4 bg-muted/30">
-          <Skeleton className="h-16 w-full" />
-        </TableCell>
+        <TableCell colSpan={8} className="p-4 bg-muted/30"><Skeleton className="h-16 w-full" /></TableCell>
       </TableRow>
     );
   }
@@ -211,12 +219,8 @@ function UserDetailsRow({ userId }: UserDetailsRowProps) {
     <TableRow className="bg-muted/30 hover:bg-muted/30">
       <TableCell colSpan={8} className="p-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Wallet Info */}
           <div className="space-y-2">
-            <h4 className="text-sm font-semibold flex items-center gap-2">
-              <Wallet className="h-4 w-4" />
-              Wallet
-            </h4>
+            <h4 className="text-sm font-semibold flex items-center gap-2"><Wallet className="h-4 w-4" /> Wallet</h4>
             {data?.wallet ? (
               <div className="text-sm space-y-1">
                 <p>Available: <span className="font-medium">₦{(data.wallet.available_balance || 0).toLocaleString()}</span></p>
@@ -226,21 +230,14 @@ function UserDetailsRow({ userId }: UserDetailsRowProps) {
               <p className="text-sm text-muted-foreground">No wallet found</p>
             )}
           </div>
-
-          {/* Groups Info */}
           <div className="space-y-2">
-            <h4 className="text-sm font-semibold flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              Groups ({data?.groups.length || 0})
-            </h4>
+            <h4 className="text-sm font-semibold flex items-center gap-2"><Users className="h-4 w-4" /> Groups ({data?.groups.length || 0})</h4>
             {data?.groups && data.groups.length > 0 ? (
               <div className="text-sm space-y-1 max-h-32 overflow-y-auto">
                 {data.groups.map((membership: any) => (
                   <div key={membership.id} className="flex justify-between items-center">
                     <span>{membership.thrift_groups?.name || "Unknown"}</span>
-                    <Badge variant="outline" className="text-xs capitalize">
-                      {membership.thrift_groups?.status}
-                    </Badge>
+                    <Badge variant="outline" className="text-xs capitalize">{membership.thrift_groups?.status}</Badge>
                   </div>
                 ))}
               </div>
@@ -276,11 +273,8 @@ export function UserManagementTab() {
   const toggleExpanded = (userId: string) => {
     setExpandedUsers(prev => {
       const next = new Set(prev);
-      if (next.has(userId)) {
-        next.delete(userId);
-      } else {
-        next.add(userId);
-      }
+      if (next.has(userId)) next.delete(userId);
+      else next.add(userId);
       return next;
     });
   };
@@ -290,14 +284,9 @@ export function UserManagementTab() {
       toast({ title: "Permission Denied", variant: "destructive" });
       return;
     }
-
     try {
-      if (currentRole) {
-        await removeRole(userId, currentRole as AppRole);
-      }
-      if (newRole !== "none") {
-        await assignRole(userId, newRole as AppRole);
-      }
+      if (currentRole) await removeRole(userId, currentRole as AppRole);
+      if (newRole !== "none") await assignRole(userId, newRole as AppRole);
       toast({ title: "Role Updated", description: "User role has been updated successfully." });
       refetch();
     } catch (error) {
@@ -315,22 +304,13 @@ export function UserManagementTab() {
           </div>
           <div className="relative w-full sm:w-72">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search by name, email, username..."
-              className="pl-9"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+            <Input placeholder="Search by name, email, username..." className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
         </div>
       </CardHeader>
       <CardContent>
         {loading ? (
-          <div className="space-y-2">
-            {[1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-12 w-full" />
-            ))}
-          </div>
+          <div className="space-y-2">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
         ) : (
           <div className="overflow-x-auto">
             <Table>
@@ -349,18 +329,10 @@ export function UserManagementTab() {
               <TableBody>
                 {filteredUsers.map((user) => (
                   <>
-                    <TableRow 
-                      key={user.id} 
-                      className="cursor-pointer hover:bg-muted/50" 
-                      onClick={() => toggleExpanded(user.id)}
-                    >
+                    <TableRow key={user.id} className="cursor-pointer hover:bg-muted/50" onClick={() => toggleExpanded(user.id)}>
                       <TableCell>
                         <Button variant="ghost" size="icon" className="h-6 w-6">
-                          {expandedUsers.has(user.id) ? (
-                            <ChevronDown className="h-4 w-4" />
-                          ) : (
-                            <ChevronRight className="h-4 w-4" />
-                          )}
+                          {expandedUsers.has(user.id) ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                         </Button>
                       </TableCell>
                       <TableCell>
@@ -370,22 +342,12 @@ export function UserManagementTab() {
                         </div>
                       </TableCell>
                       <TableCell>@{user.username || "—"}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="capitalize">
-                          {user.membership_tier}
-                        </Badge>
-                      </TableCell>
+                      <TableCell><Badge variant="outline" className="capitalize">{user.membership_tier}</Badge></TableCell>
                       <TableCell>{user.credit_score || 0}</TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
                         {hasPermission("roles.manage") ? (
-                          <Select
-                            value={user.role || "none"}
-                            onValueChange={(value) => handleRoleChange(user.id, value, user.role)}
-                            disabled={roleLoading}
-                          >
-                            <SelectTrigger className="w-36">
-                              <SelectValue />
-                            </SelectTrigger>
+                          <Select value={user.role || "none"} onValueChange={(value) => handleRoleChange(user.id, value, user.role)} disabled={roleLoading}>
+                            <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="none">No Role</SelectItem>
                               <SelectItem value="user">User</SelectItem>
@@ -399,9 +361,7 @@ export function UserManagementTab() {
                             </SelectContent>
                           </Select>
                         ) : (
-                          <Badge variant="secondary" className="capitalize">
-                            {user.role || "none"}
-                          </Badge>
+                          <Badge variant="secondary" className="capitalize">{user.role || "none"}</Badge>
                         )}
                       </TableCell>
                       <TableCell className="text-muted-foreground text-sm">
@@ -410,21 +370,12 @@ export function UserManagementTab() {
                       <TableCell onClick={(e) => e.stopPropagation()}>
                         <Dialog>
                           <DialogTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setSelectedUser(user)}
-                            >
-                              <Shield className="h-4 w-4 mr-1" />
-                              Actions
+                            <Button variant="ghost" size="sm" onClick={() => setSelectedUser(user)}>
+                              <Shield className="h-4 w-4 mr-1" /> Actions
                             </Button>
                           </DialogTrigger>
                           {selectedUser?.id === user.id && (
-                            <UserActionsDialog
-                              user={user}
-                              onClose={() => setSelectedUser(null)}
-                              onAction={refetch}
-                            />
+                            <UserActionsDialog user={user} onClose={() => setSelectedUser(null)} onAction={refetch} />
                           )}
                         </Dialog>
                       </TableCell>
