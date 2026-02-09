@@ -51,7 +51,7 @@ export function useIsAdmin() {
       }
 
       try {
-        const { data, error } = await supabase.rpc("is_admin");
+        const { data, error } = await supabase.rpc("is_any_admin", { _user_id: user.id });
         if (error) throw error;
         setIsAdmin(data === true);
       } catch (err) {
