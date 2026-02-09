@@ -34,8 +34,9 @@ export function useUserGroupCount() {
     fetchGroupCount();
   }, [user]);
 
-  const canJoinGroup = groupCount < 2;
-  const canCreateGroup = groupCount < 2;
+  // Relaxed for testing - no group limit
+  const canJoinGroup = true;
+  const canCreateGroup = true;
 
   return { groupCount, loading, canJoinGroup, canCreateGroup };
 }
