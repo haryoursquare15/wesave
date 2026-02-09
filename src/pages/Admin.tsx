@@ -1,23 +1,20 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { useIsAdmin, useAdminGroups } from "@/hooks/useAdmin";
+import { useIsAdmin } from "@/hooks/useAdmin";
 import { useAdminPermissions } from "@/hooks/useAdminPermissions";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { 
-  Shield, ArrowLeft, RefreshCw, Banknote, Users, UsersRound, 
-  Activity, TicketCheck, AlertTriangle, FileText 
+  Shield, ArrowLeft, Banknote, Users, UsersRound, 
+  Activity, FileText 
 } from "lucide-react";
-import { format } from "date-fns";
 import { PlatformRevenueTab } from "@/components/admin/PlatformRevenueTab";
 import { AdminOverviewTab } from "@/components/admin/AdminOverviewTab";
 import { UserManagementTab } from "@/components/admin/UserManagementTab";
+import { GroupManagementTab } from "@/components/admin/GroupManagementTab";
 import { TransactionExplorerTab } from "@/components/admin/TransactionExplorerTab";
 import { AuditLogsTab } from "@/components/admin/AuditLogsTab";
 
@@ -26,7 +23,6 @@ export default function Admin() {
   const { user, loading: authLoading } = useAuth();
   const { isAdmin, loading: adminLoading } = useIsAdmin();
   const { hasPermission, loading: permLoading } = useAdminPermissions();
-  const { groups, loading: groupsLoading, refetch: refetchGroups } = useAdminGroups();
   const { toast } = useToast();
 
   useEffect(() => {
@@ -131,77 +127,7 @@ export default function Admin() {
           </TabsContent>
 
           <TabsContent value="groups">
-            <Card>
-              <CardHeader>
-                <CardTitle>All Groups</CardTitle>
-                <CardDescription>View and manage all thrift groups</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {groupsLoading ? (
-                  <div className="space-y-2">
-                    {[1, 2, 3].map((i) => (
-                      <Skeleton key={i} className="h-12 w-full" />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Group Name</TableHead>
-                          <TableHead>Admin</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Members</TableHead>
-                          <TableHead>Contribution</TableHead>
-                          <TableHead>Period</TableHead>
-                          <TableHead>Created</TableHead>
-                          <TableHead>Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {groups.map((group) => (
-                          <TableRow key={group.id}>
-                            <TableCell className="font-medium">{group.name}</TableCell>
-                            <TableCell>{group.admin_name || "—"}</TableCell>
-                            <TableCell>
-                              <Badge
-                                variant={
-                                  group.status === "active"
-                                    ? "default"
-                                    : group.status === "completed"
-                                    ? "secondary"
-                                    : "outline"
-                                }
-                                className="capitalize"
-                              >
-                                {group.status}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>{group.member_count}</TableCell>
-                            <TableCell>₦{group.contribution_amount.toLocaleString()}</TableCell>
-                            <TableCell className="capitalize">{group.period}</TableCell>
-                            <TableCell className="text-muted-foreground">
-                              {group.created_at
-                                ? format(new Date(group.created_at), "MMM d, yyyy")
-                                : "—"}
-                            </TableCell>
-                            <TableCell>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => navigate(`/groups/${group.id}`)}
-                              >
-                                View
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <GroupManagementTab />
           </TabsContent>
 
           <TabsContent value="transactions">
