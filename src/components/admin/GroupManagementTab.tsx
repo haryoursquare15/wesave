@@ -6,50 +6,90 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAdminGroups } from "@/hooks/useAdmin";
+import { useAdminPermissions } from "@/hooks/useAdminPermissions";
 import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { Search, ChevronDown, ChevronRight, Users, Wallet, Calendar, ExternalLink } from "lucide-react";
+import { 
+  Search, ChevronDown, ChevronRight, Users, Wallet, Calendar, 
+  ExternalLink, Pause, Play, Trash2, UserMinus 
+} from "lucide-react";
 
 interface GroupDetailsRowProps {
   groupId: string;
+  onRefresh: () => void;
 }
 
-function GroupDetailsRow({ groupId }: GroupDetailsRowProps) {
+function GroupDetailsRow({ groupId, onRefresh }: GroupDetailsRowProps) {
   const [data, setData] = useState<{ members: any[]; wallet: any; currentCycle: any } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [removingMember, setRemovingMember] = useState<string | null>(null);
+  const { hasPermission } = useAdminPermissions();
+  const { toast } = useToast();
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [membersRes, walletRes, cycleRes] = await Promise.all([
-          supabase.from("group_memberships")
-            .select("*, profiles:user_id(full_name, email)")
-            .eq("group_id", groupId),
-          supabase.from("group_wallets")
-            .select("*")
-            .eq("group_id", groupId)
-            .maybeSingle(),
-          supabase.from("contribution_cycles")
-            .select("*")
-            .eq("group_id", groupId)
-            .eq("status", "active")
-            .maybeSingle()
-        ]);
-        
-        setData({
-          members: membersRes.data || [],
-          wallet: walletRes.data,
-          currentCycle: cycleRes.data
-        });
-      } catch (err) {
-        console.error("Error fetching group details:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchData();
   }, [groupId]);
+
+  const fetchData = async () => {
+    try {
+      const [membersRes, walletRes, cycleRes] = await Promise.all([
+        supabase.from("group_memberships")
+          .select("*, profiles:user_id(full_name, email, username)")
+          .eq("group_id", groupId),
+        supabase.from("group_wallets")
+          .select("*")
+          .eq("group_id", groupId)
+          .maybeSingle(),
+        supabase.from("contribution_cycles")
+          .select("*")
+          .eq("group_id", groupId)
+          .eq("status", "active")
+          .maybeSingle()
+      ]);
+      
+      setData({
+        members: membersRes.data || [],
+        wallet: walletRes.data,
+        currentCycle: cycleRes.data
+      });
+    } catch (err) {
+      console.error("Error fetching group details:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRemoveMember = async (membershipId: string, userId: string, memberName: string) => {
+    setRemovingMember(membershipId);
+    try {
+      const { error } = await supabase
+        .from("group_memberships")
+        .update({ status: "removed" as any })
+        .eq("id", membershipId);
+
+      if (error) throw error;
+
+      await supabase.from("audit_logs").insert({
+        user_id: userId,
+        action: "admin_remove_member",
+        resource_type: "group",
+        resource_id: groupId,
+        details: { member_name: memberName },
+      });
+
+      toast({ title: "Member Removed", description: `${memberName} has been removed from the group.` });
+      fetchData();
+      onRefresh();
+    } catch (err) {
+      console.error("Error removing member:", err);
+      toast({ title: "Error", description: "Failed to remove member.", variant: "destructive" });
+    } finally {
+      setRemovingMember(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -72,15 +112,32 @@ function GroupDetailsRow({ groupId }: GroupDetailsRowProps) {
               Members ({data?.members.length || 0})
             </h4>
             {data?.members && data.members.length > 0 ? (
-              <div className="text-sm space-y-1 max-h-32 overflow-y-auto">
-                {data.members.map((membership: any) => (
-                  <div key={membership.id} className="flex justify-between items-center">
-                    <span className="truncate">{membership.profiles?.full_name || membership.profiles?.email || "Unknown"}</span>
-                    <Badge variant="outline" className="text-xs">
-                      Pos {membership.payout_position || "—"}
-                    </Badge>
-                  </div>
-                ))}
+              <div className="text-sm space-y-1 max-h-48 overflow-y-auto">
+                {data.members.map((membership: any) => {
+                  const name = membership.profiles?.full_name || membership.profiles?.email || "Unknown";
+                  return (
+                    <div key={membership.id} className="flex justify-between items-center gap-2">
+                      <div className="flex items-center gap-2 truncate">
+                        <span className="truncate">{name}</span>
+                        <Badge variant="outline" className="text-xs shrink-0">
+                          Pos {membership.payout_position || "—"}
+                        </Badge>
+                      </div>
+                      {hasPermission("groups.resolve_disputes") && membership.status === "active" && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 shrink-0 text-destructive hover:text-destructive"
+                          disabled={removingMember === membership.id}
+                          onClick={() => handleRemoveMember(membership.id, membership.user_id, name)}
+                          title="Remove member"
+                        >
+                          <UserMinus className="h-3 w-3" />
+                        </Button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">No members</p>
@@ -130,7 +187,12 @@ export function GroupManagementTab() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
-  const { groups, loading } = useAdminGroups();
+  const [actionDialog, setActionDialog] = useState<{ group: any; action: string } | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [reason, setReason] = useState("");
+  const { groups, loading, refetch } = useAdminGroups();
+  const { hasPermission } = useAdminPermissions();
+  const { toast } = useToast();
 
   const filteredGroups = groups.filter(group => {
     const searchLower = search.toLowerCase();
@@ -144,121 +206,197 @@ export function GroupManagementTab() {
   const toggleExpanded = (groupId: string) => {
     setExpandedGroups(prev => {
       const next = new Set(prev);
-      if (next.has(groupId)) {
-        next.delete(groupId);
-      } else {
-        next.add(groupId);
-      }
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
       return next;
     });
   };
 
+  const handleGroupAction = async () => {
+    if (!actionDialog) return;
+    setActionLoading(true);
+    const { group, action } = actionDialog;
+
+    try {
+      let newStatus: string | null = null;
+
+      switch (action) {
+        case "suspend":
+          newStatus = "paused";
+          break;
+        case "unsuspend":
+          newStatus = "active";
+          break;
+        case "delete":
+          // Delete all memberships, then the group
+          await supabase.from("group_memberships").delete().eq("group_id", group.id);
+          await supabase.from("group_wallets").delete().eq("group_id", group.id);
+          const { error: deleteErr } = await supabase.from("thrift_groups").delete().eq("id", group.id);
+          if (deleteErr) throw deleteErr;
+          break;
+      }
+
+      if (newStatus) {
+        const { error } = await supabase
+          .from("thrift_groups")
+          .update({ status: newStatus as any })
+          .eq("id", group.id);
+        if (error) throw error;
+      }
+
+      // Log the action
+      await supabase.from("audit_logs").insert({
+        user_id: group.admin_id,
+        action: `admin_group_${action}`,
+        resource_type: "group",
+        resource_id: group.id,
+        details: { group_name: group.name, reason: reason.trim() || null },
+      });
+
+      toast({ title: "Success", description: `Group "${group.name}" has been ${action === "delete" ? "deleted" : action === "suspend" ? "suspended" : "unsuspended"}.` });
+      setActionDialog(null);
+      setReason("");
+      refetch();
+    } catch (err) {
+      console.error("Group action error:", err);
+      toast({ title: "Error", description: "Failed to perform action.", variant: "destructive" });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const getAvailableActions = (status: string) => {
+    const actions: { key: string; label: string; icon: any; variant: "ghost" | "destructive" | "outline" }[] = [];
+    if (hasPermission("groups.pause")) {
+      if (status === "active") {
+        actions.push({ key: "suspend", label: "Suspend", icon: Pause, variant: "outline" });
+      }
+      if (status === "paused") {
+        actions.push({ key: "unsuspend", label: "Unsuspend", icon: Play, variant: "outline" });
+      }
+    }
+    if (hasPermission("groups.resolve_disputes")) {
+      actions.push({ key: "delete", label: "Delete", icon: Trash2, variant: "destructive" });
+    }
+    return actions;
+  };
+
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <CardTitle>Group Management</CardTitle>
-            <CardDescription>View and manage all thrift groups. Click a row to expand details.</CardDescription>
+    <>
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <CardTitle>Group Management</CardTitle>
+              <CardDescription>View and manage all thrift groups. Click a row to expand details.</CardDescription>
+            </div>
+            <div className="relative w-full sm:w-72">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input placeholder="Search by name or admin..." className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} />
+            </div>
           </div>
-          <div className="relative w-full sm:w-72">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search by name or admin..."
-              className="pl-9"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
+            </div>
+          ) : filteredGroups.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8">No groups found</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-10"></TableHead>
+                    <TableHead>Group Name</TableHead>
+                    <TableHead>Admin</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Members</TableHead>
+                    <TableHead>Contribution</TableHead>
+                    <TableHead>Period</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredGroups.map((group) => (
+                    <>
+                      <TableRow key={group.id} className="cursor-pointer hover:bg-muted/50" onClick={() => toggleExpanded(group.id)}>
+                        <TableCell>
+                          <Button variant="ghost" size="icon" className="h-6 w-6">
+                            {expandedGroups.has(group.id) ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                          </Button>
+                        </TableCell>
+                        <TableCell className="font-medium">{group.name}</TableCell>
+                        <TableCell>{group.admin_name || "—"}</TableCell>
+                        <TableCell>
+                          <Badge variant={group.status === "active" ? "default" : group.status === "paused" ? "destructive" : "secondary"} className="capitalize">
+                            {group.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{group.member_count}</TableCell>
+                        <TableCell>₦{group.contribution_amount.toLocaleString()}</TableCell>
+                        <TableCell className="capitalize">{group.period}</TableCell>
+                        <TableCell className="text-muted-foreground">{group.created_at ? format(new Date(group.created_at), "MMM d, yyyy") : "—"}</TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center gap-1">
+                            <Button variant="ghost" size="sm" onClick={() => navigate(`/groups/${group.id}`)}>
+                              <ExternalLink className="h-4 w-4" />
+                            </Button>
+                            {getAvailableActions(group.status).map(({ key, label, icon: Icon, variant }) => (
+                              <Button
+                                key={key}
+                                variant={variant === "destructive" ? "ghost" : "ghost"}
+                                size="sm"
+                                className={variant === "destructive" ? "text-destructive hover:text-destructive" : ""}
+                                onClick={() => setActionDialog({ group, action: key })}
+                                title={label}
+                              >
+                                <Icon className="h-4 w-4" />
+                              </Button>
+                            ))}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                      {expandedGroups.has(group.id) && (
+                        <GroupDetailsRow key={`${group.id}-details`} groupId={group.id} onRefresh={refetch} />
+                      )}
+                    </>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Action Confirmation Dialog */}
+      <Dialog open={!!actionDialog} onOpenChange={(open) => { if (!open) { setActionDialog(null); setReason(""); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="capitalize">{actionDialog?.action} Group</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to {actionDialog?.action} "{actionDialog?.group.name}"?
+              {actionDialog?.action === "delete" && " This action cannot be undone and will remove all members and data."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <label className="text-sm font-medium">Reason (optional)</label>
+            <Input placeholder="Enter reason..." value={reason} onChange={(e) => setReason(e.target.value)} />
           </div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        {loading ? (
-          <div className="space-y-2">
-            {[1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-12 w-full" />
-            ))}
-          </div>
-        ) : filteredGroups.length === 0 ? (
-          <p className="text-center text-muted-foreground py-8">No groups found</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-10"></TableHead>
-                  <TableHead>Group Name</TableHead>
-                  <TableHead>Admin</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Members</TableHead>
-                  <TableHead>Contribution</TableHead>
-                  <TableHead>Period</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredGroups.map((group) => (
-                  <>
-                    <TableRow 
-                      key={group.id} 
-                      className="cursor-pointer hover:bg-muted/50" 
-                      onClick={() => toggleExpanded(group.id)}
-                    >
-                      <TableCell>
-                        <Button variant="ghost" size="icon" className="h-6 w-6">
-                          {expandedGroups.has(group.id) ? (
-                            <ChevronDown className="h-4 w-4" />
-                          ) : (
-                            <ChevronRight className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </TableCell>
-                      <TableCell className="font-medium">{group.name}</TableCell>
-                      <TableCell>{group.admin_name || "—"}</TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            group.status === "active"
-                              ? "default"
-                              : group.status === "completed"
-                              ? "secondary"
-                              : "outline"
-                          }
-                          className="capitalize"
-                        >
-                          {group.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{group.member_count}</TableCell>
-                      <TableCell>₦{group.contribution_amount.toLocaleString()}</TableCell>
-                      <TableCell className="capitalize">{group.period}</TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {group.created_at
-                          ? format(new Date(group.created_at), "MMM d, yyyy")
-                          : "—"}
-                      </TableCell>
-                      <TableCell onClick={(e) => e.stopPropagation()}>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => navigate(`/groups/${group.id}`)}
-                        >
-                          <ExternalLink className="h-4 w-4 mr-1" />
-                          View
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                    {expandedGroups.has(group.id) && (
-                      <GroupDetailsRow key={`${group.id}-details`} groupId={group.id} />
-                    )}
-                  </>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setActionDialog(null); setReason(""); }}>Cancel</Button>
+            <Button
+              variant={actionDialog?.action === "delete" ? "destructive" : "default"}
+              onClick={handleGroupAction}
+              disabled={actionLoading}
+            >
+              {actionLoading ? "Processing..." : `Confirm ${actionDialog?.action}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
