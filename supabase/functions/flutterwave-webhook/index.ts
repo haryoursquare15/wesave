@@ -1,9 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-// Allowed origins for CORS - restrict to application domains
-// Note: Webhook calls from Flutterwave servers don't use CORS (server-to-server)
-// but we still restrict browser-based calls
 const ALLOWED_ORIGINS = [
   'https://thrift-harmony-hub.lovable.app',
   'https://id-preview--52f5b582-a468-4659-81c8-2245803e62d4.lovable.app',
@@ -39,23 +36,18 @@ serve(async (req) => {
     // Check if this is a redirect from payment
     const url = new URL(req.url);
     if (url.searchParams.get('type') === 'funding_redirect') {
-      const txRef = url.searchParams.get('tx_ref');
       const status = url.searchParams.get('status');
-      
-      // Redirect to app with status
       const redirectUrl = status === 'successful' 
         ? '/wallet?funding=success'
         : '/wallet?funding=failed';
       
       return new Response(null, {
         status: 302,
-        headers: {
-          'Location': redirectUrl,
-        },
+        headers: { 'Location': redirectUrl },
       });
     }
 
-    // Verify webhook signature - REQUIRED for production security
+    // Verify webhook signature
     const verifHash = req.headers.get('verif-hash');
     const secretHash = Deno.env.get('FLUTTERWAVE_WEBHOOK_SECRET');
     
@@ -68,14 +60,14 @@ serve(async (req) => {
     }
     
     if (!verifHash || verifHash !== secretHash) {
-      console.error('Invalid webhook signature - received:', verifHash);
+      console.error('Invalid webhook signature');
       return new Response(JSON.stringify({ error: 'Unauthorized' }), { 
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
     
-    console.log('Webhook signature verified successfully');
+    console.log('Webhook signature verified');
 
     const payload = await req.json();
     console.log('Webhook received:', JSON.stringify(payload));
@@ -83,7 +75,7 @@ serve(async (req) => {
     const eventId = payload.id || `${payload.data?.id}-${Date.now()}`;
     const eventType = payload.event;
 
-    // Check for idempotency
+    // Idempotency check
     const { data: existingEvent } = await supabase
       .from('webhook_events')
       .select('*')
@@ -107,22 +99,122 @@ serve(async (req) => {
         processed: false,
       });
 
-    // Process based on event type
     switch (eventType) {
       case 'charge.completed': {
         const data = payload.data;
         
         if (data.status !== 'successful') {
           console.log('Charge not successful:', data.status);
+          
+          // Check if this is a card fallback contribution that failed
+          const meta = data.meta || {};
+          if (meta.type === 'card_fallback_contribution' && meta.user_id && meta.group_id) {
+            console.log(`Card fallback charge failed for user ${meta.user_id}`);
+            // The retry record was already created by the auto-contribution function
+          }
           break;
         }
 
-        // Check meta for transaction type
         const meta = data.meta || {};
         const txRef = data.tx_ref;
 
-        if (meta.type === 'wallet_funding' || txRef?.startsWith('fund-')) {
-          // Extract user ID from tx_ref or meta
+        if (meta.type === 'card_fallback_contribution') {
+          // Card fallback for contribution — handle async charge completion
+          const userId = meta.user_id;
+          const groupId = meta.group_id;
+          const cycleId = meta.cycle_id;
+
+          if (!userId || !groupId) {
+            console.error('Missing user_id or group_id in card fallback meta');
+            break;
+          }
+
+          console.log(`Processing async card fallback for user ${userId}, group ${groupId}`);
+
+          // Check if this was already handled synchronously
+          const { data: existingRetry } = await supabase
+            .from('contribution_retries')
+            .select('status')
+            .eq('transaction_reference', txRef)
+            .single();
+
+          if (existingRetry?.status === 'paid') {
+            console.log('Card fallback already processed synchronously');
+            break;
+          }
+
+          // Credit wallet atomically
+          const { data: creditResult, error: creditError } = await supabase.rpc('credit_wallet_atomic', {
+            _user_id: userId,
+            _amount: data.amount,
+            _tx_ref: txRef,
+            _description: 'Card fallback funding for contribution',
+          });
+
+          if (creditError || !creditResult?.success) {
+            console.error('Failed to credit wallet from async card fallback:', creditError || creditResult?.error);
+            break;
+          }
+
+          // Process contribution
+          const { data: contribResult, error: contribError } = await supabase.rpc('process_contribution_ledger_atomic', {
+            _user_id: userId,
+            _group_id: groupId,
+            _amount: data.amount,
+          });
+
+          if (contribError || !contribResult?.success) {
+            console.error('Async card fallback: wallet funded but contribution failed:', contribError || contribResult?.error);
+            // Wallet was credited, contribution will need manual handling
+            break;
+          }
+
+          // Update retry record
+          await supabase
+            .from('contribution_retries')
+            .update({
+              status: 'paid',
+              payment_source: 'card_fallback',
+              transaction_reference: txRef,
+            })
+            .eq('user_id', userId)
+            .eq('group_id', groupId)
+            .eq('cycle_id', cycleId)
+            .in('status', ['pending', 'failed', 'processing']);
+
+          // Notify
+          await supabase.from('chat_messages').insert({
+            group_id: groupId,
+            user_id: userId,
+            message: `Card fallback contribution of ₦${Number(data.amount).toLocaleString()} processed successfully`,
+            message_type: 'card_fallback_success',
+          });
+
+          console.log(`Async card fallback contribution completed for user ${userId}`);
+
+          // Save/update card token for future use
+          if (data.card?.token) {
+            const { data: existingToken } = await supabase
+              .from('card_tokens')
+              .select('id')
+              .eq('user_id', userId)
+              .eq('card_token', data.card.token)
+              .single();
+
+            if (!existingToken) {
+              await supabase.from('card_tokens').insert({
+                user_id: userId,
+                card_token: data.card.token,
+                card_last4: data.card.last_4digits,
+                card_type: data.card.type,
+                card_expiry: data.card.expiry,
+                is_active: true,
+              });
+            }
+          }
+
+        } else if (meta.type === 'wallet_funding' || txRef?.startsWith('fund-')) {
+          // Standard wallet funding
           const userId = meta.user_id || txRef?.split('-')[1];
           
           if (!userId) {
@@ -130,7 +222,6 @@ serve(async (req) => {
             break;
           }
 
-          // Use atomic function to credit wallet
           const { data: creditResult, error: creditError } = await supabase.rpc('credit_wallet_atomic', {
             _user_id: userId,
             _amount: data.amount,
@@ -143,7 +234,29 @@ serve(async (req) => {
             break;
           }
 
-          console.log(`Wallet funded: ${userId}, Amount: ${data.amount}, New Balance: ${creditResult.new_balance}`);
+          console.log(`Wallet funded: ${userId}, Amount: ${data.amount}`);
+
+          // Save card token if available (for future card fallback)
+          if (data.card?.token && userId) {
+            const { data: existingToken } = await supabase
+              .from('card_tokens')
+              .select('id')
+              .eq('user_id', userId)
+              .eq('card_token', data.card.token)
+              .single();
+
+            if (!existingToken) {
+              await supabase.from('card_tokens').insert({
+                user_id: userId,
+                card_token: data.card.token,
+                card_last4: data.card.last_4digits,
+                card_type: data.card.type,
+                card_expiry: data.card.expiry,
+                is_active: true,
+              });
+              console.log(`Card token saved for user ${userId}`);
+            }
+          }
         }
         break;
       }
@@ -152,7 +265,6 @@ serve(async (req) => {
         const data = payload.data;
         const reference = data.reference;
 
-        // Update payout status if applicable
         await supabase
           .from('payouts')
           .update({
@@ -185,8 +297,6 @@ serve(async (req) => {
 
   } catch (error: unknown) {
     console.error('Webhook error:', error);
-    
-    // Return generic error to external callers - keep details in server logs only
     return new Response(JSON.stringify({ 
       status: 'error',
       error: 'Webhook processing failed'

@@ -255,6 +255,42 @@ export type Database = {
         }
         Relationships: []
       }
+      card_tokens: {
+        Row: {
+          card_expiry: string | null
+          card_last4: string | null
+          card_token: string
+          card_type: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          card_expiry?: string | null
+          card_last4?: string | null
+          card_token: string
+          card_type?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          card_expiry?: string | null
+          card_last4?: string | null
+          card_token?: string
+          card_type?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       chat_messages: {
         Row: {
           created_at: string
@@ -414,6 +450,60 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      contribution_retries: {
+        Row: {
+          contribution_amount: number
+          created_at: string
+          cycle_id: string
+          failure_reason: string | null
+          group_id: string
+          id: string
+          last_retry_at: string | null
+          max_retries: number
+          next_retry_at: string | null
+          payment_source: string | null
+          retry_count: number
+          status: string
+          transaction_reference: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          contribution_amount: number
+          created_at?: string
+          cycle_id: string
+          failure_reason?: string | null
+          group_id: string
+          id?: string
+          last_retry_at?: string | null
+          max_retries?: number
+          next_retry_at?: string | null
+          payment_source?: string | null
+          retry_count?: number
+          status?: string
+          transaction_reference?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          contribution_amount?: number
+          created_at?: string
+          cycle_id?: string
+          failure_reason?: string | null
+          group_id?: string
+          id?: string
+          last_retry_at?: string | null
+          max_retries?: number
+          next_retry_at?: string | null
+          payment_source?: string | null
+          retry_count?: number
+          status?: string
+          transaction_reference?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       credit_score_history: {
         Row: {
