@@ -6,8 +6,203 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// UUID validation regex
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const FLUTTERWAVE_BASE_URL = "https://api.flutterwave.com/v3";
+
+interface CardFallbackResult {
+  attempted: boolean;
+  success: boolean;
+  error?: string;
+  tx_ref?: string;
+}
+
+async function attemptCardFallback(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  groupId: string,
+  cycleId: string,
+  amount: number,
+  flwSecretKey: string
+): Promise<CardFallbackResult> {
+  // Check for active card token
+  const { data: cardToken } = await supabase
+    .from('card_tokens')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('is_active', true)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single();
+
+  if (!cardToken) {
+    return { attempted: false, success: false, error: 'No active card token found' };
+  }
+
+  // Check for existing retry record
+  const { data: existingRetry } = await supabase
+    .from('contribution_retries')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('group_id', groupId)
+    .eq('cycle_id', cycleId)
+    .in('status', ['pending', 'processing'])
+    .single();
+
+  if (existingRetry) {
+    // Check retry limits
+    if (existingRetry.retry_count >= existingRetry.max_retries) {
+      // Mark as defaulted
+      await supabase
+        .from('contribution_retries')
+        .update({ status: 'defaulted', failure_reason: 'Max retries exceeded', updated_at: new Date().toISOString() })
+        .eq('id', existingRetry.id);
+      return { attempted: false, success: false, error: 'Max retries reached - contribution defaulted' };
+    }
+
+    // Check if enough time has passed since last retry (24 hours)
+    if (existingRetry.next_retry_at && new Date(existingRetry.next_retry_at) > new Date()) {
+      return { attempted: false, success: false, error: 'Retry not yet due' };
+    }
+  }
+
+  // Generate unique transaction reference
+  const txRef = `card-contrib-${userId.slice(0, 8)}-${groupId.slice(0, 8)}-${Date.now()}`;
+
+  // Get user email for the charge
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('email, full_name')
+    .eq('id', userId)
+    .single();
+
+  if (!profile?.email) {
+    return { attempted: true, success: false, error: 'User email not found for card charge' };
+  }
+
+  try {
+    // Attempt Flutterwave tokenized charge
+    const chargeResponse = await fetch(`${FLUTTERWAVE_BASE_URL}/tokenized-charges`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${flwSecretKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        token: cardToken.card_token,
+        currency: 'NGN',
+        country: 'NG',
+        amount: amount,
+        email: profile.email,
+        full_name: profile.full_name || 'WeSave User',
+        tx_ref: txRef,
+        narration: `WeSave contribution - Group ${groupId.slice(0, 8)}`,
+        meta: {
+          type: 'card_fallback_contribution',
+          user_id: userId,
+          group_id: groupId,
+          cycle_id: cycleId,
+        },
+      }),
+    });
+
+    const chargeData = await chargeResponse.json();
+    console.log(`Card fallback charge response for user ${userId}:`, JSON.stringify(chargeData));
+
+    if (chargeData.status === 'success' && chargeData.data?.status === 'successful') {
+      // Charge succeeded immediately — credit wallet, then debit for contribution
+      const { data: creditResult, error: creditError } = await supabase.rpc('credit_wallet_atomic', {
+        _user_id: userId,
+        _amount: amount,
+        _tx_ref: txRef,
+        _description: 'Card fallback funding for contribution',
+      });
+
+      if (creditError || !creditResult?.success) {
+        console.error('Failed to credit wallet after card charge:', creditError || creditResult?.error);
+        return { attempted: true, success: false, error: 'Card charged but wallet credit failed', tx_ref: txRef };
+      }
+
+      // Now process the contribution from wallet
+      const { data: contribResult, error: contribError } = await supabase.rpc('process_contribution_ledger_atomic', {
+        _user_id: userId,
+        _group_id: groupId,
+        _amount: amount,
+      });
+
+      if (contribError || !contribResult?.success) {
+        console.error('Card funded but contribution failed:', contribError || contribResult?.error);
+        return { attempted: true, success: false, error: 'Card charged, wallet funded, but contribution failed', tx_ref: txRef };
+      }
+
+      // Update or create retry record as paid
+      if (existingRetry) {
+        await supabase
+          .from('contribution_retries')
+          .update({
+            status: 'paid',
+            payment_source: 'card_fallback',
+            transaction_reference: txRef,
+            last_retry_at: new Date().toISOString(),
+            retry_count: existingRetry.retry_count + 1,
+          })
+          .eq('id', existingRetry.id);
+      } else {
+        await supabase.from('contribution_retries').insert({
+          user_id: userId,
+          group_id: groupId,
+          cycle_id: cycleId,
+          contribution_amount: amount,
+          status: 'paid',
+          payment_source: 'card_fallback',
+          transaction_reference: txRef,
+          retry_count: 1,
+          last_retry_at: new Date().toISOString(),
+        });
+      }
+
+      return { attempted: true, success: true, tx_ref: txRef };
+    } else {
+      // Charge failed or pending
+      const now = new Date();
+      const nextRetry = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 hours later
+      const newRetryCount = (existingRetry?.retry_count || 0) + 1;
+      const isDefaulted = newRetryCount >= 3;
+
+      if (existingRetry) {
+        await supabase
+          .from('contribution_retries')
+          .update({
+            status: isDefaulted ? 'defaulted' : 'failed',
+            retry_count: newRetryCount,
+            last_retry_at: now.toISOString(),
+            next_retry_at: isDefaulted ? null : nextRetry.toISOString(),
+            failure_reason: chargeData.message || 'Card charge failed',
+            transaction_reference: txRef,
+          })
+          .eq('id', existingRetry.id);
+      } else {
+        await supabase.from('contribution_retries').insert({
+          user_id: userId,
+          group_id: groupId,
+          cycle_id: cycleId,
+          contribution_amount: amount,
+          status: isDefaulted ? 'defaulted' : 'failed',
+          payment_source: 'card_fallback',
+          retry_count: newRetryCount,
+          last_retry_at: now.toISOString(),
+          next_retry_at: isDefaulted ? null : nextRetry.toISOString(),
+          failure_reason: chargeData.message || 'Card charge failed',
+          transaction_reference: txRef,
+        });
+      }
+
+      return { attempted: true, success: false, error: chargeData.message || 'Card charge failed', tx_ref: txRef };
+    }
+  } catch (err) {
+    console.error('Card fallback charge error:', err);
+    return { attempted: true, success: false, error: err instanceof Error ? err.message : 'Unknown charge error' };
+  }
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -18,20 +213,22 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const FLUTTERWAVE_SECRET_KEY = Deno.env.get('FLUTTERWAVE_SECRET_KEY') || '';
 
     console.log('Auto-contribution job started at:', new Date().toISOString());
 
     // Parse request body for optional force_group_id (for manual testing)
     let forceGroupId: string | null = null;
+    let processRetries = false;
     try {
       const body = await req.json();
       forceGroupId = body.force_group_id || null;
+      processRetries = body.process_retries || false;
       
       // SECURITY: Manual triggers require authentication and admin verification
       if (forceGroupId) {
         console.log(`Manual trigger requested for group: ${forceGroupId}`);
         
-        // Validate UUID format to prevent injection
         if (!UUID_REGEX.test(forceGroupId)) {
           return new Response(JSON.stringify({
             success: false,
@@ -42,7 +239,6 @@ serve(async (req) => {
           });
         }
         
-        // Check for authorization header
         const authHeader = req.headers.get('Authorization');
         if (!authHeader) {
           return new Response(JSON.stringify({
@@ -54,7 +250,6 @@ serve(async (req) => {
           });
         }
         
-        // Verify the user's JWT and check if they're a group admin or platform admin
         const token = authHeader.replace('Bearer ', '');
         const { data: { user }, error: authError } = await supabase.auth.getUser(token);
         
@@ -68,7 +263,6 @@ serve(async (req) => {
           });
         }
         
-        // Check if user is the group admin or a platform admin
         const { data: isGroupAdmin } = await supabase.rpc('is_group_admin', {
           _group_id: forceGroupId,
         });
@@ -87,34 +281,86 @@ serve(async (req) => {
           });
         }
         
-        console.log(`Manual trigger authorized for user ${user.id} (group admin: ${isGroupAdmin}, platform admin: ${isPlatformAdmin})`);
+        console.log(`Manual trigger authorized for user ${user.id}`);
       }
     } catch {
       // No body or invalid JSON - that's fine for scheduled calls
     }
 
-    // Get current time in West African Time (WAT = UTC+1)
+    // ---- Process pending retries (card fallback retries from previous failures) ----
+    if (processRetries || !forceGroupId) {
+      const { data: pendingRetries } = await supabase
+        .from('contribution_retries')
+        .select('*')
+        .eq('status', 'failed')
+        .lte('next_retry_at', new Date().toISOString())
+        .limit(50);
+
+      if (pendingRetries && pendingRetries.length > 0 && FLUTTERWAVE_SECRET_KEY) {
+        console.log(`Processing ${pendingRetries.length} pending card fallback retries`);
+        for (const retry of pendingRetries) {
+          // Get active cycle to confirm it's still valid
+          const { data: cycle } = await supabase
+            .from('contribution_cycles')
+            .select('id, status')
+            .eq('id', retry.cycle_id)
+            .eq('status', 'active')
+            .single();
+
+          if (!cycle) {
+            // Cycle no longer active, mark as failed
+            await supabase
+              .from('contribution_retries')
+              .update({ status: 'failed', failure_reason: 'Cycle no longer active' })
+              .eq('id', retry.id);
+            continue;
+          }
+
+          const result = await attemptCardFallback(
+            supabase, retry.user_id, retry.group_id, retry.cycle_id,
+            Number(retry.contribution_amount), FLUTTERWAVE_SECRET_KEY
+          );
+
+          console.log(`Retry result for user ${retry.user_id}:`, result);
+
+          if (result.success) {
+            await supabase.from('chat_messages').insert({
+              group_id: retry.group_id,
+              user_id: retry.user_id,
+              message: `Card fallback contribution of ₦${Number(retry.contribution_amount).toLocaleString()} processed successfully (retry)`,
+              message_type: 'card_fallback_success',
+            });
+          } else if (result.error?.includes('defaulted')) {
+            await supabase.from('chat_messages').insert({
+              group_id: retry.group_id,
+              user_id: retry.user_id,
+              message: `⚠️ Contribution defaulted after 3 failed attempts. Please fund your wallet manually.`,
+              message_type: 'contribution_defaulted',
+            });
+          }
+        }
+      }
+    }
+
+    // ---- Normal contribution flow ----
     const now = new Date();
-    const watOffset = 1; // WAT is UTC+1
+    const watOffset = 1;
     const watHour = (now.getUTCHours() + watOffset) % 24;
     const watMinute = now.getUTCMinutes();
-    // Round to nearest 30-minute slot (0 or 30)
     const currentMinuteSlot = watMinute < 30 ? 0 : 30;
     
-    // Adjust day if hour overflow crosses midnight
     let watDate = new Date(now);
     if (now.getUTCHours() + watOffset >= 24) {
       watDate.setUTCDate(watDate.getUTCDate() + 1);
     }
-    const currentDayOfWeek = watDate.getUTCDay(); // 0 = Sunday, 1 = Monday, etc.
+    const currentDayOfWeek = watDate.getUTCDay();
     const currentDayOfMonth = watDate.getUTCDate();
 
-    console.log(`Current WAT (Nigerian) time: Hour=${watHour}, Minute=${currentMinuteSlot}, DayOfWeek=${currentDayOfWeek}, DayOfMonth=${currentDayOfMonth}`);
+    console.log(`Current WAT time: Hour=${watHour}, Minute=${currentMinuteSlot}, DayOfWeek=${currentDayOfWeek}, DayOfMonth=${currentDayOfMonth}`);
 
     let dueGroups;
     let groupsError;
 
-    // If force_group_id is provided, process that specific group regardless of schedule
     if (forceGroupId) {
       const result = await supabase
         .from('thrift_groups')
@@ -128,10 +374,7 @@ serve(async (req) => {
       
       dueGroups = result.data;
       groupsError = result.error;
-      console.log(`Force processing group: ${forceGroupId}, found: ${dueGroups?.length || 0}`);
     } else {
-      // Normal scheduled flow - find active groups that are due for contribution
-      // Match hour AND minute (with null/0 minute treated as :00)
       const result = await supabase
         .from('thrift_groups')
         .select(`
@@ -156,18 +399,13 @@ serve(async (req) => {
     const results: { groupId: string; groupName: string; success: boolean; details: string }[] = [];
 
     for (const group of dueGroups || []) {
-      // Skip schedule checks if force_group_id is provided
       if (!forceGroupId) {
-        // Check if the minute matches (null or 0 = :00, 30 = :30)
         const groupMinute = group.contribution_minute ?? 0;
         if (groupMinute !== currentMinuteSlot) {
-          console.log(`Skipping group ${group.name}: Minute mismatch (group=${groupMinute}, current=${currentMinuteSlot})`);
           continue;
         }
 
-        // Check if the contribution is due based on period
         let isDue = false;
-
         if (group.period === 'daily') {
           isDue = true;
         } else if (group.period === 'weekly') {
@@ -176,17 +414,11 @@ serve(async (req) => {
           isDue = group.contribution_day_of_month === currentDayOfMonth;
         }
 
-        if (!isDue) {
-          console.log(`Skipping group ${group.name}: Not due (period=${group.period}, dayOfWeek=${group.contribution_day_of_week}, dayOfMonth=${group.contribution_day_of_month})`);
-          continue;
-        }
-      } else {
-        console.log(`Force processing group ${group.name} - skipping schedule checks`);
+        if (!isDue) continue;
       }
 
       console.log(`Processing auto-contribution for group: ${group.name} (${group.id})`);
 
-      // Get active cycle for this group
       const { data: activeCycle } = await supabase
         .from('contribution_cycles')
         .select('id')
@@ -195,17 +427,10 @@ serve(async (req) => {
         .single();
 
       if (!activeCycle) {
-        console.log(`No active cycle for group ${group.name}, skipping`);
-        results.push({
-          groupId: group.id,
-          groupName: group.name,
-          success: false,
-          details: 'No active cycle',
-        });
+        results.push({ groupId: group.id, groupName: group.name, success: false, details: 'No active cycle' });
         continue;
       }
 
-      // Get all active members who haven't contributed this cycle
       const { data: members, error: membersError } = await supabase
         .from('group_memberships')
         .select('user_id')
@@ -214,46 +439,75 @@ serve(async (req) => {
         .eq('has_contributed_this_cycle', false);
 
       if (membersError) {
-        console.error(`Error fetching members for group ${group.name}:`, membersError);
-        results.push({
-          groupId: group.id,
-          groupName: group.name,
-          success: false,
-          details: `Error fetching members: ${membersError.message}`,
-        });
+        results.push({ groupId: group.id, groupName: group.name, success: false, details: `Error: ${membersError.message}` });
         continue;
       }
 
-      console.log(`Found ${members?.length || 0} members who haven't contributed in group ${group.name}`);
-
       let successCount = 0;
       let failCount = 0;
+      let cardFallbackCount = 0;
 
       for (const member of members || []) {
-        // Process contribution via ledger-based atomic function to ensure debit + ledger entry
+        // Step 1: Attempt wallet deduction
         const { data: result, error: rpcError } = await supabase.rpc('process_contribution_ledger_atomic', {
           _user_id: member.user_id,
           _group_id: group.id,
           _amount: group.contribution_amount,
         });
 
-        if (rpcError) {
-          console.error(`Auto-contribution failed for user ${member.user_id}:`, rpcError);
+        if (rpcError || !result?.success) {
+          const errorMsg = rpcError?.message || result?.error || 'Unknown error';
+          console.log(`Wallet contribution failed for user ${member.user_id}: ${errorMsg}`);
+
+          // Step 2: If insufficient funds, attempt card fallback
+          if (errorMsg.toLowerCase().includes('insufficient') && FLUTTERWAVE_SECRET_KEY) {
+            console.log(`Attempting card fallback for user ${member.user_id}`);
+            
+            const fallbackResult = await attemptCardFallback(
+              supabase, member.user_id, group.id, activeCycle.id,
+              group.contribution_amount, FLUTTERWAVE_SECRET_KEY
+            );
+
+            if (fallbackResult.success) {
+              successCount++;
+              cardFallbackCount++;
+
+              await supabase.from('chat_messages').insert({
+                group_id: group.id,
+                user_id: member.user_id,
+                message: `Auto-contribution of ₦${group.contribution_amount.toLocaleString()} processed via card fallback`,
+                message_type: 'card_fallback_success',
+              });
+
+              await supabase.from('contribution_audit').insert({
+                user_id: member.user_id,
+                group_id: group.id,
+                cycle_id: activeCycle.id,
+                amount: group.contribution_amount,
+                contribution_type: 'auto_card_fallback',
+                status: 'completed',
+              });
+              continue;
+            } else if (!fallbackResult.attempted) {
+              // No card token — notify user
+              await supabase.from('chat_messages').insert({
+                group_id: group.id,
+                user_id: member.user_id,
+                message: `⚠️ Insufficient wallet balance and no saved card. Please fund your wallet to contribute.`,
+                message_type: 'contribution_failed',
+              });
+            } else {
+              // Card charge failed
+              await supabase.from('chat_messages').insert({
+                group_id: group.id,
+                user_id: member.user_id,
+                message: `⚠️ Wallet balance insufficient and card charge failed. Will retry in 24 hours.`,
+                message_type: 'card_fallback_failed',
+              });
+            }
+          }
+
           failCount++;
-          
-          // Log failed auto-contribution
-          await supabase.from('contribution_audit').insert({
-            user_id: member.user_id,
-            group_id: group.id,
-            cycle_id: activeCycle.id,
-            amount: group.contribution_amount,
-            contribution_type: 'auto',
-            status: 'failed',
-          });
-        } else if (!result.success) {
-          console.error(`Auto-contribution rejected for user ${member.user_id}:`, result.error);
-          failCount++;
-          
           await supabase.from('contribution_audit').insert({
             user_id: member.user_id,
             group_id: group.id,
@@ -263,10 +517,8 @@ serve(async (req) => {
             status: 'failed',
           });
         } else {
-          console.log(`Auto-contribution successful for user ${member.user_id}`);
           successCount++;
 
-          // Add system message to chat
           await supabase.from('chat_messages').insert({
             group_id: group.id,
             user_id: member.user_id,
@@ -274,11 +526,7 @@ serve(async (req) => {
             message_type: 'auto_contribution',
           });
           
-          // Check if auto-payout was triggered (all contributed)
           if (result.all_contributed && result.auto_payout?.success) {
-            console.log(`Auto-payout triggered for group ${group.name}:`, result.auto_payout);
-            
-            // Send notification about successful payout
             await supabase.from('chat_messages').insert({
               group_id: group.id,
               user_id: member.user_id,
@@ -289,7 +537,6 @@ serve(async (req) => {
         }
       }
 
-      // Check if all contributions are complete
       const { count: pendingCount } = await supabase
         .from('group_memberships')
         .select('*', { count: 'exact', head: true })
@@ -297,13 +544,11 @@ serve(async (req) => {
         .eq('status', 'active')
         .eq('has_contributed_this_cycle', false);
 
-      const allContributed = (pendingCount || 0) === 0;
-
       results.push({
         groupId: group.id,
         groupName: group.name,
         success: true,
-        details: `Processed ${successCount} contributions, ${failCount} failed. All contributed: ${allContributed}. Auto-payout is now integrated into contribution flow.`,
+        details: `Wallet: ${successCount - cardFallbackCount}, Card fallback: ${cardFallbackCount}, Failed: ${failCount}. Pending: ${pendingCount || 0}`,
       });
     }
 
@@ -319,7 +564,6 @@ serve(async (req) => {
 
   } catch (error: unknown) {
     console.error('Auto-contribution error:', error);
-    
     return new Response(JSON.stringify({
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
