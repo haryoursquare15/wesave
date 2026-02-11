@@ -772,9 +772,18 @@ export default function GroupDetail() {
                       animate={{ opacity: 1, y: 0 }}
                       className={`flex gap-3 ${msg.user_id === user?.id ? "flex-row-reverse" : ""}`}
                     >
-                      {msg.message_type === "system" || msg.message_type === "contribution_status" || msg.message_type === "payout_notification" ? (
+                      {msg.message_type === "system" || msg.message_type === "contribution_status" || msg.message_type === "payout_notification" || msg.message_type === "card_fallback_success" || msg.message_type === "contribution_defaulted" ? (
                         <div className="w-full text-center">
-                          <Badge variant={msg.message_type === "payout_notification" ? "success" : "secondary"} className="text-xs">
+                          <Badge 
+                            variant={
+                              msg.message_type === "payout_notification" || msg.message_type === "card_fallback_success" 
+                                ? "success" 
+                                : msg.message_type === "contribution_defaulted" 
+                                  ? "destructive" 
+                                  : "secondary"
+                            } 
+                            className={`text-xs ${msg.message_type === "contribution_defaulted" ? "bg-destructive/10 text-destructive border-destructive/20" : ""}`}
+                          >
                             {msg.message}
                           </Badge>
                           <p className="text-[10px] text-muted-foreground mt-1">

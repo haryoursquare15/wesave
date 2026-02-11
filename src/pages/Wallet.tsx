@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { ArrowLeft, Eye, EyeOff, ArrowUpRight, ArrowDownLeft, Lock, History, Percent, Copy, Check, CreditCard, Building2 } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, ArrowUpRight, ArrowDownLeft, History, Copy, Check, CreditCard, Building2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -39,7 +39,6 @@ export default function Wallet() {
   const [showBankForm, setShowBankForm] = useState(false);
 
   const balance = Number(wallet?.available_balance) || 0;
-  const lockedBalance = Number(wallet?.locked_balance) || 0;
 
   // Check for funding redirect status and verify pending transactions
   useEffect(() => {
@@ -289,7 +288,7 @@ export default function Wallet() {
       case "withdrawal":
         return <ArrowUpRight className="h-5 w-5" />;
       case "lock":
-        return <Lock className="h-4 w-4" />;
+        return <CreditCard className="h-4 w-4" />;
       default:
         return <CreditCard className="h-5 w-5" />;
     }
@@ -383,12 +382,6 @@ export default function Wallet() {
               {showBalance ? `₦${formatAmount(balance)}` : "••••••••"}
             </h2>
             
-            <div className="flex items-center justify-center gap-2 mb-6">
-              <div className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-white/10 text-primary-foreground text-sm">
-                <Lock className="h-3 w-3" />
-                {showBalance ? `₦${formatAmount(lockedBalance)}` : "••••"} locked
-              </div>
-            </div>
 
             {/* Action Buttons */}
             <div className="flex gap-3 max-w-xs mx-auto">
@@ -472,18 +465,25 @@ export default function Wallet() {
                       <p className="font-medium text-foreground text-sm">
                         {formatTransactionDescription(tx)}
                       </p>
-                      <p className="text-xs text-muted-foreground">
-                        {format(new Date(tx.created_at), "MMM d, h:mm a")}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-xs text-muted-foreground">
+                          {format(new Date(tx.created_at), "MMM d, h:mm a")}
+                        </p>
+                        {tx.status === "failed" && (
+                          <span className="text-[10px] font-medium text-destructive bg-destructive/10 px-1.5 py-0.5 rounded">Failed</span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                  <span className={`font-semibold ${
-                    tx.type === "funding" || tx.type === "payout" 
-                      ? "text-success" 
-                      : "text-foreground"
-                  }`}>
-                    {tx.type === "funding" || tx.type === "payout" ? "+" : "-"}₦{formatAmount(tx.amount)}
-                  </span>
+                  <div className="text-right">
+                    <span className={`font-semibold ${
+                      tx.type === "funding" || tx.type === "payout" 
+                        ? "text-success" 
+                        : "text-foreground"
+                    }`}>
+                      {tx.type === "funding" || tx.type === "payout" ? "+" : "-"}₦{formatAmount(tx.amount)}
+                    </span>
+                  </div>
                 </motion.div>
               ))}
             </div>

@@ -213,8 +213,10 @@ export default function Landing() {
 
       {/* Footer */}
       <footer className="border-t border-border py-8">
-        <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
+        <div className="container mx-auto px-4 text-center text-sm text-muted-foreground space-y-2">
           <p>© 2025 WeSave. All rights reserved. 2% service fee applies on payouts.</p>
+          <p>WeSave is owned by <strong className="text-foreground">LLH Premium Enterprise</strong>. Technology supported by Flutterwave.</p>
+          <p>Contact: 09039479954 | IG: <a href="https://instagram.com/Wesave.ng" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">@Wesave.ng</a></p>
         </div>
       </footer>
     </div>
