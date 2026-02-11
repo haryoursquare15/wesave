@@ -82,7 +82,6 @@ export default function Dashboard() {
         {/* Wallet Card */}
         <WalletCard
           balance={Number(wallet?.available_balance) || 0}
-          lockedBalance={Number(wallet?.locked_balance) || 0}
           onFund={() => console.log("Fund")}
           onWithdraw={() => console.log("Withdraw")}
         />

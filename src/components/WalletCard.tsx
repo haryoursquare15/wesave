@@ -1,12 +1,11 @@
 import { motion } from "framer-motion";
-import { Wallet, Eye, EyeOff, ArrowUpRight, ArrowDownLeft, Lock } from "lucide-react";
+import { Wallet, Eye, EyeOff, ArrowUpRight, ArrowDownLeft } from "lucide-react";
 import { useState } from "react";
 import { Button } from "./ui/button";
 import { cn } from "@/lib/utils";
 
 interface WalletCardProps {
   balance: number;
-  lockedBalance?: number;
   currency?: string;
   onFund?: () => void;
   onWithdraw?: () => void;
@@ -14,7 +13,6 @@ interface WalletCardProps {
 
 export function WalletCard({
   balance,
-  lockedBalance = 0,
   currency = "₦",
   onFund,
   onWithdraw,
@@ -60,15 +58,6 @@ export function WalletCard({
           </h2>
         </div>
 
-        {/* Locked Balance */}
-        {lockedBalance > 0 && (
-          <div className="flex items-center gap-2 mb-6 px-3 py-2 bg-white/10 rounded-lg w-fit">
-            <Lock className="h-4 w-4" />
-            <span className="text-sm">
-              {showBalance ? `${currency}${formatAmount(lockedBalance)}` : "••••"} locked
-            </span>
-          </div>
-        )}
 
         {/* Actions */}
         <div className="flex gap-3">

@@ -118,10 +118,12 @@ export default function Settings() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="text-center text-sm text-muted-foreground pt-4"
+          className="text-center text-sm text-muted-foreground pt-4 space-y-1"
         >
           <p>WeSave v1.0.0</p>
-          <p className="mt-1">© 2025 WeSave. All rights reserved.</p>
+          <p>© 2025 WeSave. All rights reserved.</p>
+          <p>Owned by LLH Premium Enterprise. Technology supported by Flutterwave.</p>
+          <p>Contact: 09039479954 | IG: @Wesave.ng</p>
         </motion.div>
       </main>
 
