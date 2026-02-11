@@ -440,39 +440,6 @@ export default function Wallet() {
           </motion.div>
         )}
 
-        {/* Quick Actions */}
-        <div className="grid grid-cols-2 gap-4">
-          <motion.button
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            whileHover={{ scale: 1.02 }}
-            className="p-4 rounded-xl bg-card border border-border flex items-center gap-3"
-          >
-            <div className="h-10 w-10 rounded-lg bg-gold/10 flex items-center justify-center">
-              <Lock className="h-5 w-5 text-gold" />
-            </div>
-            <div className="text-left">
-              <p className="font-medium text-foreground text-sm">Lock Funds</p>
-              <p className="text-xs text-muted-foreground">Earn interest</p>
-            </div>
-          </motion.button>
-
-          <motion.button
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            whileHover={{ scale: 1.02 }}
-            className="p-4 rounded-xl bg-card border border-border flex items-center gap-3"
-          >
-            <div className="h-10 w-10 rounded-lg bg-success/10 flex items-center justify-center">
-              <Percent className="h-5 w-5 text-success" />
-            </div>
-            <div className="text-left">
-              <p className="font-medium text-foreground text-sm">Interest</p>
-              <p className="text-xs text-muted-foreground">5% p.a.</p>
-            </div>
-          </motion.button>
-        </div>
 
         {/* Transaction History */}
         <section>
