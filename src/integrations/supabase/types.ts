@@ -1318,6 +1318,9 @@ export type Database = {
           frozen_by: string | null
           full_name: string | null
           id: string
+          id_document_url: string | null
+          id_number: string | null
+          id_type: string | null
           kyc_status: string | null
           last_security_review: string | null
           membership_tier: Database["public"]["Enums"]["membership_tier"]
@@ -1327,6 +1330,7 @@ export type Database = {
           risk_level: string | null
           updated_at: string | null
           username: string | null
+          utility_bill_url: string | null
         }
         Insert: {
           account_status?: string | null
@@ -1351,6 +1355,9 @@ export type Database = {
           frozen_by?: string | null
           full_name?: string | null
           id: string
+          id_document_url?: string | null
+          id_number?: string | null
+          id_type?: string | null
           kyc_status?: string | null
           last_security_review?: string | null
           membership_tier?: Database["public"]["Enums"]["membership_tier"]
@@ -1360,6 +1367,7 @@ export type Database = {
           risk_level?: string | null
           updated_at?: string | null
           username?: string | null
+          utility_bill_url?: string | null
         }
         Update: {
           account_status?: string | null
@@ -1384,6 +1392,9 @@ export type Database = {
           frozen_by?: string | null
           full_name?: string | null
           id?: string
+          id_document_url?: string | null
+          id_number?: string | null
+          id_type?: string | null
           kyc_status?: string | null
           last_security_review?: string | null
           membership_tier?: Database["public"]["Enums"]["membership_tier"]
@@ -1393,6 +1404,7 @@ export type Database = {
           risk_level?: string | null
           updated_at?: string | null
           username?: string | null
+          utility_bill_url?: string | null
         }
         Relationships: []
       }

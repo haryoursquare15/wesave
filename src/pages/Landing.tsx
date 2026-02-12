@@ -22,8 +22,8 @@ const features = [
   },
   {
     icon: TrendingUp,
-    title: "Earn Interest",
-    description: "Lock funds and earn competitive interest rates",
+    title: "Credit Building",
+    description: "Build your credit score through consistent participation",
   },
 ];
 
@@ -217,6 +217,10 @@ export default function Landing() {
           <p>© 2025 WeSave. All rights reserved. 2% service fee applies on payouts.</p>
           <p>WeSave is owned by <strong className="text-foreground">LLH Premium Enterprise</strong>. Technology supported by Flutterwave.</p>
           <p>Contact: 09039479954 | IG: <a href="https://instagram.com/Wesave.ng" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">@Wesave.ng</a></p>
+          <div className="flex justify-center gap-4 mt-2">
+            <Link to="/terms" className="text-primary hover:underline">Terms of Service</Link>
+            <Link to="/privacy" className="text-primary hover:underline">Privacy Policy</Link>
+          </div>
         </div>
       </footer>
     </div>

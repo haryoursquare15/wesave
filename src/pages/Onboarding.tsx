@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowRight, ArrowLeft, Building2, CreditCard, User, Check, Shield, AtSign, AlertCircle, Loader2, CheckCircle2 } from "lucide-react";
+import { ArrowRight, ArrowLeft, Building2, CreditCard, User, Check, Shield, AtSign, AlertCircle, Loader2, CheckCircle2, FileText, Upload } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,7 +17,14 @@ const steps = [
   { id: 1, title: "Personal Info", icon: User },
   { id: 2, title: "Create Username", icon: AtSign },
   { id: 3, title: "Verify Identity", icon: Shield },
-  { id: 4, title: "Bank Details", icon: Building2 },
+  { id: 4, title: "Upload Documents", icon: FileText },
+  { id: 5, title: "Bank Details", icon: Building2 },
+];
+
+const idTypes = [
+  { value: "international_passport", label: "International Passport" },
+  { value: "drivers_license", label: "Driver's License" },
+  { value: "nin_slip", label: "NIN Slip" },
 ];
 
 export default function Onboarding() {
@@ -31,6 +38,8 @@ export default function Onboarding() {
   const [bankValidating, setBankValidating] = useState(false);
   const [bankValidated, setBankValidated] = useState(false);
   const [bankError, setBankError] = useState<string | null>(null);
+  const [idUploading, setIdUploading] = useState(false);
+  const [utilityUploading, setUtilityUploading] = useState(false);
   const [formData, setFormData] = useState({
     fullName: "",
     username: "",
@@ -38,6 +47,10 @@ export default function Onboarding() {
     bankName: "",
     accountNumber: "",
     accountName: "",
+    idType: "",
+    idNumber: "",
+    idDocumentUrl: "",
+    utilityBillUrl: "",
   });
 
   // Debounce account number for validation
@@ -108,7 +121,7 @@ export default function Onboarding() {
   }, [formData.bankName, debouncedAccountNumber]);
 
   useEffect(() => {
-    if (currentStep === 4) {
+    if (currentStep === 5) {
       validateBankAccount();
     }
   }, [currentStep, validateBankAccount]);
@@ -138,7 +151,7 @@ export default function Onboarding() {
     }
 
     // Check if username is taken
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("profiles")
       .select("id")
       .eq("username", username.toLowerCase())
@@ -152,6 +165,43 @@ export default function Onboarding() {
 
     setUsernameError(null);
     return true;
+  };
+
+  const handleFileUpload = async (file: File, type: "id" | "utility") => {
+    if (!user) return;
+    
+    const isId = type === "id";
+    if (isId) setIdUploading(true);
+    else setUtilityUploading(true);
+
+    try {
+      const ext = file.name.split(".").pop();
+      const fileName = `${user.id}/${type}-${Date.now()}.${ext}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from("kyc-documents")
+        .upload(fileName, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from("kyc-documents")
+        .getPublicUrl(fileName);
+
+      if (isId) {
+        setFormData(prev => ({ ...prev, idDocumentUrl: urlData.publicUrl }));
+        toast.success("ID document uploaded successfully");
+      } else {
+        setFormData(prev => ({ ...prev, utilityBillUrl: urlData.publicUrl }));
+        toast.success("Utility bill uploaded successfully");
+      }
+    } catch (err) {
+      console.error("Upload error:", err);
+      toast.error(`Failed to upload ${isId ? "ID document" : "utility bill"}`);
+    } finally {
+      if (isId) setIdUploading(false);
+      else setUtilityUploading(false);
+    }
   };
 
   const handleNext = async () => {
@@ -190,6 +240,10 @@ export default function Onboarding() {
           bvn: formData.bvn || null,
           bank_name: formData.bankName || null,
           bank_account: formData.accountNumber || null,
+          id_type: formData.idType || null,
+          id_number: formData.idNumber || null,
+          id_document_url: formData.idDocumentUrl || null,
+          utility_bill_url: formData.utilityBillUrl || null,
           onboarding_completed: true,
         })
         .eq("id", user.id);
@@ -202,12 +256,11 @@ export default function Onboarding() {
       // Check for pending invite and join group
       if (pendingInviteToken) {
         try {
-          const result = await joinGroup(pendingInviteToken);
+          await joinGroup(pendingInviteToken);
           sessionStorage.removeItem("pending_invite_token");
           toast.success("You've joined the group!");
         } catch (err) {
           console.error("Failed to join group via invite:", err);
-          // Still continue to dashboard even if join fails
         }
       }
 
@@ -386,6 +439,137 @@ export default function Onboarding() {
           >
             <div className="text-center mb-8">
               <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                <FileText className="h-8 w-8 text-primary" />
+              </div>
+              <h2 className="text-2xl font-bold text-foreground mb-2">
+                Upload Documents
+              </h2>
+              <p className="text-muted-foreground">
+                Upload a valid ID and utility bill for KYC verification
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              {/* ID Type Selection */}
+              <div className="space-y-2">
+                <Label>ID Type</Label>
+                <Select
+                  value={formData.idType}
+                  onValueChange={(value) => setFormData({ ...formData, idType: value })}
+                >
+                  <SelectTrigger className="h-12">
+                    <SelectValue placeholder="Select ID type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {idTypes.map((type) => (
+                      <SelectItem key={type.value} value={type.value}>
+                        {type.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* ID Number */}
+              <div className="space-y-2">
+                <Label htmlFor="idNumber">ID Number</Label>
+                <Input
+                  id="idNumber"
+                  type="text"
+                  placeholder="Enter your ID number"
+                  className="h-12"
+                  value={formData.idNumber}
+                  onChange={(e) => setFormData({ ...formData, idNumber: e.target.value })}
+                />
+              </div>
+
+              {/* ID Document Upload */}
+              <div className="space-y-2">
+                <Label>Upload ID Document</Label>
+                <div className="relative">
+                  <input
+                    type="file"
+                    accept="image/*,.pdf"
+                    className="hidden"
+                    id="id-upload"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleFileUpload(file, "id");
+                    }}
+                  />
+                  <label
+                    htmlFor="id-upload"
+                    className={`flex items-center justify-center gap-2 h-12 w-full rounded-md border border-input bg-background px-3 cursor-pointer hover:bg-muted/50 transition-colors ${formData.idDocumentUrl ? 'border-success' : ''}`}
+                  >
+                    {idUploading ? (
+                      <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                    ) : formData.idDocumentUrl ? (
+                      <>
+                        <CheckCircle2 className="h-5 w-5 text-success" />
+                        <span className="text-sm text-success">ID uploaded successfully</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-5 w-5 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">Choose file to upload</span>
+                      </>
+                    )}
+                  </label>
+                </div>
+              </div>
+
+              {/* Utility Bill Upload */}
+              <div className="space-y-2">
+                <Label>Upload Utility Bill</Label>
+                <div className="relative">
+                  <input
+                    type="file"
+                    accept="image/*,.pdf"
+                    className="hidden"
+                    id="utility-upload"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleFileUpload(file, "utility");
+                    }}
+                  />
+                  <label
+                    htmlFor="utility-upload"
+                    className={`flex items-center justify-center gap-2 h-12 w-full rounded-md border border-input bg-background px-3 cursor-pointer hover:bg-muted/50 transition-colors ${formData.utilityBillUrl ? 'border-success' : ''}`}
+                  >
+                    {utilityUploading ? (
+                      <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                    ) : formData.utilityBillUrl ? (
+                      <>
+                        <CheckCircle2 className="h-5 w-5 text-success" />
+                        <span className="text-sm text-success">Utility bill uploaded successfully</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-5 w-5 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">Choose file to upload</span>
+                      </>
+                    )}
+                  </label>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Accepted formats: JPG, PNG, PDF (max 5MB)
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        );
+
+      case 5:
+        return (
+          <motion.div
+            key="step5"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            className="space-y-6"
+          >
+            <div className="text-center mb-8">
+              <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
                 <Building2 className="h-8 w-8 text-primary" />
               </div>
               <h2 className="text-2xl font-bold text-foreground mb-2">
@@ -551,7 +735,7 @@ export default function Onboarding() {
               bankValidating ||
               (currentStep === 1 && !formData.fullName) || 
               (currentStep === 2 && !formData.username) ||
-              (currentStep === 4 && formData.bankName && formData.accountNumber.length === 10 && !bankValidated)
+              (currentStep === 5 && formData.bankName && formData.accountNumber.length === 10 && !bankValidated)
             }
           >
             {isLoading ? (

@@ -82,8 +82,8 @@ export default function Dashboard() {
         {/* Wallet Card */}
         <WalletCard
           balance={Number(wallet?.available_balance) || 0}
-          onFund={() => console.log("Fund")}
-          onWithdraw={() => console.log("Withdraw")}
+          onFund={() => navigate("/wallet")}
+          onWithdraw={() => navigate("/wallet")}
         />
 
         {/* Quick Actions */}
