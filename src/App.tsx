@@ -23,11 +23,13 @@ import Settings from "./pages/Settings";
 import Support from "./pages/Support";
 import Crowdfunding from "./pages/Crowdfunding";
 import Associations from "./pages/Associations";
+import TermsOfService from "./pages/TermsOfService";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-const PUBLIC_ROUTES = ["/", "/auth", "/forgot-password", "/invite", "/onboarding"];
+const PUBLIC_ROUTES = ["/", "/auth", "/forgot-password", "/invite", "/onboarding", "/terms", "/privacy"];
 
 function isPublicRoute(pathname: string) {
   return PUBLIC_ROUTES.some(route => 
@@ -112,6 +114,8 @@ const App = () => {
                 <Route path="/help" element={<Support />} />
                 <Route path="/crowdfunding" element={<Crowdfunding />} />
                 <Route path="/associations" element={<Associations />} />
+                <Route path="/terms" element={<TermsOfService />} />
+                <Route path="/privacy" element={<PrivacyPolicy />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </OnboardingRedirect>
