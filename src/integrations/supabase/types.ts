@@ -1408,6 +1408,45 @@ export type Database = {
         }
         Relationships: []
       }
+      recurring_webhook_logs_test: {
+        Row: {
+          amount: number | null
+          created_at: string
+          event_type: string
+          flw_ref: string | null
+          id: string
+          payload: Json
+          processed: boolean | null
+          processed_at: string | null
+          status: string | null
+          tx_ref: string | null
+        }
+        Insert: {
+          amount?: number | null
+          created_at?: string
+          event_type: string
+          flw_ref?: string | null
+          id?: string
+          payload: Json
+          processed?: boolean | null
+          processed_at?: string | null
+          status?: string | null
+          tx_ref?: string | null
+        }
+        Update: {
+          amount?: number | null
+          created_at?: string
+          event_type?: string
+          flw_ref?: string | null
+          id?: string
+          payload?: Json
+          processed?: boolean | null
+          processed_at?: string | null
+          status?: string | null
+          tx_ref?: string | null
+        }
+        Relationships: []
+      }
       support_ticket_comments: {
         Row: {
           author_id: string
@@ -1488,6 +1527,78 @@ export type Database = {
           subject?: string
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      test_ledger_entries: {
+        Row: {
+          amount: number
+          created_at: string
+          failure_reason: string | null
+          group_id: string | null
+          id: string
+          payment_cycle: number | null
+          retry_count: number | null
+          status: string
+          tx_ref: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          failure_reason?: string | null
+          group_id?: string | null
+          id?: string
+          payment_cycle?: number | null
+          retry_count?: number | null
+          status?: string
+          tx_ref: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          failure_reason?: string | null
+          group_id?: string | null
+          id?: string
+          payment_cycle?: number | null
+          retry_count?: number | null
+          status?: string
+          tx_ref?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      test_recurring_groups: {
+        Row: {
+          contribution_amount: number
+          created_at: string
+          frequency: string
+          id: string
+          mode: string
+          name: string
+          status: string
+        }
+        Insert: {
+          contribution_amount?: number
+          created_at?: string
+          frequency?: string
+          id?: string
+          mode?: string
+          name: string
+          status?: string
+        }
+        Update: {
+          contribution_amount?: number
+          created_at?: string
+          frequency?: string
+          id?: string
+          mode?: string
+          name?: string
+          status?: string
         }
         Relationships: []
       }
@@ -1671,6 +1782,45 @@ export type Database = {
           is_trusted?: boolean
           last_used_at?: string
           os?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_payment_tokens_test: {
+        Row: {
+          card_token: string
+          card_type: string | null
+          created_at: string
+          expiry: string | null
+          first_6digits: string | null
+          id: string
+          is_active: boolean | null
+          last_4digits: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          card_token: string
+          card_type?: string | null
+          created_at?: string
+          expiry?: string | null
+          first_6digits?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_4digits?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          card_token?: string
+          card_type?: string | null
+          created_at?: string
+          expiry?: string | null
+          first_6digits?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_4digits?: string | null
+          updated_at?: string
           user_id?: string
         }
         Relationships: []

@@ -29,3 +29,9 @@ verify_jwt = false
 
 [functions.contribution-handler]
 verify_jwt = false
+
+[functions.recurring-test-charge]
+verify_jwt = false
+
+[functions.recurring-test-webhook]
+verify_jwt = false

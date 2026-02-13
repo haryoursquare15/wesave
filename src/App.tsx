@@ -25,6 +25,7 @@ import Crowdfunding from "./pages/Crowdfunding";
 import Associations from "./pages/Associations";
 import TermsOfService from "./pages/TermsOfService";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
+import RecurringTestDashboard from "./pages/RecurringTestDashboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -105,6 +106,7 @@ const App = () => {
                 <Route path="/wallet" element={<Wallet />} />
                 <Route path="/invite/:token" element={<Invite />} />
                 <Route path="/admin" element={<Admin />} />
+                <Route path="/admin/recurring-test" element={<RecurringTestDashboard />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/settings/security" element={<SecuritySettings />} />
                 <Route path="/settings/profile" element={<Profile />} />
