@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { 
   Shield, ArrowLeft, Banknote, Users, UsersRound, 
-  Activity, FileText 
+  Activity, FileText, FlaskConical 
 } from "lucide-react";
 import { PlatformRevenueTab } from "@/components/admin/PlatformRevenueTab";
 import { AdminOverviewTab } from "@/components/admin/AdminOverviewTab";
@@ -75,6 +75,10 @@ export default function Admin() {
               <h1 className="text-2xl font-bold">Admin Dashboard</h1>
             </div>
           </div>
+          <Button variant="outline" size="sm" onClick={() => navigate("/admin/recurring-test")} className="flex items-center gap-1">
+            <FlaskConical className="h-4 w-4" />
+            Recurring Test Lab
+          </Button>
         </div>
       </div>
 
