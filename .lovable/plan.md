@@ -31,32 +31,47 @@ Actions:
 
 ---
 
-## Phase 2: Contribution Reconciliation (TODO)
+## Phase 2: Contribution Reconciliation ✅ COMPLETE
 
-### Goals
-- Upgrade `contribution-handler` card fallback to use `pending_card` status
-- Port verification worker + webhook from test infra to production
-- Set up cron job for reconciliation every 2-5 minutes
+### Database Changes
+- Added tracking fields to `cycle_contributions`: `card_charge_status`, `flw_transaction_id`, `card_charged_at`, `card_verified_at`
+- Created `pending_card_charges` table for transaction state tracking
+
+### Edge Function: `contribution-handler` (Upgraded)
+- Card fallback: if wallet insufficient, charges tokenized card automatically
+- Creates `pending_card_charges` record with status `pending`
+- No ledger entry until verified
+
+### Edge Function: `contribution-reconciler` (New)
+- `reconcile` — cron job every 3 min, verifies pending charges via Flutterwave API
+- `webhook` — processes Flutterwave webhook callbacks for card contributions
+- `manual_verify` — admin-triggered verification of pending/unresolved charges
+
+### Cron Job
+- `reconcile-pending-card-charges` — runs every 3 minutes via pg_cron + pg_net
+
+### Safety
+- Idempotent processing via existing contribution check
 - Dual confirmation: webhook (primary) + polling (secondary)
-- Idempotent ledger entries — only on verified success
-
-### New statuses for cycle_contributions
-- `pending_card` — card charged, awaiting confirmation
-- `failed` — charge failed
-- `unresolved` — pending > 24 hours, flagged for admin
+- 24-hour timeout → unresolved status for admin review
 
 ---
 
-## Phase 3: Admin Dashboard Sections (TODO)
+## Phase 3: Admin Dashboard ✅ COMPLETE
 
-### Contributions panel
-- Successful / Pending Wallet / Pending Card / Failed / Overdue
+### ContributionsTab
+- Summary cards: Completed / Pending Wallet / Pending Card / Failed / Unresolved
+- Full contributions table with status filters
+- Pending card charges table with manual verify button
 
-### Payment Authorization panel
-- Users with active tokens / without tokens / expired tokens
+### PaymentAuthTab
+- Summary cards: Active / Expired / Revoked / Pending tokens
+- Full token list with card details, status, and group association
 
-### Withdrawals panel
-- Requested / Processing / Paid / Failed
+### WithdrawalsTab
+- Summary cards: Total count / Volume / Processing
+- Withdrawal ledger entries with status and references
 
-### Manual verification
-- Admin can trigger manual Flutterwave verification for pending transactions
+### Admin Page Updates
+- 3 new tabs: Contributions, Payment Auth, Withdrawals
+- Gated by `transactions.view` permission
