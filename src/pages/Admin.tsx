@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { 
   Shield, ArrowLeft, Banknote, Users, UsersRound, 
-  Activity, FileText, FlaskConical 
+  Activity, FileText, FlaskConical, CreditCard, ArrowDownToLine, Wallet
 } from "lucide-react";
 import { PlatformRevenueTab } from "@/components/admin/PlatformRevenueTab";
 import { AdminOverviewTab } from "@/components/admin/AdminOverviewTab";
@@ -17,6 +17,9 @@ import { UserManagementTab } from "@/components/admin/UserManagementTab";
 import { GroupManagementTab } from "@/components/admin/GroupManagementTab";
 import { TransactionExplorerTab } from "@/components/admin/TransactionExplorerTab";
 import { AuditLogsTab } from "@/components/admin/AuditLogsTab";
+import { ContributionsTab } from "@/components/admin/ContributionsTab";
+import { PaymentAuthTab } from "@/components/admin/PaymentAuthTab";
+import { WithdrawalsTab } from "@/components/admin/WithdrawalsTab";
 
 export default function Admin() {
   const navigate = useNavigate();
@@ -120,6 +123,24 @@ export default function Admin() {
                 Audit Logs
               </TabsTrigger>
             )}
+            {hasPermission("transactions.view") && (
+              <TabsTrigger value="contributions" className="flex items-center gap-1">
+                <Wallet className="h-4 w-4" />
+                Contributions
+              </TabsTrigger>
+            )}
+            {hasPermission("transactions.view") && (
+              <TabsTrigger value="payment-auth" className="flex items-center gap-1">
+                <CreditCard className="h-4 w-4" />
+                Payment Auth
+              </TabsTrigger>
+            )}
+            {hasPermission("transactions.view") && (
+              <TabsTrigger value="withdrawals" className="flex items-center gap-1">
+                <ArrowDownToLine className="h-4 w-4" />
+                Withdrawals
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="overview">
@@ -144,6 +165,18 @@ export default function Admin() {
 
           <TabsContent value="audit">
             <AuditLogsTab />
+          </TabsContent>
+
+          <TabsContent value="contributions">
+            <ContributionsTab />
+          </TabsContent>
+
+          <TabsContent value="payment-auth">
+            <PaymentAuthTab />
+          </TabsContent>
+
+          <TabsContent value="withdrawals">
+            <WithdrawalsTab />
           </TabsContent>
         </Tabs>
       </div>
