@@ -259,9 +259,13 @@ export type Database = {
         Row: {
           card_expiry: string | null
           card_last4: string | null
+          card_status: string
           card_token: string
           card_type: string | null
+          charge_email: string | null
           created_at: string
+          first_6digits: string | null
+          group_id: string | null
           id: string
           is_active: boolean
           updated_at: string
@@ -270,9 +274,13 @@ export type Database = {
         Insert: {
           card_expiry?: string | null
           card_last4?: string | null
+          card_status?: string
           card_token: string
           card_type?: string | null
+          charge_email?: string | null
           created_at?: string
+          first_6digits?: string | null
+          group_id?: string | null
           id?: string
           is_active?: boolean
           updated_at?: string
@@ -281,15 +289,34 @@ export type Database = {
         Update: {
           card_expiry?: string | null
           card_last4?: string | null
+          card_status?: string
           card_token?: string
           card_type?: string | null
+          charge_email?: string | null
           created_at?: string
+          first_6digits?: string | null
+          group_id?: string | null
           id?: string
           is_active?: boolean
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "card_tokens_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "public_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "card_tokens_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "thrift_groups"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       chat_messages: {
         Row: {
@@ -754,6 +781,8 @@ export type Database = {
           mandate_status: string | null
           payout_position: number | null
           status: Database["public"]["Enums"]["membership_status"]
+          terms_accepted_at: string | null
+          tokenization_completed: boolean | null
           user_id: string
         }
         Insert: {
@@ -767,6 +796,8 @@ export type Database = {
           mandate_status?: string | null
           payout_position?: number | null
           status?: Database["public"]["Enums"]["membership_status"]
+          terms_accepted_at?: string | null
+          tokenization_completed?: boolean | null
           user_id: string
         }
         Update: {
@@ -780,6 +811,8 @@ export type Database = {
           mandate_status?: string | null
           payout_position?: number | null
           status?: Database["public"]["Enums"]["membership_status"]
+          terms_accepted_at?: string | null
+          tokenization_completed?: boolean | null
           user_id?: string
         }
         Relationships: [

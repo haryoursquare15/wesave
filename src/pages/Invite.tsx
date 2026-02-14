@@ -45,8 +45,10 @@ export default function Invite() {
       const result = await joinGroup(token!);
       setStatus("joined");
       toast.success("You've joined the group!");
+      // Redirect to group detail so tokenization gate can appear if needed
+      const groupId = result.group_id;
       setTimeout(() => {
-        navigate("/dashboard");
+        navigate(groupId ? `/groups/${groupId}` : "/dashboard");
       }, 1500);
     } catch (err: any) {
       toast.error(err.message || "Failed to join group");
