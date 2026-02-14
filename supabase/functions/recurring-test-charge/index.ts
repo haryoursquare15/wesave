@@ -25,29 +25,32 @@ serve(async (req) => {
       });
     }
 
-    // Auth check - admin only
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), {
-        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    if (authError || !user) {
-      return new Response(JSON.stringify({ success: false, error: 'Invalid token' }), {
-        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-    const { data: isAdmin } = await supabase.rpc('is_any_admin', { _user_id: user.id });
-    if (!isAdmin) {
-      return new Response(JSON.stringify({ success: false, error: 'Admin access required' }), {
-        status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
     const body = await req.json();
     const { action } = body;
+
+    // Skip auth for cron-triggered auto-charge (only touches test tables)
+    if (action !== 'cron_auto_charge') {
+      // Auth check - admin only
+      const authHeader = req.headers.get('Authorization');
+      if (!authHeader) {
+        return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), {
+          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      const token = authHeader.replace('Bearer ', '');
+      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+      if (authError || !user) {
+        return new Response(JSON.stringify({ success: false, error: 'Invalid token' }), {
+          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      const { data: isAdmin } = await supabase.rpc('is_any_admin', { _user_id: user.id });
+      if (!isAdmin) {
+        return new Response(JSON.stringify({ success: false, error: 'Admin access required' }), {
+          status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
 
     // ---- ACTION: CRON AUTO-CHARGE (no auth needed, runs via service role cron) ----
     if (action === 'cron_auto_charge') {
