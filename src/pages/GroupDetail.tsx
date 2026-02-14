@@ -600,7 +600,18 @@ export default function GroupDetail() {
             groupName={group.name}
             contributionAmount={group.contribution_amount}
             period={group.period}
-            onComplete={() => setNeedsTokenization(false)}
+            onComplete={async () => {
+              setNeedsTokenization(false);
+              // Refetch group data, member count, and payout order
+              const [{ data: updatedGroup }, { count }, { data: orderData }] = await Promise.all([
+                supabase.from("thrift_groups").select("*").eq("id", groupId!).single(),
+                supabase.from("group_memberships").select("*", { count: "exact", head: true }).eq("group_id", groupId!).eq("status", "active").then(r => ({ count: r.count })),
+                supabase.rpc("get_payout_order", { target_group_id: groupId! }),
+              ]);
+              if (updatedGroup) setGroup(updatedGroup);
+              setMemberCount(count || 0);
+              if (orderData) setPayoutOrder(orderData as PayoutMember[]);
+            }}
           />
           <BottomNav />
         </>
