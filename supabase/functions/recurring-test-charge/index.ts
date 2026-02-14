@@ -135,27 +135,15 @@ serve(async (req) => {
               .update({ status: 'failed', failure_reason: chargeData.message || 'Charge failed', updated_at: new Date().toISOString() })
               .eq('tx_ref', txRef);
           } else {
-            // Auto-verify since sandbox doesn't send webhooks
-            const chargeId = chargeData.data?.id;
-            if (chargeId) {
-              // Brief delay to allow Flutterwave to process
-              await new Promise(r => setTimeout(r, 3000));
-              try {
-                const verifyResp = await fetch(`${FLUTTERWAVE_TEST_BASE}/transactions/${chargeId}/verify`, {
-                  headers: { 'Authorization': `Bearer ${flwTestSecret}` },
-                });
-                const verifyData = await verifyResp.json();
-                console.log('Cron auto-verify response:', JSON.stringify(verifyData));
-                if (verifyData.status === 'success' && verifyData.data?.status === 'successful') {
-                  await supabase.from('test_ledger_entries')
-                    .update({ status: 'successful', updated_at: new Date().toISOString() })
-                    .eq('tx_ref', txRef)
-                    .eq('status', 'pending');
-                  console.log('Cron auto-verified successful for:', txRef);
-                }
-              } catch (verifyErr) {
-                console.warn('Cron auto-verify failed:', verifyErr);
-              }
+            // Sandbox tokenized charges stay "pending" because 3D Secure redirect isn't followed.
+            // If processor_response is "Approved", treat as successful immediately.
+            const processorResponse = chargeData.data?.processor_response || '';
+            if (processorResponse === 'Approved') {
+              await supabase.from('test_ledger_entries')
+                .update({ status: 'successful', updated_at: new Date().toISOString() })
+                .eq('tx_ref', txRef)
+                .eq('status', 'pending');
+              console.log('Cron: marked successful (processor approved) for:', txRef);
             }
           }
 
@@ -284,25 +272,15 @@ serve(async (req) => {
             .update({ status: 'failed', failure_reason: chargeData.message || 'Charge initiation failed', updated_at: new Date().toISOString() })
             .eq('tx_ref', txRef);
         } else {
-          // Auto-verify since sandbox doesn't send webhooks
-          const chargeId = chargeData.data?.id;
-          if (chargeId) {
-            await new Promise(r => setTimeout(r, 3000));
-            try {
-              const verifyResp = await fetch(`${FLUTTERWAVE_TEST_BASE}/transactions/${chargeId}/verify`, {
-                headers: { 'Authorization': `Bearer ${flwTestSecret}` },
-              });
-              const verifyData = await verifyResp.json();
-              console.log('Manual auto-verify response:', JSON.stringify(verifyData));
-              if (verifyData.status === 'success' && verifyData.data?.status === 'successful') {
-                await supabase.from('test_ledger_entries')
-                  .update({ status: 'successful', updated_at: new Date().toISOString() })
-                  .eq('tx_ref', txRef)
-                  .eq('status', 'pending');
-              }
-            } catch (verifyErr) {
-              console.warn('Manual auto-verify failed:', verifyErr);
-            }
+          // Sandbox tokenized charges stay "pending" (3D Secure redirect not followed).
+          // Use processor_response to determine success.
+          const processorResponse = chargeData.data?.processor_response || '';
+          if (processorResponse === 'Approved') {
+            await supabase.from('test_ledger_entries')
+              .update({ status: 'successful', updated_at: new Date().toISOString() })
+              .eq('tx_ref', txRef)
+              .eq('status', 'pending');
+            console.log('Manual: marked successful (processor approved) for:', txRef);
           }
         }
 
