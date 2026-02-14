@@ -256,8 +256,7 @@ serve(async (req) => {
       const { email, amount, name } = body;
       const txRef = `recurring-test-${Date.now()}`;
       const flwPublicKey = Deno.env.get('FLUTTERWAVE_TEST_PUBLIC_KEY') || '';
-      const siteUrl = Deno.env.get('SITE_URL') || supabaseUrl.replace('.supabase.co', '.lovable.app');
-      const redirectUrl = `${siteUrl}/recurring-test`;
+      const redirectUrl = 'https://wesave.lovable.app/admin/recurring-test';
 
       return new Response(JSON.stringify({
         success: true,
