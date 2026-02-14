@@ -78,6 +78,14 @@ serve(async (req) => {
         const amount = testGroup?.contribution_amount || 1000;
         const txRef = `cron-charge-${tokenData.user_id.slice(0, 8)}-${Date.now()}`;
 
+        // Fetch user's actual email for the charge
+        const { data: userProfile } = await supabase
+          .from('profiles')
+          .select('email')
+          .eq('id', tokenData.user_id)
+          .single();
+        const chargeEmail = userProfile?.email || 'test@wesave.ng';
+
         const { data: lastLedger } = await supabase
           .from('test_ledger_entries')
           .select('payment_cycle')
@@ -109,7 +117,7 @@ serve(async (req) => {
               currency: 'NGN',
               country: 'NG',
               amount,
-              email: 'test@wesave.ng',
+              email: chargeEmail,
               tx_ref: txRef,
               narration: `WeSave Cron Recurring Test - Cycle ${nextCycle}`,
             }),
@@ -189,6 +197,14 @@ serve(async (req) => {
       const amount = testGroup?.contribution_amount || 1000;
       const txRef = `recurring-charge-${tokenData.user_id.slice(0, 8)}-${Date.now()}`;
 
+      // Fetch user's actual email for the charge
+      const { data: chargeProfile } = await supabase
+        .from('profiles')
+        .select('email')
+        .eq('id', tokenData.user_id)
+        .single();
+      const userEmail = chargeProfile?.email || 'test@wesave.ng';
+
       // Get last cycle number
       const { data: lastLedger } = await supabase
         .from('test_ledger_entries')
@@ -223,7 +239,7 @@ serve(async (req) => {
             currency: 'NGN',
             country: 'NG',
             amount,
-            email: 'test@wesave.ng',
+            email: userEmail,
             tx_ref: txRef,
             narration: `WeSave Recurring Test - Cycle ${nextCycle}`,
           }),
