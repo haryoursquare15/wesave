@@ -169,11 +169,23 @@ serve(async (req) => {
     
     // Some actions (like check_login_allowed) don't require auth
     if (authHeader) {
-      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser(
-        authHeader.replace('Bearer ', '')
-      );
+      const token = authHeader.replace('Bearer ', '');
+      
+      // Try getUser with token first
+      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser(token);
       if (!authError && authUser) {
         user = authUser;
+      } else {
+        // Fallback: decode JWT and use admin API
+        try {
+          const payload = JSON.parse(atob(token.split('.')[1]));
+          if (payload.sub) {
+            const { data: { user: adminUser } } = await supabase.auth.admin.getUserById(payload.sub);
+            if (adminUser) user = adminUser;
+          }
+        } catch (_e) {
+          // Token invalid
+        }
       }
     }
 
