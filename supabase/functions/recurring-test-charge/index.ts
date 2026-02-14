@@ -49,6 +49,92 @@ serve(async (req) => {
     const body = await req.json();
     const { action } = body;
 
+    // ---- ACTION: CRON AUTO-CHARGE (no auth needed, runs via service role cron) ----
+    if (action === 'cron_auto_charge') {
+      // Fetch all active tokens and charge each one
+      const { data: activeTokens } = await supabase
+        .from('user_payment_tokens_test')
+        .select('*')
+        .eq('is_active', true);
+
+      if (!activeTokens || activeTokens.length === 0) {
+        return new Response(JSON.stringify({ success: true, message: 'No active tokens to charge', charged: 0 }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const results = [];
+      for (const tokenData of activeTokens) {
+        const { data: testGroup } = await supabase
+          .from('test_recurring_groups')
+          .select('*')
+          .eq('status', 'active')
+          .limit(1)
+          .single();
+
+        const amount = testGroup?.contribution_amount || 1000;
+        const txRef = `cron-charge-${tokenData.user_id.slice(0, 8)}-${Date.now()}`;
+
+        const { data: lastLedger } = await supabase
+          .from('test_ledger_entries')
+          .select('payment_cycle')
+          .eq('user_id', tokenData.user_id)
+          .order('payment_cycle', { ascending: false })
+          .limit(1)
+          .single();
+
+        const nextCycle = (lastLedger?.payment_cycle || 0) + 1;
+
+        await supabase.from('test_ledger_entries').insert({
+          user_id: tokenData.user_id,
+          group_id: testGroup?.id || null,
+          amount,
+          tx_ref: txRef,
+          status: 'pending',
+          payment_cycle: nextCycle,
+        });
+
+        try {
+          const chargeResp = await fetch(`${FLUTTERWAVE_TEST_BASE}/tokenized-charges`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${flwTestSecret}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              token: tokenData.card_token,
+              currency: 'NGN',
+              country: 'NG',
+              amount,
+              email: 'test@wesave.ng',
+              tx_ref: txRef,
+              narration: `WeSave Cron Recurring Test - Cycle ${nextCycle}`,
+            }),
+          });
+
+          const chargeData = await chargeResp.json();
+          console.log('Cron recurring charge response:', JSON.stringify(chargeData));
+
+          if (chargeData.status !== 'success') {
+            await supabase.from('test_ledger_entries')
+              .update({ status: 'failed', failure_reason: chargeData.message || 'Charge failed', updated_at: new Date().toISOString() })
+              .eq('tx_ref', txRef);
+          }
+
+          results.push({ user_id: tokenData.user_id, tx_ref: txRef, status: chargeData.status, cycle: nextCycle });
+        } catch (err) {
+          await supabase.from('test_ledger_entries')
+            .update({ status: 'failed', failure_reason: err instanceof Error ? err.message : 'Network error', updated_at: new Date().toISOString() })
+            .eq('tx_ref', txRef);
+          results.push({ user_id: tokenData.user_id, tx_ref: txRef, status: 'error', error: err instanceof Error ? err.message : 'Unknown' });
+        }
+      }
+
+      return new Response(JSON.stringify({ success: true, charged: results.length, results }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // ---- ACTION: INITIATE FIRST PAYMENT (for token generation) ----
     if (action === 'initiate_payment') {
       const { email, amount, name } = body;
