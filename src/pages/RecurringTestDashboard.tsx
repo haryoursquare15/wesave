@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useIsAdmin } from "@/hooks/useAdmin";
@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, CreditCard, RefreshCw, Play, Trash2, Shield, Zap, FileText, BarChart3 } from "lucide-react";
+import { ArrowLeft, CreditCard, RefreshCw, Play, Trash2, Shield, Zap, FileText, BarChart3, CheckCircle, AlertTriangle, Clock, Search, FlaskConical } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
@@ -30,16 +30,36 @@ interface TestToken {
   created_at: string;
 }
 
-interface TestLedgerEntry {
+interface Payment {
   id: string;
   user_id: string;
   group_id: string | null;
   amount: number;
   tx_ref: string;
+  flw_transaction_id: string | null;
+  flw_ref: string | null;
   status: string;
-  payment_cycle: number;
+  payment_cycle: number | null;
   retry_count: number;
+  max_retries: number;
   failure_reason: string | null;
+  processor_response: string | null;
+  charge_type: string;
+  verified_at: string | null;
+  resolved_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ConfirmedLedgerEntry {
+  id: string;
+  payment_id: string;
+  user_id: string;
+  amount: number;
+  tx_ref: string;
+  flw_transaction_id: string | null;
+  payment_cycle: number | null;
+  confirmed_at: string;
   created_at: string;
 }
 
@@ -48,9 +68,11 @@ interface WebhookLog {
   event_type: string;
   tx_ref: string | null;
   flw_ref: string | null;
+  flw_transaction_id: string | null;
   status: string | null;
   amount: number | null;
   processed: boolean;
+  verification_source: string | null;
   created_at: string;
 }
 
@@ -70,7 +92,8 @@ export default function RecurringTestDashboard() {
   const { toast } = useToast();
 
   const [tokens, setTokens] = useState<TestToken[]>([]);
-  const [ledger, setLedger] = useState<TestLedgerEntry[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [confirmedLedger, setConfirmedLedger] = useState<ConfirmedLedgerEntry[]>([]);
   const [webhookLogs, setWebhookLogs] = useState<WebhookLog[]>([]);
   const [testGroups, setTestGroups] = useState<TestGroup[]>([]);
   const [loading, setLoading] = useState(true);
@@ -99,7 +122,8 @@ export default function RecurringTestDashboard() {
 
       if (resp.data?.success) {
         setTokens(resp.data.tokens || []);
-        setLedger(resp.data.ledger || []);
+        setPayments(resp.data.payments || []);
+        setConfirmedLedger(resp.data.confirmed_ledger || []);
         setWebhookLogs(resp.data.webhook_logs || []);
         setTestGroups(resp.data.test_groups || []);
       }
@@ -114,7 +138,6 @@ export default function RecurringTestDashboard() {
     if (isAdmin && user) fetchData();
   }, [isAdmin, user]);
 
-  // Load Flutterwave inline JS SDK
   useEffect(() => {
     if (document.getElementById('flw-inline-script')) return;
     const script = document.createElement('script');
@@ -145,12 +168,11 @@ export default function RecurringTestDashboard() {
       const config = resp.data.payment_link_data;
 
       if (!window.FlutterwaveCheckout) {
-        toast({ title: "Error", description: "Flutterwave SDK not loaded yet. Please try again in a moment.", variant: "destructive" });
+        toast({ title: "Error", description: "Flutterwave SDK not loaded yet.", variant: "destructive" });
         setActionLoading(null);
         return;
       }
 
-      // Open Flutterwave payment modal
       window.FlutterwaveCheckout({
         public_key: config.public_key,
         tx_ref: config.tx_ref,
@@ -161,34 +183,24 @@ export default function RecurringTestDashboard() {
         meta: config.meta,
         payment_options: 'card',
         callback: async (response: Record<string, unknown>) => {
-          console.log('Flutterwave callback:', response);
-          // Verify and save token via edge function
           try {
             const verifyResp = await supabase.functions.invoke('recurring-test-charge', {
-              body: {
-                action: 'verify_and_save_token',
-                transaction_id: response.transaction_id,
-                tx_ref: response.tx_ref,
-              },
+              body: { action: 'verify_and_save_token', transaction_id: response.transaction_id, tx_ref: response.tx_ref },
             });
-
             if (verifyResp.data?.success) {
               toast({ title: "Token Saved!", description: verifyResp.data.message });
             } else {
               toast({ title: "Verification Issue", description: verifyResp.data?.error || 'Could not save token', variant: "destructive" });
             }
           } catch (err) {
-            console.error('Token verification error:', err);
             toast({ title: "Error", description: "Failed to verify transaction", variant: "destructive" });
           }
           fetchData();
           setActionLoading(null);
         },
-        onclose: () => {
-          setActionLoading(null);
-        },
+        onclose: () => setActionLoading(null),
       });
-    } catch (err) {
+    } catch {
       toast({ title: "Error", description: 'Network error', variant: "destructive" });
       setActionLoading(null);
     }
@@ -200,7 +212,6 @@ export default function RecurringTestDashboard() {
       const resp = await supabase.functions.invoke('recurring-test-charge', {
         body: { action: 'run_recurring_charge', token_id: tokenId },
       });
-
       if (resp.data?.success) {
         toast({
           title: resp.data.charge_status === 'success' ? "Charge Initiated" : "Charge Failed",
@@ -211,7 +222,68 @@ export default function RecurringTestDashboard() {
       } else {
         toast({ title: "Error", description: resp.data?.error || 'Failed', variant: "destructive" });
       }
-    } catch (err) {
+    } catch {
+      toast({ title: "Error", description: 'Network error', variant: "destructive" });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const manualVerify = async (paymentId: string) => {
+    setActionLoading(`verify-${paymentId}`);
+    try {
+      const resp = await supabase.functions.invoke('recurring-test-charge', {
+        body: { action: 'manual_verify', payment_id: paymentId },
+      });
+      if (resp.data?.success) {
+        toast({
+          title: resp.data.status === 'final_success' ? "Verified & Confirmed!" : "Still Pending",
+          description: resp.data.status === 'final_success' ? 'Ledger entry created.' : `Status: ${resp.data.status}`,
+          variant: resp.data.status === 'final_success' ? "default" : "destructive",
+        });
+        fetchData();
+      } else {
+        toast({ title: "Error", description: resp.data?.error || 'Verification failed', variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Error", description: 'Network error', variant: "destructive" });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const runSimulation = async (scenario: string) => {
+    setActionLoading(`sim-${scenario}`);
+    try {
+      const resp = await supabase.functions.invoke('recurring-test-charge', {
+        body: { action: 'simulate', scenario },
+      });
+      if (resp.data?.success) {
+        toast({ title: "Simulation Created", description: resp.data.message });
+        fetchData();
+      } else {
+        toast({ title: "Error", description: resp.data?.error || 'Failed', variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Error", description: 'Network error', variant: "destructive" });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const triggerVerifyWorker = async () => {
+    setActionLoading('verify-worker');
+    try {
+      const resp = await supabase.functions.invoke('recurring-test-charge', {
+        body: { action: 'verify_pending' },
+      });
+      if (resp.data?.success) {
+        toast({ title: "Verification Complete", description: `Processed ${resp.data.verified} transactions.` });
+        fetchData();
+      } else {
+        toast({ title: "Error", description: resp.data?.error || 'Failed', variant: "destructive" });
+      }
+    } catch {
       toast({ title: "Error", description: 'Network error', variant: "destructive" });
     } finally {
       setActionLoading(null);
@@ -225,12 +297,11 @@ export default function RecurringTestDashboard() {
       const resp = await supabase.functions.invoke('recurring-test-charge', {
         body: { action: 'reset_test_data' },
       });
-
       if (resp.data?.success) {
         toast({ title: "Reset Complete", description: "All test data cleared." });
         fetchData();
       }
-    } catch (err) {
+    } catch {
       toast({ title: "Error", description: 'Reset failed', variant: "destructive" });
     } finally {
       setActionLoading(null);
@@ -251,15 +322,23 @@ export default function RecurringTestDashboard() {
   if (!isAdmin) return null;
 
   const statusColor = (s: string) => {
-    if (s === 'successful' || s === 'success') return 'bg-green-100 text-green-800';
-    if (s === 'failed') return 'bg-red-100 text-red-800';
+    if (s === 'final_success' || s === 'successful' || s === 'success') return 'bg-green-100 text-green-800';
+    if (s === 'final_failed' || s === 'failed') return 'bg-red-100 text-red-800';
     if (s === 'pending') return 'bg-yellow-100 text-yellow-800';
     if (s === 'initiated') return 'bg-blue-100 text-blue-800';
+    if (s === 'unresolved') return 'bg-orange-100 text-orange-800';
+    if (s === 'reversed') return 'bg-purple-100 text-purple-800';
     return 'bg-muted text-muted-foreground';
   };
 
+  const pendingCount = payments.filter(p => ['initiated', 'pending'].includes(p.status)).length;
+  const confirmedCount = confirmedLedger.length;
+  const failedCount = payments.filter(p => ['final_failed', 'unresolved'].includes(p.status)).length;
+  const totalAmount = confirmedLedger.reduce((sum, e) => sum + Number(e.amount), 0);
+
   return (
     <div className="min-h-screen bg-background">
+      {/* Header */}
       <div className="border-b bg-card">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -268,13 +347,14 @@ export default function RecurringTestDashboard() {
             </Button>
             <div className="flex items-center gap-2">
               <Shield className="h-6 w-6 text-primary" />
-              <h1 className="text-2xl font-bold">Recurring Charge Test Lab</h1>
-              <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-300">
-                TEST MODE
-              </Badge>
+              <h1 className="text-2xl font-bold">Reconciliation-Safe Test Lab</h1>
+              <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-300">TEST MODE</Badge>
             </div>
           </div>
           <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={triggerVerifyWorker} disabled={actionLoading === 'verify-worker'}>
+              <Search className={`h-4 w-4 mr-1 ${actionLoading === 'verify-worker' ? 'animate-spin' : ''}`} /> Verify Pending
+            </Button>
             <Button variant="outline" size="sm" onClick={fetchData} disabled={loading}>
               <RefreshCw className={`h-4 w-4 mr-1 ${loading ? 'animate-spin' : ''}`} /> Refresh
             </Button>
@@ -287,7 +367,7 @@ export default function RecurringTestDashboard() {
 
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <Card>
             <CardHeader className="pb-2">
               <CardDescription>Saved Tokens</CardDescription>
@@ -296,25 +376,31 @@ export default function RecurringTestDashboard() {
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardDescription>Ledger Entries</CardDescription>
-              <CardTitle className="text-3xl">{ledger.length}</CardTitle>
+              <CardDescription className="flex items-center gap-1"><Clock className="h-3 w-3" /> Pending</CardDescription>
+              <CardTitle className="text-3xl text-yellow-600">{pendingCount}</CardTitle>
             </CardHeader>
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardDescription>Successful Charges</CardDescription>
-              <CardTitle className="text-3xl text-green-600">{ledger.filter(l => l.status === 'successful').length}</CardTitle>
+              <CardDescription className="flex items-center gap-1"><CheckCircle className="h-3 w-3" /> Confirmed</CardDescription>
+              <CardTitle className="text-3xl text-green-600">{confirmedCount}</CardTitle>
             </CardHeader>
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardDescription>Failed Charges</CardDescription>
-              <CardTitle className="text-3xl text-red-600">{ledger.filter(l => l.status === 'failed').length}</CardTitle>
+              <CardDescription className="flex items-center gap-1"><AlertTriangle className="h-3 w-3" /> Failed/Unresolved</CardDescription>
+              <CardTitle className="text-3xl text-red-600">{failedCount}</CardTitle>
+            </CardHeader>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>Confirmed Total</CardDescription>
+              <CardTitle className="text-2xl">₦{totalAmount.toLocaleString()}</CardTitle>
             </CardHeader>
           </Card>
         </div>
 
-        {/* Initiate First Payment */}
+        {/* Step 1: Generate Token */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><CreditCard className="h-5 w-5" /> Step 1: Generate Card Token</CardTitle>
@@ -326,22 +412,36 @@ export default function RecurringTestDashboard() {
               {actionLoading === 'initiate' ? 'Initializing...' : 'Initiate Test Payment (₦1,000)'}
             </Button>
             <p className="text-sm text-muted-foreground mt-2">
-              Use Flutterwave test card: 5531 8866 5214 2950, CVV: 564, Expiry: 09/32, PIN: 3310, OTP: 12345
+              Use test card: 5531 8866 5214 2950, CVV: 564, Expiry: 09/32, PIN: 3310, OTP: 12345
             </p>
           </CardContent>
         </Card>
 
-        <Tabs defaultValue="tokens" className="space-y-4">
+        {/* Failure Simulation */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><FlaskConical className="h-5 w-5" /> Failure Simulation</CardTitle>
+            <CardDescription>Create test scenarios to verify the reconciliation system handles edge cases correctly.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-3">
+            <Button variant="outline" size="sm" onClick={() => runSimulation('webhook_not_received')} disabled={!!actionLoading}>
+              Simulate: No Webhook
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => runSimulation('pending_timeout')} disabled={!!actionLoading}>
+              Simulate: 24h Timeout
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => runSimulation('failed_charge')} disabled={!!actionLoading}>
+              Simulate: Failed Charge
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Tabs defaultValue="payments" className="space-y-4">
           <TabsList>
-            <TabsTrigger value="tokens" className="flex items-center gap-1">
-              <CreditCard className="h-4 w-4" /> Tokens
-            </TabsTrigger>
-            <TabsTrigger value="ledger" className="flex items-center gap-1">
-              <BarChart3 className="h-4 w-4" /> Test Ledger
-            </TabsTrigger>
-            <TabsTrigger value="webhooks" className="flex items-center gap-1">
-              <FileText className="h-4 w-4" /> Webhook Logs
-            </TabsTrigger>
+            <TabsTrigger value="tokens" className="flex items-center gap-1"><CreditCard className="h-4 w-4" /> Tokens</TabsTrigger>
+            <TabsTrigger value="payments" className="flex items-center gap-1"><BarChart3 className="h-4 w-4" /> Payments</TabsTrigger>
+            <TabsTrigger value="confirmed" className="flex items-center gap-1"><CheckCircle className="h-4 w-4" /> Confirmed Ledger</TabsTrigger>
+            <TabsTrigger value="webhooks" className="flex items-center gap-1"><FileText className="h-4 w-4" /> Logs</TabsTrigger>
           </TabsList>
 
           {/* Tokens Tab */}
@@ -349,7 +449,7 @@ export default function RecurringTestDashboard() {
             <Card>
               <CardHeader>
                 <CardTitle>Stored Test Tokens</CardTitle>
-                <CardDescription>Card tokens captured from test payments. Use these for recurring charges.</CardDescription>
+                <CardDescription>Card tokens captured from test payments.</CardDescription>
               </CardHeader>
               <CardContent>
                 {tokens.length === 0 ? (
@@ -359,7 +459,7 @@ export default function RecurringTestDashboard() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Card</TableHead>
-                        <TableHead>Token (masked)</TableHead>
+                        <TableHead>Token</TableHead>
                         <TableHead>Type</TableHead>
                         <TableHead>Expiry</TableHead>
                         <TableHead>Status</TableHead>
@@ -377,11 +477,7 @@ export default function RecurringTestDashboard() {
                           <TableCell><Badge variant={t.is_active ? 'default' : 'secondary'}>{t.is_active ? 'Active' : 'Inactive'}</Badge></TableCell>
                           <TableCell className="text-xs">{new Date(t.created_at).toLocaleString()}</TableCell>
                           <TableCell>
-                            <Button
-                              size="sm"
-                              onClick={() => runRecurringCharge(t.id)}
-                              disabled={actionLoading === `charge-${t.id}` || !t.is_active}
-                            >
+                            <Button size="sm" onClick={() => runRecurringCharge(t.id)} disabled={actionLoading === `charge-${t.id}` || !t.is_active}>
                               <Play className="h-3 w-3 mr-1" />
                               {actionLoading === `charge-${t.id}` ? 'Charging...' : 'Charge ₦1,000'}
                             </Button>
@@ -395,16 +491,81 @@ export default function RecurringTestDashboard() {
             </Card>
           </TabsContent>
 
-          {/* Ledger Tab */}
-          <TabsContent value="ledger">
+          {/* Payments Tab */}
+          <TabsContent value="payments">
             <Card>
               <CardHeader>
-                <CardTitle>Test Ledger</CardTitle>
-                <CardDescription>All recurring charge attempts and their status. Updated only after webhook confirmation.</CardDescription>
+                <CardTitle>Transaction State Machine</CardTitle>
+                <CardDescription>
+                  All payment attempts: initiated → pending → final_success / final_failed / unresolved. Only final_success creates a ledger entry.
+                </CardDescription>
               </CardHeader>
               <CardContent>
-                {ledger.length === 0 ? (
-                  <p className="text-muted-foreground text-center py-8">No ledger entries yet.</p>
+                {payments.length === 0 ? (
+                  <p className="text-muted-foreground text-center py-8">No payment records yet.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Cycle</TableHead>
+                          <TableHead>Amount</TableHead>
+                          <TableHead>TX Ref</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Type</TableHead>
+                          <TableHead>Retries</TableHead>
+                          <TableHead>Processor</TableHead>
+                          <TableHead>FLW ID</TableHead>
+                          <TableHead>Created</TableHead>
+                          <TableHead>Action</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {payments.map(p => (
+                          <TableRow key={p.id}>
+                            <TableCell>{p.payment_cycle || '-'}</TableCell>
+                            <TableCell>₦{Number(p.amount).toLocaleString()}</TableCell>
+                            <TableCell className="font-mono text-xs max-w-[160px] truncate">{p.tx_ref}</TableCell>
+                            <TableCell>
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColor(p.status)}`}>
+                                {p.status}
+                              </span>
+                            </TableCell>
+                            <TableCell><Badge variant="outline" className="text-xs">{p.charge_type}</Badge></TableCell>
+                            <TableCell>{p.retry_count}/{p.max_retries}</TableCell>
+                            <TableCell className="text-xs max-w-[120px] truncate">{p.processor_response || p.failure_reason || '-'}</TableCell>
+                            <TableCell className="font-mono text-xs">{p.flw_transaction_id || '-'}</TableCell>
+                            <TableCell className="text-xs">{new Date(p.created_at).toLocaleString()}</TableCell>
+                            <TableCell>
+                              {['initiated', 'pending', 'unresolved'].includes(p.status) && p.flw_transaction_id && (
+                                <Button size="sm" variant="outline" onClick={() => manualVerify(p.id)} disabled={actionLoading === `verify-${p.id}`}>
+                                  <Search className="h-3 w-3 mr-1" />
+                                  {actionLoading === `verify-${p.id}` ? 'Verifying...' : 'Re-verify'}
+                                </Button>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Confirmed Ledger Tab */}
+          <TabsContent value="confirmed">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><CheckCircle className="h-5 w-5 text-green-600" /> Confirmed Ledger</CardTitle>
+                <CardDescription>
+                  Only verified successful transactions appear here. This is the single source of truth for contribution totals.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {confirmedLedger.length === 0 ? (
+                  <p className="text-muted-foreground text-center py-8">No confirmed entries yet. Transactions must be verified first.</p>
                 ) : (
                   <Table>
                     <TableHeader>
@@ -412,26 +573,18 @@ export default function RecurringTestDashboard() {
                         <TableHead>Cycle</TableHead>
                         <TableHead>Amount</TableHead>
                         <TableHead>TX Ref</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Retries</TableHead>
-                        <TableHead>Failure Reason</TableHead>
-                        <TableHead>Created</TableHead>
+                        <TableHead>FLW TX ID</TableHead>
+                        <TableHead>Confirmed At</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {ledger.map(l => (
-                        <TableRow key={l.id}>
-                          <TableCell>{l.payment_cycle}</TableCell>
-                          <TableCell>₦{Number(l.amount).toLocaleString()}</TableCell>
-                          <TableCell className="font-mono text-xs max-w-[200px] truncate">{l.tx_ref}</TableCell>
-                          <TableCell>
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColor(l.status)}`}>
-                              {l.status}
-                            </span>
-                          </TableCell>
-                          <TableCell>{l.retry_count}</TableCell>
-                          <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">{l.failure_reason || '-'}</TableCell>
-                          <TableCell className="text-xs">{new Date(l.created_at).toLocaleString()}</TableCell>
+                      {confirmedLedger.map(e => (
+                        <TableRow key={e.id}>
+                          <TableCell>{e.payment_cycle || '-'}</TableCell>
+                          <TableCell className="text-green-700 font-medium">₦{Number(e.amount).toLocaleString()}</TableCell>
+                          <TableCell className="font-mono text-xs max-w-[200px] truncate">{e.tx_ref}</TableCell>
+                          <TableCell className="font-mono text-xs">{e.flw_transaction_id || '-'}</TableCell>
+                          <TableCell className="text-xs">{new Date(e.confirmed_at).toLocaleString()}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -445,48 +598,77 @@ export default function RecurringTestDashboard() {
           <TabsContent value="webhooks">
             <Card>
               <CardHeader>
-                <CardTitle>Webhook Logs</CardTitle>
-                <CardDescription>Raw webhook events received from Flutterwave test mode.</CardDescription>
+                <CardTitle>Audit Logs</CardTitle>
+                <CardDescription>All webhook events, verification attempts, and state transitions.</CardDescription>
               </CardHeader>
               <CardContent>
                 {webhookLogs.length === 0 ? (
-                  <p className="text-muted-foreground text-center py-8">No webhook events yet.</p>
+                  <p className="text-muted-foreground text-center py-8">No events yet.</p>
                 ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Event</TableHead>
-                        <TableHead>TX Ref</TableHead>
-                        <TableHead>FLW Ref</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Amount</TableHead>
-                        <TableHead>Processed</TableHead>
-                        <TableHead>Time</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {webhookLogs.map(w => (
-                        <TableRow key={w.id}>
-                          <TableCell>{w.event_type}</TableCell>
-                          <TableCell className="font-mono text-xs max-w-[180px] truncate">{w.tx_ref || '-'}</TableCell>
-                          <TableCell className="font-mono text-xs">{w.flw_ref || '-'}</TableCell>
-                          <TableCell>
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColor(w.status || '')}`}>
-                              {w.status || '-'}
-                            </span>
-                          </TableCell>
-                          <TableCell>{w.amount ? `₦${Number(w.amount).toLocaleString()}` : '-'}</TableCell>
-                          <TableCell><Badge variant={w.processed ? 'default' : 'outline'}>{w.processed ? 'Yes' : 'No'}</Badge></TableCell>
-                          <TableCell className="text-xs">{new Date(w.created_at).toLocaleString()}</TableCell>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Event</TableHead>
+                          <TableHead>TX Ref</TableHead>
+                          <TableHead>FLW Ref</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Source</TableHead>
+                          <TableHead>Amount</TableHead>
+                          <TableHead>Processed</TableHead>
+                          <TableHead>Time</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {webhookLogs.map(w => (
+                          <TableRow key={w.id}>
+                            <TableCell className="text-xs">{w.event_type}</TableCell>
+                            <TableCell className="font-mono text-xs max-w-[140px] truncate">{w.tx_ref || '-'}</TableCell>
+                            <TableCell className="font-mono text-xs">{w.flw_ref || '-'}</TableCell>
+                            <TableCell>
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColor(w.status || '')}`}>
+                                {w.status || '-'}
+                              </span>
+                            </TableCell>
+                            <TableCell><Badge variant="outline" className="text-xs">{w.verification_source || '-'}</Badge></TableCell>
+                            <TableCell>{w.amount ? `₦${Number(w.amount).toLocaleString()}` : '-'}</TableCell>
+                            <TableCell><Badge variant={w.processed ? 'default' : 'outline'}>{w.processed ? 'Yes' : 'No'}</Badge></TableCell>
+                            <TableCell className="text-xs">{new Date(w.created_at).toLocaleString()}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 )}
               </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* State Machine Legend */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Transaction State Model</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-3 text-xs">
+              <span className="px-2 py-1 rounded-full bg-blue-100 text-blue-800 font-medium">initiated</span>
+              <span>→</span>
+              <span className="px-2 py-1 rounded-full bg-yellow-100 text-yellow-800 font-medium">pending</span>
+              <span>→</span>
+              <span className="px-2 py-1 rounded-full bg-green-100 text-green-800 font-medium">final_success</span>
+              <span>/</span>
+              <span className="px-2 py-1 rounded-full bg-red-100 text-red-800 font-medium">final_failed</span>
+              <span>/</span>
+              <span className="px-2 py-1 rounded-full bg-orange-100 text-orange-800 font-medium">unresolved</span>
+              <span>/</span>
+              <span className="px-2 py-1 rounded-full bg-purple-100 text-purple-800 font-medium">reversed</span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Only <strong>final_success</strong> creates a confirmed ledger entry. Pending transactions are verified via Flutterwave API every 2 minutes. Transactions pending &gt;24h or exceeding retry limits are marked <strong>unresolved</strong>.
+            </p>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

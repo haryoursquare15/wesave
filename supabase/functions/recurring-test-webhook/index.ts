@@ -1,6 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { createHmac } from "https://deno.land/std@0.168.0/crypto/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -20,7 +19,7 @@ serve(async (req) => {
     const payload = await req.json();
     console.log('[TEST WEBHOOK] Received payload:', JSON.stringify(payload));
 
-    // Verify webhook signature (using test webhook secret or shared one)
+    // Verify webhook signature
     const verifHash = req.headers.get('verif-hash');
     const webhookSecret = Deno.env.get('FLUTTERWAVE_WEBHOOK_SECRET');
     if (webhookSecret && verifHash !== webhookSecret) {
@@ -36,20 +35,23 @@ serve(async (req) => {
     const flwRef = data.flw_ref || '';
     const status = data.status || '';
     const amount = data.amount || 0;
+    const flwTransactionId = data.id?.toString() || '';
 
-    // Log webhook to test table
+    // Log webhook
     await supabase.from('recurring_webhook_logs_test').insert({
       event_type: event,
       tx_ref: txRef,
       flw_ref: flwRef,
+      flw_transaction_id: flwTransactionId,
       status,
       amount,
       payload,
+      verification_source: 'webhook',
     });
 
-    // Only process if this is a recurring test transaction
-    if (!txRef.startsWith('recurring-')) {
-      console.log('[TEST WEBHOOK] Not a recurring test tx_ref, ignoring:', txRef);
+    // Only process recurring test transactions
+    if (!txRef.startsWith('recurring-') && !txRef.startsWith('cron-charge-')) {
+      console.log('[TEST WEBHOOK] Not a test tx_ref, ignoring:', txRef);
       return new Response(JSON.stringify({ status: 'ignored', reason: 'Not a test transaction' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -59,7 +61,6 @@ serve(async (req) => {
     if (txRef.startsWith('recurring-test-') && status === 'successful') {
       const card = data.card || {};
       if (card.token) {
-        // Check if token already stored
         const { data: existing } = await supabase
           .from('user_payment_tokens_test')
           .select('id')
@@ -67,8 +68,6 @@ serve(async (req) => {
           .single();
 
         if (!existing) {
-          // Store new test token
-          // Use a placeholder user_id since this is test mode
           const userId = data.meta?.user_id || data.customer?.id || '00000000-0000-0000-0000-000000000001';
           await supabase.from('user_payment_tokens_test').insert({
             user_id: userId,
@@ -77,55 +76,80 @@ serve(async (req) => {
             last_4digits: card.last_4digits || card.last4 || null,
             expiry: card.expiry || null,
             card_type: card.type || card.brand || null,
+            charge_email: data.customer?.email || null,
           });
-          console.log('[TEST WEBHOOK] Card token stored for test user');
+          console.log('[TEST WEBHOOK] Card token stored');
         }
       }
     }
 
-    // ---- LEDGER UPDATE (only on successful charge confirmation) ----
-    if (txRef.startsWith('recurring-charge-') && status === 'successful') {
-      const { data: ledgerEntry, error: ledgerErr } = await supabase
-        .from('test_ledger_entries')
-        .update({
-          status: 'successful',
-          updated_at: new Date().toISOString(),
-        })
-        .eq('tx_ref', txRef)
-        .eq('status', 'pending')
-        .select()
-        .single();
-
-      if (ledgerEntry) {
-        console.log('[TEST WEBHOOK] Test ledger updated to successful for:', txRef);
-
-        // Mark webhook as processed
-        await supabase.from('recurring_webhook_logs_test')
-          .update({ processed: true, processed_at: new Date().toISOString() })
-          .eq('tx_ref', txRef);
-      } else {
-        console.warn('[TEST WEBHOOK] No pending ledger entry found for:', txRef, ledgerErr);
-      }
-    }
-
-    // ---- FAILED CHARGE ----
-    if (txRef.startsWith('recurring-charge-') && status === 'failed') {
-      const { data: entry } = await supabase
-        .from('test_ledger_entries')
+    // ---- RECONCILIATION: Update payments_test on successful webhook ----
+    if (status === 'successful' && (txRef.startsWith('recurring-charge-') || txRef.startsWith('cron-charge-'))) {
+      // Find the payment record
+      const { data: payment } = await supabase
+        .from('payments_test')
         .select('*')
         .eq('tx_ref', txRef)
         .single();
 
-      if (entry) {
-        await supabase.from('test_ledger_entries')
-          .update({
-            status: 'failed',
-            retry_count: (entry.retry_count || 0) + 1,
-            failure_reason: data.processor_response || 'Charge failed',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('tx_ref', txRef);
-        console.log('[TEST WEBHOOK] Test ledger marked failed for:', txRef);
+      if (payment && payment.status !== 'final_success') {
+        // Update to final_success
+        await supabase.from('payments_test').update({
+          status: 'final_success',
+          flw_transaction_id: flwTransactionId || payment.flw_transaction_id,
+          verified_at: new Date().toISOString(),
+          resolved_at: new Date().toISOString(),
+        }).eq('id', payment.id);
+
+        // Idempotency: check if ledger entry already exists
+        const { data: existingLedger } = await supabase
+          .from('ledger_confirmed_test')
+          .select('id')
+          .eq('payment_id', payment.id)
+          .single();
+
+        if (!existingLedger) {
+          // Create confirmed ledger entry
+          await supabase.from('ledger_confirmed_test').insert({
+            payment_id: payment.id,
+            user_id: payment.user_id,
+            group_id: payment.group_id,
+            amount: payment.amount,
+            tx_ref: payment.tx_ref,
+            flw_transaction_id: flwTransactionId || payment.flw_transaction_id,
+            payment_cycle: payment.payment_cycle,
+          });
+          console.log('[TEST WEBHOOK] Confirmed ledger entry created for:', txRef);
+        }
+
+        // Mark webhook as processed
+        await supabase.from('recurring_webhook_logs_test')
+          .update({ processed: true, processed_at: new Date().toISOString() })
+          .eq('tx_ref', txRef)
+          .eq('verification_source', 'webhook');
+      } else if (!payment) {
+        console.warn('[TEST WEBHOOK] No payment record found for:', txRef);
+      } else {
+        console.log('[TEST WEBHOOK] Payment already confirmed for:', txRef);
+      }
+    }
+
+    // ---- FAILED WEBHOOK ----
+    if (status === 'failed' && (txRef.startsWith('recurring-charge-') || txRef.startsWith('cron-charge-'))) {
+      const { data: payment } = await supabase
+        .from('payments_test')
+        .select('*')
+        .eq('tx_ref', txRef)
+        .single();
+
+      if (payment && !['final_success', 'final_failed'].includes(payment.status)) {
+        await supabase.from('payments_test').update({
+          status: 'final_failed',
+          failure_reason: data.processor_response || 'Charge failed (webhook)',
+          processor_response: data.processor_response || null,
+          resolved_at: new Date().toISOString(),
+        }).eq('id', payment.id);
+        console.log('[TEST WEBHOOK] Payment marked failed for:', txRef);
       }
     }
 
