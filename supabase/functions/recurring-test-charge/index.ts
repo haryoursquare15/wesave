@@ -28,9 +28,8 @@ serve(async (req) => {
     const body = await req.json();
     const { action } = body;
 
-    // Skip auth for cron-triggered auto-charge (only touches test tables)
-    if (action !== 'cron_auto_charge') {
-      // Auth check - admin only
+    // Skip auth for cron-triggered actions (runs via service role)
+    if (action !== 'cron_auto_charge' && action !== 'verify_pending') {
       const authHeader = req.headers.get('Authorization');
       if (!authHeader) {
         return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), {
@@ -52,16 +51,100 @@ serve(async (req) => {
       }
     }
 
-    // ---- ACTION: CRON AUTO-CHARGE (no auth needed, runs via service role cron) ----
+    // ========== HELPER: Get charge email ==========
+    async function getChargeEmail(tokenData: any): Promise<string> {
+      if (tokenData.charge_email) return tokenData.charge_email;
+      const { data: profile } = await supabase.from('profiles').select('email').eq('id', tokenData.user_id).single();
+      return profile?.email || 'test@wesave.ng';
+    }
+
+    // ========== HELPER: Get next payment cycle ==========
+    async function getNextCycle(userId: string): Promise<number> {
+      const { data } = await supabase
+        .from('payments_test')
+        .select('payment_cycle')
+        .eq('user_id', userId)
+        .order('payment_cycle', { ascending: false })
+        .limit(1)
+        .single();
+      return (data?.payment_cycle || 0) + 1;
+    }
+
+    // ========== HELPER: Verify a single transaction via Flutterwave API ==========
+    async function verifyTransaction(flwTransactionId: string) {
+      const resp = await fetch(`${FLUTTERWAVE_TEST_BASE}/transactions/${flwTransactionId}/verify`, {
+        headers: { 'Authorization': `Bearer ${flwTestSecret}` },
+      });
+      return await resp.json();
+    }
+
+    // ========== HELPER: Confirm payment and create ledger entry ==========
+    async function confirmPayment(paymentId: string, flwTransactionId: string | null, source: string) {
+      // Fetch payment
+      const { data: payment } = await supabase
+        .from('payments_test')
+        .select('*')
+        .eq('id', paymentId)
+        .single();
+      
+      if (!payment || payment.status === 'final_success') return { success: false, reason: 'Already confirmed or not found' };
+
+      // Update payment to final_success
+      await supabase.from('payments_test').update({
+        status: 'final_success',
+        flw_transaction_id: flwTransactionId || payment.flw_transaction_id,
+        verified_at: new Date().toISOString(),
+        resolved_at: new Date().toISOString(),
+      }).eq('id', paymentId);
+
+      // Idempotency: check if ledger entry already exists
+      const { data: existingLedger } = await supabase
+        .from('ledger_confirmed_test')
+        .select('id')
+        .eq('payment_id', paymentId)
+        .single();
+
+      if (existingLedger) return { success: true, reason: 'Already in confirmed ledger' };
+
+      // Create confirmed ledger entry
+      await supabase.from('ledger_confirmed_test').insert({
+        payment_id: paymentId,
+        user_id: payment.user_id,
+        group_id: payment.group_id,
+        amount: payment.amount,
+        tx_ref: payment.tx_ref,
+        flw_transaction_id: flwTransactionId || payment.flw_transaction_id,
+        payment_cycle: payment.payment_cycle,
+      });
+
+      // Log verification
+      await supabase.from('recurring_webhook_logs_test').insert({
+        event_type: `${source}.verified`,
+        tx_ref: payment.tx_ref,
+        flw_ref: payment.flw_ref || '',
+        flw_transaction_id: flwTransactionId || payment.flw_transaction_id,
+        status: 'final_success',
+        amount: payment.amount,
+        payload: { source, payment_id: paymentId },
+        processed: true,
+        processed_at: new Date().toISOString(),
+        verification_source: source,
+      });
+
+      return { success: true };
+    }
+
+    // ================================================================
+    // ACTION: CRON AUTO-CHARGE
+    // ================================================================
     if (action === 'cron_auto_charge') {
-      // Fetch all active tokens and charge each one
       const { data: activeTokens } = await supabase
         .from('user_payment_tokens_test')
         .select('*')
         .eq('is_active', true);
 
       if (!activeTokens || activeTokens.length === 0) {
-        return new Response(JSON.stringify({ success: true, message: 'No active tokens to charge', charged: 0 }), {
+        return new Response(JSON.stringify({ success: true, message: 'No active tokens', charged: 0 }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
@@ -69,46 +152,26 @@ serve(async (req) => {
       const results = [];
       for (const tokenData of activeTokens) {
         const { data: testGroup } = await supabase
-          .from('test_recurring_groups')
-          .select('*')
-          .eq('status', 'active')
-          .limit(1)
-          .single();
-
+          .from('test_recurring_groups').select('*').eq('status', 'active').limit(1).single();
+        
         const amount = testGroup?.contribution_amount || 1000;
+        const nextCycle = await getNextCycle(tokenData.user_id);
         const txRef = `cron-charge-${tokenData.user_id.slice(0, 8)}-${Date.now()}`;
+        const chargeEmail = await getChargeEmail(tokenData);
 
-        // Use stored charge_email first, fall back to profile email
-        let chargeEmail = tokenData.charge_email;
-        if (!chargeEmail) {
-          const { data: userProfile } = await supabase
-            .from('profiles')
-            .select('email')
-            .eq('id', tokenData.user_id)
-            .single();
-          chargeEmail = userProfile?.email || 'test@wesave.ng';
-        }
-
-        const { data: lastLedger } = await supabase
-          .from('test_ledger_entries')
-          .select('payment_cycle')
-          .eq('user_id', tokenData.user_id)
-          .order('payment_cycle', { ascending: false })
-          .limit(1)
-          .single();
-
-        const nextCycle = (lastLedger?.payment_cycle || 0) + 1;
-
-        await supabase.from('test_ledger_entries').insert({
+        // Step 1: Create payment record as 'initiated'
+        const { data: paymentRecord } = await supabase.from('payments_test').insert({
           user_id: tokenData.user_id,
           group_id: testGroup?.id || null,
           amount,
           tx_ref: txRef,
-          status: 'pending',
+          status: 'initiated',
           payment_cycle: nextCycle,
-        });
+          charge_type: 'cron',
+        }).select().single();
 
         try {
+          // Step 2: Call Flutterwave tokenized charge
           const chargeResp = await fetch(`${FLUTTERWAVE_TEST_BASE}/tokenized-charges`, {
             method: 'POST',
             headers: {
@@ -123,50 +186,60 @@ serve(async (req) => {
               email: chargeEmail,
               tx_ref: txRef,
               narration: `WeSave Cron Recurring Test - Cycle ${nextCycle}`,
-              redirect_url: `${supabaseUrl}/functions/v1/recurring-test-webhook`,
             }),
           });
 
           const chargeData = await chargeResp.json();
-          console.log('Cron recurring charge response:', JSON.stringify(chargeData));
+          console.log('Cron charge response:', JSON.stringify(chargeData));
 
           if (chargeData.status !== 'success') {
-            await supabase.from('test_ledger_entries')
-              .update({ status: 'failed', failure_reason: chargeData.message || 'Charge failed', updated_at: new Date().toISOString() })
-              .eq('tx_ref', txRef);
-            // Log failed charge for reconciliation
+            // Step 3a: Mark as final_failed
+            await supabase.from('payments_test').update({
+              status: 'final_failed',
+              failure_reason: chargeData.message || 'Charge initiation failed',
+              processor_response: chargeData.data?.processor_response || null,
+              resolved_at: new Date().toISOString(),
+            }).eq('id', paymentRecord?.id);
+
             await supabase.from('recurring_webhook_logs_test').insert({
               event_type: 'cron.charge.failed',
               tx_ref: txRef,
-              status: 'failed',
+              status: 'final_failed',
               amount,
               payload: chargeData,
               processed: true,
               processed_at: new Date().toISOString(),
+              verification_source: 'direct',
             });
           } else {
-            // Ledger stays "pending" — only a real webhook can confirm success.
-            // This ensures our ledger matches Flutterwave's actual status.
-            console.log('Cron: charge initiated, ledger stays pending until webhook confirms:', txRef);
-          }
+            // Step 3b: Move to 'pending' - awaiting verification
+            await supabase.from('payments_test').update({
+              status: 'pending',
+              flw_transaction_id: chargeData.data?.id?.toString() || null,
+              flw_ref: chargeData.data?.flw_ref || null,
+              processor_response: chargeData.data?.processor_response || null,
+            }).eq('id', paymentRecord?.id);
 
-          // Log to webhook table for reconciliation audit trail
-          await supabase.from('recurring_webhook_logs_test').insert({
-            event_type: 'cron.charge.initiated',
-            tx_ref: txRef,
-            flw_ref: chargeData.data?.flw_ref || '',
-            status: chargeData.status === 'success' ? 'pending' : 'failed',
-            amount,
-            payload: chargeData,
-            processed: false,
-            processed_at: null,
-          });
+            await supabase.from('recurring_webhook_logs_test').insert({
+              event_type: 'cron.charge.initiated',
+              tx_ref: txRef,
+              flw_ref: chargeData.data?.flw_ref || '',
+              flw_transaction_id: chargeData.data?.id?.toString() || null,
+              status: 'pending',
+              amount,
+              payload: chargeData,
+              processed: false,
+              verification_source: 'awaiting',
+            });
+          }
 
           results.push({ user_id: tokenData.user_id, tx_ref: txRef, status: chargeData.status, cycle: nextCycle });
         } catch (err) {
-          await supabase.from('test_ledger_entries')
-            .update({ status: 'failed', failure_reason: err instanceof Error ? err.message : 'Network error', updated_at: new Date().toISOString() })
-            .eq('tx_ref', txRef);
+          await supabase.from('payments_test').update({
+            status: 'final_failed',
+            failure_reason: err instanceof Error ? err.message : 'Network error',
+            resolved_at: new Date().toISOString(),
+          }).eq('id', paymentRecord?.id);
           results.push({ user_id: tokenData.user_id, tx_ref: txRef, status: 'error', error: err instanceof Error ? err.message : 'Unknown' });
         }
       }
@@ -176,7 +249,9 @@ serve(async (req) => {
       });
     }
 
-    // ---- ACTION: INITIATE FIRST PAYMENT (for token generation) ----
+    // ================================================================
+    // ACTION: INITIATE FIRST PAYMENT (token generation)
+    // ================================================================
     if (action === 'initiate_payment') {
       const { email, amount, name } = body;
       const txRef = `recurring-test-${Date.now()}`;
@@ -198,11 +273,12 @@ serve(async (req) => {
       });
     }
 
-    // ---- ACTION: RUN RECURRING CHARGE ----
+    // ================================================================
+    // ACTION: RUN MANUAL RECURRING CHARGE
+    // ================================================================
     if (action === 'run_recurring_charge') {
       const { token_id } = body;
 
-      // Fetch token
       const { data: tokenData, error: tokenErr } = await supabase
         .from('user_payment_tokens_test')
         .select('*')
@@ -216,50 +292,25 @@ serve(async (req) => {
         });
       }
 
-      // Fetch test group
       const { data: testGroup } = await supabase
-        .from('test_recurring_groups')
-        .select('*')
-        .eq('status', 'active')
-        .limit(1)
-        .single();
+        .from('test_recurring_groups').select('*').eq('status', 'active').limit(1).single();
 
       const amount = testGroup?.contribution_amount || 1000;
+      const nextCycle = await getNextCycle(tokenData.user_id);
       const txRef = `recurring-charge-${tokenData.user_id.slice(0, 8)}-${Date.now()}`;
+      const userEmail = await getChargeEmail(tokenData);
 
-      // Use stored charge_email first, fall back to profile email
-      let userEmail = tokenData.charge_email;
-      if (!userEmail) {
-        const { data: chargeProfile } = await supabase
-          .from('profiles')
-          .select('email')
-          .eq('id', tokenData.user_id)
-          .single();
-        userEmail = chargeProfile?.email || 'test@wesave.ng';
-      }
-
-      // Get last cycle number
-      const { data: lastLedger } = await supabase
-        .from('test_ledger_entries')
-        .select('payment_cycle')
-        .eq('user_id', tokenData.user_id)
-        .order('payment_cycle', { ascending: false })
-        .limit(1)
-        .single();
-
-      const nextCycle = (lastLedger?.payment_cycle || 0) + 1;
-
-      // Create pending ledger entry FIRST (webhook will confirm)
-      await supabase.from('test_ledger_entries').insert({
+      // Create payment as 'initiated'
+      const { data: paymentRecord } = await supabase.from('payments_test').insert({
         user_id: tokenData.user_id,
         group_id: testGroup?.id || null,
         amount,
         tx_ref: txRef,
-        status: 'pending',
+        status: 'initiated',
         payment_cycle: nextCycle,
-      });
+        charge_type: 'manual',
+      }).select().single();
 
-      // Attempt tokenized charge via Flutterwave TEST API
       try {
         const chargeResp = await fetch(`${FLUTTERWAVE_TEST_BASE}/tokenized-charges`, {
           method: 'POST',
@@ -275,35 +326,55 @@ serve(async (req) => {
             email: userEmail,
             tx_ref: txRef,
             narration: `WeSave Recurring Test - Cycle ${nextCycle}`,
-            redirect_url: `${supabaseUrl}/functions/v1/recurring-test-webhook`,
           }),
         });
 
         const chargeData = await chargeResp.json();
-        console.log('Recurring test charge response:', JSON.stringify(chargeData));
+        console.log('Manual charge response:', JSON.stringify(chargeData));
 
         if (chargeData.status !== 'success') {
-          await supabase.from('test_ledger_entries')
-            .update({ status: 'failed', failure_reason: chargeData.message || 'Charge initiation failed', updated_at: new Date().toISOString() })
-            .eq('tx_ref', txRef);
+          await supabase.from('payments_test').update({
+            status: 'final_failed',
+            failure_reason: chargeData.message || 'Charge initiation failed',
+            processor_response: chargeData.data?.processor_response || null,
+            resolved_at: new Date().toISOString(),
+          }).eq('id', paymentRecord?.id);
+
+          await supabase.from('recurring_webhook_logs_test').insert({
+            event_type: 'manual.charge.failed',
+            tx_ref: txRef,
+            status: 'final_failed',
+            amount,
+            payload: chargeData,
+            processed: true,
+            processed_at: new Date().toISOString(),
+            verification_source: 'direct',
+          });
         } else {
-          // Ledger stays "pending" — only a real webhook can confirm success.
-          console.log('Manual: charge initiated, ledger stays pending until webhook confirms:', txRef);
+          // Move to 'pending' - awaiting verification
+          await supabase.from('payments_test').update({
+            status: 'pending',
+            flw_transaction_id: chargeData.data?.id?.toString() || null,
+            flw_ref: chargeData.data?.flw_ref || null,
+            processor_response: chargeData.data?.processor_response || null,
+          }).eq('id', paymentRecord?.id);
+
+          await supabase.from('recurring_webhook_logs_test').insert({
+            event_type: 'manual.charge.initiated',
+            tx_ref: txRef,
+            flw_ref: chargeData.data?.flw_ref || '',
+            flw_transaction_id: chargeData.data?.id?.toString() || null,
+            status: 'pending',
+            amount,
+            payload: chargeData,
+            processed: false,
+            verification_source: 'awaiting',
+          });
         }
 
-        // Log to webhook table for reconciliation audit trail
-        await supabase.from('recurring_webhook_logs_test').insert({
-          event_type: 'manual.charge.initiated',
-          tx_ref: txRef,
-          flw_ref: chargeData.data?.flw_ref || '',
-          status: chargeData.status === 'success' ? 'pending' : 'failed',
-          amount,
-          payload: chargeData,
-          processed: false,
-          processed_at: null,
-        });
-
-        const finalStatus = chargeData.status === 'success' ? 'Charge initiated (pending webhook confirmation).' : `Charge failed: ${chargeData.message}`;
+        const finalStatus = chargeData.status === 'success'
+          ? 'Charge initiated → pending verification.'
+          : `Charge failed: ${chargeData.message}`;
 
         return new Response(JSON.stringify({
           success: true,
@@ -316,9 +387,11 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       } catch (err) {
-        await supabase.from('test_ledger_entries')
-          .update({ status: 'failed', failure_reason: err instanceof Error ? err.message : 'Network error', updated_at: new Date().toISOString() })
-          .eq('tx_ref', txRef);
+        await supabase.from('payments_test').update({
+          status: 'final_failed',
+          failure_reason: err instanceof Error ? err.message : 'Network error',
+          resolved_at: new Date().toISOString(),
+        }).eq('id', paymentRecord?.id);
 
         return new Response(JSON.stringify({ success: false, error: err instanceof Error ? err.message : 'Charge error', tx_ref: txRef }), {
           status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -326,19 +399,256 @@ serve(async (req) => {
       }
     }
 
-    // ---- ACTION: GET STATUS ----
+    // ================================================================
+    // ACTION: VERIFY PENDING TRANSACTIONS (Verification Worker)
+    // ================================================================
+    if (action === 'verify_pending') {
+      const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+
+      // Find pending transactions older than 2 minutes
+      const { data: pendingPayments } = await supabase
+        .from('payments_test')
+        .select('*')
+        .in('status', ['initiated', 'pending'])
+        .lt('created_at', twoMinutesAgo)
+        .order('created_at', { ascending: true });
+
+      if (!pendingPayments || pendingPayments.length === 0) {
+        return new Response(JSON.stringify({ success: true, message: 'No pending transactions to verify', verified: 0 }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const results = [];
+      for (const payment of pendingPayments) {
+        // Timeout check: > 24 hours or exceeded max retries
+        const ageMs = Date.now() - new Date(payment.created_at).getTime();
+        const isTimedOut = ageMs > 24 * 60 * 60 * 1000;
+        const isMaxRetries = payment.retry_count >= payment.max_retries;
+
+        if (isTimedOut || isMaxRetries) {
+          await supabase.from('payments_test').update({
+            status: 'unresolved',
+            failure_reason: isTimedOut ? 'Timed out after 24 hours' : `Exceeded max retries (${payment.max_retries})`,
+            resolved_at: new Date().toISOString(),
+          }).eq('id', payment.id);
+
+          await supabase.from('recurring_webhook_logs_test').insert({
+            event_type: 'verify.timeout',
+            tx_ref: payment.tx_ref,
+            flw_transaction_id: payment.flw_transaction_id,
+            status: 'unresolved',
+            amount: payment.amount,
+            payload: { reason: isTimedOut ? 'timeout_24h' : 'max_retries', retry_count: payment.retry_count },
+            processed: true,
+            processed_at: new Date().toISOString(),
+            verification_source: 'api_verify',
+          });
+
+          results.push({ tx_ref: payment.tx_ref, status: 'unresolved', reason: isTimedOut ? 'timeout' : 'max_retries' });
+          continue;
+        }
+
+        // If we don't have a flw_transaction_id, we can't verify via API
+        if (!payment.flw_transaction_id) {
+          await supabase.from('payments_test').update({
+            retry_count: payment.retry_count + 1,
+          }).eq('id', payment.id);
+          results.push({ tx_ref: payment.tx_ref, status: 'no_flw_id', retry: payment.retry_count + 1 });
+          continue;
+        }
+
+        // Call Flutterwave Verify API
+        try {
+          const verifyData = await verifyTransaction(payment.flw_transaction_id);
+          console.log(`Verify ${payment.tx_ref}:`, JSON.stringify(verifyData));
+
+          if (verifyData.status === 'success' && verifyData.data?.status === 'successful') {
+            // FINAL SUCCESS - confirm and create ledger entry
+            const confirmResult = await confirmPayment(payment.id, payment.flw_transaction_id, 'api_verify');
+            results.push({ tx_ref: payment.tx_ref, status: 'final_success', confirm: confirmResult });
+          } else if (verifyData.data?.status === 'failed' || verifyData.status === 'error') {
+            // FINAL FAILED
+            await supabase.from('payments_test').update({
+              status: 'final_failed',
+              failure_reason: verifyData.data?.processor_response || verifyData.message || 'Verification failed',
+              processor_response: verifyData.data?.processor_response || null,
+              verified_at: new Date().toISOString(),
+              resolved_at: new Date().toISOString(),
+            }).eq('id', payment.id);
+
+            await supabase.from('recurring_webhook_logs_test').insert({
+              event_type: 'verify.failed',
+              tx_ref: payment.tx_ref,
+              flw_transaction_id: payment.flw_transaction_id,
+              status: 'final_failed',
+              amount: payment.amount,
+              payload: verifyData,
+              processed: true,
+              processed_at: new Date().toISOString(),
+              verification_source: 'api_verify',
+            });
+
+            results.push({ tx_ref: payment.tx_ref, status: 'final_failed' });
+          } else {
+            // Still pending - increment retry
+            await supabase.from('payments_test').update({
+              retry_count: payment.retry_count + 1,
+            }).eq('id', payment.id);
+
+            results.push({ tx_ref: payment.tx_ref, status: 'still_pending', retry: payment.retry_count + 1 });
+          }
+        } catch (err) {
+          // Verification API error - increment retry, don't change status
+          await supabase.from('payments_test').update({
+            retry_count: payment.retry_count + 1,
+          }).eq('id', payment.id);
+          results.push({ tx_ref: payment.tx_ref, status: 'verify_error', error: err instanceof Error ? err.message : 'Unknown' });
+        }
+      }
+
+      return new Response(JSON.stringify({ success: true, verified: results.length, results }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // ================================================================
+    // ACTION: MANUAL RE-VERIFY (admin-triggered for specific payment)
+    // ================================================================
+    if (action === 'manual_verify') {
+      const { payment_id } = body;
+
+      const { data: payment } = await supabase
+        .from('payments_test')
+        .select('*')
+        .eq('id', payment_id)
+        .single();
+
+      if (!payment) {
+        return new Response(JSON.stringify({ success: false, error: 'Payment not found' }), {
+          status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (payment.status === 'final_success') {
+        return new Response(JSON.stringify({ success: true, message: 'Already confirmed' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (!payment.flw_transaction_id) {
+        return new Response(JSON.stringify({ success: false, error: 'No Flutterwave transaction ID to verify' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const verifyData = await verifyTransaction(payment.flw_transaction_id);
+
+      if (verifyData.status === 'success' && verifyData.data?.status === 'successful') {
+        const confirmResult = await confirmPayment(payment.id, payment.flw_transaction_id, 'manual_verify');
+        return new Response(JSON.stringify({ success: true, status: 'final_success', confirm: confirmResult, verify_data: verifyData }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Update with latest processor info
+      await supabase.from('payments_test').update({
+        processor_response: verifyData.data?.processor_response || null,
+        retry_count: payment.retry_count + 1,
+      }).eq('id', payment.id);
+
+      return new Response(JSON.stringify({
+        success: true,
+        status: verifyData.data?.status || 'unknown',
+        message: 'Transaction not yet successful',
+        verify_data: verifyData,
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // ================================================================
+    // ACTION: SIMULATE FAILURE SCENARIOS
+    // ================================================================
+    if (action === 'simulate') {
+      const { scenario } = body;
+
+      if (scenario === 'webhook_not_received') {
+        // Create a payment stuck in pending (simulates webhook never arriving)
+        const txRef = `sim-no-webhook-${Date.now()}`;
+        await supabase.from('payments_test').insert({
+          user_id: '00000000-0000-0000-0000-000000000001',
+          amount: 1000,
+          tx_ref: txRef,
+          status: 'pending',
+          charge_type: 'simulation',
+          flw_transaction_id: `sim-${Date.now()}`,
+          payment_cycle: 99,
+        });
+        return new Response(JSON.stringify({ success: true, scenario: 'webhook_not_received', tx_ref: txRef, message: 'Simulated pending tx with no webhook. Verify worker will eventually resolve.' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (scenario === 'pending_timeout') {
+        // Create a payment that's been pending for > 24 hours
+        const txRef = `sim-timeout-${Date.now()}`;
+        const oldDate = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+        await supabase.from('payments_test').insert({
+          user_id: '00000000-0000-0000-0000-000000000001',
+          amount: 1000,
+          tx_ref: txRef,
+          status: 'pending',
+          charge_type: 'simulation',
+          flw_transaction_id: `sim-${Date.now()}`,
+          payment_cycle: 99,
+          created_at: oldDate,
+        });
+        return new Response(JSON.stringify({ success: true, scenario: 'pending_timeout', tx_ref: txRef, message: 'Simulated 24h+ pending tx. Will be marked unresolved on next verify run.' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (scenario === 'failed_charge') {
+        const txRef = `sim-failed-${Date.now()}`;
+        await supabase.from('payments_test').insert({
+          user_id: '00000000-0000-0000-0000-000000000001',
+          amount: 1000,
+          tx_ref: txRef,
+          status: 'final_failed',
+          charge_type: 'simulation',
+          failure_reason: 'Simulated card decline',
+          processor_response: 'Declined',
+          payment_cycle: 99,
+          resolved_at: new Date().toISOString(),
+        });
+        return new Response(JSON.stringify({ success: true, scenario: 'failed_charge', tx_ref: txRef, message: 'Simulated failed charge. No ledger entry created.' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      return new Response(JSON.stringify({ success: false, error: 'Unknown scenario. Use: webhook_not_received, pending_timeout, failed_charge' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // ================================================================
+    // ACTION: GET STATUS (dashboard data)
+    // ================================================================
     if (action === 'get_status') {
-      const [tokens, ledger, webhookLogs, testGroups] = await Promise.all([
+      const [tokens, payments, confirmedLedger, webhookLogs, testGroups] = await Promise.all([
         supabase.from('user_payment_tokens_test').select('*').order('created_at', { ascending: false }),
-        supabase.from('test_ledger_entries').select('*').order('created_at', { ascending: false }).limit(50),
-        supabase.from('recurring_webhook_logs_test').select('*').order('created_at', { ascending: false }).limit(50),
+        supabase.from('payments_test').select('*').order('created_at', { ascending: false }).limit(100),
+        supabase.from('ledger_confirmed_test').select('*').order('created_at', { ascending: false }).limit(100),
+        supabase.from('recurring_webhook_logs_test').select('*').order('created_at', { ascending: false }).limit(100),
         supabase.from('test_recurring_groups').select('*'),
       ]);
 
       return new Response(JSON.stringify({
         success: true,
         tokens: tokens.data || [],
-        ledger: ledger.data || [],
+        payments: payments.data || [],
+        confirmed_ledger: confirmedLedger.data || [],
         webhook_logs: webhookLogs.data || [],
         test_groups: testGroups.data || [],
       }), {
@@ -346,20 +656,9 @@ serve(async (req) => {
       });
     }
 
-    // ---- ACTION: RESET TEST DATA ----
-    if (action === 'reset_test_data') {
-      await Promise.all([
-        supabase.from('test_ledger_entries').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
-        supabase.from('recurring_webhook_logs_test').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
-        supabase.from('user_payment_tokens_test').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
-      ]);
-
-      return new Response(JSON.stringify({ success: true, message: 'All test data reset' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // ---- ACTION: VERIFY TRANSACTION AND SAVE TOKEN ----
+    // ================================================================
+    // ACTION: VERIFY AND SAVE TOKEN (first payment callback)
+    // ================================================================
     if (action === 'verify_and_save_token') {
       const { transaction_id, tx_ref } = body;
 
@@ -369,11 +668,7 @@ serve(async (req) => {
         });
       }
 
-      // Verify transaction with Flutterwave
-      const verifyResp = await fetch(`${FLUTTERWAVE_TEST_BASE}/transactions/${transaction_id}/verify`, {
-        headers: { 'Authorization': `Bearer ${flwTestSecret}` },
-      });
-      const verifyData = await verifyResp.json();
+      const verifyData = await verifyTransaction(transaction_id);
       console.log('Verify response:', JSON.stringify(verifyData));
 
       if (verifyData.status !== 'success' || verifyData.data?.status !== 'successful') {
@@ -385,20 +680,20 @@ serve(async (req) => {
       const txData = verifyData.data;
       const card = txData.card || {};
 
-      // Log webhook equivalent
       await supabase.from('recurring_webhook_logs_test').insert({
         event_type: 'charge.completed.verified',
         tx_ref: txData.tx_ref || tx_ref,
         flw_ref: txData.flw_ref || '',
+        flw_transaction_id: transaction_id.toString(),
         status: txData.status,
         amount: txData.amount,
         payload: verifyData,
         processed: true,
         processed_at: new Date().toISOString(),
+        verification_source: 'initial_tokenization',
       });
 
       if (card.token) {
-        // Check if token already exists
         const { data: existing } = await supabase
           .from('user_payment_tokens_test')
           .select('id')
@@ -406,7 +701,6 @@ serve(async (req) => {
           .single();
 
         if (!existing) {
-          // Use the authenticated user's ID
           const authHeader2 = req.headers.get('Authorization');
           let userId = '00000000-0000-0000-0000-000000000001';
           if (authHeader2) {
@@ -415,8 +709,6 @@ serve(async (req) => {
             if (u2) userId = u2.id;
           }
 
-          const customerEmail = txData.customer?.email || null;
-
           await supabase.from('user_payment_tokens_test').insert({
             user_id: userId,
             card_token: card.token,
@@ -424,7 +716,7 @@ serve(async (req) => {
             last_4digits: card.last_4digits || null,
             expiry: card.expiry || null,
             card_type: card.type || null,
-            charge_email: customerEmail,
+            charge_email: txData.customer?.email || null,
           });
 
           return new Response(JSON.stringify({ success: true, message: 'Token saved successfully', card_info: { last4: card.last_4digits, type: card.type, expiry: card.expiry } }), {
@@ -437,8 +729,25 @@ serve(async (req) => {
         });
       }
 
-      return new Response(JSON.stringify({ success: false, error: 'No card token in transaction response. Card tokenization may not be supported for this test card.' }), {
+      return new Response(JSON.stringify({ success: false, error: 'No card token in transaction response.' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // ================================================================
+    // ACTION: RESET TEST DATA
+    // ================================================================
+    if (action === 'reset_test_data') {
+      // Delete in order due to FK constraints
+      await supabase.from('ledger_confirmed_test').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('payments_test').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('recurring_webhook_logs_test').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('user_payment_tokens_test').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      // Keep old test_ledger_entries for historical reference but clean too
+      await supabase.from('test_ledger_entries').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+
+      return new Response(JSON.stringify({ success: true, message: 'All test data reset' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 

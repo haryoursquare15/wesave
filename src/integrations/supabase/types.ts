@@ -838,6 +838,53 @@ export type Database = {
           },
         ]
       }
+      ledger_confirmed_test: {
+        Row: {
+          amount: number
+          confirmed_at: string
+          created_at: string
+          flw_transaction_id: string | null
+          group_id: string | null
+          id: string
+          payment_cycle: number | null
+          payment_id: string
+          tx_ref: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          confirmed_at?: string
+          created_at?: string
+          flw_transaction_id?: string | null
+          group_id?: string | null
+          id?: string
+          payment_cycle?: number | null
+          payment_id: string
+          tx_ref: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          confirmed_at?: string
+          created_at?: string
+          flw_transaction_id?: string | null
+          group_id?: string | null
+          id?: string
+          payment_cycle?: number | null
+          payment_id?: string
+          tx_ref?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ledger_confirmed_test_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: true
+            referencedRelation: "payments_test"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ledger_entries: {
         Row: {
           amount: number
@@ -971,6 +1018,69 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      payments_test: {
+        Row: {
+          amount: number
+          charge_type: string
+          created_at: string
+          failure_reason: string | null
+          flw_ref: string | null
+          flw_transaction_id: string | null
+          group_id: string | null
+          id: string
+          max_retries: number
+          payment_cycle: number | null
+          processor_response: string | null
+          resolved_at: string | null
+          retry_count: number
+          status: string
+          tx_ref: string
+          updated_at: string
+          user_id: string
+          verified_at: string | null
+        }
+        Insert: {
+          amount: number
+          charge_type?: string
+          created_at?: string
+          failure_reason?: string | null
+          flw_ref?: string | null
+          flw_transaction_id?: string | null
+          group_id?: string | null
+          id?: string
+          max_retries?: number
+          payment_cycle?: number | null
+          processor_response?: string | null
+          resolved_at?: string | null
+          retry_count?: number
+          status?: string
+          tx_ref: string
+          updated_at?: string
+          user_id: string
+          verified_at?: string | null
+        }
+        Update: {
+          amount?: number
+          charge_type?: string
+          created_at?: string
+          failure_reason?: string | null
+          flw_ref?: string | null
+          flw_transaction_id?: string | null
+          group_id?: string | null
+          id?: string
+          max_retries?: number
+          payment_cycle?: number | null
+          processor_response?: string | null
+          resolved_at?: string | null
+          retry_count?: number
+          status?: string
+          tx_ref?: string
+          updated_at?: string
+          user_id?: string
+          verified_at?: string | null
+        }
+        Relationships: []
       }
       payouts: {
         Row: {
@@ -1414,36 +1524,42 @@ export type Database = {
           created_at: string
           event_type: string
           flw_ref: string | null
+          flw_transaction_id: string | null
           id: string
           payload: Json
           processed: boolean | null
           processed_at: string | null
           status: string | null
           tx_ref: string | null
+          verification_source: string | null
         }
         Insert: {
           amount?: number | null
           created_at?: string
           event_type: string
           flw_ref?: string | null
+          flw_transaction_id?: string | null
           id?: string
           payload: Json
           processed?: boolean | null
           processed_at?: string | null
           status?: string | null
           tx_ref?: string | null
+          verification_source?: string | null
         }
         Update: {
           amount?: number | null
           created_at?: string
           event_type?: string
           flw_ref?: string | null
+          flw_transaction_id?: string | null
           id?: string
           payload?: Json
           processed?: boolean | null
           processed_at?: string | null
           status?: string | null
           tx_ref?: string | null
+          verification_source?: string | null
         }
         Relationships: []
       }
