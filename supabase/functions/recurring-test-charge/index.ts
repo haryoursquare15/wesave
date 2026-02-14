@@ -145,28 +145,21 @@ serve(async (req) => {
               processed_at: new Date().toISOString(),
             });
           } else {
-            // Sandbox tokenized charges stay "pending" because 3D Secure redirect isn't followed.
-            // If processor_response is "Approved", treat as successful immediately.
-            const processorResponse = chargeData.data?.processor_response || '';
-            if (processorResponse === 'Approved') {
-              await supabase.from('test_ledger_entries')
-                .update({ status: 'successful', updated_at: new Date().toISOString() })
-                .eq('tx_ref', txRef)
-                .eq('status', 'pending');
-              console.log('Cron: marked successful (processor approved) for:', txRef);
-            }
+            // Ledger stays "pending" — only a real webhook can confirm success.
+            // This ensures our ledger matches Flutterwave's actual status.
+            console.log('Cron: charge initiated, ledger stays pending until webhook confirms:', txRef);
           }
 
           // Log to webhook table for reconciliation audit trail
           await supabase.from('recurring_webhook_logs_test').insert({
-            event_type: 'cron.charge.completed',
+            event_type: 'cron.charge.initiated',
             tx_ref: txRef,
             flw_ref: chargeData.data?.flw_ref || '',
-            status: processorResponse === 'Approved' ? 'successful' : (chargeData.status === 'success' ? 'pending' : 'failed'),
+            status: chargeData.status === 'success' ? 'pending' : 'failed',
             amount,
             payload: chargeData,
-            processed: processorResponse === 'Approved',
-            processed_at: processorResponse === 'Approved' ? new Date().toISOString() : null,
+            processed: false,
+            processed_at: null,
           });
 
           results.push({ user_id: tokenData.user_id, tx_ref: txRef, status: chargeData.status, cycle: nextCycle });
@@ -294,31 +287,23 @@ serve(async (req) => {
             .update({ status: 'failed', failure_reason: chargeData.message || 'Charge initiation failed', updated_at: new Date().toISOString() })
             .eq('tx_ref', txRef);
         } else {
-          // Sandbox tokenized charges stay "pending" (3D Secure redirect not followed).
-          // Use processor_response to determine success.
-          const processorResponse = chargeData.data?.processor_response || '';
-          if (processorResponse === 'Approved') {
-            await supabase.from('test_ledger_entries')
-              .update({ status: 'successful', updated_at: new Date().toISOString() })
-              .eq('tx_ref', txRef)
-              .eq('status', 'pending');
-            console.log('Manual: marked successful (processor approved) for:', txRef);
-          }
+          // Ledger stays "pending" — only a real webhook can confirm success.
+          console.log('Manual: charge initiated, ledger stays pending until webhook confirms:', txRef);
         }
 
         // Log to webhook table for reconciliation audit trail
         await supabase.from('recurring_webhook_logs_test').insert({
-          event_type: 'manual.charge.completed',
+          event_type: 'manual.charge.initiated',
           tx_ref: txRef,
           flw_ref: chargeData.data?.flw_ref || '',
-          status: processorResponse === 'Approved' ? 'successful' : (chargeData.status === 'success' ? 'pending' : 'failed'),
+          status: chargeData.status === 'success' ? 'pending' : 'failed',
           amount,
           payload: chargeData,
-          processed: processorResponse === 'Approved',
-          processed_at: processorResponse === 'Approved' ? new Date().toISOString() : null,
+          processed: false,
+          processed_at: null,
         });
 
-        const finalStatus = chargeData.status === 'success' ? 'Charge initiated and auto-verified.' : `Charge failed: ${chargeData.message}`;
+        const finalStatus = chargeData.status === 'success' ? 'Charge initiated (pending webhook confirmation).' : `Charge failed: ${chargeData.message}`;
 
         return new Response(JSON.stringify({
           success: true,
