@@ -134,6 +134,16 @@ serve(async (req) => {
             await supabase.from('test_ledger_entries')
               .update({ status: 'failed', failure_reason: chargeData.message || 'Charge failed', updated_at: new Date().toISOString() })
               .eq('tx_ref', txRef);
+            // Log failed charge for reconciliation
+            await supabase.from('recurring_webhook_logs_test').insert({
+              event_type: 'cron.charge.failed',
+              tx_ref: txRef,
+              status: 'failed',
+              amount,
+              payload: chargeData,
+              processed: true,
+              processed_at: new Date().toISOString(),
+            });
           } else {
             // Sandbox tokenized charges stay "pending" because 3D Secure redirect isn't followed.
             // If processor_response is "Approved", treat as successful immediately.
@@ -146,6 +156,18 @@ serve(async (req) => {
               console.log('Cron: marked successful (processor approved) for:', txRef);
             }
           }
+
+          // Log to webhook table for reconciliation audit trail
+          await supabase.from('recurring_webhook_logs_test').insert({
+            event_type: 'cron.charge.completed',
+            tx_ref: txRef,
+            flw_ref: chargeData.data?.flw_ref || '',
+            status: processorResponse === 'Approved' ? 'successful' : (chargeData.status === 'success' ? 'pending' : 'failed'),
+            amount,
+            payload: chargeData,
+            processed: processorResponse === 'Approved',
+            processed_at: processorResponse === 'Approved' ? new Date().toISOString() : null,
+          });
 
           results.push({ user_id: tokenData.user_id, tx_ref: txRef, status: chargeData.status, cycle: nextCycle });
         } catch (err) {
@@ -283,6 +305,18 @@ serve(async (req) => {
             console.log('Manual: marked successful (processor approved) for:', txRef);
           }
         }
+
+        // Log to webhook table for reconciliation audit trail
+        await supabase.from('recurring_webhook_logs_test').insert({
+          event_type: 'manual.charge.completed',
+          tx_ref: txRef,
+          flw_ref: chargeData.data?.flw_ref || '',
+          status: processorResponse === 'Approved' ? 'successful' : (chargeData.status === 'success' ? 'pending' : 'failed'),
+          amount,
+          payload: chargeData,
+          processed: processorResponse === 'Approved',
+          processed_at: processorResponse === 'Approved' ? new Date().toISOString() : null,
+        });
 
         const finalStatus = chargeData.status === 'success' ? 'Charge initiated and auto-verified.' : `Charge failed: ${chargeData.message}`;
 
