@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { 
   ArrowLeft, Users, Send, Play, Crown, Check, Clock, 
   MessageSquare, ListOrdered, Settings, Share2, AlertCircle,
@@ -69,6 +69,7 @@ interface GroupData {
 export default function GroupDetail() {
   const { groupId } = useParams<{ groupId: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const scrollRef = useRef<HTMLDivElement>(null);
   
@@ -90,6 +91,52 @@ export default function GroupDetail() {
   const [showRestartTerms, setShowRestartTerms] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [needsTokenization, setNeedsTokenization] = useState(false);
+  const [verifyingRedirect, setVerifyingRedirect] = useState(false);
+
+  // isAdmin is declared below after redirect handler
+
+  // Handle Flutterwave redirect-based verification
+  useEffect(() => {
+    const status = searchParams.get("status");
+    const transactionId = searchParams.get("transaction_id");
+    const txRef = searchParams.get("tx_ref");
+
+    if (!groupId || !user || !transactionId || !txRef) return;
+    if (status !== "successful" && status !== "completed") return;
+
+    // Clear URL params immediately to prevent re-trigger
+    setSearchParams({}, { replace: true });
+    setVerifyingRedirect(true);
+
+    (async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke("card-tokenization", {
+          body: { action: "verify", transactionId, groupId, txRef },
+        });
+        if (error) throw error;
+        if (!data?.success) throw new Error(data?.error || "Verification failed");
+
+        toast.success(
+          `Card authorized! ₦${data.amount_credited?.toLocaleString()} credited to your wallet.`
+        );
+        setNeedsTokenization(false);
+
+        // Refetch group data
+        const [{ data: updatedGroup }, { count }, { data: orderData }] = await Promise.all([
+          supabase.from("thrift_groups").select("*").eq("id", groupId).single(),
+          supabase.from("group_memberships").select("*", { count: "exact", head: true }).eq("group_id", groupId).eq("status", "active"),
+          supabase.rpc("get_payout_order", { target_group_id: groupId }),
+        ]);
+        if (updatedGroup) setGroup(updatedGroup);
+        setMemberCount(count || 0);
+        if (orderData) setPayoutOrder(orderData as PayoutMember[]);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Card verification failed");
+      } finally {
+        setVerifyingRedirect(false);
+      }
+    })();
+  }, [searchParams, groupId, user]);
 
   const isAdmin = group?.admin_id === user?.id;
 
@@ -592,8 +639,19 @@ export default function GroupDetail() {
         </div>
       </header>
 
+      {/* Redirect verification loading state */}
+      {verifyingRedirect && (
+        <div className="min-h-[60vh] flex items-center justify-center p-4">
+          <div className="text-center">
+            <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-4" />
+            <h3 className="font-semibold text-lg mb-2">Verifying Payment</h3>
+            <p className="text-muted-foreground text-sm">Please wait while we verify your card authorization...</p>
+          </div>
+        </div>
+      )}
+
       {/* Tokenization Gate — blocks group content for auto_debit groups */}
-      {needsTokenization ? (
+      {!verifyingRedirect && needsTokenization ? (
         <>
           <TokenizationGate
             groupId={group.id}

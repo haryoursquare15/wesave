@@ -86,7 +86,9 @@ serve(async (req) => {
         : Deno.env.get('FLUTTERWAVE_PUBLIC_KEY');
 
       const txRef = `token-${user.id.slice(0, 8)}-${groupId.slice(0, 8)}-${Date.now()}`;
-      const redirectUrl = 'https://wesave.lovable.app/groups/' + groupId;
+      // Use origin from request headers for redirect, fallback to published URL
+      const origin = req.headers.get('origin') || 'https://wesave.lovable.app';
+      const redirectUrl = `${origin}/groups/${groupId}`;
 
       // Get group contribution amount for the tokenization charge
       const { data: group } = await supabase
