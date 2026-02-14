@@ -666,9 +666,14 @@ export type Database = {
       cycle_contributions: {
         Row: {
           amount: number
+          card_charge_amount: number | null
+          card_charge_status: string | null
+          card_charged_at: string | null
+          card_verified_at: string | null
           contributed_at: string | null
           created_at: string
           cycle_id: string
+          flw_transaction_id: string | null
           flw_transaction_ref: string | null
           group_id: string
           id: string
@@ -677,9 +682,14 @@ export type Database = {
         }
         Insert: {
           amount: number
+          card_charge_amount?: number | null
+          card_charge_status?: string | null
+          card_charged_at?: string | null
+          card_verified_at?: string | null
           contributed_at?: string | null
           created_at?: string
           cycle_id: string
+          flw_transaction_id?: string | null
           flw_transaction_ref?: string | null
           group_id: string
           id?: string
@@ -688,9 +698,14 @@ export type Database = {
         }
         Update: {
           amount?: number
+          card_charge_amount?: number | null
+          card_charge_status?: string | null
+          card_charged_at?: string | null
+          card_verified_at?: string | null
           contributed_at?: string | null
           created_at?: string
           cycle_id?: string
+          flw_transaction_id?: string | null
           flw_transaction_ref?: string | null
           group_id?: string
           id?: string
@@ -1175,6 +1190,95 @@ export type Database = {
           },
           {
             foreignKeyName: "payouts_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "thrift_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pending_card_charges: {
+        Row: {
+          amount: number
+          contribution_id: string | null
+          created_at: string
+          cycle_id: string
+          failure_reason: string | null
+          flw_ref: string | null
+          flw_transaction_id: string | null
+          group_id: string
+          id: string
+          last_checked_at: string | null
+          max_retries: number | null
+          resolved_at: string | null
+          retry_count: number | null
+          status: string
+          tx_ref: string
+          user_id: string
+          verified_at: string | null
+        }
+        Insert: {
+          amount: number
+          contribution_id?: string | null
+          created_at?: string
+          cycle_id: string
+          failure_reason?: string | null
+          flw_ref?: string | null
+          flw_transaction_id?: string | null
+          group_id: string
+          id?: string
+          last_checked_at?: string | null
+          max_retries?: number | null
+          resolved_at?: string | null
+          retry_count?: number | null
+          status?: string
+          tx_ref: string
+          user_id: string
+          verified_at?: string | null
+        }
+        Update: {
+          amount?: number
+          contribution_id?: string | null
+          created_at?: string
+          cycle_id?: string
+          failure_reason?: string | null
+          flw_ref?: string | null
+          flw_transaction_id?: string | null
+          group_id?: string
+          id?: string
+          last_checked_at?: string | null
+          max_retries?: number | null
+          resolved_at?: string | null
+          retry_count?: number | null
+          status?: string
+          tx_ref?: string
+          user_id?: string
+          verified_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pending_card_charges_contribution_id_fkey"
+            columns: ["contribution_id"]
+            isOneToOne: false
+            referencedRelation: "cycle_contributions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pending_card_charges_cycle_id_fkey"
+            columns: ["cycle_id"]
+            isOneToOne: false
+            referencedRelation: "contribution_cycles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pending_card_charges_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "public_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pending_card_charges_group_id_fkey"
             columns: ["group_id"]
             isOneToOne: false
             referencedRelation: "thrift_groups"

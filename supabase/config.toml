@@ -38,3 +38,6 @@ verify_jwt = false
 
 [functions.card-tokenization]
 verify_jwt = false
+
+[functions.contribution-reconciler]
+verify_jwt = false
