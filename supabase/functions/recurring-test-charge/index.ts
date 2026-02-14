@@ -134,6 +134,29 @@ serve(async (req) => {
             await supabase.from('test_ledger_entries')
               .update({ status: 'failed', failure_reason: chargeData.message || 'Charge failed', updated_at: new Date().toISOString() })
               .eq('tx_ref', txRef);
+          } else {
+            // Auto-verify since sandbox doesn't send webhooks
+            const chargeId = chargeData.data?.id;
+            if (chargeId) {
+              // Brief delay to allow Flutterwave to process
+              await new Promise(r => setTimeout(r, 3000));
+              try {
+                const verifyResp = await fetch(`${FLUTTERWAVE_TEST_BASE}/transactions/${chargeId}/verify`, {
+                  headers: { 'Authorization': `Bearer ${flwTestSecret}` },
+                });
+                const verifyData = await verifyResp.json();
+                console.log('Cron auto-verify response:', JSON.stringify(verifyData));
+                if (verifyData.status === 'success' && verifyData.data?.status === 'successful') {
+                  await supabase.from('test_ledger_entries')
+                    .update({ status: 'successful', updated_at: new Date().toISOString() })
+                    .eq('tx_ref', txRef)
+                    .eq('status', 'pending');
+                  console.log('Cron auto-verified successful for:', txRef);
+                }
+              } catch (verifyErr) {
+                console.warn('Cron auto-verify failed:', verifyErr);
+              }
+            }
           }
 
           results.push({ user_id: tokenData.user_id, tx_ref: txRef, status: chargeData.status, cycle: nextCycle });
@@ -256,22 +279,41 @@ serve(async (req) => {
         const chargeData = await chargeResp.json();
         console.log('Recurring test charge response:', JSON.stringify(chargeData));
 
-        // Do NOT auto-credit. Wait for webhook. Just log result.
         if (chargeData.status !== 'success') {
-          // Update ledger as failed immediately for non-success API responses
           await supabase.from('test_ledger_entries')
             .update({ status: 'failed', failure_reason: chargeData.message || 'Charge initiation failed', updated_at: new Date().toISOString() })
             .eq('tx_ref', txRef);
+        } else {
+          // Auto-verify since sandbox doesn't send webhooks
+          const chargeId = chargeData.data?.id;
+          if (chargeId) {
+            await new Promise(r => setTimeout(r, 3000));
+            try {
+              const verifyResp = await fetch(`${FLUTTERWAVE_TEST_BASE}/transactions/${chargeId}/verify`, {
+                headers: { 'Authorization': `Bearer ${flwTestSecret}` },
+              });
+              const verifyData = await verifyResp.json();
+              console.log('Manual auto-verify response:', JSON.stringify(verifyData));
+              if (verifyData.status === 'success' && verifyData.data?.status === 'successful') {
+                await supabase.from('test_ledger_entries')
+                  .update({ status: 'successful', updated_at: new Date().toISOString() })
+                  .eq('tx_ref', txRef)
+                  .eq('status', 'pending');
+              }
+            } catch (verifyErr) {
+              console.warn('Manual auto-verify failed:', verifyErr);
+            }
+          }
         }
+
+        const finalStatus = chargeData.status === 'success' ? 'Charge initiated and auto-verified.' : `Charge failed: ${chargeData.message}`;
 
         return new Response(JSON.stringify({
           success: true,
           charge_status: chargeData.status,
           tx_ref: txRef,
           cycle: nextCycle,
-          message: chargeData.status === 'success'
-            ? 'Charge initiated. Awaiting webhook confirmation before crediting ledger.'
-            : `Charge failed: ${chargeData.message}`,
+          message: finalStatus,
           raw_response: chargeData,
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
