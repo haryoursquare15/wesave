@@ -186,7 +186,6 @@ serve(async (req) => {
               email: chargeEmail,
               tx_ref: txRef,
               narration: `WeSave Cron Recurring Test - Cycle ${nextCycle}`,
-              usesecureauth: true,
             }),
           });
 
@@ -213,51 +212,25 @@ serve(async (req) => {
               verification_source: 'direct',
             });
           } else {
-            // Check if 3DS redirect is required
-            const authMode = chargeData.meta?.authorization?.mode;
-            const redirectUrl3ds = chargeData.meta?.authorization?.redirect;
+            // Move to 'pending' - awaiting webhook/verification
+            await supabase.from('payments_test').update({
+              status: 'pending',
+              flw_transaction_id: chargeData.data?.id?.toString() || null,
+              flw_ref: chargeData.data?.flw_ref || null,
+              processor_response: chargeData.data?.processor_response || null,
+            }).eq('id', paymentRecord?.id);
 
-            if (authMode === 'redirect' && redirectUrl3ds) {
-              // 3DS required - mark as pending_3ds
-              await supabase.from('payments_test').update({
-                status: 'pending',
-                flw_transaction_id: chargeData.data?.id?.toString() || null,
-                flw_ref: chargeData.data?.flw_ref || null,
-                processor_response: `3DS redirect required`,
-              }).eq('id', paymentRecord?.id);
-
-              await supabase.from('recurring_webhook_logs_test').insert({
-                event_type: 'cron.charge.3ds_required',
-                tx_ref: txRef,
-                flw_ref: chargeData.data?.flw_ref || '',
-                flw_transaction_id: chargeData.data?.id?.toString() || null,
-                status: 'pending',
-                amount,
-                payload: { ...chargeData, _3ds_redirect: redirectUrl3ds },
-                processed: false,
-                verification_source: '3ds_redirect',
-              });
-            } else {
-              // Step 3b: Move to 'pending' - awaiting verification
-              await supabase.from('payments_test').update({
-                status: 'pending',
-                flw_transaction_id: chargeData.data?.id?.toString() || null,
-                flw_ref: chargeData.data?.flw_ref || null,
-                processor_response: chargeData.data?.processor_response || null,
-              }).eq('id', paymentRecord?.id);
-
-              await supabase.from('recurring_webhook_logs_test').insert({
-                event_type: 'cron.charge.initiated',
-                tx_ref: txRef,
-                flw_ref: chargeData.data?.flw_ref || '',
-                flw_transaction_id: chargeData.data?.id?.toString() || null,
-                status: 'pending',
-                amount,
-                payload: chargeData,
-                processed: false,
-                verification_source: 'awaiting',
-              });
-            }
+            await supabase.from('recurring_webhook_logs_test').insert({
+              event_type: 'cron.charge.initiated',
+              tx_ref: txRef,
+              flw_ref: chargeData.data?.flw_ref || '',
+              flw_transaction_id: chargeData.data?.id?.toString() || null,
+              status: 'pending',
+              amount,
+              payload: chargeData,
+              processed: false,
+              verification_source: 'awaiting',
+            });
           }
 
           results.push({ user_id: tokenData.user_id, tx_ref: txRef, status: chargeData.status, cycle: nextCycle });
@@ -356,7 +329,6 @@ serve(async (req) => {
             email: userEmail,
             tx_ref: txRef,
             narration: `WeSave Recurring Test - Cycle ${nextCycle}`,
-            usesecureauth: true,
           }),
         });
 
@@ -382,56 +354,29 @@ serve(async (req) => {
             verification_source: 'direct',
           });
         } else {
-          // Check for 3DS redirect
-          const authMode = chargeData.meta?.authorization?.mode;
-          const redirectUrl3ds = chargeData.meta?.authorization?.redirect;
+          // Move to 'pending' - awaiting webhook/verification
+          await supabase.from('payments_test').update({
+            status: 'pending',
+            flw_transaction_id: chargeData.data?.id?.toString() || null,
+            flw_ref: chargeData.data?.flw_ref || null,
+            processor_response: chargeData.data?.processor_response || null,
+          }).eq('id', paymentRecord?.id);
 
-          if (authMode === 'redirect' && redirectUrl3ds) {
-            await supabase.from('payments_test').update({
-              status: 'pending',
-              flw_transaction_id: chargeData.data?.id?.toString() || null,
-              flw_ref: chargeData.data?.flw_ref || null,
-              processor_response: '3DS redirect required',
-            }).eq('id', paymentRecord?.id);
-
-            await supabase.from('recurring_webhook_logs_test').insert({
-              event_type: 'manual.charge.3ds_required',
-              tx_ref: txRef,
-              flw_ref: chargeData.data?.flw_ref || '',
-              flw_transaction_id: chargeData.data?.id?.toString() || null,
-              status: 'pending',
-              amount,
-              payload: { ...chargeData, _3ds_redirect: redirectUrl3ds },
-              processed: false,
-              verification_source: '3ds_redirect',
-            });
-          } else {
-            // Move to 'pending' - awaiting verification
-            await supabase.from('payments_test').update({
-              status: 'pending',
-              flw_transaction_id: chargeData.data?.id?.toString() || null,
-              flw_ref: chargeData.data?.flw_ref || null,
-              processor_response: chargeData.data?.processor_response || null,
-            }).eq('id', paymentRecord?.id);
-
-            await supabase.from('recurring_webhook_logs_test').insert({
-              event_type: 'manual.charge.initiated',
-              tx_ref: txRef,
-              flw_ref: chargeData.data?.flw_ref || '',
-              flw_transaction_id: chargeData.data?.id?.toString() || null,
-              status: 'pending',
-              amount,
-              payload: chargeData,
-              processed: false,
-              verification_source: 'awaiting',
-            });
-          }
+          await supabase.from('recurring_webhook_logs_test').insert({
+            event_type: 'manual.charge.initiated',
+            tx_ref: txRef,
+            flw_ref: chargeData.data?.flw_ref || '',
+            flw_transaction_id: chargeData.data?.id?.toString() || null,
+            status: 'pending',
+            amount,
+            payload: chargeData,
+            processed: false,
+            verification_source: 'awaiting',
+          });
         }
 
-        const authMode = chargeData.meta?.authorization?.mode;
-        const redirectUrl3dsResp = chargeData.meta?.authorization?.redirect;
         const finalStatus = chargeData.status === 'success'
-          ? (authMode === 'redirect' ? '3DS redirect required — open link to complete.' : 'Charge initiated → pending verification.')
+          ? 'Charge initiated → pending verification.'
           : `Charge failed: ${chargeData.message}`;
 
         return new Response(JSON.stringify({
@@ -440,8 +385,6 @@ serve(async (req) => {
           tx_ref: txRef,
           cycle: nextCycle,
           message: finalStatus,
-          requires_3ds: authMode === 'redirect',
-          redirect_url: redirectUrl3dsResp || null,
           raw_response: chargeData,
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
