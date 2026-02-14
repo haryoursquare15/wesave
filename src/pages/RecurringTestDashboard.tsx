@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useIsAdmin } from "@/hooks/useAdmin";
@@ -11,6 +11,12 @@ import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, CreditCard, RefreshCw, Play, Trash2, Shield, Zap, FileText, BarChart3 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+
+declare global {
+  interface Window {
+    FlutterwaveCheckout: (config: Record<string, unknown>) => { close: () => void };
+  }
+}
 
 interface TestToken {
   id: string;
@@ -108,6 +114,20 @@ export default function RecurringTestDashboard() {
     if (isAdmin && user) fetchData();
   }, [isAdmin, user]);
 
+  // Load Flutterwave inline JS SDK
+  useEffect(() => {
+    if (document.getElementById('flw-inline-script')) return;
+    const script = document.createElement('script');
+    script.id = 'flw-inline-script';
+    script.src = 'https://checkout.flutterwave.com/v3.js';
+    script.async = true;
+    document.body.appendChild(script);
+    return () => {
+      const el = document.getElementById('flw-inline-script');
+      if (el) document.body.removeChild(el);
+    };
+  }, []);
+
   const initiateTestPayment = async () => {
     setActionLoading('initiate');
     try {
@@ -115,18 +135,60 @@ export default function RecurringTestDashboard() {
         body: { action: 'initiate_payment', email: 'test@wesave.ng', name: 'Test User', amount: 1000 },
       });
 
-      if (resp.data?.success) {
-        const { payment_link_data } = resp.data;
-        toast({
-          title: "Payment Initialized",
-          description: `Use Flutterwave inline with public key: ${payment_link_data.public_key?.slice(0, 20)}... and tx_ref: ${payment_link_data.tx_ref}`,
-        });
-      } else {
+      if (!resp.data?.success) {
         toast({ title: "Error", description: resp.data?.error || 'Failed', variant: "destructive" });
+        setActionLoading(null);
+        return;
       }
+
+      const config = resp.data.payment_link_data;
+
+      if (!window.FlutterwaveCheckout) {
+        toast({ title: "Error", description: "Flutterwave SDK not loaded yet. Please try again in a moment.", variant: "destructive" });
+        setActionLoading(null);
+        return;
+      }
+
+      // Open Flutterwave payment modal
+      window.FlutterwaveCheckout({
+        public_key: config.public_key,
+        tx_ref: config.tx_ref,
+        amount: config.amount,
+        currency: config.currency,
+        customer: config.customer,
+        customizations: config.customizations,
+        meta: config.meta,
+        payment_options: 'card',
+        callback: async (response: Record<string, unknown>) => {
+          console.log('Flutterwave callback:', response);
+          // Verify and save token via edge function
+          try {
+            const verifyResp = await supabase.functions.invoke('recurring-test-charge', {
+              body: {
+                action: 'verify_and_save_token',
+                transaction_id: response.transaction_id,
+                tx_ref: response.tx_ref,
+              },
+            });
+
+            if (verifyResp.data?.success) {
+              toast({ title: "Token Saved!", description: verifyResp.data.message });
+            } else {
+              toast({ title: "Verification Issue", description: verifyResp.data?.error || 'Could not save token', variant: "destructive" });
+            }
+          } catch (err) {
+            console.error('Token verification error:', err);
+            toast({ title: "Error", description: "Failed to verify transaction", variant: "destructive" });
+          }
+          fetchData();
+          setActionLoading(null);
+        },
+        onclose: () => {
+          setActionLoading(null);
+        },
+      });
     } catch (err) {
       toast({ title: "Error", description: 'Network error', variant: "destructive" });
-    } finally {
       setActionLoading(null);
     }
   };

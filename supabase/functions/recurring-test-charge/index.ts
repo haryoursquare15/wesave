@@ -296,6 +296,86 @@ serve(async (req) => {
       });
     }
 
+    // ---- ACTION: VERIFY TRANSACTION AND SAVE TOKEN ----
+    if (action === 'verify_and_save_token') {
+      const { transaction_id, tx_ref } = body;
+
+      if (!transaction_id) {
+        return new Response(JSON.stringify({ success: false, error: 'transaction_id required' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Verify transaction with Flutterwave
+      const verifyResp = await fetch(`${FLUTTERWAVE_TEST_BASE}/transactions/${transaction_id}/verify`, {
+        headers: { 'Authorization': `Bearer ${flwTestSecret}` },
+      });
+      const verifyData = await verifyResp.json();
+      console.log('Verify response:', JSON.stringify(verifyData));
+
+      if (verifyData.status !== 'success' || verifyData.data?.status !== 'successful') {
+        return new Response(JSON.stringify({ success: false, error: 'Transaction not successful', details: verifyData }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const txData = verifyData.data;
+      const card = txData.card || {};
+
+      // Log webhook equivalent
+      await supabase.from('recurring_webhook_logs_test').insert({
+        event_type: 'charge.completed.verified',
+        tx_ref: txData.tx_ref || tx_ref,
+        flw_ref: txData.flw_ref || '',
+        status: txData.status,
+        amount: txData.amount,
+        payload: verifyData,
+        processed: true,
+        processed_at: new Date().toISOString(),
+      });
+
+      if (card.token) {
+        // Check if token already exists
+        const { data: existing } = await supabase
+          .from('user_payment_tokens_test')
+          .select('id')
+          .eq('card_token', card.token)
+          .single();
+
+        if (!existing) {
+          // Use the authenticated user's ID
+          const authHeader2 = req.headers.get('Authorization');
+          let userId = '00000000-0000-0000-0000-000000000001';
+          if (authHeader2) {
+            const t = authHeader2.replace('Bearer ', '');
+            const { data: { user: u2 } } = await supabase.auth.getUser(t);
+            if (u2) userId = u2.id;
+          }
+
+          await supabase.from('user_payment_tokens_test').insert({
+            user_id: userId,
+            card_token: card.token,
+            first_6digits: card.first_6digits || null,
+            last_4digits: card.last_4digits || null,
+            expiry: card.expiry || null,
+            card_type: card.type || null,
+          });
+
+          return new Response(JSON.stringify({ success: true, message: 'Token saved successfully', card_info: { last4: card.last_4digits, type: card.type, expiry: card.expiry } }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        return new Response(JSON.stringify({ success: true, message: 'Token already exists' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      return new Response(JSON.stringify({ success: false, error: 'No card token in transaction response. Card tokenization may not be supported for this test card.' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     return new Response(JSON.stringify({ success: false, error: 'Unknown action' }), {
       status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
