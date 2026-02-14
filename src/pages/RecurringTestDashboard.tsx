@@ -212,6 +212,7 @@ export default function RecurringTestDashboard() {
         tx_ref: config.tx_ref,
         amount: config.amount,
         currency: config.currency,
+        redirect_url: config.redirect_url,
         customer: config.customer,
         customizations: config.customizations,
         meta: config.meta,
@@ -247,11 +248,15 @@ export default function RecurringTestDashboard() {
         body: { action: 'run_recurring_charge', token_id: tokenId },
       });
       if (resp.data?.success) {
+        const is3ds = resp.data.requires_3ds;
         toast({
-          title: resp.data.charge_status === 'success' ? "Charge Initiated" : "Charge Failed",
-          description: resp.data.message,
+          title: is3ds ? "3DS Required" : (resp.data.charge_status === 'success' ? "Charge Initiated" : "Charge Failed"),
+          description: is3ds ? "Opening 3DS authentication..." : resp.data.message,
           variant: resp.data.charge_status === 'success' ? "default" : "destructive",
         });
+        if (is3ds && resp.data.redirect_url) {
+          window.open(resp.data.redirect_url, '_blank');
+        }
         fetchData();
       } else {
         toast({ title: "Error", description: resp.data?.error || 'Failed', variant: "destructive" });
