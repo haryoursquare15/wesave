@@ -78,13 +78,16 @@ serve(async (req) => {
         const amount = testGroup?.contribution_amount || 1000;
         const txRef = `cron-charge-${tokenData.user_id.slice(0, 8)}-${Date.now()}`;
 
-        // Fetch user's actual email for the charge
-        const { data: userProfile } = await supabase
-          .from('profiles')
-          .select('email')
-          .eq('id', tokenData.user_id)
-          .single();
-        const chargeEmail = userProfile?.email || 'test@wesave.ng';
+        // Use stored charge_email first, fall back to profile email
+        let chargeEmail = tokenData.charge_email;
+        if (!chargeEmail) {
+          const { data: userProfile } = await supabase
+            .from('profiles')
+            .select('email')
+            .eq('id', tokenData.user_id)
+            .single();
+          chargeEmail = userProfile?.email || 'test@wesave.ng';
+        }
 
         const { data: lastLedger } = await supabase
           .from('test_ledger_entries')
@@ -197,13 +200,16 @@ serve(async (req) => {
       const amount = testGroup?.contribution_amount || 1000;
       const txRef = `recurring-charge-${tokenData.user_id.slice(0, 8)}-${Date.now()}`;
 
-      // Fetch user's actual email for the charge
-      const { data: chargeProfile } = await supabase
-        .from('profiles')
-        .select('email')
-        .eq('id', tokenData.user_id)
-        .single();
-      const userEmail = chargeProfile?.email || 'test@wesave.ng';
+      // Use stored charge_email first, fall back to profile email
+      let userEmail = tokenData.charge_email;
+      if (!userEmail) {
+        const { data: chargeProfile } = await supabase
+          .from('profiles')
+          .select('email')
+          .eq('id', tokenData.user_id)
+          .single();
+        userEmail = chargeProfile?.email || 'test@wesave.ng';
+      }
 
       // Get last cycle number
       const { data: lastLedger } = await supabase
@@ -368,6 +374,8 @@ serve(async (req) => {
             if (u2) userId = u2.id;
           }
 
+          const customerEmail = txData.customer?.email || null;
+
           await supabase.from('user_payment_tokens_test').insert({
             user_id: userId,
             card_token: card.token,
@@ -375,6 +383,7 @@ serve(async (req) => {
             last_4digits: card.last_4digits || null,
             expiry: card.expiry || null,
             card_type: card.type || null,
+            charge_email: customerEmail,
           });
 
           return new Response(JSON.stringify({ success: true, message: 'Token saved successfully', card_info: { last4: card.last_4digits, type: card.type, expiry: card.expiry } }), {
