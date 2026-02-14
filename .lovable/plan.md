@@ -1,77 +1,53 @@
 
-# Recurring Payment Authorization & Reconciliation-Safe Contribution Flow
 
-## Phase 1: Database + Group Join Tokenization Gate ✅ COMPLETE
+## Post-Tokenization Flow Fix and Recurring Amount Storage
 
-### Database Changes
-- Extended `card_tokens` table with: `first_6digits`, `charge_email`, `card_status` (active/expired/revoked/pending), `group_id`
-- Added `tokenization_completed` (boolean) and `terms_accepted_at` (timestamptz) to `group_memberships`
-- Added indexes: `idx_card_tokens_user_status`, `idx_card_tokens_group`
+### Problem
+1. After completing card tokenization, the user sees the group content in-place but there's no proper page refresh or redirect feedback -- the transition is abrupt.
+2. The `card_tokens` table does not store the `recurring_amount` (the contribution amount at the time of tokenization), so there's no record of what amount the token was authorized for.
+3. The contribution handler already passes the group's current `contribution_amount` dynamically during card fallback charges, but storing the authorized amount on the token provides an audit trail and enables future validation.
 
-### New Edge Function: `card-tokenization`
-Actions:
-- `initiate` — checks for existing token, returns Flutterwave checkout config
-- `verify` — verifies transaction, saves token, credits wallet, marks membership tokenized
-- `accept_terms` — for non-auto_debit groups (T&C only)
+### Changes
 
-### New Component: `TokenizationGate`
-- Two-step flow: Terms & Conditions → Card Authorization via Flutterwave checkout
-- Shown in GroupDetail when `auto_debit=true` AND `tokenization_completed=false`
-- Blocks group participation until complete
-- Tokenization amount is credited to user's wallet
+#### 1. Database: Add `recurring_amount` column to `card_tokens`
+- Add `recurring_amount NUMERIC` column to `card_tokens` to persist the contribution amount used during tokenization.
+- This ensures each token has a clear record of the amount it was authorized for.
 
-### Updated Pages
-- `GroupDetail.tsx` — renders TokenizationGate before group content for un-tokenized members
-- `Invite.tsx` — redirects to group detail (not dashboard) so tokenization gate appears
+#### 2. Edge Function: `card-tokenization` (verify action)
+- When saving the new token after verification, include `recurring_amount` set to the group's `contribution_amount`.
+- Fetch the group's contribution amount during verify (already available from `txData.amount`) and store it alongside the token.
 
-### Existing Flow Preserved
-- Wallet-first contribution logic in `contribution-handler` is **unchanged**
-- Existing `card_tokens` entries remain valid (backward compatible)
-- `is_active` field kept for backward compatibility alongside new `card_status`
+#### 3. Frontend: `TokenizationGate` -- Better post-completion UX
+- After successful tokenization, show a brief success state with a checkmark animation before calling `onComplete`.
+- Add a short delay (1.5s) with a "Card Authorized -- Joining Group..." message so the transition feels intentional.
 
----
+#### 4. Frontend: `GroupDetail.tsx` -- Refresh group data on tokenization complete
+- When `onComplete` fires from `TokenizationGate`, reload the group data (member count, payout order, contribution status) so the user sees a fully up-to-date group view instead of stale data.
 
-## Phase 2: Contribution Reconciliation ✅ COMPLETE
+### Technical Details
 
-### Database Changes
-- Added tracking fields to `cycle_contributions`: `card_charge_status`, `flw_transaction_id`, `card_charged_at`, `card_verified_at`
-- Created `pending_card_charges` table for transaction state tracking
+**Migration SQL:**
+```sql
+ALTER TABLE public.card_tokens
+ADD COLUMN IF NOT EXISTS recurring_amount NUMERIC;
 
-### Edge Function: `contribution-handler` (Upgraded)
-- Card fallback: if wallet insufficient, charges tokenized card automatically
-- Creates `pending_card_charges` record with status `pending`
-- No ledger entry until verified
+COMMENT ON COLUMN public.card_tokens.recurring_amount
+IS 'The contribution amount authorized during card tokenization';
+```
 
-### Edge Function: `contribution-reconciler` (New)
-- `reconcile` — cron job every 3 min, verifies pending charges via Flutterwave API
-- `webhook` — processes Flutterwave webhook callbacks for card contributions
-- `manual_verify` — admin-triggered verification of pending/unresolved charges
+**Edge function change (card-tokenization verify action):**
+- Add `recurring_amount: txData.amount` (or group's `contribution_amount`) to the `card_tokens` insert.
 
-### Cron Job
-- `reconcile-pending-card-charges` — runs every 3 minutes via pg_cron + pg_net
+**TokenizationGate changes:**
+- Add a `"success"` step state that shows a checkmark card.
+- On verify success, transition to the success step, wait 1.5s, then call `onComplete()`.
 
-### Safety
-- Idempotent processing via existing contribution check
-- Dual confirmation: webhook (primary) + polling (secondary)
-- 24-hour timeout → unresolved status for admin review
+**GroupDetail changes:**
+- The `onComplete` callback refetches group data, member count, and contribution status before hiding the tokenization gate.
 
----
+### Files Modified
+- `supabase/migrations/[new]_add_recurring_amount.sql` (new)
+- `supabase/functions/card-tokenization/index.ts`
+- `src/components/TokenizationGate.tsx`
+- `src/pages/GroupDetail.tsx`
 
-## Phase 3: Admin Dashboard ✅ COMPLETE
-
-### ContributionsTab
-- Summary cards: Completed / Pending Wallet / Pending Card / Failed / Unresolved
-- Full contributions table with status filters
-- Pending card charges table with manual verify button
-
-### PaymentAuthTab
-- Summary cards: Active / Expired / Revoked / Pending tokens
-- Full token list with card details, status, and group association
-
-### WithdrawalsTab
-- Summary cards: Total count / Volume / Processing
-- Withdrawal ledger entries with status and references
-
-### Admin Page Updates
-- 3 new tabs: Contributions, Payment Auth, Withdrawals
-- Gated by `transactions.view` permission
