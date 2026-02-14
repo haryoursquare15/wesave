@@ -1790,6 +1790,7 @@ export type Database = {
         Row: {
           card_token: string
           card_type: string | null
+          charge_email: string | null
           created_at: string
           expiry: string | null
           first_6digits: string | null
@@ -1802,6 +1803,7 @@ export type Database = {
         Insert: {
           card_token: string
           card_type?: string | null
+          charge_email?: string | null
           created_at?: string
           expiry?: string | null
           first_6digits?: string | null
@@ -1814,6 +1816,7 @@ export type Database = {
         Update: {
           card_token?: string
           card_type?: string | null
+          charge_email?: string | null
           created_at?: string
           expiry?: string | null
           first_6digits?: string | null
