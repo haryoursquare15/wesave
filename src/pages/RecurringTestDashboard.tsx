@@ -8,7 +8,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, CreditCard, RefreshCw, Play, Trash2, Shield, Zap, FileText, BarChart3, CheckCircle, AlertTriangle, Clock, Search, FlaskConical } from "lucide-react";
+import {
+  ArrowLeft, CreditCard, RefreshCw, Play, Trash2, Shield, Zap,
+  FileText, BarChart3, CheckCircle, AlertTriangle, Clock, Search,
+  FlaskConical, Wallet, Activity, Info, ChevronRight, Timer, Ban
+} from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
@@ -85,6 +89,42 @@ interface TestGroup {
   status: string;
 }
 
+const StatusBadge = ({ status }: { status: string }) => {
+  const config: Record<string, { icon: React.ReactNode; className: string }> = {
+    final_success: { icon: <CheckCircle className="h-3 w-3" />, className: "bg-green-500/10 text-green-700 border-green-500/20" },
+    successful: { icon: <CheckCircle className="h-3 w-3" />, className: "bg-green-500/10 text-green-700 border-green-500/20" },
+    success: { icon: <CheckCircle className="h-3 w-3" />, className: "bg-green-500/10 text-green-700 border-green-500/20" },
+    final_failed: { icon: <Ban className="h-3 w-3" />, className: "bg-destructive/10 text-destructive border-destructive/20" },
+    failed: { icon: <Ban className="h-3 w-3" />, className: "bg-destructive/10 text-destructive border-destructive/20" },
+    pending: { icon: <Timer className="h-3 w-3" />, className: "bg-yellow-500/10 text-yellow-700 border-yellow-500/20" },
+    initiated: { icon: <Activity className="h-3 w-3" />, className: "bg-blue-500/10 text-blue-700 border-blue-500/20" },
+    unresolved: { icon: <AlertTriangle className="h-3 w-3" />, className: "bg-orange-500/10 text-orange-700 border-orange-500/20" },
+    reversed: { icon: <RefreshCw className="h-3 w-3" />, className: "bg-purple-500/10 text-purple-700 border-purple-500/20" },
+  };
+  const c = config[status] || { icon: null, className: "bg-muted text-muted-foreground border-border" };
+  return (
+    <Badge variant="outline" className={`gap-1 font-mono text-[10px] uppercase tracking-wider ${c.className}`}>
+      {c.icon} {status}
+    </Badge>
+  );
+};
+
+const StatCard = ({ icon, label, value, sub, accent }: { icon: React.ReactNode; label: string; value: string | number; sub?: string; accent?: string }) => (
+  <Card className="relative overflow-hidden">
+    <div className={`absolute top-0 left-0 w-1 h-full ${accent || 'bg-primary'}`} />
+    <CardContent className="p-4 pl-5">
+      <div className="flex items-center gap-3">
+        <div className="p-2 rounded-lg bg-muted/50">{icon}</div>
+        <div className="min-w-0">
+          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">{label}</p>
+          <p className="text-2xl font-bold tracking-tight">{value}</p>
+          {sub && <p className="text-[11px] text-muted-foreground">{sub}</p>}
+        </div>
+      </div>
+    </CardContent>
+  </Card>
+);
+
 export default function RecurringTestDashboard() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
@@ -115,11 +155,9 @@ export default function RecurringTestDashboard() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
-
       const resp = await supabase.functions.invoke('recurring-test-charge', {
         body: { action: 'get_status' },
       });
-
       if (resp.data?.success) {
         setTokens(resp.data.tokens || []);
         setPayments(resp.data.payments || []);
@@ -158,21 +196,17 @@ export default function RecurringTestDashboard() {
       const resp = await supabase.functions.invoke('recurring-test-charge', {
         body: { action: 'initiate_payment', email: userEmail, name: 'Test User', amount: 1000 },
       });
-
       if (!resp.data?.success) {
         toast({ title: "Error", description: resp.data?.error || 'Failed', variant: "destructive" });
         setActionLoading(null);
         return;
       }
-
       const config = resp.data.payment_link_data;
-
       if (!window.FlutterwaveCheckout) {
         toast({ title: "Error", description: "Flutterwave SDK not loaded yet.", variant: "destructive" });
         setActionLoading(null);
         return;
       }
-
       window.FlutterwaveCheckout({
         public_key: config.public_key,
         tx_ref: config.tx_ref,
@@ -192,7 +226,7 @@ export default function RecurringTestDashboard() {
             } else {
               toast({ title: "Verification Issue", description: verifyResp.data?.error || 'Could not save token', variant: "destructive" });
             }
-          } catch (err) {
+          } catch {
             toast({ title: "Error", description: "Failed to verify transaction", variant: "destructive" });
           }
           fetchData();
@@ -310,26 +344,17 @@ export default function RecurringTestDashboard() {
 
   if (authLoading || adminLoading) {
     return (
-      <div className="min-h-screen bg-background p-6">
-        <Skeleton className="h-12 w-64 mb-6" />
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {[1, 2, 3].map(i => <Skeleton key={i} className="h-32" />)}
+      <div className="min-h-screen bg-background p-6 space-y-6">
+        <Skeleton className="h-14 w-80" />
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-24 rounded-lg" />)}
         </div>
+        <Skeleton className="h-96 rounded-lg" />
       </div>
     );
   }
 
   if (!isAdmin) return null;
-
-  const statusColor = (s: string) => {
-    if (s === 'final_success' || s === 'successful' || s === 'success') return 'bg-green-100 text-green-800';
-    if (s === 'final_failed' || s === 'failed') return 'bg-red-100 text-red-800';
-    if (s === 'pending') return 'bg-yellow-100 text-yellow-800';
-    if (s === 'initiated') return 'bg-blue-100 text-blue-800';
-    if (s === 'unresolved') return 'bg-orange-100 text-orange-800';
-    if (s === 'reversed') return 'bg-purple-100 text-purple-800';
-    return 'bg-muted text-muted-foreground';
-  };
 
   const pendingCount = payments.filter(p => ['initiated', 'pending'].includes(p.status)).length;
   const confirmedCount = confirmedLedger.length;
@@ -339,208 +364,246 @@ export default function RecurringTestDashboard() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <div className="border-b bg-card">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => navigate("/admin")}>
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
+      <header className="sticky top-0 z-30 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" size="icon" onClick={() => navigate("/admin")} className="shrink-0">
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+              <div className="flex items-center gap-2.5">
+                <div className="p-1.5 rounded-lg bg-secondary/10">
+                  <Shield className="h-5 w-5 text-secondary" />
+                </div>
+                <div>
+                  <h1 className="text-lg font-bold leading-tight">Reconciliation Test Lab</h1>
+                  <p className="text-[11px] text-muted-foreground leading-none">Isolated staging · Flutterwave TEST keys</p>
+                </div>
+                <Badge variant="outline" className="ml-1 bg-yellow-500/10 text-yellow-700 border-yellow-500/20 text-[10px] font-mono uppercase">
+                  Sandbox
+                </Badge>
+              </div>
+            </div>
             <div className="flex items-center gap-2">
-              <Shield className="h-6 w-6 text-primary" />
-              <h1 className="text-2xl font-bold">Reconciliation-Safe Test Lab</h1>
-              <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-300">TEST MODE</Badge>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={triggerVerifyWorker}
+                disabled={actionLoading === 'verify-worker'}
+                className="hidden sm:flex"
+              >
+                <Search className={`h-3.5 w-3.5 mr-1.5 ${actionLoading === 'verify-worker' ? 'animate-spin' : ''}`} />
+                Verify Pending
+              </Button>
+              <Button variant="outline" size="sm" onClick={fetchData} disabled={loading}>
+                <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+              </Button>
+              <Button variant="destructive" size="sm" onClick={resetTestData} disabled={actionLoading === 'reset'}>
+                <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                <span className="hidden sm:inline">Reset</span>
+              </Button>
             </div>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={triggerVerifyWorker} disabled={actionLoading === 'verify-worker'}>
-              <Search className={`h-4 w-4 mr-1 ${actionLoading === 'verify-worker' ? 'animate-spin' : ''}`} /> Verify Pending
-            </Button>
-            <Button variant="outline" size="sm" onClick={fetchData} disabled={loading}>
-              <RefreshCw className={`h-4 w-4 mr-1 ${loading ? 'animate-spin' : ''}`} /> Refresh
-            </Button>
-            <Button variant="destructive" size="sm" onClick={resetTestData} disabled={actionLoading === 'reset'}>
-              <Trash2 className="h-4 w-4 mr-1" /> Reset All
-            </Button>
-          </div>
         </div>
-      </div>
+      </header>
 
-      <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
-        {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardDescription>Saved Tokens</CardDescription>
-              <CardTitle className="text-3xl">{tokens.length}</CardTitle>
-            </CardHeader>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardDescription className="flex items-center gap-1"><Clock className="h-3 w-3" /> Pending</CardDescription>
-              <CardTitle className="text-3xl text-yellow-600">{pendingCount}</CardTitle>
-            </CardHeader>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardDescription className="flex items-center gap-1"><CheckCircle className="h-3 w-3" /> Confirmed</CardDescription>
-              <CardTitle className="text-3xl text-green-600">{confirmedCount}</CardTitle>
-            </CardHeader>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardDescription className="flex items-center gap-1"><AlertTriangle className="h-3 w-3" /> Failed/Unresolved</CardDescription>
-              <CardTitle className="text-3xl text-red-600">{failedCount}</CardTitle>
-            </CardHeader>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardDescription>Confirmed Total</CardDescription>
-              <CardTitle className="text-2xl">₦{totalAmount.toLocaleString()}</CardTitle>
-            </CardHeader>
-          </Card>
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+        {/* Stats Row */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <StatCard
+            icon={<CreditCard className="h-4 w-4 text-primary" />}
+            label="Tokens"
+            value={tokens.length}
+            sub={`${tokens.filter(t => t.is_active).length} active`}
+            accent="bg-primary"
+          />
+          <StatCard
+            icon={<Clock className="h-4 w-4 text-yellow-600" />}
+            label="Pending"
+            value={pendingCount}
+            sub="Awaiting verification"
+            accent="bg-yellow-500"
+          />
+          <StatCard
+            icon={<CheckCircle className="h-4 w-4 text-green-600" />}
+            label="Confirmed"
+            value={confirmedCount}
+            sub="Ledger entries"
+            accent="bg-green-500"
+          />
+          <StatCard
+            icon={<AlertTriangle className="h-4 w-4 text-destructive" />}
+            label="Failed"
+            value={failedCount}
+            sub="Failed or unresolved"
+            accent="bg-destructive"
+          />
+          <StatCard
+            icon={<Wallet className="h-4 w-4 text-secondary" />}
+            label="Total Confirmed"
+            value={`₦${totalAmount.toLocaleString()}`}
+            sub="Verified amount"
+            accent="bg-secondary"
+          />
         </div>
 
-        {/* Step 1: Generate Token */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><CreditCard className="h-5 w-5" /> Step 1: Generate Card Token</CardTitle>
-            <CardDescription>Initiate a first payment to capture the card token via Flutterwave test mode.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button onClick={initiateTestPayment} disabled={actionLoading === 'initiate'}>
-              <Zap className="h-4 w-4 mr-2" />
-              {actionLoading === 'initiate' ? 'Initializing...' : 'Initiate Test Payment (₦1,000)'}
-            </Button>
-            <p className="text-sm text-muted-foreground mt-2">
-              Use test card: 5531 8866 5214 2950, CVV: 564, Expiry: 09/32, PIN: 3310, OTP: 12345
-            </p>
-          </CardContent>
-        </Card>
+        {/* Quick Actions */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Token Generation */}
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-md bg-primary/10">
+                  <CreditCard className="h-4 w-4 text-primary" />
+                </div>
+                <div>
+                  <CardTitle className="text-sm">Generate Card Token</CardTitle>
+                  <CardDescription className="text-xs">First payment to capture test card token</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Button onClick={initiateTestPayment} disabled={actionLoading === 'initiate'} className="w-full">
+                <Zap className="h-4 w-4 mr-2" />
+                {actionLoading === 'initiate' ? 'Initializing...' : 'Initiate Test Payment (₦1,000)'}
+              </Button>
+              <div className="rounded-md bg-muted/30 border border-border/50 p-2.5">
+                <p className="text-[11px] text-muted-foreground font-mono leading-relaxed">
+                  Card: 5531 8866 5214 2950 · CVV: 564 · Exp: 09/32
+                  <br />PIN: 3310 · OTP: 12345
+                </p>
+              </div>
+            </CardContent>
+          </Card>
 
-        {/* Failure Simulation */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><FlaskConical className="h-5 w-5" /> Failure Simulation</CardTitle>
-            <CardDescription>Create test scenarios to verify the reconciliation system handles edge cases correctly.</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-wrap gap-3">
-            <Button variant="outline" size="sm" onClick={() => runSimulation('webhook_not_received')} disabled={!!actionLoading}>
-              Simulate: No Webhook
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => runSimulation('pending_timeout')} disabled={!!actionLoading}>
-              Simulate: 24h Timeout
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => runSimulation('failed_charge')} disabled={!!actionLoading}>
-              Simulate: Failed Charge
-            </Button>
-          </CardContent>
-        </Card>
+          {/* Failure Simulation */}
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-md bg-orange-500/10">
+                  <FlaskConical className="h-4 w-4 text-orange-600" />
+                </div>
+                <div>
+                  <CardTitle className="text-sm">Failure Simulation</CardTitle>
+                  <CardDescription className="text-xs">Test edge cases & reconciliation handling</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 gap-2">
+                {[
+                  { key: 'webhook_not_received', label: 'No Webhook', desc: 'Payment stuck in pending' },
+                  { key: 'pending_timeout', label: '24h Timeout', desc: 'Exceeds timeout window' },
+                  { key: 'failed_charge', label: 'Failed Charge', desc: 'Card decline simulation' },
+                ].map(sim => (
+                  <Button
+                    key={sim.key}
+                    variant="outline"
+                    size="sm"
+                    className="justify-between h-auto py-2 px-3"
+                    onClick={() => runSimulation(sim.key)}
+                    disabled={!!actionLoading}
+                  >
+                    <div className="text-left">
+                      <span className="text-xs font-medium">{sim.label}</span>
+                      <span className="text-[10px] text-muted-foreground ml-2">{sim.desc}</span>
+                    </div>
+                    <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                  </Button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
+        {/* Data Tabs */}
         <Tabs defaultValue="payments" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="tokens" className="flex items-center gap-1"><CreditCard className="h-4 w-4" /> Tokens</TabsTrigger>
-            <TabsTrigger value="payments" className="flex items-center gap-1"><BarChart3 className="h-4 w-4" /> Payments</TabsTrigger>
-            <TabsTrigger value="confirmed" className="flex items-center gap-1"><CheckCircle className="h-4 w-4" /> Confirmed Ledger</TabsTrigger>
-            <TabsTrigger value="webhooks" className="flex items-center gap-1"><FileText className="h-4 w-4" /> Logs</TabsTrigger>
+          <TabsList className="bg-muted/50">
+            <TabsTrigger value="payments" className="gap-1.5 text-xs">
+              <BarChart3 className="h-3.5 w-3.5" /> Payments
+              {payments.length > 0 && <Badge variant="secondary" className="ml-1 h-4 min-w-[16px] px-1 text-[10px]">{payments.length}</Badge>}
+            </TabsTrigger>
+            <TabsTrigger value="tokens" className="gap-1.5 text-xs">
+              <CreditCard className="h-3.5 w-3.5" /> Tokens
+              {tokens.length > 0 && <Badge variant="secondary" className="ml-1 h-4 min-w-[16px] px-1 text-[10px]">{tokens.length}</Badge>}
+            </TabsTrigger>
+            <TabsTrigger value="confirmed" className="gap-1.5 text-xs">
+              <CheckCircle className="h-3.5 w-3.5" /> Ledger
+              {confirmedCount > 0 && <Badge variant="secondary" className="ml-1 h-4 min-w-[16px] px-1 text-[10px]">{confirmedCount}</Badge>}
+            </TabsTrigger>
+            <TabsTrigger value="webhooks" className="gap-1.5 text-xs">
+              <FileText className="h-3.5 w-3.5" /> Logs
+            </TabsTrigger>
           </TabsList>
-
-          {/* Tokens Tab */}
-          <TabsContent value="tokens">
-            <Card>
-              <CardHeader>
-                <CardTitle>Stored Test Tokens</CardTitle>
-                <CardDescription>Card tokens captured from test payments.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {tokens.length === 0 ? (
-                  <p className="text-muted-foreground text-center py-8">No tokens yet. Complete a test payment first.</p>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Card</TableHead>
-                        <TableHead>Token</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Expiry</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Created</TableHead>
-                        <TableHead>Action</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {tokens.map(t => (
-                        <TableRow key={t.id}>
-                          <TableCell className="font-mono">{t.first_6digits || '******'}...{t.last_4digits || '****'}</TableCell>
-                          <TableCell className="font-mono text-xs">{t.card_token.slice(0, 12)}...</TableCell>
-                          <TableCell>{t.card_type || '-'}</TableCell>
-                          <TableCell>{t.expiry || '-'}</TableCell>
-                          <TableCell><Badge variant={t.is_active ? 'default' : 'secondary'}>{t.is_active ? 'Active' : 'Inactive'}</Badge></TableCell>
-                          <TableCell className="text-xs">{new Date(t.created_at).toLocaleString()}</TableCell>
-                          <TableCell>
-                            <Button size="sm" onClick={() => runRecurringCharge(t.id)} disabled={actionLoading === `charge-${t.id}` || !t.is_active}>
-                              <Play className="h-3 w-3 mr-1" />
-                              {actionLoading === `charge-${t.id}` ? 'Charging...' : 'Charge ₦1,000'}
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
 
           {/* Payments Tab */}
           <TabsContent value="payments">
             <Card>
-              <CardHeader>
-                <CardTitle>Transaction State Machine</CardTitle>
-                <CardDescription>
-                  All payment attempts: initiated → pending → final_success / final_failed / unresolved. Only final_success creates a ledger entry.
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Activity className="h-4 w-4" /> Transaction State Machine
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  initiated → pending → final_success / final_failed / unresolved. Only final_success writes to the confirmed ledger.
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 {payments.length === 0 ? (
-                  <p className="text-muted-foreground text-center py-8">No payment records yet.</p>
+                  <EmptyState icon={<BarChart3 className="h-8 w-8" />} message="No payment records yet" sub="Run a charge or simulation to begin" />
                 ) : (
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto -mx-6">
                     <Table>
                       <TableHeader>
-                        <TableRow>
-                          <TableHead>Cycle</TableHead>
-                          <TableHead>Amount</TableHead>
-                          <TableHead>TX Ref</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Type</TableHead>
-                          <TableHead>Retries</TableHead>
-                          <TableHead>Processor</TableHead>
-                          <TableHead>FLW ID</TableHead>
-                          <TableHead>Created</TableHead>
-                          <TableHead>Action</TableHead>
+                        <TableRow className="hover:bg-transparent">
+                          <TableHead className="text-[11px] font-semibold uppercase tracking-wider">Cycle</TableHead>
+                          <TableHead className="text-[11px] font-semibold uppercase tracking-wider">Amount</TableHead>
+                          <TableHead className="text-[11px] font-semibold uppercase tracking-wider">TX Ref</TableHead>
+                          <TableHead className="text-[11px] font-semibold uppercase tracking-wider">Status</TableHead>
+                          <TableHead className="text-[11px] font-semibold uppercase tracking-wider">Type</TableHead>
+                          <TableHead className="text-[11px] font-semibold uppercase tracking-wider">Retries</TableHead>
+                          <TableHead className="text-[11px] font-semibold uppercase tracking-wider">Response</TableHead>
+                          <TableHead className="text-[11px] font-semibold uppercase tracking-wider">FLW ID</TableHead>
+                          <TableHead className="text-[11px] font-semibold uppercase tracking-wider">Time</TableHead>
+                          <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-right">Action</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {payments.map(p => (
-                          <TableRow key={p.id}>
-                            <TableCell>{p.payment_cycle || '-'}</TableCell>
-                            <TableCell>₦{Number(p.amount).toLocaleString()}</TableCell>
-                            <TableCell className="font-mono text-xs max-w-[160px] truncate">{p.tx_ref}</TableCell>
+                          <TableRow key={p.id} className="group">
+                            <TableCell className="font-mono text-xs">{p.payment_cycle || '-'}</TableCell>
+                            <TableCell className="font-medium text-xs">₦{Number(p.amount).toLocaleString()}</TableCell>
                             <TableCell>
-                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColor(p.status)}`}>
-                                {p.status}
+                              <code className="text-[10px] bg-muted/50 px-1.5 py-0.5 rounded max-w-[140px] truncate block">
+                                {p.tx_ref}
+                              </code>
+                            </TableCell>
+                            <TableCell><StatusBadge status={p.status} /></TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="text-[10px] font-mono">{p.charge_type}</Badge>
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground">{p.retry_count}/{p.max_retries}</TableCell>
+                            <TableCell>
+                              <span className="text-[10px] text-muted-foreground max-w-[100px] truncate block">
+                                {p.processor_response || p.failure_reason || '—'}
                               </span>
                             </TableCell>
-                            <TableCell><Badge variant="outline" className="text-xs">{p.charge_type}</Badge></TableCell>
-                            <TableCell>{p.retry_count}/{p.max_retries}</TableCell>
-                            <TableCell className="text-xs max-w-[120px] truncate">{p.processor_response || p.failure_reason || '-'}</TableCell>
-                            <TableCell className="font-mono text-xs">{p.flw_transaction_id || '-'}</TableCell>
-                            <TableCell className="text-xs">{new Date(p.created_at).toLocaleString()}</TableCell>
                             <TableCell>
+                              <code className="text-[10px] text-muted-foreground">{p.flw_transaction_id || '—'}</code>
+                            </TableCell>
+                            <TableCell className="text-[10px] text-muted-foreground whitespace-nowrap">
+                              {new Date(p.created_at).toLocaleString()}
+                            </TableCell>
+                            <TableCell className="text-right">
                               {['initiated', 'pending', 'unresolved'].includes(p.status) && p.flw_transaction_id && (
-                                <Button size="sm" variant="outline" onClick={() => manualVerify(p.id)} disabled={actionLoading === `verify-${p.id}`}>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 px-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  onClick={() => manualVerify(p.id)}
+                                  disabled={actionLoading === `verify-${p.id}`}
+                                >
                                   <Search className="h-3 w-3 mr-1" />
-                                  {actionLoading === `verify-${p.id}` ? 'Verifying...' : 'Re-verify'}
+                                  <span className="text-[10px]">{actionLoading === `verify-${p.id}` ? '...' : 'Verify'}</span>
                                 </Button>
                               )}
                             </TableCell>
@@ -554,41 +617,105 @@ export default function RecurringTestDashboard() {
             </Card>
           </TabsContent>
 
+          {/* Tokens Tab */}
+          <TabsContent value="tokens">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">Stored Card Tokens</CardTitle>
+                <CardDescription className="text-xs">Captured from test payments. Use to trigger recurring charges.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {tokens.length === 0 ? (
+                  <EmptyState icon={<CreditCard className="h-8 w-8" />} message="No tokens yet" sub="Complete a test payment to capture a card token" />
+                ) : (
+                  <div className="space-y-2">
+                    {tokens.map(t => (
+                      <div key={t.id} className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-muted/30 transition-colors">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 rounded-md bg-muted/50">
+                            <CreditCard className="h-4 w-4 text-muted-foreground" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-sm font-medium">
+                                {t.first_6digits || '••••••'}····{t.last_4digits || '••••'}
+                              </span>
+                              <Badge variant={t.is_active ? 'default' : 'secondary'} className="text-[10px]">
+                                {t.is_active ? 'Active' : 'Inactive'}
+                              </Badge>
+                            </div>
+                            <div className="flex items-center gap-3 mt-0.5">
+                              <span className="text-[11px] text-muted-foreground">{t.card_type || 'Unknown'}</span>
+                              <span className="text-[11px] text-muted-foreground">Exp: {t.expiry || '—'}</span>
+                              <span className="text-[11px] text-muted-foreground">{new Date(t.created_at).toLocaleDateString()}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={() => runRecurringCharge(t.id)}
+                          disabled={actionLoading === `charge-${t.id}` || !t.is_active}
+                          className="shrink-0"
+                        >
+                          <Play className="h-3 w-3 mr-1.5" />
+                          {actionLoading === `charge-${t.id}` ? 'Charging...' : 'Charge ₦1,000'}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           {/* Confirmed Ledger Tab */}
           <TabsContent value="confirmed">
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2"><CheckCircle className="h-5 w-5 text-green-600" /> Confirmed Ledger</CardTitle>
-                <CardDescription>
-                  Only verified successful transactions appear here. This is the single source of truth for contribution totals.
-                </CardDescription>
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                  <div>
+                    <CardTitle className="text-sm">Confirmed Ledger</CardTitle>
+                    <CardDescription className="text-xs">
+                      Single source of truth. Only verified successful transactions appear here.
+                    </CardDescription>
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
                 {confirmedLedger.length === 0 ? (
-                  <p className="text-muted-foreground text-center py-8">No confirmed entries yet. Transactions must be verified first.</p>
+                  <EmptyState icon={<CheckCircle className="h-8 w-8" />} message="No confirmed entries" sub="Transactions must pass verification to appear here" />
                 ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Cycle</TableHead>
-                        <TableHead>Amount</TableHead>
-                        <TableHead>TX Ref</TableHead>
-                        <TableHead>FLW TX ID</TableHead>
-                        <TableHead>Confirmed At</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {confirmedLedger.map(e => (
-                        <TableRow key={e.id}>
-                          <TableCell>{e.payment_cycle || '-'}</TableCell>
-                          <TableCell className="text-green-700 font-medium">₦{Number(e.amount).toLocaleString()}</TableCell>
-                          <TableCell className="font-mono text-xs max-w-[200px] truncate">{e.tx_ref}</TableCell>
-                          <TableCell className="font-mono text-xs">{e.flw_transaction_id || '-'}</TableCell>
-                          <TableCell className="text-xs">{new Date(e.confirmed_at).toLocaleString()}</TableCell>
+                  <div className="overflow-x-auto -mx-6">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="hover:bg-transparent">
+                          <TableHead className="text-[11px] font-semibold uppercase tracking-wider">Cycle</TableHead>
+                          <TableHead className="text-[11px] font-semibold uppercase tracking-wider">Amount</TableHead>
+                          <TableHead className="text-[11px] font-semibold uppercase tracking-wider">TX Ref</TableHead>
+                          <TableHead className="text-[11px] font-semibold uppercase tracking-wider">FLW TX ID</TableHead>
+                          <TableHead className="text-[11px] font-semibold uppercase tracking-wider">Confirmed</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {confirmedLedger.map(e => (
+                          <TableRow key={e.id}>
+                            <TableCell className="font-mono text-xs">{e.payment_cycle || '-'}</TableCell>
+                            <TableCell className="font-medium text-xs text-green-700">₦{Number(e.amount).toLocaleString()}</TableCell>
+                            <TableCell>
+                              <code className="text-[10px] bg-muted/50 px-1.5 py-0.5 rounded max-w-[180px] truncate block">
+                                {e.tx_ref}
+                              </code>
+                            </TableCell>
+                            <TableCell><code className="text-[10px] text-muted-foreground">{e.flw_transaction_id || '—'}</code></TableCell>
+                            <TableCell className="text-[10px] text-muted-foreground whitespace-nowrap">
+                              {new Date(e.confirmed_at).toLocaleString()}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -597,43 +724,53 @@ export default function RecurringTestDashboard() {
           {/* Webhook Logs Tab */}
           <TabsContent value="webhooks">
             <Card>
-              <CardHeader>
-                <CardTitle>Audit Logs</CardTitle>
-                <CardDescription>All webhook events, verification attempts, and state transitions.</CardDescription>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">Audit Trail</CardTitle>
+                <CardDescription className="text-xs">Webhook events, verification attempts, and state transitions.</CardDescription>
               </CardHeader>
               <CardContent>
                 {webhookLogs.length === 0 ? (
-                  <p className="text-muted-foreground text-center py-8">No events yet.</p>
+                  <EmptyState icon={<FileText className="h-8 w-8" />} message="No events logged" sub="Events appear as charges and verifications occur" />
                 ) : (
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto -mx-6">
                     <Table>
                       <TableHeader>
-                        <TableRow>
-                          <TableHead>Event</TableHead>
-                          <TableHead>TX Ref</TableHead>
-                          <TableHead>FLW Ref</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Source</TableHead>
-                          <TableHead>Amount</TableHead>
-                          <TableHead>Processed</TableHead>
-                          <TableHead>Time</TableHead>
+                        <TableRow className="hover:bg-transparent">
+                          <TableHead className="text-[11px] font-semibold uppercase tracking-wider">Event</TableHead>
+                          <TableHead className="text-[11px] font-semibold uppercase tracking-wider">TX Ref</TableHead>
+                          <TableHead className="text-[11px] font-semibold uppercase tracking-wider">Status</TableHead>
+                          <TableHead className="text-[11px] font-semibold uppercase tracking-wider">Source</TableHead>
+                          <TableHead className="text-[11px] font-semibold uppercase tracking-wider">Amount</TableHead>
+                          <TableHead className="text-[11px] font-semibold uppercase tracking-wider">Processed</TableHead>
+                          <TableHead className="text-[11px] font-semibold uppercase tracking-wider">Time</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {webhookLogs.map(w => (
                           <TableRow key={w.id}>
-                            <TableCell className="text-xs">{w.event_type}</TableCell>
-                            <TableCell className="font-mono text-xs max-w-[140px] truncate">{w.tx_ref || '-'}</TableCell>
-                            <TableCell className="font-mono text-xs">{w.flw_ref || '-'}</TableCell>
                             <TableCell>
-                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColor(w.status || '')}`}>
-                                {w.status || '-'}
-                              </span>
+                              <code className="text-[10px] bg-muted/50 px-1.5 py-0.5 rounded">{w.event_type}</code>
                             </TableCell>
-                            <TableCell><Badge variant="outline" className="text-xs">{w.verification_source || '-'}</Badge></TableCell>
-                            <TableCell>{w.amount ? `₦${Number(w.amount).toLocaleString()}` : '-'}</TableCell>
-                            <TableCell><Badge variant={w.processed ? 'default' : 'outline'}>{w.processed ? 'Yes' : 'No'}</Badge></TableCell>
-                            <TableCell className="text-xs">{new Date(w.created_at).toLocaleString()}</TableCell>
+                            <TableCell>
+                              <code className="text-[10px] text-muted-foreground max-w-[120px] truncate block">
+                                {w.tx_ref || '—'}
+                              </code>
+                            </TableCell>
+                            <TableCell><StatusBadge status={w.status || '—'} /></TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="text-[10px] font-mono">{w.verification_source || '—'}</Badge>
+                            </TableCell>
+                            <TableCell className="text-xs">{w.amount ? `₦${Number(w.amount).toLocaleString()}` : '—'}</TableCell>
+                            <TableCell>
+                              {w.processed ? (
+                                <CheckCircle className="h-3.5 w-3.5 text-green-600" />
+                              ) : (
+                                <Clock className="h-3.5 w-3.5 text-yellow-600" />
+                              )}
+                            </TableCell>
+                            <TableCell className="text-[10px] text-muted-foreground whitespace-nowrap">
+                              {new Date(w.created_at).toLocaleString()}
+                            </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -646,30 +783,41 @@ export default function RecurringTestDashboard() {
         </Tabs>
 
         {/* State Machine Legend */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Transaction State Model</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-3 text-xs">
-              <span className="px-2 py-1 rounded-full bg-blue-100 text-blue-800 font-medium">initiated</span>
-              <span>→</span>
-              <span className="px-2 py-1 rounded-full bg-yellow-100 text-yellow-800 font-medium">pending</span>
-              <span>→</span>
-              <span className="px-2 py-1 rounded-full bg-green-100 text-green-800 font-medium">final_success</span>
-              <span>/</span>
-              <span className="px-2 py-1 rounded-full bg-red-100 text-red-800 font-medium">final_failed</span>
-              <span>/</span>
-              <span className="px-2 py-1 rounded-full bg-orange-100 text-orange-800 font-medium">unresolved</span>
-              <span>/</span>
-              <span className="px-2 py-1 rounded-full bg-purple-100 text-purple-800 font-medium">reversed</span>
+        <Card className="border-dashed">
+          <CardContent className="py-4">
+            <div className="flex items-start gap-3">
+              <Info className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+              <div className="space-y-2">
+                <p className="text-xs font-medium">Transaction State Model</p>
+                <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                  <StatusBadge status="initiated" />
+                  <ChevronRight className="h-3 w-3 text-muted-foreground" />
+                  <StatusBadge status="pending" />
+                  <ChevronRight className="h-3 w-3 text-muted-foreground" />
+                  <StatusBadge status="final_success" />
+                  <span className="text-muted-foreground">/</span>
+                  <StatusBadge status="final_failed" />
+                  <span className="text-muted-foreground">/</span>
+                  <StatusBadge status="unresolved" />
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Only <strong>final_success</strong> creates a confirmed ledger entry. Pending transactions are verified via Flutterwave API every 2 minutes (cron). Transactions pending &gt;24h or exceeding retry limits are marked <strong>unresolved</strong> for manual review.
+                </p>
+              </div>
             </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              Only <strong>final_success</strong> creates a confirmed ledger entry. Pending transactions are verified via Flutterwave API every 2 minutes. Transactions pending &gt;24h or exceeding retry limits are marked <strong>unresolved</strong>.
-            </p>
           </CardContent>
         </Card>
-      </div>
+      </main>
+    </div>
+  );
+}
+
+function EmptyState({ icon, message, sub }: { icon: React.ReactNode; message: string; sub: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+      <div className="p-3 rounded-full bg-muted/30 mb-3">{icon}</div>
+      <p className="text-sm font-medium">{message}</p>
+      <p className="text-xs">{sub}</p>
     </div>
   );
 }
