@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Checkbox } from "@/components/ui/checkbox";
 
 import { BottomNav } from "@/components/BottomNav";
+import { TokenizationGate } from "@/components/TokenizationGate";
 import { AddMembersDialog } from "@/components/AddMembersDialog";
 import { SwapPositionDialog, SwapRequestNotification } from "@/components/SwapPositionDialog";
 import { GroupProfile } from "@/components/GroupProfile";
@@ -88,6 +89,7 @@ export default function GroupDetail() {
   const [confirmingContinue, setConfirmingContinue] = useState(false);
   const [showRestartTerms, setShowRestartTerms] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [needsTokenization, setNeedsTokenization] = useState(false);
 
   const isAdmin = group?.admin_id === user?.id;
 
@@ -115,6 +117,21 @@ export default function GroupDetail() {
           .eq("status", "active");
         
         setMemberCount(count || 0);
+
+        // Check if user needs tokenization (auto_debit groups only)
+        if (groupData.auto_debit) {
+          const { data: membership } = await supabase
+            .from("group_memberships")
+            .select("tokenization_completed")
+            .eq("group_id", groupId)
+            .eq("user_id", user.id)
+            .eq("status", "active")
+            .single();
+
+          if (membership && !membership.tokenization_completed) {
+            setNeedsTokenization(true);
+          }
+        }
 
         // Check if user has contributed this cycle and if any contributions exist
         if (groupData.status === "active") {
@@ -575,6 +592,21 @@ export default function GroupDetail() {
         </div>
       </header>
 
+      {/* Tokenization Gate — blocks group content for auto_debit groups */}
+      {needsTokenization ? (
+        <>
+          <TokenizationGate
+            groupId={group.id}
+            groupName={group.name}
+            contributionAmount={group.contribution_amount}
+            period={group.period}
+            onComplete={() => setNeedsTokenization(false)}
+          />
+          <BottomNav />
+        </>
+      ) : (
+      <>
+
       {/* Admin Actions - Only show if group is full */}
       {isAdmin && group.status === "pending" && memberCount === group.max_members && (
         <div className="container mx-auto px-4 py-3">
@@ -1029,6 +1061,8 @@ export default function GroupDetail() {
       </Dialog>
 
       <BottomNav />
+      </>
+      )}
     </div>
   );
 }

@@ -1,48 +1,62 @@
 
-# Fix: Store Tokenization Email for Recurring Charges
+# Recurring Payment Authorization & Reconciliation-Safe Contribution Flow
 
-## Root Cause
+## Phase 1: Database + Group Join Tokenization Gate ✅ COMPLETE
 
-Flutterwave's **test sandbox** automatically modifies the customer email during payment. For example:
-- You pay with: `llhpremium@gmail.com`
-- Flutterwave stores: `ravesb_48d821fc96064411dfd4_llhpremium@gmail.com`
+### Database Changes
+- Extended `card_tokens` table with: `first_6digits`, `charge_email`, `card_status` (active/expired/revoked/pending), `group_id`
+- Added `tokenization_completed` (boolean) and `terms_accepted_at` (timestamptz) to `group_memberships`
+- Added indexes: `idx_card_tokens_user_status`, `idx_card_tokens_group`
 
-When a recurring (tokenized) charge is attempted, Flutterwave requires the **exact email that was used during tokenization** -- not the original one. The current code fetches the user's profile email (`llhpremium@gmail.com`) and sends that, causing `"Wrong token or email passed"` every time.
+### New Edge Function: `card-tokenization`
+Actions:
+- `initiate` — checks for existing token, returns Flutterwave checkout config
+- `verify` — verifies transaction, saves token, credits wallet, marks membership tokenized
+- `accept_terms` — for non-auto_debit groups (T&C only)
 
-## Solution
+### New Component: `TokenizationGate`
+- Two-step flow: Terms & Conditions → Card Authorization via Flutterwave checkout
+- Shown in GroupDetail when `auto_debit=true` AND `tokenization_completed=false`
+- Blocks group participation until complete
+- Tokenization amount is credited to user's wallet
 
-1. **Add a `charge_email` column** to `user_payment_tokens_test` to store the exact email Flutterwave returned during verification.
+### Updated Pages
+- `GroupDetail.tsx` — renders TokenizationGate before group content for un-tokenized members
+- `Invite.tsx` — redirects to group detail (not dashboard) so tokenization gate appears
 
-2. **Update the `verify_and_save_token` action** in the edge function to extract and save the customer email from the Flutterwave verification response (the `customer.email` field).
+### Existing Flow Preserved
+- Wallet-first contribution logic in `contribution-handler` is **unchanged**
+- Existing `card_tokens` entries remain valid (backward compatible)
+- `is_active` field kept for backward compatibility alongside new `card_status`
 
-3. **Update the `run_recurring_charge` and `cron_auto_charge` actions** to use `tokenData.charge_email` instead of looking up the profile email. Fall back to profile email only if `charge_email` is null.
+---
 
-4. **Update the existing active token** in the database with the correct Flutterwave sandbox email so the current token works immediately without re-tokenizing.
+## Phase 2: Contribution Reconciliation (TODO)
 
-## Technical Details
+### Goals
+- Upgrade `contribution-handler` card fallback to use `pending_card` status
+- Port verification worker + webhook from test infra to production
+- Set up cron job for reconciliation every 2-5 minutes
+- Dual confirmation: webhook (primary) + polling (secondary)
+- Idempotent ledger entries — only on verified success
 
-### Database Change
-```sql
-ALTER TABLE user_payment_tokens_test
-ADD COLUMN charge_email TEXT;
-```
+### New statuses for cycle_contributions
+- `pending_card` — card charged, awaiting confirmation
+- `failed` — charge failed
+- `unresolved` — pending > 24 hours, flagged for admin
 
-Then update the existing record:
-```sql
-UPDATE user_payment_tokens_test
-SET charge_email = 'ravesb_48d821fc96064411dfd4_llhpremium@gmail.com'
-WHERE card_token = 'flw-t1nf-87228488ee05ccce4de422aafca2fe39-m03k';
-```
+---
 
-### Edge Function Changes (`recurring-test-charge/index.ts`)
+## Phase 3: Admin Dashboard Sections (TODO)
 
-**In `verify_and_save_token`**: Save `txData.customer.email` into the new `charge_email` column when inserting the token.
+### Contributions panel
+- Successful / Pending Wallet / Pending Card / Failed / Overdue
 
-**In `run_recurring_charge`**: Replace the profile email lookup with:
-```typescript
-const userEmail = tokenData.charge_email || chargeProfile?.email || 'test@wesave.ng';
-```
+### Payment Authorization panel
+- Users with active tokens / without tokens / expired tokens
 
-**In `cron_auto_charge`**: Same change -- use `tokenData.charge_email` first, fall back to profile email.
+### Withdrawals panel
+- Requested / Processing / Paid / Failed
 
-This ensures the exact email Flutterwave expects is always used, whether in test or live mode (where the emails will match naturally).
+### Manual verification
+- Admin can trigger manual Flutterwave verification for pending transactions

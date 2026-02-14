@@ -35,3 +35,6 @@ verify_jwt = false
 
 [functions.recurring-test-webhook]
 verify_jwt = false
+
+[functions.card-tokenization]
+verify_jwt = false
