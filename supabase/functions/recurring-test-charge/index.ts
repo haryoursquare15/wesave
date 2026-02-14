@@ -123,6 +123,7 @@ serve(async (req) => {
               email: chargeEmail,
               tx_ref: txRef,
               narration: `WeSave Cron Recurring Test - Cycle ${nextCycle}`,
+              redirect_url: `${supabaseUrl}/functions/v1/recurring-test-webhook`,
             }),
           });
 
@@ -248,6 +249,7 @@ serve(async (req) => {
             email: userEmail,
             tx_ref: txRef,
             narration: `WeSave Recurring Test - Cycle ${nextCycle}`,
+            redirect_url: `${supabaseUrl}/functions/v1/recurring-test-webhook`,
           }),
         });
 
