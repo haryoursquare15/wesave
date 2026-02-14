@@ -24,7 +24,7 @@ export function TokenizationGate({
   period,
   onComplete,
 }: TokenizationGateProps) {
-  const [step, setStep] = useState<"terms" | "tokenize" | "verifying">("terms");
+  const [step, setStep] = useState<"terms" | "tokenize" | "verifying" | "success">("terms");
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -89,7 +89,8 @@ export function TokenizationGate({
               toast.success(
                 `Card authorized! ₦${verifyData.amount_credited?.toLocaleString() || contributionAmount.toLocaleString()} credited to your wallet.`
               );
-              onComplete();
+              setStep("success");
+              setTimeout(() => onComplete(), 1500);
             } catch (err) {
               toast.error(err instanceof Error ? err.message : "Verification failed");
               setStep("tokenize");
@@ -227,6 +228,24 @@ export function TokenizationGate({
               <h3 className="font-semibold text-lg mb-2">Verifying Payment</h3>
               <p className="text-muted-foreground text-sm">
                 Please wait while we verify your card authorization...
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {step === "success" && (
+          <Card>
+            <CardContent className="pt-8 pb-8 text-center">
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ type: "spring", stiffness: 200, damping: 15 }}
+              >
+                <CheckCircle className="h-14 w-14 text-success mx-auto mb-4" />
+              </motion.div>
+              <h3 className="font-semibold text-lg mb-2">Card Authorized</h3>
+              <p className="text-muted-foreground text-sm">
+                Joining group...
               </p>
             </CardContent>
           </Card>

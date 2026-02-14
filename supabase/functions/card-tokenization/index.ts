@@ -171,6 +171,13 @@ serve(async (req) => {
           .eq('user_id', user.id)
           .eq('is_active', true);
 
+        // Fetch group contribution amount for recurring_amount
+        const { data: groupForAmount } = await supabase
+          .from('thrift_groups')
+          .select('contribution_amount')
+          .eq('id', groupId)
+          .single();
+
         // Save new token
         await supabase.from('card_tokens').insert({
           user_id: user.id,
@@ -183,6 +190,7 @@ serve(async (req) => {
           is_active: true,
           card_status: 'active',
           group_id: groupId,
+          recurring_amount: groupForAmount?.contribution_amount || txData.amount,
         });
       }
 
