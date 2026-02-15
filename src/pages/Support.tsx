@@ -102,7 +102,7 @@ export default function Support() {
           category: validatedData.category,
           description: validatedData.description,
           status: "open",
-          priority: "normal",
+          priority: "medium",
         })
         .select()
         .single();
