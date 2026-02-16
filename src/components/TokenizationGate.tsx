@@ -136,12 +136,16 @@ export function TokenizationGate({
                     Contribute <span className="font-medium text-foreground">₦{contributionAmount.toLocaleString()}</span> {period} as scheduled
                   </li>
                   <li>Authorize recurring card charges when your wallet balance is insufficient</li>
-                  <li>A 2% platform service fee is deducted from each payout</li>
+                  <li>
+                    A platform fee applies to each payout: <span className="font-medium text-foreground">₦100</span> flat for payouts under ₦20,000, or <span className="font-medium text-foreground">1%</span> (capped at ₦500) for payouts of ₦20,000 and above
+                  </li>
+                  <li>Card payments may include processor charges borne by the contributor</li>
                   <li>Failure to contribute may result in credit score penalties and removal from the group</li>
                   <li>Payout order is randomized and binding once the thrift commences</li>
                   <li>The group admin manages disputes and schedule changes</li>
                   <li>You may exit the group only after all cycles are completed</li>
                   <li>Card authorization is required for auto-debit groups to ensure timely contributions</li>
+                  <li>You may be a member of up to 2 active groups at a time</li>
                 </ul>
               </div>
 

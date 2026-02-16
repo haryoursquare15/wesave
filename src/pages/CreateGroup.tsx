@@ -397,15 +397,22 @@ export default function CreateGroup() {
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Payout per Member</span>
+              <span className="text-muted-foreground">Estimated Payout</span>
               <span className="font-medium text-foreground">
-                ₦{formatAmount(formData.contributionAmount * formData.maxMembers * 0.98)}
+                ₦{formatAmount(
+                  formData.contributionAmount * formData.maxMembers - 
+                  (formData.contributionAmount * formData.maxMembers < 20000 
+                    ? 100 
+                    : Math.min(formData.contributionAmount * formData.maxMembers * 0.01, 500))
+                )}
               </span>
             </div>
             <div className="flex justify-between text-xs">
-              <span className="text-muted-foreground">Service Fee (2%)</span>
+              <span className="text-muted-foreground">Platform Fee</span>
               <span className="text-muted-foreground">
-                ₦{formatAmount(formData.contributionAmount * formData.maxMembers * 0.02)}
+                {formData.contributionAmount * formData.maxMembers < 20000 
+                  ? '₦100 (flat)' 
+                  : `₦${formatAmount(Math.min(formData.contributionAmount * formData.maxMembers * 0.01, 500))} (1%, max ₦500)`}
               </span>
             </div>
           </div>
@@ -413,7 +420,7 @@ export default function CreateGroup() {
 
         {/* Terms Notice */}
         <p className="text-xs text-muted-foreground text-center">
-          By creating this group, you agree to our Terms of Service and the 2% service fee on all payouts.
+          By creating this group, you agree to our Terms of Service. A platform fee applies to payouts: ₦100 flat under ₦20,000 or 1% (max ₦500) for ₦20,000+.
         </p>
 
         {/* Create Button or Add Members */}

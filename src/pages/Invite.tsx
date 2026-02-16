@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Users, Calendar, DollarSign, Loader2, CheckCircle, XCircle } from "lucide-react";
+import { Users, Calendar, DollarSign, Loader2, CheckCircle, XCircle, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { useValidateInvite, useJoinGroupViaInvite } from "@/hooks/useGroupInvites";
+import { useUserGroupCount } from "@/hooks/useUserGroupCount";
 import { toast } from "sonner";
 
 export default function Invite() {
@@ -14,6 +15,7 @@ export default function Invite() {
   const { user, loading: authLoading } = useAuth();
   const { validateToken, validation, loading: validating, error: validationError } = useValidateInvite();
   const { joinGroup, loading: joining } = useJoinGroupViaInvite();
+  const { canJoinGroup, groupCount } = useUserGroupCount();
   const [status, setStatus] = useState<"loading" | "valid" | "invalid" | "joining" | "joined">("loading");
 
   useEffect(() => {
@@ -181,21 +183,31 @@ export default function Invite() {
             </div>
 
             {user ? (
-              <Button
-                variant="hero"
-                className="w-full h-12"
-                onClick={handleJoinGroup}
-                disabled={joining || status === "joining"}
-              >
-                {joining || status === "joining" ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Joining...
-                  </>
-                ) : (
-                  "Join Group"
+              <>
+                {!canJoinGroup && (
+                  <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30 flex items-start gap-2">
+                    <AlertCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
+                    <p className="text-sm text-muted-foreground">
+                      You are already in {groupCount} active groups. You can only be a member of up to 2 active groups at a time.
+                    </p>
+                  </div>
                 )}
-              </Button>
+                <Button
+                  variant="hero"
+                  className="w-full h-12"
+                  onClick={handleJoinGroup}
+                  disabled={joining || status === "joining" || !canJoinGroup}
+                >
+                  {joining || status === "joining" ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Joining...
+                    </>
+                  ) : (
+                    "Join Group"
+                  )}
+                </Button>
+              </>
             ) : (
               <div className="space-y-3">
                 <Button
