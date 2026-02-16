@@ -1367,6 +1367,45 @@ export type Database = {
           },
         ]
       }
+      platform_expenses: {
+        Row: {
+          amount: number
+          created_at: string
+          description: string | null
+          expense_type: string
+          id: string
+          metadata: Json | null
+          source_group_id: string | null
+          source_id: string | null
+          source_type: string | null
+          source_user_id: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          description?: string | null
+          expense_type: string
+          id?: string
+          metadata?: Json | null
+          source_group_id?: string | null
+          source_id?: string | null
+          source_type?: string | null
+          source_user_id?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          description?: string | null
+          expense_type?: string
+          id?: string
+          metadata?: Json | null
+          source_group_id?: string | null
+          source_id?: string | null
+          source_type?: string | null
+          source_user_id?: string | null
+        }
+        Relationships: []
+      }
       platform_ledger: {
         Row: {
           amount: number
@@ -2598,6 +2637,19 @@ export type Database = {
           _success: boolean
         }
         Returns: undefined
+      }
+      record_platform_expense: {
+        Args: {
+          _amount: number
+          _description: string
+          _expense_type: string
+          _metadata?: Json
+          _source_group_id?: string
+          _source_id?: string
+          _source_type?: string
+          _source_user_id?: string
+        }
+        Returns: Json
       }
       record_platform_fee: {
         Args: {

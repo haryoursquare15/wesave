@@ -822,6 +822,7 @@ export default function GroupDetail() {
               <p className="text-sm text-muted-foreground">
                 Cycle {group.current_cycle} • ₦{group.contribution_amount.toLocaleString()}
               </p>
+              <p className="text-xs text-muted-foreground/70 mt-0.5">Card payments may include processor charges.</p>
             </div>
             <Button onClick={makeContribution} disabled={contributing} variant="gold">
               {contributing ? (
@@ -1084,7 +1085,7 @@ export default function GroupDetail() {
               <ul className="list-disc pl-5 space-y-2 text-muted-foreground">
                 <li>A new payout order will be randomized for all members</li>
                 <li>All members must contribute according to the schedule</li>
-                <li>A 2% platform service fee applies to all payouts</li>
+                <li>No platform fee is charged on internal rotation payouts</li>
                 <li>Members who fail to contribute may be penalized</li>
                 <li>The group admin is responsible for managing disputes</li>
               </ul>
