@@ -1,8 +1,10 @@
+import { useEffect } from "react";
 import { motion } from "framer-motion";
 import { ArrowRight, Shield, Users, Wallet, TrendingUp, Star, Check } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { WeSaveLogo } from "@/components/WeSaveLogo";
+import { useAuth } from "@/contexts/AuthContext";
 
 const features = [
   {
@@ -35,6 +37,16 @@ const benefits = [
 ];
 
 export default function Landing() {
+  const { user, loading } = useAuth();
+  const navigate = useNavigate();
+
+  // Redirect logged-in users (e.g. after OAuth callback) to dashboard
+  useEffect(() => {
+    if (!loading && user) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [user, loading, navigate]);
+
   return (
     <div className="min-h-screen bg-background">
       {/* Hero Section */}
