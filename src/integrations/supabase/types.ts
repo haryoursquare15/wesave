@@ -2659,7 +2659,7 @@ export type Database = {
           _source_type: string
           _source_user_id: string
         }
-        Returns: Json
+        Returns: undefined
       }
       request_position_swap: {
         Args: { _group_id: string; _target_user_id: string }
