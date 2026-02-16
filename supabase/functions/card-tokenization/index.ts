@@ -18,14 +18,59 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    const body = await req.json();
+    const { action } = body;
+
+    // SERVICE-LEVEL: recover_token uses service_role key auth (no user session needed)
+    if (action === 'recover_token') {
+      // Service-level action - verify via FLUTTERWAVE_WEBHOOK_SECRET as admin token
+      const { adminToken, transactionId, targetUserId } = body;
+      const webhookSecret = Deno.env.get('FLUTTERWAVE_WEBHOOK_SECRET');
+      if (!adminToken || adminToken !== webhookSecret) {
+        throw new Error('Unauthorized: admin token required');
+      }
+      if (!transactionId || !targetUserId) throw new Error('Transaction ID and target user ID are required');
+      if (!transactionId || !targetUserId) throw new Error('Transaction ID and target user ID are required');
+
+      const secretKey = Deno.env.get('FLUTTERWAVE_SECRET_KEY');
+      if (!secretKey) throw new Error('Flutterwave secret key not configured');
+
+      const verifyResp = await fetch(`${FLUTTERWAVE_BASE_URL}/transactions/${transactionId}/verify`, {
+        headers: { 'Authorization': `Bearer ${secretKey}` },
+      });
+      const verifyData = await verifyResp.json();
+      console.log('Recover token verify response:', JSON.stringify(verifyData));
+
+      if (verifyData.status !== 'success' || verifyData.data?.status !== 'successful') {
+        throw new Error('Transaction verification failed');
+      }
+
+      const cardData = verifyData.data.card;
+      if (!cardData?.token) {
+        throw new Error('No card token in transaction');
+      }
+
+      // Update placeholder token
+      const { error: updateError } = await supabase.from('card_tokens')
+        .update({ card_token: cardData.token })
+        .eq('user_id', targetUserId)
+        .eq('card_token', 'placeholder_needs_verify')
+        .eq('is_active', true);
+
+      if (updateError) throw new Error('Failed to update token: ' + updateError.message);
+
+      return new Response(JSON.stringify({
+        success: true,
+        card_token_updated: true,
+        card_last4: cardData.last_4digits,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) throw new Error('No authorization header');
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
     if (authError || !user) throw new Error('Unauthorized');
-
-    const body = await req.json();
-    const { action } = body;
 
     // ========================================
     // ACTION: INITIATE — Return Flutterwave checkout config
@@ -236,45 +281,7 @@ serve(async (req) => {
       });
     }
 
-    // ========================================
-    // ACTION: RECOVER_TOKEN — Recover card token from a completed transaction (admin/service use)
-    // ========================================
-    if (action === 'recover_token') {
-      const { transactionId, targetUserId } = body;
-      if (!transactionId) throw new Error('Transaction ID is required');
-
-      const secretKey = Deno.env.get('FLUTTERWAVE_SECRET_KEY');
-      if (!secretKey) throw new Error('Flutterwave secret key not configured');
-
-      const verifyResp = await fetch(`${FLUTTERWAVE_BASE_URL}/transactions/${transactionId}/verify`, {
-        headers: { 'Authorization': `Bearer ${secretKey}` },
-      });
-      const verifyData = await verifyResp.json();
-
-      if (verifyData.status !== 'success' || verifyData.data?.status !== 'successful') {
-        throw new Error('Transaction verification failed');
-      }
-
-      const cardData = verifyData.data.card;
-      if (!cardData?.token) {
-        throw new Error('No card token in transaction');
-      }
-
-      const resolvedUserId = targetUserId || user.id;
-
-      // Update placeholder token
-      await supabase.from('card_tokens')
-        .update({ card_token: cardData.token })
-        .eq('user_id', resolvedUserId)
-        .eq('card_token', 'placeholder_needs_verify')
-        .eq('is_active', true);
-
-      return new Response(JSON.stringify({
-        success: true,
-        card_token_updated: true,
-        card_last4: cardData.last_4digits,
-      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
+    // recover_token is handled above (before auth check)
 
     throw new Error(`Unknown action: ${action}`);
 
