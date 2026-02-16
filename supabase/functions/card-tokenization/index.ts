@@ -236,6 +236,46 @@ serve(async (req) => {
       });
     }
 
+    // ========================================
+    // ACTION: RECOVER_TOKEN — Recover card token from a completed transaction (admin/service use)
+    // ========================================
+    if (action === 'recover_token') {
+      const { transactionId, targetUserId } = body;
+      if (!transactionId) throw new Error('Transaction ID is required');
+
+      const secretKey = Deno.env.get('FLUTTERWAVE_SECRET_KEY');
+      if (!secretKey) throw new Error('Flutterwave secret key not configured');
+
+      const verifyResp = await fetch(`${FLUTTERWAVE_BASE_URL}/transactions/${transactionId}/verify`, {
+        headers: { 'Authorization': `Bearer ${secretKey}` },
+      });
+      const verifyData = await verifyResp.json();
+
+      if (verifyData.status !== 'success' || verifyData.data?.status !== 'successful') {
+        throw new Error('Transaction verification failed');
+      }
+
+      const cardData = verifyData.data.card;
+      if (!cardData?.token) {
+        throw new Error('No card token in transaction');
+      }
+
+      const resolvedUserId = targetUserId || user.id;
+
+      // Update placeholder token
+      await supabase.from('card_tokens')
+        .update({ card_token: cardData.token })
+        .eq('user_id', resolvedUserId)
+        .eq('card_token', 'placeholder_needs_verify')
+        .eq('is_active', true);
+
+      return new Response(JSON.stringify({
+        success: true,
+        card_token_updated: true,
+        card_last4: cardData.last_4digits,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     throw new Error(`Unknown action: ${action}`);
 
   } catch (error: unknown) {
