@@ -211,10 +211,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signIn = async (email: string, password: string) => {
+    // Set session marker BEFORE sign-in so useSessionEnforcement
+    // doesn't immediately clear the new session on mount
+    sessionStorage.setItem("wesave_session_active", "true");
+    
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
+    
+    if (error) {
+      // Clear marker if sign-in failed
+      sessionStorage.removeItem("wesave_session_active");
+    }
     
     return { error };
   };
