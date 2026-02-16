@@ -383,7 +383,7 @@ export default function GroupDetail() {
         
         // Check if auto-payout was triggered
         if (data.all_contributed && data.auto_payout?.success) {
-          toast.success(`🎉 All members contributed! Payout of ₦${data.auto_payout.net_amount?.toLocaleString()} sent to recipient.`);
+          toast.success(`🎉 All members contributed! Payout of ₦${data.auto_payout.net_amount?.toLocaleString()} credited to recipient's wallet.`);
           
           // Refresh group data after payout
           const { data: updatedGroup } = await supabase
@@ -822,7 +822,7 @@ export default function GroupDetail() {
               <p className="text-sm text-muted-foreground">
                 Cycle {group.current_cycle} • ₦{group.contribution_amount.toLocaleString()}
               </p>
-              <p className="text-xs text-muted-foreground/70 mt-0.5">Card payments may include processor charges.</p>
+              <p className="text-xs text-muted-foreground/70 mt-0.5">Card payments may include processor charges. A platform fee may apply to group payouts.</p>
             </div>
             <Button onClick={makeContribution} disabled={contributing} variant="gold">
               {contributing ? (
