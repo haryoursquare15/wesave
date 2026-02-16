@@ -2519,26 +2519,48 @@ export type Database = {
         }
         Returns: Json
       }
-      credit_wallet_via_ledger: {
-        Args: {
-          _amount: number
-          _description?: string
-          _reference_id?: string
-          _reference_type: string
-          _user_id: string
-        }
-        Returns: Json
-      }
-      debit_wallet_via_ledger: {
-        Args: {
-          _amount: number
-          _description?: string
-          _reference_id?: string
-          _reference_type: string
-          _user_id: string
-        }
-        Returns: Json
-      }
+      credit_wallet_via_ledger:
+        | {
+            Args: {
+              _amount: number
+              _description: string
+              _reference_id: string
+              _reference_type: string
+              _user_id: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              _amount: number
+              _description?: string
+              _reference_id?: string
+              _reference_type: string
+              _user_id: string
+            }
+            Returns: Json
+          }
+      debit_wallet_via_ledger:
+        | {
+            Args: {
+              _amount: number
+              _description: string
+              _reference_id: string
+              _reference_type: string
+              _user_id: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              _amount: number
+              _description?: string
+              _reference_id?: string
+              _reference_type: string
+              _user_id: string
+            }
+            Returns: Json
+          }
       exit_completed_group: { Args: { _group_id: string }; Returns: Json }
       gen_random_bytes: { Args: { n: number }; Returns: string }
       gen_random_uuid: { Args: never; Returns: string }
