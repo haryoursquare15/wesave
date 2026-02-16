@@ -165,6 +165,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // Global realtime subscription for wallet balance updates
+  useEffect(() => {
+    if (!user) return;
+
+    const walletChannel = supabase
+      .channel(`global-wallet-${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "wallets",
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          // Directly update wallet state from the realtime payload
+          if (payload.new && typeof payload.new === "object" && "id" in payload.new) {
+            setWallet(payload.new as Wallet);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(walletChannel);
+    };
+  }, [user]);
+
   const signUp = async (email: string, password: string, fullName: string) => {
     const redirectUrl = `${window.location.origin}/`;
     
