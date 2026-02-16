@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const ALLOWED_ORIGINS = [
+  'https://wesave.lovable.app',
   'https://thrift-harmony-hub.lovable.app',
   'https://id-preview--52f5b582-a468-4659-81c8-2245803e62d4.lovable.app',
 ];
@@ -37,9 +38,13 @@ serve(async (req) => {
     const url = new URL(req.url);
     if (url.searchParams.get('type') === 'funding_redirect') {
       const status = url.searchParams.get('status');
+      const txRef = url.searchParams.get('tx_ref') || '';
+      
+      // Determine the app origin from allowed origins
+      const appOrigin = 'https://wesave.lovable.app';
       const redirectUrl = status === 'successful' 
-        ? '/wallet?funding=success'
-        : '/wallet?funding=failed';
+        ? `${appOrigin}/wallet?funding=success&tx_ref=${encodeURIComponent(txRef)}`
+        : `${appOrigin}/wallet?funding=failed`;
       
       return new Response(null, {
         status: 302,
@@ -215,7 +220,9 @@ serve(async (req) => {
 
         } else if (meta.type === 'wallet_funding' || txRef?.startsWith('fund-')) {
           // Standard wallet funding
-          const userId = meta.user_id || txRef?.split('-')[1];
+          // tx_ref format: fund-<uuid>-<timestamp>, extract UUID (segments 1-5)
+          const txParts = txRef?.split('-') || [];
+          const userId = meta.user_id || (txParts.length >= 6 ? txParts.slice(1, 6).join('-') : null);
           
           if (!userId) {
             console.error('Could not determine user ID');
