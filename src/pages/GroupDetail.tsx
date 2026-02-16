@@ -1052,7 +1052,7 @@ export default function GroupDetail() {
             {/* Service Fee Notice */}
             <div className="mt-6 p-4 rounded-xl bg-muted/50 text-center">
               <p className="text-xs text-muted-foreground">
-                A 2% platform service fee is deducted from each payout.
+                A platform fee applies to each payout: ₦100 flat for payouts under ₦20,000, or 1% (capped at ₦500) for payouts of ₦20,000 and above.
               </p>
             </div>
           </div>
