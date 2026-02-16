@@ -77,13 +77,8 @@ serve(async (req) => {
         .eq('id', user.id)
         .single();
 
-      // Determine environment
-      const flwTestSecret = Deno.env.get('FLUTTERWAVE_TEST_SECRET_KEY');
-      const flwLiveSecret = Deno.env.get('FLUTTERWAVE_SECRET_KEY');
-      const isTestMode = !!flwTestSecret;
-      const flwPublicKey = isTestMode
-        ? Deno.env.get('FLUTTERWAVE_TEST_PUBLIC_KEY')
-        : Deno.env.get('FLUTTERWAVE_PUBLIC_KEY');
+      // Use live keys for production card authorization
+      const flwPublicKey = Deno.env.get('FLUTTERWAVE_PUBLIC_KEY');
 
       const txRef = `token-${user.id.slice(0, 8)}-${groupId.slice(0, 8)}-${Date.now()}`;
       // Use origin from request headers for redirect, fallback to published URL
@@ -131,10 +126,8 @@ serve(async (req) => {
       const { transactionId, groupId, txRef } = body;
       if (!transactionId || !groupId) throw new Error('Transaction ID and Group ID are required');
 
-      // Determine environment
-      const flwTestSecret = Deno.env.get('FLUTTERWAVE_TEST_SECRET_KEY');
-      const flwLiveSecret = Deno.env.get('FLUTTERWAVE_SECRET_KEY');
-      const secretKey = flwTestSecret || flwLiveSecret;
+      // Use live secret key for verification
+      const secretKey = Deno.env.get('FLUTTERWAVE_SECRET_KEY');
 
       if (!secretKey) throw new Error('Flutterwave secret key not configured');
 

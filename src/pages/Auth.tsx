@@ -557,7 +557,7 @@ export default function Auth() {
                   <Link to="/privacy" className="underline hover:text-foreground">
                     Privacy Policy
                   </Link>
-                  . A 2% service fee applies on payouts.
+                  . A platform fee applies on payouts.
                 </p>
               )}
             </>
