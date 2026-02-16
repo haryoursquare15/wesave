@@ -146,6 +146,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(nextSession);
       setUser(nextSession?.user ?? null);
 
+      // Set session marker for OAuth / magic-link sign-ins so that
+      // useSessionEnforcement doesn't immediately kill the session
+      if (nextSession && (event === "SIGNED_IN" || event === "TOKEN_REFRESHED")) {
+        sessionStorage.setItem("wesave_session_active", "true");
+      }
+
       if (nextSession?.user) {
         // Defer any Supabase calls outside the auth callback
         setTimeout(() => {

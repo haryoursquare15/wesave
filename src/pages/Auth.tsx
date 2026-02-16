@@ -39,52 +39,70 @@ export default function Auth() {
   }, [searchParams]);
 
   // Ensure we have a valid auth session when arriving from a password-recovery email.
-  // Some flows require exchanging `?code=...` for a session before updateUser() works.
+  // The implicit flow delivers tokens via URL hash; Supabase client auto-detects them
+  // and fires a PASSWORD_RECOVERY event. We also handle PKCE (?code=) as fallback.
   useEffect(() => {
     let cancelled = false;
 
-    const ensureResetSession = async () => {
-      if (!isPasswordReset) {
-        setResetSessionReady(false);
-        return;
-      }
+    if (!isPasswordReset) {
+      setResetSessionReady(false);
+      return;
+    }
 
+    const checkExistingSession = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (cancelled) return;
-
         if (session) {
           setResetSessionReady(true);
           return;
         }
 
+        // Try PKCE code exchange as fallback
         const url = new URL(window.location.href);
         const code = url.searchParams.get("code");
-
         if (code) {
           const { error } = await supabase.auth.exchangeCodeForSession(code);
           if (cancelled) return;
           if (error) {
-            setResetSessionReady(false);
             toast.error("Reset link is invalid or expired. Please request a new one.");
+            setResetSessionReady(false);
             return;
           }
-
           setResetSessionReady(true);
-          return;
         }
-
-        // No session and no code in URL → cannot proceed
-        setResetSessionReady(false);
+        // If no session and no code, wait for onAuthStateChange to fire
       } catch {
         if (cancelled) return;
-        setResetSessionReady(false);
       }
     };
 
-    ensureResetSession();
+    checkExistingSession();
+
+    // Listen for PASSWORD_RECOVERY or SIGNED_IN events from hash-based tokens
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (cancelled) return;
+      if ((event === "PASSWORD_RECOVERY" || event === "SIGNED_IN") && session) {
+        setResetSessionReady(true);
+      }
+    });
+
+    // Timeout: if no session after 10s, show error
+    const timeout = setTimeout(() => {
+      if (!cancelled) {
+        setResetSessionReady((prev) => {
+          if (!prev) {
+            toast.error("Reset link may be invalid or expired. Please request a new one.");
+          }
+          return prev;
+        });
+      }
+    }, 10000);
+
     return () => {
       cancelled = true;
+      subscription.unsubscribe();
+      clearTimeout(timeout);
     };
   }, [isPasswordReset]);
 
