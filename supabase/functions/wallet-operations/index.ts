@@ -468,12 +468,33 @@ serve(async (req) => {
 
   } catch (error: unknown) {
     console.error('Wallet error:', error);
-    let userMessage = 'An error occurred';
+    let userMessage = 'Something went wrong. Please try again later.';
     if (error instanceof Error) {
       const msg = error.message.toLowerCase();
-      if (msg.includes('unauthorized')) userMessage = 'Authentication required';
-      else if (msg.includes('minimum')) userMessage = 'Amount does not meet minimum requirements';
-      else userMessage = error.message;
+      if (msg.includes('unauthorized') || msg.includes('no authorization'))
+        userMessage = 'Please log in again to continue.';
+      else if (msg.includes('minimum'))
+        userMessage = 'The amount entered is below the minimum allowed.';
+      else if (msg.includes('insufficient'))
+        userMessage = 'You don\'t have enough funds for this transaction.';
+      else if (msg.includes('bank details are missing'))
+        userMessage = 'Please add your bank details before withdrawing.';
+      else if (msg.includes('unable to verify bank') || msg.includes('unable to find bank'))
+        userMessage = 'We couldn\'t verify your bank account. Please check your details and try again.';
+      else if (msg.includes('ip whitelisting'))
+        userMessage = 'We\'re experiencing a temporary issue processing transfers. Our team has been notified.';
+      else if (msg.includes('transfer failed'))
+        userMessage = 'Your withdrawal could not be completed at this time. Please try again shortly.';
+      else if (msg.includes('2fa') || msg.includes('token'))
+        userMessage = 'Verification failed. Please check your code and try again.';
+      else if (msg.includes('google'))
+        userMessage = 'Google sign-in is required for withdrawals.';
+      else if (msg.includes('unable to debit'))
+        userMessage = 'We couldn\'t process this withdrawal. Please try again.';
+      else if (msg.includes('too low after fees'))
+        userMessage = 'The withdrawal amount is too small after the ₦100 fee is applied.';
+      else
+        userMessage = 'Something went wrong. Please try again or contact support if the issue persists.';
     }
     return new Response(JSON.stringify({ success: false, error: userMessage }), {
       status: 400,

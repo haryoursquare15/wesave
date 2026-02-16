@@ -120,7 +120,13 @@ export default function SecuritySettings() {
       setShowWithdrawVerify(false);
       navigate("/wallet");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Withdrawal failed");
+      const msg = e instanceof Error ? e.message : "";
+      // Show friendly message — backend already sanitises, but catch edge cases
+      if (msg.includes("FunctionsHttpError") || msg.includes("FunctionsFetchError")) {
+        toast.error("Something went wrong. Please try again later.");
+      } else {
+        toast.error(msg || "We couldn't process your withdrawal. Please try again.");
+      }
     }
   };
 
