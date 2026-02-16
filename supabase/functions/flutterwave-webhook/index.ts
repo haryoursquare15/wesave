@@ -218,6 +218,99 @@ serve(async (req) => {
             }
           }
 
+        } else if (txRef?.startsWith('token-')) {
+          // Card tokenization for group joining
+          // tx_ref format: token-<userId8>-<groupId8>-<timestamp>
+          const txParts = txRef.split('-');
+          const userIdPrefix = txParts[1]; // first 8 chars of user_id
+          const groupIdPrefix = txParts[2]; // first 8 chars of group_id
+
+          // Look up user by prefix match
+          const { data: matchedProfile } = await supabase
+            .from('profiles')
+            .select('id')
+            .like('id', `${userIdPrefix}%`)
+            .single();
+
+          const userId = meta.user_id || matchedProfile?.id;
+          if (!userId) {
+            console.error('Could not determine user ID for tokenization tx_ref:', txRef);
+            break;
+          }
+
+          // Look up group by prefix match
+          const { data: matchedGroup } = await supabase
+            .from('thrift_groups')
+            .select('id, contribution_amount')
+            .like('id', `${groupIdPrefix}%`)
+            .single();
+
+          const groupId = meta.group_id || matchedGroup?.id;
+          if (!groupId) {
+            console.error('Could not determine group ID for tokenization tx_ref:', txRef);
+            break;
+          }
+
+          console.log(`Processing card tokenization for user ${userId}, group ${groupId}`);
+
+          // Save card token if available
+          if (data.card?.token) {
+            const { data: existingToken } = await supabase
+              .from('card_tokens')
+              .select('id')
+              .eq('user_id', userId)
+              .eq('card_token', data.card.token)
+              .single();
+
+            if (!existingToken) {
+              // Deactivate existing tokens
+              await supabase
+                .from('card_tokens')
+                .update({ is_active: false, card_status: 'revoked' })
+                .eq('user_id', userId)
+                .eq('is_active', true);
+
+              await supabase.from('card_tokens').insert({
+                user_id: userId,
+                card_token: data.card.token,
+                card_last4: data.card.last_4digits,
+                card_type: data.card.type,
+                card_expiry: data.card.expiry,
+                first_6digits: data.card.first_6digits,
+                charge_email: data.customer?.email || null,
+                is_active: true,
+                card_status: 'active',
+                group_id: groupId,
+                recurring_amount: matchedGroup?.contribution_amount || data.amount,
+              });
+              console.log(`Card token saved for user ${userId}`);
+            }
+          }
+
+          // Mark membership as tokenized
+          await supabase.from('group_memberships').update({
+            tokenization_completed: true,
+            terms_accepted_at: new Date().toISOString(),
+          }).eq('group_id', groupId).eq('user_id', userId).eq('status', 'active');
+
+          // Credit wallet with the tokenization amount
+          if (data.amount > 0) {
+            const { error: creditError } = await supabase.rpc('credit_wallet_atomic', {
+              _user_id: userId,
+              _amount: data.amount,
+              _tx_ref: txRef,
+              _description: 'Card authorization deposit — credited to wallet',
+            });
+
+            if (creditError) {
+              console.error('Failed to credit wallet after tokenization:', creditError);
+            } else {
+              console.log(`Wallet credited ₦${data.amount} for tokenization user ${userId}`);
+            }
+          }
+
+          console.log(`Card tokenization completed for user ${userId}, group ${groupId}`);
+
         } else if (meta.type === 'wallet_funding' || txRef?.startsWith('fund-')) {
           // Standard wallet funding
           // tx_ref format: fund-<uuid>-<timestamp>, extract UUID (segments 1-5)
