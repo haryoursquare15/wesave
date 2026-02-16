@@ -7,8 +7,6 @@ const corsHeaders = {
 };
 
 const FLUTTERWAVE_BASE_URL = "https://api.flutterwave.com/v3";
-const PLATFORM_BANK_CODE = "044";
-const PLATFORM_ACCOUNT_NUMBER = Deno.env.get('PLATFORM_BANK_ACCOUNT') || "";
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -86,30 +84,13 @@ serve(async (req) => {
         const { groupId } = params;
         if (!groupId) throw new Error('Group ID is required');
 
-        const FLUTTERWAVE_SECRET_KEY = Deno.env.get('FLUTTERWAVE_SECRET_KEY');
-        if (!FLUTTERWAVE_SECRET_KEY) throw new Error('FLUTTERWAVE_SECRET_KEY is not configured');
-
+        // Internal payout: wallet-to-wallet transfer, no fees, no bank transfer
         const { data: payoutResult, error: rpcError } = await supabase.rpc('process_payout_atomic', { _admin_id: user.id, _group_id: groupId });
 
         if (rpcError) throw new Error('Failed to process payout');
         if (!payoutResult.success) throw new Error(payoutResult.error || 'Payout failed');
 
-        if (payoutResult.platform_fee > 0) {
-          const { error: feeError } = await supabase.rpc('record_platform_fee', { _amount: payoutResult.platform_fee, _source_type: 'payout', _source_id: groupId, _source_user_id: payoutResult.recipient_id, _source_group_id: groupId });
-          if (feeError) console.error('Failed to record fee:', feeError);
-
-          await supabase.from('transactions').update({ status: 'completed', description: 'Platform service fee' }).eq('group_id', groupId).eq('type', 'service_fee').eq('status', 'pending');
-
-          if (PLATFORM_ACCOUNT_NUMBER && payoutResult.platform_fee >= 100) {
-            const transferRef = `fee-${groupId}-${Date.now()}`;
-            await fetch(`${FLUTTERWAVE_BASE_URL}/transfers`, {
-              method: 'POST',
-              headers: { 'Authorization': `Bearer ${FLUTTERWAVE_SECRET_KEY}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify({ account_bank: PLATFORM_BANK_CODE, account_number: PLATFORM_ACCOUNT_NUMBER, amount: payoutResult.platform_fee, currency: 'NGN', narration: `WeSave fee - ${groupId}`, reference: transferRef, debit_currency: 'NGN' }),
-            });
-          }
-        }
-
+        // No platform fee on internal rotation payouts
         result = payoutResult;
         break;
       }

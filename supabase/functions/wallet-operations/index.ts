@@ -354,25 +354,33 @@ serve(async (req) => {
           throw new Error('Unable to resolve bank code for your selected bank');
         }
 
+        const WITHDRAWAL_FEE = 100; // ₦100 flat withdrawal fee
+        const totalDebit = amount; // Full amount debited from user
+        const transferAmount = amount - WITHDRAWAL_FEE; // Amount sent to bank
+
+        if (transferAmount < 1) {
+          throw new Error('Withdrawal amount too low after fees');
+        }
+
         const withdrawRef = `wd-${user.id}-${Date.now()}`;
 
         // Create a pending transaction record up-front
         await supabase.from('transactions').insert({
           user_id: user.id,
           type: 'withdrawal',
-          amount,
+          amount: totalDebit,
           status: 'pending',
           reference: withdrawRef,
-          description: 'Withdrawal to bank',
+          description: `Withdrawal to bank (₦${WITHDRAWAL_FEE} fee applied)`,
         });
 
-        // Atomic debit via ledger (prevents double-spend)
+        // Atomic debit via ledger (prevents double-spend) — debits FULL requested amount
         const { data: debitResult, error: debitError } = await supabase.rpc('debit_wallet_via_ledger', {
           _user_id: user.id,
-          _amount: amount,
+          _amount: totalDebit,
           _reference_type: 'withdrawal',
           _reference_id: withdrawRef,
-          _description: 'Withdrawal to bank',
+          _description: `Withdrawal to bank (fee: ₦${WITHDRAWAL_FEE})`,
         });
 
         if (debitError || !debitResult?.success) {
@@ -380,7 +388,17 @@ serve(async (req) => {
           throw new Error(debitResult?.error || 'Unable to debit wallet');
         }
 
-        // Trigger Flutterwave transfer
+        // Credit ₦100 withdrawal fee to platform revenue
+        const { error: feeError } = await supabase.rpc('record_platform_fee', {
+          _amount: WITHDRAWAL_FEE,
+          _source_type: 'withdrawal',
+          _source_id: withdrawRef,
+          _source_user_id: user.id,
+          _source_group_id: null,
+        });
+        if (feeError) console.error('Failed to record withdrawal fee:', feeError);
+
+        // Trigger Flutterwave transfer with transferAmount (amount minus fee)
         const transferResponse = await fetch(`${FLUTTERWAVE_BASE_URL}/transfers`, {
           method: 'POST',
           headers: {
@@ -390,9 +408,9 @@ serve(async (req) => {
           body: JSON.stringify({
             account_bank: bankCode,
             account_number: accountNumber,
-            amount,
+            amount: transferAmount,
             currency: 'NGN',
-            narration: 'ThriftPal withdrawal',
+            narration: 'WeSave withdrawal',
             reference: withdrawRef,
             debit_currency: 'NGN',
           }),
@@ -405,7 +423,7 @@ serve(async (req) => {
           // Compensate debit if transfer failed
           await supabase.rpc('credit_wallet_via_ledger', {
             _user_id: user.id,
-            _amount: amount,
+            _amount: totalDebit,
             _reference_type: 'withdrawal_reversal',
             _reference_id: withdrawRef,
             _description: 'Withdrawal reversal (transfer failed)',
@@ -416,12 +434,24 @@ serve(async (req) => {
           throw new Error(transferData?.message || 'Transfer failed');
         }
 
+        // Record Flutterwave transfer charge as platform expense (Wesave bears this)
+        await supabase.rpc('record_platform_expense', {
+          _amount: 0, // Actual FLW charge unknown at this point; updated via webhook reconciliation
+          _expense_type: 'transfer_fee',
+          _description: `Flutterwave transfer fee for withdrawal ${withdrawRef}`,
+          _source_type: 'withdrawal',
+          _source_id: withdrawRef,
+          _source_user_id: user.id,
+        });
+
         await supabase.from('transactions').update({ status: 'completed' }).eq('reference', withdrawRef);
 
         result = {
           success: true,
           reference: withdrawRef,
-          message: 'Withdrawal processed',
+          message: `Withdrawal processed. ₦${transferAmount.toLocaleString()} sent to your bank.`,
+          amount_sent: transferAmount,
+          fee: WITHDRAWAL_FEE,
         };
         break;
       }

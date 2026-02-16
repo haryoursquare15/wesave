@@ -577,6 +577,7 @@ export default function Wallet() {
                 max={balance}
               />
               <p className="text-xs text-muted-foreground">Minimum: ₦100 • 2FA required</p>
+              <p className="text-xs text-muted-foreground mt-1">A ₦100 withdrawal fee applies for bank transfers.</p>
             </div>
             <Button 
               onClick={handleWithdraw} 
