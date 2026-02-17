@@ -294,7 +294,7 @@ serve(async (req) => {
           throw new Error('2FA token is required');
         }
 
-        // Verify 2FA (if enabled) using the same security function
+        // Verify 2FA
         const { data: verify2FAData, error: verify2FAError } = await supabase.functions.invoke('security-controls', {
           body: { action: 'verify_2fa', token, purpose: 'withdrawal' },
           headers: { Authorization: authHeader },
@@ -306,22 +306,6 @@ serve(async (req) => {
 
         if (!verify2FAData?.verified) {
           throw new Error(verify2FAData?.error || 'Invalid 2FA code');
-        }
-
-        // Confirm balance is sufficient (quick check before atomic debit)
-        const { data: walletRow, error: walletError } = await supabase
-          .from('wallets')
-          .select('available_balance')
-          .eq('user_id', user.id)
-          .single();
-
-        if (walletError || !walletRow) {
-          throw new Error('Unable to read wallet balance');
-        }
-
-        const available = Number(walletRow.available_balance || 0);
-        if (amount > available) {
-          throw new Error('Insufficient wallet balance');
         }
 
         // Fetch bank details (encrypted preferred)
@@ -355,7 +339,7 @@ serve(async (req) => {
         }
 
         const WITHDRAWAL_FEE = 100; // ₦100 flat withdrawal fee
-        const totalDebit = amount; // Full amount debited from user
+        const totalDebit = amount; // Full amount frozen from user
         const transferAmount = amount - WITHDRAWAL_FEE; // Amount sent to bank
 
         if (transferAmount < 1) {
@@ -364,7 +348,19 @@ serve(async (req) => {
 
         const withdrawRef = `wd-${user.id}-${Date.now()}`;
 
-        // Create a pending transaction record up-front
+        // ── STEP 1: FREEZE funds (do NOT deduct yet) ──
+        const { data: freezeResult, error: freezeError } = await supabase.rpc('freeze_wallet_for_withdrawal', {
+          _user_id: user.id,
+          _amount: totalDebit,
+          _reference: withdrawRef,
+          _description: `Withdrawal freeze (₦${WITHDRAWAL_FEE} fee applies)`,
+        });
+
+        if (freezeError || !freezeResult?.success) {
+          throw new Error(freezeResult?.error || 'Unable to freeze funds for withdrawal');
+        }
+
+        // Create a pending transaction record
         await supabase.from('transactions').insert({
           user_id: user.id,
           type: 'withdrawal',
@@ -374,31 +370,32 @@ serve(async (req) => {
           description: `Withdrawal to bank (₦${WITHDRAWAL_FEE} fee applied)`,
         });
 
-        // Atomic debit via ledger (prevents double-spend) — debits FULL requested amount
-        const { data: debitResult, error: debitError } = await supabase.rpc('debit_wallet_via_ledger', {
-          _user_id: user.id,
-          _amount: totalDebit,
-          _reference_type: 'withdrawal',
-          _reference_id: withdrawRef,
-          _description: `Withdrawal to bank (fee: ₦${WITHDRAWAL_FEE})`,
+        // ── STEP 2: Verify bank account ──
+        const verifyBankRes = await fetch(`${FLUTTERWAVE_BASE_URL}/accounts/resolve`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${FLUTTERWAVE_SECRET_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ account_number: accountNumber, account_bank: bankCode }),
         });
 
-        if (debitError || !debitResult?.success) {
-          await supabase.from('transactions').update({ status: 'failed', description: 'Withdrawal failed - debit rejected' }).eq('reference', withdrawRef);
-          throw new Error(debitResult?.error || 'Unable to debit wallet');
+        const verifyBankData = await verifyBankRes.json();
+        if (verifyBankData.status !== 'success') {
+          // Release frozen funds and fail
+          await supabase.rpc('release_withdrawal_freeze', {
+            _user_id: user.id,
+            _amount: totalDebit,
+            _reference: withdrawRef,
+            _description: 'Withdrawal cancelled — bank verification failed',
+          });
+          await supabase.from('transactions').update({ status: 'failed', description: 'Withdrawal failed — bank verification failed' }).eq('reference', withdrawRef);
+          throw new Error('Unable to verify bank account. Please check your details.');
         }
 
-        // Credit ₦100 withdrawal fee to platform revenue
-        const { error: feeError } = await supabase.rpc('record_platform_fee', {
-          _amount: WITHDRAWAL_FEE,
-          _source_type: 'withdrawal',
-          _source_id: withdrawRef,
-          _source_user_id: user.id,
-          _source_group_id: null,
-        });
-        if (feeError) console.error('Failed to record withdrawal fee:', feeError);
+        const verifiedAccountName = verifyBankData.data?.account_name || '';
 
-        // Trigger Flutterwave transfer with transferAmount (amount minus fee)
+        // ── STEP 3: Initiate Flutterwave transfer ──
         const transferResponse = await fetch(`${FLUTTERWAVE_BASE_URL}/transfers`, {
           method: 'POST',
           headers: {
@@ -413,6 +410,7 @@ serve(async (req) => {
             narration: 'WeSave withdrawal',
             reference: withdrawRef,
             debit_currency: 'NGN',
+            meta: [{ sender: 'WeSave', sender_country: 'NG', mobile_number: '' }],
           }),
         });
 
@@ -420,23 +418,36 @@ serve(async (req) => {
         console.log('Withdrawal transfer response:', JSON.stringify(transferData));
 
         if (transferData?.status !== 'success') {
-          // Compensate debit if transfer failed
-          await supabase.rpc('credit_wallet_via_ledger', {
+          // Release frozen funds on API failure
+          await supabase.rpc('release_withdrawal_freeze', {
             _user_id: user.id,
             _amount: totalDebit,
-            _reference_type: 'withdrawal_reversal',
-            _reference_id: withdrawRef,
-            _description: 'Withdrawal reversal (transfer failed)',
+            _reference: withdrawRef,
+            _description: 'Withdrawal cancelled — transfer initiation failed',
           });
-
-          await supabase.from('transactions').update({ status: 'failed', description: 'Withdrawal failed - transfer rejected' }).eq('reference', withdrawRef);
-
+          await supabase.from('transactions').update({ status: 'failed', description: 'Withdrawal failed — transfer rejected' }).eq('reference', withdrawRef);
           throw new Error(transferData?.message || 'Transfer failed');
         }
 
-        // Record Flutterwave transfer charge as platform expense (Wesave bears this)
+        // Mark as PROCESSING — final confirmation happens via webhook
+        await supabase.from('transactions').update({
+          status: 'processing',
+          description: `Withdrawal processing — ₦${transferAmount.toLocaleString()} to ${verifiedAccountName} (${bankName})`,
+        }).eq('reference', withdrawRef);
+
+        // Record platform withdrawal fee
+        const { error: feeError } = await supabase.rpc('record_platform_fee', {
+          _amount: WITHDRAWAL_FEE,
+          _source_type: 'withdrawal',
+          _source_id: withdrawRef,
+          _source_user_id: user.id,
+          _source_group_id: null,
+        });
+        if (feeError) console.error('Failed to record withdrawal fee:', feeError);
+
+        // Record Flutterwave transfer expense placeholder
         await supabase.rpc('record_platform_expense', {
-          _amount: 0, // Actual FLW charge unknown at this point; updated via webhook reconciliation
+          _amount: 0,
           _expense_type: 'transfer_fee',
           _description: `Flutterwave transfer fee for withdrawal ${withdrawRef}`,
           _source_type: 'withdrawal',
@@ -444,19 +455,75 @@ serve(async (req) => {
           _source_user_id: user.id,
         });
 
-        await supabase.from('transactions').update({ status: 'completed' }).eq('reference', withdrawRef);
-
         result = {
           success: true,
           reference: withdrawRef,
-          message: `Withdrawal processed. ₦${transferAmount.toLocaleString()} sent to your bank.`,
+          message: `Withdrawal initiated. ₦${transferAmount.toLocaleString()} will be sent to ${verifiedAccountName}. You'll be notified when complete.`,
           amount_sent: transferAmount,
           fee: WITHDRAWAL_FEE,
+          status: 'processing',
+          verified_account_name: verifiedAccountName,
         };
         break;
       }
 
       // validate_bank_account is handled before auth check above
+
+      case 'reconcile_withdrawals': {
+        // Backup reconciliation: check stale processing withdrawals against Flutterwave
+        const { data: staleWithdrawals } = await supabase
+          .from('transactions')
+          .select('reference, amount, user_id')
+          .eq('type', 'withdrawal')
+          .eq('status', 'processing')
+          .lt('created_at', new Date(Date.now() - 30 * 60 * 1000).toISOString()); // > 30 min old
+
+        const reconciled: string[] = [];
+        for (const tx of staleWithdrawals || []) {
+          try {
+            const checkRes = await fetch(
+              `${FLUTTERWAVE_BASE_URL}/transfers?reference=${tx.reference}`,
+              { headers: { 'Authorization': `Bearer ${FLUTTERWAVE_SECRET_KEY}` } }
+            );
+            const checkData = await checkRes.json();
+            const transfer = checkData?.data?.[0];
+
+            if (!transfer) continue;
+
+            const frozenAmount = Number(tx.amount);
+
+            if (transfer.status === 'SUCCESSFUL') {
+              await supabase.rpc('confirm_withdrawal_debit', {
+                _user_id: tx.user_id,
+                _amount: frozenAmount,
+                _reference: tx.reference,
+                _description: 'Withdrawal confirmed via reconciliation',
+              });
+              await supabase.from('transactions').update({ status: 'completed', description: 'Withdrawal completed (reconciled)' }).eq('reference', tx.reference);
+              reconciled.push(tx.reference!);
+            } else if (transfer.status === 'FAILED') {
+              await supabase.rpc('release_withdrawal_freeze', {
+                _user_id: tx.user_id,
+                _amount: frozenAmount,
+                _reference: tx.reference,
+                _description: 'Withdrawal failed — funds released via reconciliation',
+              });
+              await supabase.from('transactions').update({ status: 'failed', description: 'Withdrawal failed (reconciled)' }).eq('reference', tx.reference);
+              reconciled.push(tx.reference!);
+            }
+          } catch (e) {
+            console.error(`Reconciliation error for ${tx.reference}:`, e);
+          }
+        }
+
+        result = {
+          success: true,
+          checked: staleWithdrawals?.length || 0,
+          reconciled: reconciled.length,
+          references: reconciled,
+        };
+        break;
+      }
 
       default:
         throw new Error(`Unknown action: ${action}`);

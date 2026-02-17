@@ -365,6 +365,7 @@ serve(async (req) => {
         const data = payload.data;
         const reference = data.reference;
 
+        // Handle group payouts
         await supabase
           .from('payouts')
           .update({
@@ -373,6 +374,74 @@ serve(async (req) => {
             processed_at: new Date().toISOString(),
           })
           .eq('flw_transfer_ref', reference);
+
+        // Handle user withdrawal transfers (wd-* references)
+        if (reference?.startsWith('wd-')) {
+          // Extract user_id from reference: wd-<uuid>-<timestamp>
+          const refParts = reference.split('-');
+          // UUID is segments 1-5 (after 'wd-')
+          const userId = refParts.length >= 7 ? refParts.slice(1, 6).join('-') : null;
+
+          if (!userId) {
+            console.error('Could not extract user_id from withdrawal reference:', reference);
+            break;
+          }
+
+          // Fetch the frozen amount from the transaction record
+          const { data: txRecord } = await supabase
+            .from('transactions')
+            .select('amount, status')
+            .eq('reference', reference)
+            .single();
+
+          if (!txRecord) {
+            console.error('No transaction record found for withdrawal:', reference);
+            break;
+          }
+
+          const frozenAmount = Number(txRecord.amount);
+
+          if (data.status === 'SUCCESSFUL') {
+            // ✅ Permanently deduct frozen funds
+            const { data: confirmResult, error: confirmError } = await supabase.rpc('confirm_withdrawal_debit', {
+              _user_id: userId,
+              _amount: frozenAmount,
+              _reference: reference,
+              _description: `Withdrawal confirmed — ₦${data.amount} sent to bank`,
+            });
+
+            if (confirmError) {
+              console.error('Failed to confirm withdrawal debit:', confirmError);
+            }
+
+            await supabase.from('transactions').update({
+              status: 'completed',
+              description: `Withdrawal completed — ₦${data.amount} sent to bank`,
+            }).eq('reference', reference);
+
+            console.log(`Withdrawal COMPLETED: ${reference}, amount: ${data.amount}`);
+
+          } else {
+            // ❌ Release frozen funds back to available
+            const { data: releaseResult, error: releaseError } = await supabase.rpc('release_withdrawal_freeze', {
+              _user_id: userId,
+              _amount: frozenAmount,
+              _reference: reference,
+              _description: `Withdrawal failed — funds released (${data.complete_message || data.status})`,
+            });
+
+            if (releaseError) {
+              console.error('Failed to release withdrawal freeze:', releaseError);
+            }
+
+            await supabase.from('transactions').update({
+              status: 'failed',
+              description: `Withdrawal failed — ${data.complete_message || 'transfer unsuccessful'}`,
+            }).eq('reference', reference);
+
+            console.log(`Withdrawal FAILED: ${reference}, reason: ${data.complete_message || data.status}`);
+          }
+        }
 
         console.log(`Transfer ${data.status}: ${reference}`);
         break;
