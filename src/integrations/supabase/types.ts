@@ -2081,6 +2081,54 @@ export type Database = {
         }
         Relationships: []
       }
+      user_notifications: {
+        Row: {
+          created_at: string
+          group_id: string | null
+          id: string
+          is_read: boolean
+          message: string
+          notification_type: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          group_id?: string | null
+          id?: string
+          is_read?: boolean
+          message: string
+          notification_type?: string
+          title: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          group_id?: string | null
+          id?: string
+          is_read?: boolean
+          message?: string
+          notification_type?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_notifications_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "public_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_notifications_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "thrift_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_payment_tokens_test: {
         Row: {
           card_token: string

@@ -16,6 +16,27 @@ interface CardFallbackResult {
   tx_ref?: string;
 }
 
+async function insertNotification(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  title: string,
+  message: string,
+  notificationType: string,
+  groupId?: string
+) {
+  try {
+    await supabase.from('user_notifications').insert({
+      user_id: userId,
+      title,
+      message,
+      notification_type: notificationType,
+      group_id: groupId || null,
+    });
+  } catch (err) {
+    console.error('Failed to insert notification:', err);
+  }
+}
+
 async function attemptCardFallback(
   supabase: ReturnType<typeof createClient>,
   userId: string,
@@ -428,6 +449,7 @@ serve(async (req) => {
             message: `Auto-contribution of ₦${group.contribution_amount.toLocaleString()} processed (retry ${attemptCount + 1})`,
             message_type: 'auto_contribution',
           });
+          await insertNotification(supabase, member.user_id, 'Contribution Successful', `Your auto-contribution of ₦${group.contribution_amount.toLocaleString()} for ${group.name} was processed successfully (attempt ${attemptCount + 1}).`, 'contribution_success', group.id);
 
           if (result.all_contributed && result.auto_payout?.success) {
             await supabase.from('chat_messages').insert({
@@ -464,6 +486,7 @@ serve(async (req) => {
               message: `Auto-contribution of ₦${group.contribution_amount.toLocaleString()} processed via card fallback (retry ${attemptCount + 1})`,
               message_type: 'card_fallback_success',
             });
+            await insertNotification(supabase, member.user_id, 'Card Contribution Successful', `Your contribution of ₦${group.contribution_amount.toLocaleString()} for ${group.name} was charged to your card (attempt ${attemptCount + 1}).`, 'card_fallback_success', group.id);
             continue;
           }
         }
@@ -487,6 +510,15 @@ serve(async (req) => {
             : `⚠️ Auto-contribution retry ${attemptCount + 1}/${MAX_CONTRIBUTION_ATTEMPTS} failed. Next retry in 6 hours.`,
           message_type: isLastAttempt ? 'contribution_defaulted' : 'contribution_failed',
         });
+        await insertNotification(
+          supabase, member.user_id,
+          isLastAttempt ? 'Contribution Failed' : 'Contribution Retry Failed',
+          isLastAttempt
+            ? `All ${MAX_CONTRIBUTION_ATTEMPTS} auto-contribution attempts for ${group.name} have failed. Please contribute manually.`
+            : `Auto-contribution attempt ${attemptCount + 1}/${MAX_CONTRIBUTION_ATTEMPTS} for ${group.name} failed. Next retry in 6 hours.`,
+          isLastAttempt ? 'contribution_defaulted' : 'contribution_retry',
+          group.id
+        );
       }
 
       if (retriedCount > 0) {
@@ -643,6 +675,7 @@ serve(async (req) => {
                 contribution_type: 'auto_card_fallback',
                 status: 'completed',
               });
+              await insertNotification(supabase, member.user_id, 'Card Contribution Successful', `Your contribution of ₦${group.contribution_amount.toLocaleString()} for ${group.name} was charged to your card.`, 'card_fallback_success', group.id);
               continue;
             } else if (!fallbackResult.attempted) {
               await supabase.from('chat_messages').insert({
@@ -651,6 +684,7 @@ serve(async (req) => {
                 message: `⚠️ Insufficient wallet balance and no saved card. Please fund your wallet to contribute.`,
                 message_type: 'contribution_failed',
               });
+              await insertNotification(supabase, member.user_id, 'Contribution Failed', `Insufficient wallet balance for ${group.name} and no saved card. Please fund your wallet. Will retry in 6 hours.`, 'contribution_failed', group.id);
             } else {
               await supabase.from('chat_messages').insert({
                 group_id: group.id,
@@ -658,6 +692,7 @@ serve(async (req) => {
                 message: `⚠️ Wallet balance insufficient and card charge failed. Will retry in 6 hours.`,
                 message_type: 'card_fallback_failed',
               });
+              await insertNotification(supabase, member.user_id, 'Card Charge Failed', `Wallet and card charge both failed for ${group.name}. Will retry in 6 hours.`, 'card_fallback_failed', group.id);
             }
           }
 
@@ -679,6 +714,7 @@ serve(async (req) => {
             message: `Auto-contribution of ₦${group.contribution_amount.toLocaleString()} processed`,
             message_type: 'auto_contribution',
           });
+          await insertNotification(supabase, member.user_id, 'Contribution Successful', `Your auto-contribution of ₦${group.contribution_amount.toLocaleString()} for ${group.name} was processed successfully.`, 'contribution_success', group.id);
           
           if (result.all_contributed && result.auto_payout?.success) {
             await supabase.from('chat_messages').insert({
