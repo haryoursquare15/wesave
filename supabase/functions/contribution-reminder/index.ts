@@ -42,6 +42,16 @@ serve(async (req) => {
 
       if (!activeCycle) continue;
 
+      // Only send reminders if we're within the cycle's contribution deadline
+      if (activeCycle.contribution_deadline) {
+        const deadline = new Date(activeCycle.contribution_deadline);
+        const now = new Date();
+        if (now > deadline) {
+          console.log(`Skipping group ${group.name}: cycle ${activeCycle.cycle_number} deadline has passed (${activeCycle.contribution_deadline})`);
+          continue;
+        }
+      }
+
       // Get members who have NOT contributed this cycle
       const { data: pendingMembers, error: membersError } = await supabase
         .from('group_memberships')
