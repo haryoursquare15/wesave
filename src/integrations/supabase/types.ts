@@ -2517,6 +2517,15 @@ export type Database = {
       }
       commence_thrift: { Args: { target_group_id: string }; Returns: Json }
       confirm_continue_group: { Args: { _group_id: string }; Returns: Json }
+      confirm_withdrawal_debit: {
+        Args: {
+          _amount: number
+          _description: string
+          _reference: string
+          _user_id: string
+        }
+        Returns: Json
+      }
       create_thrift_group: {
         Args: {
           _auto_debit: boolean
@@ -2591,6 +2600,15 @@ export type Database = {
         Returns: Json
       }
       exit_completed_group: { Args: { _group_id: string }; Returns: Json }
+      freeze_wallet_for_withdrawal: {
+        Args: {
+          _amount: number
+          _description: string
+          _reference: string
+          _user_id: string
+        }
+        Returns: Json
+      }
       gen_random_bytes: { Args: { n: number }; Returns: string }
       gen_random_uuid: { Args: never; Returns: string }
       get_payout_order: {
@@ -2712,6 +2730,15 @@ export type Database = {
         }
         Returns: undefined
       }
+      release_withdrawal_freeze: {
+        Args: {
+          _amount: number
+          _description: string
+          _reference: string
+          _user_id: string
+        }
+        Returns: Json
+      }
       request_position_swap: {
         Args: { _group_id: string; _target_user_id: string }
         Returns: Json
@@ -2783,7 +2810,7 @@ export type Database = {
       membership_status: "active" | "pending" | "removed"
       membership_tier: "gold" | "silver" | "bronze" | "newbie"
       request_status: "pending" | "approved" | "rejected"
-      transaction_status: "pending" | "completed" | "failed"
+      transaction_status: "pending" | "completed" | "failed" | "processing"
       transaction_type:
         | "contribution"
         | "payout"
@@ -2934,7 +2961,7 @@ export const Constants = {
       membership_status: ["active", "pending", "removed"],
       membership_tier: ["gold", "silver", "bronze", "newbie"],
       request_status: ["pending", "approved", "rejected"],
-      transaction_status: ["pending", "completed", "failed"],
+      transaction_status: ["pending", "completed", "failed", "processing"],
       transaction_type: [
         "contribution",
         "payout",
