@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { Settings, ChevronRight, Shield, CreditCard, Bell, HelpCircle, LogOut, Award, User, Check, X, Pencil, Camera } from "lucide-react";
+import { CardManagement } from "@/components/CardManagement";
 import { Link, useNavigate } from "react-router-dom";
 import { UserBadge } from "@/components/UserBadge";
 import { StarRating } from "@/components/StarRating";
@@ -339,6 +340,15 @@ export default function Profile() {
               <span>Excellent ({maxScore})</span>
             </div>
           </div>
+        </motion.div>
+
+        {/* Card Management */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+        >
+          <CardManagement />
         </motion.div>
 
         {/* Badge Progress */}

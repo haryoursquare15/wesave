@@ -281,6 +281,157 @@ serve(async (req) => {
       });
     }
 
+    // ========================================
+    // ACTION: GET_CARD — Return user's active card info
+    // ========================================
+    if (action === 'get_card') {
+      const { data: card } = await supabase
+        .from('card_tokens')
+        .select('id, card_last4, card_type, first_6digits, card_expiry, card_status, last_tokenized_at, created_at')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .eq('card_status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      return new Response(JSON.stringify({
+        success: true,
+        card: card || null,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // ========================================
+    // ACTION: RETOKENIZE — Replace existing card (24hr cooldown)
+    // ========================================
+    if (action === 'retokenize') {
+      // Check 24hr cooldown
+      const { data: existingCard } = await supabase
+        .from('card_tokens')
+        .select('id, last_tokenized_at')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .eq('card_status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (existingCard?.last_tokenized_at) {
+        const lastTokenized = new Date(existingCard.last_tokenized_at).getTime();
+        const now = Date.now();
+        const hoursSince = (now - lastTokenized) / (1000 * 60 * 60);
+        if (hoursSince < 24) {
+          const hoursLeft = Math.ceil(24 - hoursSince);
+          throw new Error(`You can only change your card once every 24 hours. Please try again in ${hoursLeft} hour(s).`);
+        }
+      }
+
+      // Get user profile for checkout
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('email, full_name')
+        .eq('id', user.id)
+        .single();
+
+      const flwPublicKey = Deno.env.get('FLUTTERWAVE_PUBLIC_KEY');
+      const txRef = `retoken-${user.id.slice(0, 8)}-${Date.now()}`;
+      const origin = req.headers.get('origin') || 'https://wesave.lovable.app';
+      const redirectUrl = `${origin}/profile`;
+
+      // Use a small auth charge amount (e.g. 50 NGN)
+      const authAmount = 50;
+
+      return new Response(JSON.stringify({
+        success: true,
+        payment_config: {
+          public_key: flwPublicKey || '',
+          tx_ref: txRef,
+          amount: authAmount,
+          currency: 'NGN',
+          redirect_url: redirectUrl,
+          customer: {
+            email: profile?.email || '',
+            name: profile?.full_name || 'WeSave User',
+          },
+          customizations: {
+            title: 'WeSave Card Update',
+            description: 'Authorize your new card for recurring payments',
+          },
+          meta: {
+            purpose: 'retokenization',
+            user_id: user.id,
+          },
+        },
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // ========================================
+    // ACTION: VERIFY_RETOKENIZE — Verify new card and replace old token
+    // ========================================
+    if (action === 'verify_retokenize') {
+      const { transactionId, txRef } = body;
+      if (!transactionId) throw new Error('Transaction ID is required');
+
+      const secretKey = Deno.env.get('FLUTTERWAVE_SECRET_KEY');
+      if (!secretKey) throw new Error('Flutterwave secret key not configured');
+
+      const verifyResp = await fetch(`${FLUTTERWAVE_BASE_URL}/transactions/${transactionId}/verify`, {
+        headers: { 'Authorization': `Bearer ${secretKey}` },
+      });
+      const verifyData = await verifyResp.json();
+      console.log('Retokenization verify response:', JSON.stringify(verifyData));
+
+      if (verifyData.status !== 'success' || verifyData.data?.status !== 'successful') {
+        throw new Error('Transaction verification failed');
+      }
+
+      const txData = verifyData.data;
+      const cardData = txData.card;
+      if (!cardData?.token) {
+        throw new Error('No card token returned. Please try again.');
+      }
+
+      // Deactivate all existing tokens
+      await supabase
+        .from('card_tokens')
+        .update({ is_active: false, card_status: 'revoked' })
+        .eq('user_id', user.id)
+        .eq('is_active', true);
+
+      // Save new token
+      await supabase.from('card_tokens').insert({
+        user_id: user.id,
+        card_token: cardData.token,
+        card_last4: cardData.last_4digits,
+        card_type: cardData.type,
+        card_expiry: cardData.expiry,
+        first_6digits: cardData.first_6digits,
+        charge_email: txData.customer?.email || null,
+        is_active: true,
+        card_status: 'active',
+        last_tokenized_at: new Date().toISOString(),
+      });
+
+      // Credit the auth charge to wallet
+      const amount = txData.amount;
+      if (amount > 0) {
+        await supabase.rpc('credit_wallet_atomic', {
+          _user_id: user.id,
+          _amount: amount,
+          _tx_ref: txRef || txData.tx_ref,
+          _description: 'Card re-authorization deposit — credited to wallet',
+        });
+      }
+
+      return new Response(JSON.stringify({
+        success: true,
+        message: 'Card updated successfully.',
+        card_last4: cardData.last_4digits,
+        card_type: cardData.type,
+        amount_credited: amount,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     // recover_token is handled above (before auth check)
 
     throw new Error(`Unknown action: ${action}`);

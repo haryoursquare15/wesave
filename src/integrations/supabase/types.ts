@@ -268,6 +268,7 @@ export type Database = {
           group_id: string | null
           id: string
           is_active: boolean
+          last_tokenized_at: string | null
           recurring_amount: number | null
           updated_at: string
           user_id: string
@@ -284,6 +285,7 @@ export type Database = {
           group_id?: string | null
           id?: string
           is_active?: boolean
+          last_tokenized_at?: string | null
           recurring_amount?: number | null
           updated_at?: string
           user_id: string
@@ -300,6 +302,7 @@ export type Database = {
           group_id?: string | null
           id?: string
           is_active?: boolean
+          last_tokenized_at?: string | null
           recurring_amount?: number | null
           updated_at?: string
           user_id?: string
