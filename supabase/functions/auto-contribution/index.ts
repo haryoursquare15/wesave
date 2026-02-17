@@ -363,6 +363,146 @@ serve(async (req) => {
       }
     }
 
+    // ---- Catch-up sweep: process groups whose scheduled trigger was missed entirely ----
+    const catchupResults: { groupId: string; groupName: string; catchupMembers: number; succeeded: number }[] = [];
+
+    const { data: allActiveGroupsCatchup } = await supabase
+      .from('thrift_groups')
+      .select('id, name, contribution_amount, contribution_hour, contribution_minute, period')
+      .eq('status', 'active');
+
+    for (const group of allActiveGroupsCatchup || []) {
+      // Skip if this is a force_group_id call (handled separately below)
+      if (forceGroupId) continue;
+
+      const { data: activeCycle } = await supabase
+        .from('contribution_cycles')
+        .select('id, cycle_number, created_at')
+        .eq('group_id', group.id)
+        .eq('status', 'active')
+        .single();
+
+      if (!activeCycle) continue;
+
+      // Get members who haven't contributed
+      const { data: pendingMembers } = await supabase
+        .from('group_memberships')
+        .select('user_id')
+        .eq('group_id', group.id)
+        .eq('status', 'active')
+        .eq('has_contributed_this_cycle', false);
+
+      if (!pendingMembers || pendingMembers.length === 0) continue;
+
+      // Check if ANY contribution audit entries exist for this cycle at all
+      const { count: auditCount } = await supabase
+        .from('contribution_audit')
+        .select('id', { count: 'exact', head: true })
+        .eq('group_id', group.id)
+        .eq('cycle_id', activeCycle.id);
+
+      // If some members have been processed but others haven't, the retry sweep handles that.
+      // This catch-up only fires when the ENTIRE initial trigger was missed (zero audit entries)
+      // AND the cycle has existed for more than 30 minutes (to avoid racing with a normal trigger)
+      const cycleAge = Date.now() - new Date(activeCycle.created_at).getTime();
+      const THIRTY_MINUTES = 30 * 60 * 1000;
+
+      if ((auditCount || 0) > 0 || cycleAge < THIRTY_MINUTES) continue;
+
+      console.log(`CATCH-UP: Group "${group.name}" has active cycle ${activeCycle.cycle_number} with ZERO contribution attempts. Processing now.`);
+
+      let catchupSucceeded = 0;
+
+      for (const member of pendingMembers) {
+        // Attempt wallet deduction
+        const { data: result, error: rpcError } = await supabase.rpc('process_contribution_ledger_atomic', {
+          _user_id: member.user_id,
+          _group_id: group.id,
+          _amount: group.contribution_amount,
+        });
+
+        if (!rpcError && result?.success) {
+          catchupSucceeded++;
+          await supabase.from('contribution_audit').insert({
+            user_id: member.user_id,
+            group_id: group.id,
+            cycle_id: activeCycle.id,
+            amount: group.contribution_amount,
+            contribution_type: 'auto',
+            status: 'completed',
+          });
+          await supabase.from('chat_messages').insert({
+            group_id: group.id,
+            user_id: member.user_id,
+            message: `Auto-contribution of ₦${group.contribution_amount.toLocaleString()} processed (catch-up)`,
+            message_type: 'auto_contribution',
+          });
+          await insertNotification(supabase, member.user_id, 'Contribution Successful', `Your auto-contribution of ₦${group.contribution_amount.toLocaleString()} for ${group.name} was processed successfully.`, 'contribution_success', group.id);
+
+          if (result.all_contributed && result.auto_payout?.success) {
+            await supabase.from('chat_messages').insert({
+              group_id: group.id,
+              user_id: member.user_id,
+              message: `🎉 Cycle complete! Payout of ₦${result.auto_payout.net_amount?.toLocaleString() || 'N/A'} sent to recipient.`,
+              message_type: 'payout_notification',
+            });
+          }
+        } else {
+          const errorMsg = rpcError?.message || result?.error || '';
+          // Attempt card fallback if insufficient funds
+          if (errorMsg.toLowerCase().includes('insufficient') && FLUTTERWAVE_SECRET_KEY) {
+            const fallbackResult = await attemptCardFallback(
+              supabase, member.user_id, group.id, activeCycle.id,
+              group.contribution_amount, FLUTTERWAVE_SECRET_KEY
+            );
+
+            if (fallbackResult.success) {
+              catchupSucceeded++;
+              await supabase.from('contribution_audit').insert({
+                user_id: member.user_id,
+                group_id: group.id,
+                cycle_id: activeCycle.id,
+                amount: group.contribution_amount,
+                contribution_type: 'auto_card_fallback',
+                status: 'completed',
+              });
+              await supabase.from('chat_messages').insert({
+                group_id: group.id,
+                user_id: member.user_id,
+                message: `Auto-contribution of ₦${group.contribution_amount.toLocaleString()} processed via card (catch-up)`,
+                message_type: 'card_fallback_success',
+              });
+              await insertNotification(supabase, member.user_id, 'Card Contribution Successful', `Your contribution of ₦${group.contribution_amount.toLocaleString()} for ${group.name} was charged to your card.`, 'card_fallback_success', group.id);
+              continue;
+            }
+          }
+
+          // Record failed attempt so retry sweep can pick it up
+          await supabase.from('contribution_audit').insert({
+            user_id: member.user_id,
+            group_id: group.id,
+            cycle_id: activeCycle.id,
+            amount: group.contribution_amount,
+            contribution_type: 'auto',
+            status: 'failed',
+          });
+          await supabase.from('chat_messages').insert({
+            group_id: group.id,
+            user_id: member.user_id,
+            message: `⚠️ Auto-contribution failed (catch-up). Will retry in 6 hours.`,
+            message_type: 'contribution_failed',
+          });
+          await insertNotification(supabase, member.user_id, 'Contribution Failed', `Auto-contribution for ${group.name} failed. Will retry in 6 hours.`, 'contribution_failed', group.id);
+        }
+      }
+
+      catchupResults.push({ groupId: group.id, groupName: group.name, catchupMembers: pendingMembers.length, succeeded: catchupSucceeded });
+    }
+
+    if (catchupResults.length > 0) {
+      console.log('Catch-up sweep results:', JSON.stringify(catchupResults, null, 2));
+    }
+
     // ---- Retry sweep: re-attempt contributions for members with < 3 attempts, 6h apart ----
     const MAX_CONTRIBUTION_ATTEMPTS = 3;
     const RETRY_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
@@ -414,14 +554,12 @@ serve(async (req) => {
         // Skip if already hit max attempts
         if (attemptCount >= MAX_CONTRIBUTION_ATTEMPTS) continue;
 
+        // Skip if no previous attempt (catch-up sweep or normal flow handles first attempt)
+        if (!prevAttempts || prevAttempts.length === 0) continue;
+
         // Skip if not enough time has passed since last attempt
-        if (prevAttempts && prevAttempts.length > 0) {
-          const lastAttemptTime = new Date(prevAttempts[0].created_at).getTime();
-          if (Date.now() - lastAttemptTime < RETRY_INTERVAL_MS) continue;
-        } else {
-          // No previous attempt at all — skip retry sweep, let normal flow handle first attempt
-          continue;
-        }
+        const lastAttemptTime = new Date(prevAttempts[0].created_at).getTime();
+        if (Date.now() - lastAttemptTime < RETRY_INTERVAL_MS) continue;
 
         console.log(`Retry attempt ${attemptCount + 1}/${MAX_CONTRIBUTION_ATTEMPTS} for user ${member.user_id} in group ${group.name}`);
         retriedCount++;
@@ -748,6 +886,7 @@ serve(async (req) => {
       success: true,
       processed_at: now.toISOString(),
       results,
+      catchup_results: catchupResults,
       retry_results: retryResults,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
