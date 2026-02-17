@@ -116,6 +116,7 @@ async function attemptCardFallback(
         email: profile.email,
         full_name: profile.full_name || 'WeSave User',
         tx_ref: txRef,
+        redirect_url: 'https://app.wesave.ng/dashboard',
         narration: `WeSave contribution - Group ${groupId.slice(0, 8)}`,
         meta: {
           type: 'card_fallback_contribution',
