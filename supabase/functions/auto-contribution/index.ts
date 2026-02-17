@@ -342,7 +342,163 @@ serve(async (req) => {
       }
     }
 
-    // ---- Normal contribution flow ----
+    // ---- Retry sweep: re-attempt contributions for members with < 3 attempts, 6h apart ----
+    const MAX_CONTRIBUTION_ATTEMPTS = 3;
+    const RETRY_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+    const retryResults: { groupId: string; groupName: string; retried: number; succeeded: number }[] = [];
+
+    // Get all active groups with active cycles for retry sweep
+    const { data: allActiveGroups } = await supabase
+      .from('thrift_groups')
+      .select('id, name, contribution_amount')
+      .eq('status', 'active');
+
+    for (const group of allActiveGroups || []) {
+      const { data: activeCycle } = await supabase
+        .from('contribution_cycles')
+        .select('id, cycle_number')
+        .eq('group_id', group.id)
+        .eq('status', 'active')
+        .single();
+
+      if (!activeCycle) continue;
+
+      // Get members who haven't contributed
+      const { data: pendingMembers } = await supabase
+        .from('group_memberships')
+        .select('user_id')
+        .eq('group_id', group.id)
+        .eq('status', 'active')
+        .eq('has_contributed_this_cycle', false);
+
+      if (!pendingMembers || pendingMembers.length === 0) continue;
+
+      let retriedCount = 0;
+      let succeededCount = 0;
+
+      for (const member of pendingMembers) {
+        // Count previous auto attempts for this member in this cycle
+        const { data: prevAttempts } = await supabase
+          .from('contribution_audit')
+          .select('id, created_at')
+          .eq('user_id', member.user_id)
+          .eq('group_id', group.id)
+          .eq('cycle_id', activeCycle.id)
+          .in('contribution_type', ['auto', 'auto_card_fallback', 'auto_retry', 'auto_retry_card_fallback'])
+          .order('created_at', { ascending: false });
+
+        const attemptCount = prevAttempts?.length || 0;
+
+        // Skip if already hit max attempts
+        if (attemptCount >= MAX_CONTRIBUTION_ATTEMPTS) continue;
+
+        // Skip if not enough time has passed since last attempt
+        if (prevAttempts && prevAttempts.length > 0) {
+          const lastAttemptTime = new Date(prevAttempts[0].created_at).getTime();
+          if (Date.now() - lastAttemptTime < RETRY_INTERVAL_MS) continue;
+        } else {
+          // No previous attempt at all — skip retry sweep, let normal flow handle first attempt
+          continue;
+        }
+
+        console.log(`Retry attempt ${attemptCount + 1}/${MAX_CONTRIBUTION_ATTEMPTS} for user ${member.user_id} in group ${group.name}`);
+        retriedCount++;
+
+        // Step 1: Wallet-first
+        const { data: result, error: rpcError } = await supabase.rpc('process_contribution_ledger_atomic', {
+          _user_id: member.user_id,
+          _group_id: group.id,
+          _amount: group.contribution_amount,
+        });
+
+        if (!rpcError && result?.success) {
+          succeededCount++;
+          await supabase.from('contribution_audit').insert({
+            user_id: member.user_id,
+            group_id: group.id,
+            cycle_id: activeCycle.id,
+            amount: group.contribution_amount,
+            contribution_type: 'auto_retry',
+            status: 'completed',
+          });
+          await supabase.from('chat_messages').insert({
+            group_id: group.id,
+            user_id: member.user_id,
+            message: `Auto-contribution of ₦${group.contribution_amount.toLocaleString()} processed (retry ${attemptCount + 1})`,
+            message_type: 'auto_contribution',
+          });
+
+          if (result.all_contributed && result.auto_payout?.success) {
+            await supabase.from('chat_messages').insert({
+              group_id: group.id,
+              user_id: member.user_id,
+              message: `🎉 Cycle complete! Payout of ₦${result.auto_payout.net_amount?.toLocaleString() || 'N/A'} sent to recipient.`,
+              message_type: 'payout_notification',
+            });
+          }
+          continue;
+        }
+
+        // Step 2: Card fallback if insufficient funds
+        const errorMsg = rpcError?.message || result?.error || '';
+        if (errorMsg.toLowerCase().includes('insufficient') && FLUTTERWAVE_SECRET_KEY) {
+          const fallbackResult = await attemptCardFallback(
+            supabase, member.user_id, group.id, activeCycle.id,
+            group.contribution_amount, FLUTTERWAVE_SECRET_KEY
+          );
+
+          if (fallbackResult.success) {
+            succeededCount++;
+            await supabase.from('contribution_audit').insert({
+              user_id: member.user_id,
+              group_id: group.id,
+              cycle_id: activeCycle.id,
+              amount: group.contribution_amount,
+              contribution_type: 'auto_retry_card_fallback',
+              status: 'completed',
+            });
+            await supabase.from('chat_messages').insert({
+              group_id: group.id,
+              user_id: member.user_id,
+              message: `Auto-contribution of ₦${group.contribution_amount.toLocaleString()} processed via card fallback (retry ${attemptCount + 1})`,
+              message_type: 'card_fallback_success',
+            });
+            continue;
+          }
+        }
+
+        // Failed retry
+        await supabase.from('contribution_audit').insert({
+          user_id: member.user_id,
+          group_id: group.id,
+          cycle_id: activeCycle.id,
+          amount: group.contribution_amount,
+          contribution_type: 'auto_retry',
+          status: 'failed',
+        });
+
+        const isLastAttempt = attemptCount + 1 >= MAX_CONTRIBUTION_ATTEMPTS;
+        await supabase.from('chat_messages').insert({
+          group_id: group.id,
+          user_id: member.user_id,
+          message: isLastAttempt
+            ? `❌ Auto-contribution failed after ${MAX_CONTRIBUTION_ATTEMPTS} attempts. Please contribute manually.`
+            : `⚠️ Auto-contribution retry ${attemptCount + 1}/${MAX_CONTRIBUTION_ATTEMPTS} failed. Next retry in 6 hours.`,
+          message_type: isLastAttempt ? 'contribution_defaulted' : 'contribution_failed',
+        });
+      }
+
+      if (retriedCount > 0) {
+        retryResults.push({ groupId: group.id, groupName: group.name, retried: retriedCount, succeeded: succeededCount });
+      }
+    }
+
+    if (retryResults.length > 0) {
+      console.log('Retry sweep results:', JSON.stringify(retryResults, null, 2));
+    }
+
+    // ---- Normal contribution flow (first attempt for newly due groups) ----
     const now = new Date();
     const watOffset = 1;
     const watHour = (now.getUTCHours() + watOffset) % 24;
@@ -489,7 +645,6 @@ serve(async (req) => {
               });
               continue;
             } else if (!fallbackResult.attempted) {
-              // No card token — notify user
               await supabase.from('chat_messages').insert({
                 group_id: group.id,
                 user_id: member.user_id,
@@ -497,11 +652,10 @@ serve(async (req) => {
                 message_type: 'contribution_failed',
               });
             } else {
-              // Card charge failed
               await supabase.from('chat_messages').insert({
                 group_id: group.id,
                 user_id: member.user_id,
-                message: `⚠️ Wallet balance insufficient and card charge failed. Will retry in 24 hours.`,
+                message: `⚠️ Wallet balance insufficient and card charge failed. Will retry in 6 hours.`,
                 message_type: 'card_fallback_failed',
               });
             }
@@ -558,6 +712,7 @@ serve(async (req) => {
       success: true,
       processed_at: now.toISOString(),
       results,
+      retry_results: retryResults,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
