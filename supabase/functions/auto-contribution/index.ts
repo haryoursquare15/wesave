@@ -89,14 +89,16 @@ async function attemptCardFallback(
   // Generate unique transaction reference
   const txRef = `card-contrib-${userId.slice(0, 8)}-${groupId.slice(0, 8)}-${Date.now()}`;
 
-  // Get user email for the charge
+  // Use the charge_email stored on the card token (required by Flutterwave for tokenized charges)
+  // Fall back to profile email only if charge_email is not available
   const { data: profile } = await supabase
     .from('profiles')
     .select('email, full_name')
     .eq('id', userId)
     .single();
 
-  if (!profile?.email) {
+  const chargeEmail = cardToken.charge_email || profile?.email;
+  if (!chargeEmail) {
     return { attempted: true, success: false, error: 'User email not found for card charge' };
   }
 
