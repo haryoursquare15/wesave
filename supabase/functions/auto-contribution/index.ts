@@ -115,7 +115,7 @@ async function attemptCardFallback(
         currency: 'NGN',
         country: 'NG',
         amount: amount,
-        email: profile.email,
+        email: chargeEmail,
         full_name: profile.full_name || 'WeSave User',
         tx_ref: txRef,
         redirect_url: 'https://app.wesave.ng/dashboard',
