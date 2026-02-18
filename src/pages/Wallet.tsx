@@ -219,8 +219,8 @@ export default function Wallet() {
 
   const handleWithdraw = async () => {
     const amount = Number(withdrawAmount);
-    if (!amount || amount < 100) {
-      toast.error("Minimum withdrawal amount is ₦100");
+    if (!amount || amount < 1100) {
+      toast.error("Minimum withdrawal amount is ₦1,100 (₦1,000 + ₦100 fee)");
       return;
     }
     if (amount > balance) {
@@ -573,11 +573,11 @@ export default function Wallet() {
                 placeholder="Enter amount"
                 value={withdrawAmount}
                 onChange={(e) => setWithdrawAmount(e.target.value)}
-                min={100}
+                min={1100}
                 max={balance}
               />
-              <p className="text-xs text-muted-foreground">Minimum: ₦100 • 2FA required</p>
-              <p className="text-xs text-muted-foreground mt-1">A ₦100 withdrawal fee applies for bank transfers.</p>
+              <p className="text-xs text-muted-foreground">Minimum: ₦1,100 • 2FA required</p>
+              <p className="text-xs text-muted-foreground mt-1">A ₦100 withdrawal fee applies. Flutterwave requires ₦1,000 minimum transfer.</p>
             </div>
             <Button 
               onClick={handleWithdraw} 
