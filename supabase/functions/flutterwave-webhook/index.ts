@@ -311,6 +311,74 @@ serve(async (req) => {
 
           console.log(`Card tokenization completed for user ${userId}, group ${groupId}`);
 
+        } else if (txRef?.startsWith('retoken-')) {
+          // Re-tokenization: save new card token and credit wallet
+          const txParts = txRef.split('-');
+          const userIdPrefix = txParts[1]; // first 8 chars of user_id
+
+          const { data: matchedProfile } = await supabase
+            .from('profiles')
+            .select('id')
+            .like('id', `${userIdPrefix}%`)
+            .single();
+
+          const userId = meta.user_id || matchedProfile?.id;
+          if (!userId) {
+            console.error('Could not determine user ID for retoken tx_ref:', txRef);
+            break;
+          }
+
+          console.log(`Processing re-tokenization webhook for user ${userId}`);
+
+          // Save card token if available
+          if (data.card?.token) {
+            const { data: existingToken } = await supabase
+              .from('card_tokens')
+              .select('id')
+              .eq('user_id', userId)
+              .eq('card_token', data.card.token)
+              .single();
+
+            if (!existingToken) {
+              // Deactivate existing tokens
+              await supabase
+                .from('card_tokens')
+                .update({ is_active: false, card_status: 'revoked' })
+                .eq('user_id', userId)
+                .eq('is_active', true);
+
+              await supabase.from('card_tokens').insert({
+                user_id: userId,
+                card_token: data.card.token,
+                card_last4: data.card.last_4digits,
+                card_type: data.card.type,
+                card_expiry: data.card.expiry,
+                first_6digits: data.card.first_6digits,
+                charge_email: data.customer?.email || null,
+                is_active: true,
+                card_status: 'active',
+                last_tokenized_at: new Date().toISOString(),
+              });
+              console.log(`Re-tokenization: new card saved for user ${userId}`);
+            }
+          }
+
+          // Credit the auth charge to wallet
+          if (data.amount > 0) {
+            const { error: creditError } = await supabase.rpc('credit_wallet_atomic', {
+              _user_id: userId,
+              _amount: data.amount,
+              _tx_ref: txRef,
+              _description: 'Card re-authorization deposit — credited to wallet',
+            });
+
+            if (creditError) {
+              console.error('Failed to credit wallet after re-tokenization:', creditError);
+            } else {
+              console.log(`Wallet credited ₦${data.amount} for re-tokenization user ${userId}`);
+            }
+          }
+
         } else if (meta.type === 'wallet_funding' || txRef?.startsWith('fund-')) {
           // Standard wallet funding
           // tx_ref format: fund-<uuid>-<timestamp>, extract UUID (segments 1-5)

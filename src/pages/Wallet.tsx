@@ -156,44 +156,49 @@ export default function Wallet() {
         .on(
           "postgres_changes",
           {
-            event: "INSERT",
+            event: "*",
             schema: "public",
             table: "transactions",
             filter: `user_id=eq.${user.id}`,
           },
           async (payload) => {
-            // Show toast notification for new transactions
             const newTx = payload.new as Transaction;
-            if (newTx) {
-              const amount = Number(newTx.amount).toLocaleString();
-              switch (newTx.type) {
-                case "funding":
-                  toast.success(`💰 ₦${amount} added to your wallet!`);
-                  break;
-                case "payout":
-                  toast.success(`🎉 You received a payout of ₦${amount}!`);
-                  break;
-                case "contribution":
-                  toast.info(`📤 Contribution of ₦${amount} made successfully`);
-                  break;
-                case "withdrawal":
-                  toast.info(`💸 Withdrawal of ₦${amount} processed`);
-                  break;
-                case "lock":
-                  toast.info(`🔒 ₦${amount} locked in savings`);
-                  break;
-                case "unlock":
-                  toast.info(`🔓 ₦${amount} unlocked from savings`);
-                  break;
-                case "service_fee":
-                  // Don't show notification for service fees
-                  break;
-                default:
-                  toast.info(`Transaction: ₦${amount}`);
+            // Only show toast for completed transactions (prevents premature notifications)
+            if (newTx && newTx.status === "completed") {
+              // For UPDATE events, only notify if the old status was not completed (transition to completed)
+              const oldTx = payload.old as Partial<Transaction> | undefined;
+              const wasAlreadyCompleted = payload.eventType === "UPDATE" && oldTx?.status === "completed";
+              
+              if (!wasAlreadyCompleted) {
+                const amount = Number(newTx.amount).toLocaleString();
+                switch (newTx.type) {
+                  case "funding":
+                    toast.success(`💰 ₦${amount} added to your wallet!`);
+                    break;
+                  case "payout":
+                    toast.success(`🎉 You received a payout of ₦${amount}!`);
+                    break;
+                  case "contribution":
+                    toast.info(`📤 Contribution of ₦${amount} made successfully`);
+                    break;
+                  case "withdrawal":
+                    toast.info(`💸 Withdrawal of ₦${amount} processed`);
+                    break;
+                  case "lock":
+                    toast.info(`🔒 ₦${amount} locked in savings`);
+                    break;
+                  case "unlock":
+                    toast.info(`🔓 ₦${amount} unlocked from savings`);
+                    break;
+                  case "service_fee":
+                    break;
+                  default:
+                    toast.info(`Transaction: ₦${amount}`);
+                }
               }
             }
             
-            // Refetch transactions on new entry
+            // Refetch transactions on any change
             const { data } = await supabase
               .from("transactions")
               .select("*")
@@ -201,7 +206,6 @@ export default function Wallet() {
               .order("created_at", { ascending: false })
               .limit(20);
             if (data) setTransactions(data);
-            // Also refresh wallet balance
             refreshWallet();
           }
         )
@@ -471,6 +475,9 @@ export default function Wallet() {
                         </p>
                         {tx.status === "failed" && (
                           <span className="text-[10px] font-medium text-destructive bg-destructive/10 px-1.5 py-0.5 rounded">Failed</span>
+                        )}
+                        {tx.status === "pending" && (
+                          <span className="text-[10px] font-medium text-amber-600 bg-amber-100 dark:text-amber-400 dark:bg-amber-900/30 px-1.5 py-0.5 rounded">Pending</span>
                         )}
                       </div>
                     </div>
