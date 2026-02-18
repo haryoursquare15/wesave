@@ -176,7 +176,25 @@ export default function GroupDetail() {
             .single();
 
           if (membership && !membership.tokenization_completed) {
-            setNeedsTokenization(true);
+            // Check if user already has an active card — if so, auto-activate
+            const { data: existingCard } = await supabase.functions.invoke("card-tokenization", {
+              body: { action: "get_card" },
+            });
+
+            if (existingCard?.success && existingCard?.card && !existingCard.card.needs_recovery) {
+              // User has a valid card — call initiate to mark membership as tokenized
+              const { data: initiateResult } = await supabase.functions.invoke("card-tokenization", {
+                body: { action: "initiate", groupId },
+              });
+              if (initiateResult?.success) {
+                // Membership is now marked as tokenized, no gate needed
+                setNeedsTokenization(false);
+              } else {
+                setNeedsTokenization(true);
+              }
+            } else {
+              setNeedsTokenization(true);
+            }
           }
         }
 
