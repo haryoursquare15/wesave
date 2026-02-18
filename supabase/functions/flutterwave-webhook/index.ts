@@ -330,13 +330,34 @@ serve(async (req) => {
 
           console.log(`Processing re-tokenization webhook for user ${userId}`);
 
+          // Get card token - webhook may not include it, so fetch from Flutterwave API
+          let cardToken = data.card?.token;
+          let cardData = data.card;
+          
+          if (!cardToken && data.id) {
+            console.log('No card token in webhook payload, fetching from Flutterwave API...');
+            try {
+              const verifyResp = await fetch(`https://api.flutterwave.com/v3/transactions/${data.id}/verify`, {
+                headers: { 'Authorization': `Bearer ${FLUTTERWAVE_SECRET_KEY}` },
+              });
+              const verifyResult = await verifyResp.json();
+              if (verifyResult.status === 'success' && verifyResult.data?.card?.token) {
+                cardToken = verifyResult.data.card.token;
+                cardData = verifyResult.data.card;
+                console.log('Card token retrieved from Flutterwave API');
+              }
+            } catch (fetchErr) {
+              console.error('Failed to fetch card token from API:', fetchErr);
+            }
+          }
+
           // Save card token if available
-          if (data.card?.token) {
+          if (cardToken) {
             const { data: existingToken } = await supabase
               .from('card_tokens')
               .select('id')
               .eq('user_id', userId)
-              .eq('card_token', data.card.token)
+              .eq('card_token', cardToken)
               .single();
 
             if (!existingToken) {
@@ -349,11 +370,11 @@ serve(async (req) => {
 
               await supabase.from('card_tokens').insert({
                 user_id: userId,
-                card_token: data.card.token,
-                card_last4: data.card.last_4digits,
-                card_type: data.card.type,
-                card_expiry: data.card.expiry,
-                first_6digits: data.card.first_6digits,
+                card_token: cardToken,
+                card_last4: cardData?.last_4digits || data.card?.last_4digits,
+                card_type: cardData?.type || data.card?.type,
+                card_expiry: cardData?.expiry || data.card?.expiry,
+                first_6digits: cardData?.first_6digits || data.card?.first_6digits,
                 charge_email: data.customer?.email || null,
                 is_active: true,
                 card_status: 'active',
@@ -361,6 +382,8 @@ serve(async (req) => {
               });
               console.log(`Re-tokenization: new card saved for user ${userId}`);
             }
+          } else {
+            console.error('Could not obtain card token for re-tokenization, user must verify from profile');
           }
 
           // Credit the auth charge to wallet
