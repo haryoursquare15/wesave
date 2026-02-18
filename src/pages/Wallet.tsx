@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { WithdrawalBankForm } from "@/components/settings/WithdrawalBankForm";
+import { getUserFriendlyError } from "@/lib/errorMessages";
 
 interface Transaction {
   id: string;
@@ -234,8 +235,7 @@ export default function Wallet() {
       // The actual withdrawal will be processed after 2FA verification
       navigate("/settings/security?action=withdraw&amount=" + amount);
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : "Failed to initiate withdrawal";
-      toast.error(errorMessage);
+      toast.error(getUserFriendlyError(err));
     } finally {
       setWithdrawing(false);
     }
@@ -263,8 +263,7 @@ export default function Wallet() {
         toast.error(data.error || "Failed to initiate payment");
       }
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : "Failed to initiate payment";
-      toast.error(errorMessage);
+      toast.error(getUserFriendlyError(err));
     } finally {
       setFunding(false);
     }

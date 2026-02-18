@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { Settings, ChevronRight, Shield, CreditCard, Bell, HelpCircle, LogOut, Award, User, Check, X, Pencil, Camera } from "lucide-react";
 import { CardManagement } from "@/components/CardManagement";
+import { BankAccountManagement } from "@/components/BankAccountManagement";
 import { Link, useNavigate } from "react-router-dom";
 import { UserBadge } from "@/components/UserBadge";
 import { StarRating } from "@/components/StarRating";
@@ -349,6 +350,15 @@ export default function Profile() {
           transition={{ delay: 0.15 }}
         >
           <CardManagement />
+        </motion.div>
+
+        {/* Bank Account Management */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.18 }}
+        >
+          <BankAccountManagement />
         </motion.div>
 
         {/* Badge Progress */}

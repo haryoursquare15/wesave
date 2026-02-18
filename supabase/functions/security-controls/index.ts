@@ -766,6 +766,128 @@ serve(async (req) => {
         break;
       }
 
+      case 'send_bank_change_otp': {
+        if (!user) throw new Error('Authentication required');
+
+        // Get user email
+        const { data: userProfile } = await supabase
+          .from('profiles')
+          .select('email')
+          .eq('id', user.id)
+          .single();
+
+        const userEmail = userProfile?.email || user.email;
+        if (!userEmail) throw new Error('No email address found for your account');
+
+        // Check cooldown on bank changes
+        const { data: profileCheck } = await supabase
+          .from('profiles')
+          .select('bank_details_changed_at')
+          .eq('id', user.id)
+          .single();
+
+        if (profileCheck?.bank_details_changed_at) {
+          const changedAt = new Date(profileCheck.bank_details_changed_at).getTime();
+          const hoursSince = (Date.now() - changedAt) / (1000 * 60 * 60);
+          if (hoursSince < 24) {
+            throw new Error(`Bank details can only be changed once every 24 hours. Please try again in ${Math.ceil(24 - hoursSince)} hours.`);
+          }
+        }
+
+        // Rate limit: max 3 OTPs per hour
+        const { count: recentOtps } = await supabase
+          .from('bank_change_otps')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .gte('created_at', new Date(Date.now() - 60 * 60 * 1000).toISOString());
+
+        if ((recentOtps || 0) >= 3) {
+          throw new Error('Too many verification attempts. Please wait and try again later.');
+        }
+
+        // Generate 6-digit OTP
+        const otpDigits = crypto.getRandomValues(new Uint8Array(3));
+        const otpCode = ((otpDigits[0] * 65536 + otpDigits[1] * 256 + otpDigits[2]) % 900000 + 100000).toString();
+
+        // Store OTP
+        await supabase.from('bank_change_otps').insert({
+          user_id: user.id,
+          otp_code: otpCode,
+          email: userEmail,
+        });
+
+        // Send email via Resend
+        const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
+        if (!RESEND_API_KEY) {
+          throw new Error('Email service not configured');
+        }
+
+        const emailRes = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${RESEND_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            from: 'WeSave <onboarding@resend.dev>',
+            to: [userEmail],
+            subject: 'WeSave — Bank Change Verification Code',
+            html: `
+              <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 20px;">
+                <h2 style="color: #1a1a1a;">Bank Detail Change Verification</h2>
+                <p>You requested to change your bank details on WeSave. Use the code below to verify this action:</p>
+                <div style="background: #f5f5f5; border-radius: 8px; padding: 20px; text-align: center; margin: 20px 0;">
+                  <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #1a1a1a;">${otpCode}</span>
+                </div>
+                <p style="color: #666; font-size: 14px;">This code expires in 5 minutes. If you didn't request this, please ignore this email and secure your account.</p>
+                <p style="color: #999; font-size: 12px; margin-top: 30px;">— WeSave Team</p>
+              </div>
+            `,
+          }),
+        });
+
+        if (!emailRes.ok) {
+          const emailError = await emailRes.text();
+          console.error('Resend email error:', emailError);
+          throw new Error('Failed to send verification email');
+        }
+
+        result = { success: true, message: 'Verification code sent to your email' };
+        break;
+      }
+
+      case 'verify_bank_change_otp': {
+        if (!user) throw new Error('Authentication required');
+
+        const { otp_code } = params;
+        if (!otp_code || otp_code.length !== 6) throw new Error('Invalid verification code');
+
+        // Find valid OTP
+        const { data: otpRecord } = await supabase
+          .from('bank_change_otps')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('otp_code', otp_code)
+          .eq('verified', false)
+          .gte('expires_at', new Date().toISOString())
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+
+        if (!otpRecord) {
+          throw new Error('Invalid or expired verification code. Please request a new one.');
+        }
+
+        // Mark as verified
+        await supabase
+          .from('bank_change_otps')
+          .update({ verified: true })
+          .eq('id', otpRecord.id);
+
+        result = { success: true };
+        break;
+      }
+
       default:
         throw new Error(`Unknown action: ${action}`);
     }
@@ -777,9 +899,23 @@ serve(async (req) => {
   } catch (error: unknown) {
     console.error('Security error:', error);
     
-    let userMessage = 'An error occurred';
+    let userMessage = 'Something went wrong. Please try again or contact support.';
     if (error instanceof Error) {
-      userMessage = error.message;
+      const msg = error.message.toLowerCase();
+      if (msg.includes('authentication required'))
+        userMessage = 'Your session has expired. Please log in again.';
+      else if (msg.includes('too many'))
+        userMessage = error.message;
+      else if (msg.includes('invalid') || msg.includes('expired'))
+        userMessage = error.message;
+      else if (msg.includes('cooldown') || msg.includes('24 hours'))
+        userMessage = error.message;
+      else if (msg.includes('email service'))
+        userMessage = 'We could not send the verification email. Please try again later.';
+      else if (msg.includes('not found'))
+        userMessage = error.message;
+      else
+        userMessage = error.message;
     }
     
     return new Response(JSON.stringify({
