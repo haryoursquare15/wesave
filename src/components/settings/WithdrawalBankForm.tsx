@@ -1,12 +1,11 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Building2, Check, AlertTriangle, Loader2, CheckCircle, Mail, Clock } from "lucide-react";
+import { Building2, Check, AlertTriangle, Loader2, CheckCircle, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -25,7 +24,7 @@ interface ValidationResult {
   verified: boolean;
 }
 
-type FormStep = "bank_details" | "otp_verify";
+type FormStep = "bank_details";
 
 export function WithdrawalBankForm({ open, onOpenChange, onComplete }: WithdrawalBankFormProps) {
   const { user, profile, refreshProfile } = useAuth();
@@ -36,9 +35,6 @@ export function WithdrawalBankForm({ open, onOpenChange, onComplete }: Withdrawa
   const [validating, setValidating] = useState(false);
   const [validated, setValidated] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [otpCode, setOtpCode] = useState("");
-  const [sendingOtp, setSendingOtp] = useState(false);
-  const [otpSent, setOtpSent] = useState(false);
   const [cooldownBlocked, setCooldownBlocked] = useState(false);
   const [cooldownHours, setCooldownHours] = useState<number | null>(null);
 
@@ -69,8 +65,6 @@ export function WithdrawalBankForm({ open, onOpenChange, onComplete }: Withdrawa
       setAccountName("");
       setValidated(false);
       setStep("bank_details");
-      setOtpCode("");
-      setOtpSent(false);
     }
   }, [open, profile]);
 
@@ -127,29 +121,6 @@ export function WithdrawalBankForm({ open, onOpenChange, onComplete }: Withdrawa
     }
   }, [accountNumber, debouncedAccountNumber]);
 
-  const handleSendOtp = async () => {
-    if (!user || !validated) return;
-
-    setSendingOtp(true);
-    try {
-      const response = await supabase.functions.invoke("security-controls", {
-        body: { action: "send_bank_change_otp" },
-      });
-
-      if (response.error) throw new Error(response.error.message);
-      if (!response.data?.success) throw new Error(response.data?.error || "Failed to send OTP");
-
-      setOtpSent(true);
-      setStep("otp_verify");
-      toast.success("Verification code sent to your email");
-    } catch (err) {
-      console.error("OTP send error:", err);
-      toast.error(getUserFriendlyError(err));
-    } finally {
-      setSendingOtp(false);
-    }
-  };
-
   const handleSubmit = async () => {
     if (!user) {
       toast.error("Please sign in first");
@@ -161,24 +132,8 @@ export function WithdrawalBankForm({ open, onOpenChange, onComplete }: Withdrawa
       return;
     }
 
-    if (otpCode.length !== 6) {
-      toast.error("Please enter the 6-digit verification code");
-      return;
-    }
-
     setLoading(true);
     try {
-      // Verify OTP first
-      const otpResponse = await supabase.functions.invoke("security-controls", {
-        body: {
-          action: "verify_bank_change_otp",
-          otp_code: otpCode,
-        },
-      });
-
-      if (otpResponse.error) throw new Error(otpResponse.error.message);
-      if (!otpResponse.data?.success) throw new Error(otpResponse.data?.error || "Invalid verification code");
-
       // Update bank details
       const { error } = await supabase
         .from("profiles")
@@ -190,11 +145,6 @@ export function WithdrawalBankForm({ open, onOpenChange, onComplete }: Withdrawa
         .eq("id", user.id);
 
       if (error) throw error;
-
-      // Set 24-hour cooldown
-      await supabase.functions.invoke("security-controls", {
-        body: { action: "set_bank_cooldown" },
-      });
 
       await refreshProfile();
       toast.success("Bank details updated successfully. Withdrawals are restricted for 24 hours.");
@@ -217,9 +167,7 @@ export function WithdrawalBankForm({ open, onOpenChange, onComplete }: Withdrawa
             Withdrawal Bank Account
           </DialogTitle>
           <DialogDescription>
-            {step === "bank_details"
-              ? "Set the bank account for receiving payouts"
-              : "Enter the verification code sent to your email"}
+            Set the bank account for receiving payouts
           </DialogDescription>
         </DialogHeader>
 
@@ -239,7 +187,7 @@ export function WithdrawalBankForm({ open, onOpenChange, onComplete }: Withdrawa
               Close
             </Button>
           </div>
-        ) : step === "bank_details" ? (
+        ) : (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -320,67 +268,8 @@ export function WithdrawalBankForm({ open, onOpenChange, onComplete }: Withdrawa
                 Cancel
               </Button>
               <Button
-                onClick={handleSendOtp}
-                disabled={sendingOtp || !bankName || accountNumber.length !== 10 || !validated || validating}
-                className="flex-1"
-              >
-                {sendingOtp ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <>
-                    <Mail className="h-4 w-4 mr-2" />
-                    Verify Email
-                  </>
-                )}
-              </Button>
-            </div>
-          </motion.div>
-        ) : (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="space-y-4"
-          >
-            <div className="p-4 bg-primary/5 rounded-lg border border-primary/10 text-center">
-              <Mail className="h-8 w-8 text-primary mx-auto mb-2" />
-              <p className="text-sm text-foreground font-medium">Check your email</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                We sent a 6-digit code to your registered email address
-              </p>
-            </div>
-
-            <div className="flex justify-center">
-              <InputOTP maxLength={6} value={otpCode} onChange={setOtpCode}>
-                <InputOTPGroup>
-                  <InputOTPSlot index={0} />
-                  <InputOTPSlot index={1} />
-                  <InputOTPSlot index={2} />
-                  <InputOTPSlot index={3} />
-                  <InputOTPSlot index={4} />
-                  <InputOTPSlot index={5} />
-                </InputOTPGroup>
-              </InputOTP>
-            </div>
-
-            <div className="text-center">
-              <Button
-                variant="link"
-                size="sm"
-                onClick={handleSendOtp}
-                disabled={sendingOtp}
-                className="text-xs"
-              >
-                {sendingOtp ? "Sending..." : "Resend Code"}
-              </Button>
-            </div>
-
-            <div className="flex gap-3 pt-2">
-              <Button variant="outline" onClick={() => setStep("bank_details")} className="flex-1">
-                Back
-              </Button>
-              <Button
                 onClick={handleSubmit}
-                disabled={loading || otpCode.length !== 6}
+                disabled={loading || !bankName || accountNumber.length !== 10 || !validated || validating}
                 className="flex-1"
               >
                 {loading ? (
@@ -388,7 +277,7 @@ export function WithdrawalBankForm({ open, onOpenChange, onComplete }: Withdrawa
                 ) : (
                   <>
                     <Check className="h-4 w-4 mr-2" />
-                    Confirm
+                    Save Bank
                   </>
                 )}
               </Button>
