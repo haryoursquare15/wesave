@@ -479,12 +479,6 @@ serve(async (req) => {
           throw new Error('Minimum withdrawal amount is ₦1,100 (₦1,000 + ₦100 processing fee)');
         }
 
-        // Enforce Google auth for withdrawals
-        if (!isGoogleAuthenticated(user)) {
-          result = { success: false, code: 'google_required', error: 'Google sign-in is required for withdrawals' };
-          break;
-        }
-
         if (!token) {
           throw new Error('2FA token is required');
         }
