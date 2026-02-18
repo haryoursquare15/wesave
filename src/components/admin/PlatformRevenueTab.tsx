@@ -24,6 +24,8 @@ import {
   AlertCircle
 } from "lucide-react";
 import { format } from "date-fns";
+import { exportToCSV } from "@/lib/exportUtils";
+import { Download } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -194,6 +196,19 @@ export function PlatformRevenueTab() {
         <Button variant="outline" onClick={handleRefresh}>
           <RefreshCw className="h-4 w-4 mr-2" />
           Refresh Data
+        </Button>
+        <Button variant="outline" disabled={!entries.length} onClick={() => {
+          exportToCSV(entries.map(e => ({
+            Type: e.entry_type,
+            Amount: e.amount,
+            "Balance Before": e.balance_before,
+            "Balance After": e.balance_after,
+            Source: e.source_type || "",
+            Description: e.description || "",
+            Date: format(new Date(e.created_at), "yyyy-MM-dd HH:mm:ss"),
+          })), "platform_ledger");
+        }}>
+          <Download className="h-4 w-4 mr-2" /> Export Ledger
         </Button>
         
         <AlertDialog>

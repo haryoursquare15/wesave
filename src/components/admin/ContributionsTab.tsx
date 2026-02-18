@@ -7,7 +7,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
-import { RefreshCw, CheckCircle, Clock, CreditCard, AlertTriangle, XCircle, Search } from "lucide-react";
+import { RefreshCw, CheckCircle, Clock, CreditCard, AlertTriangle, XCircle, Search, Download } from "lucide-react";
+import { exportToCSV } from "@/lib/exportUtils";
 import { useToast } from "@/hooks/use-toast";
 
 interface ContributionRow {
@@ -164,8 +165,17 @@ export function ContributionsTab() {
                   <SelectItem value="failed">Failed</SelectItem>
                 </SelectContent>
               </Select>
-              <Button variant="outline" size="sm" onClick={fetchData}><RefreshCw className="h-4 w-4" /></Button>
-            </div>
+               <Button variant="outline" size="sm" onClick={fetchData}><RefreshCw className="h-4 w-4" /></Button>
+               <Button variant="outline" size="sm" disabled={!contributions.length} onClick={() => {
+                 exportToCSV(contributions.map(c => ({
+                   "User ID": c.user_id,
+                   Amount: c.amount,
+                   Status: c.status || "",
+                   "Card Status": c.card_charge_status || "",
+                   Date: format(new Date(c.created_at), "yyyy-MM-dd HH:mm:ss"),
+                 })), "contributions");
+               }}><Download className="h-4 w-4" /></Button>
+             </div>
           </div>
         </CardHeader>
         <CardContent>

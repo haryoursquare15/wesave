@@ -14,8 +14,9 @@ import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { 
   Search, ChevronDown, ChevronRight, Users, Wallet, Calendar, 
-  ExternalLink, Pause, Play, Trash2, UserMinus 
+  ExternalLink, Pause, Play, Trash2, UserMinus, Download
 } from "lucide-react";
+import { exportToCSV } from "@/lib/exportUtils";
 
 interface GroupDetailsRowProps {
   groupId: string;
@@ -290,10 +291,25 @@ export function GroupManagementTab() {
               <CardTitle>Group Management</CardTitle>
               <CardDescription>View and manage all thrift groups. Click a row to expand details.</CardDescription>
             </div>
+          <div className="flex items-center gap-2">
             <div className="relative w-full sm:w-72">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input placeholder="Search by name or admin..." className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
+            <Button variant="outline" size="sm" disabled={!filteredGroups.length} onClick={() => {
+              exportToCSV(filteredGroups.map(g => ({
+                Name: g.name,
+                Admin: g.admin_name || "",
+                Status: g.status,
+                Members: g.member_count,
+                Contribution: g.contribution_amount,
+                Period: g.period,
+                Created: g.created_at ? format(new Date(g.created_at), "yyyy-MM-dd") : "",
+              })), "groups");
+            }}>
+              <Download className="h-4 w-4 mr-1" /> Export
+            </Button>
+          </div>
           </div>
         </CardHeader>
         <CardContent>
