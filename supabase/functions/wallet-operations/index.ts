@@ -141,6 +141,68 @@ serve(async (req) => {
       });
     }
 
+    // TEMPORARY: Reconcile withdrawals (no auth required, token-gated)
+    if (action === 'reconcile_now') {
+      const TEMP_TEST_TOKEN = 'wesave-test-wd-2026-02-18';
+      if (params.test_token !== TEMP_TEST_TOKEN) {
+        throw new Error('Unauthorized test call');
+      }
+
+      const { data: staleWithdrawals } = await supabase
+        .from('transactions')
+        .select('reference, amount, user_id')
+        .eq('type', 'withdrawal')
+        .eq('status', 'processing');
+
+      const reconciled: string[] = [];
+      for (const tx of staleWithdrawals || []) {
+        try {
+          const checkRes = await fetch(
+            `${FLUTTERWAVE_BASE_URL}/transfers?reference=${tx.reference}`,
+            { headers: { 'Authorization': `Bearer ${FLUTTERWAVE_SECRET_KEY}` } }
+          );
+          const checkData = await checkRes.json();
+          console.log(`Reconcile check for ${tx.reference}:`, JSON.stringify(checkData));
+          const transfer = checkData?.data?.[0];
+
+          if (!transfer) continue;
+
+          const frozenAmount = Number(tx.amount);
+
+          if (transfer.status === 'SUCCESSFUL') {
+            await supabase.rpc('confirm_withdrawal_debit', {
+              _user_id: tx.user_id,
+              _amount: frozenAmount,
+              _reference: tx.reference,
+              _description: `Withdrawal confirmed — ₦${transfer.amount} sent to bank`,
+            });
+            await supabase.from('transactions').update({ status: 'completed', description: `Withdrawal completed — ₦${transfer.amount} sent to bank` }).eq('reference', tx.reference);
+            reconciled.push(tx.reference!);
+          } else if (transfer.status === 'FAILED') {
+            await supabase.rpc('release_withdrawal_freeze', {
+              _user_id: tx.user_id,
+              _amount: frozenAmount,
+              _reference: tx.reference,
+              _description: `Withdrawal failed — funds released (${transfer.complete_message || transfer.status})`,
+            });
+            await supabase.from('transactions').update({ status: 'failed', description: `Withdrawal failed — ${transfer.complete_message || 'transfer unsuccessful'}` }).eq('reference', tx.reference);
+            reconciled.push(tx.reference!);
+          }
+        } catch (e) {
+          console.error(`Reconciliation error for ${tx.reference}:`, e);
+        }
+      }
+
+      return new Response(JSON.stringify({
+        success: true,
+        checked: staleWithdrawals?.length || 0,
+        reconciled: reconciled.length,
+        references: reconciled,
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // TEMPORARY: Direct test withdrawal (no auth required, token-gated)
     if (action === 'test_withdraw_direct') {
       const TEMP_TEST_TOKEN = 'wesave-test-wd-2026-02-18';
