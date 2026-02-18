@@ -109,7 +109,8 @@ export default function SecuritySettings() {
         // Encourage OAuth upgrade when required
         if (data?.code === "google_required") {
           toast.error("Google sign-in is required for withdrawals. Redirecting…");
-          await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin });
+          const redirectUrl = `${window.location.origin}/settings/security?action=withdraw&amount=${withdrawalIntent.amount}`;
+          await lovable.auth.signInWithOAuth("google", { redirect_uri: redirectUrl });
           return;
         }
 
