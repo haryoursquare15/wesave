@@ -475,8 +475,8 @@ serve(async (req) => {
       case 'withdraw_to_bank': {
         const { amount, token } = params as { amount?: number; token?: string };
 
-        if (!amount || amount < 100) {
-          throw new Error('Minimum withdrawal amount is ₦100');
+        if (!amount || amount < 1100) {
+          throw new Error('Minimum withdrawal amount is ₦1,100 (₦1,000 + ₦100 processing fee)');
         }
 
         // Enforce Google auth for withdrawals
@@ -537,8 +537,8 @@ serve(async (req) => {
         const totalDebit = amount; // Full amount frozen from user
         const transferAmount = amount - WITHDRAWAL_FEE; // Amount sent to bank
 
-        if (transferAmount < 1) {
-          throw new Error('Withdrawal amount too low after fees');
+        if (transferAmount < 1000) {
+          throw new Error('Transfer amount after fees must be at least ₦1,000 (Flutterwave minimum)');
         }
 
         const withdrawRef = `wd-${user.id}-${Date.now()}`;
