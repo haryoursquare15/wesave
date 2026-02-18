@@ -285,9 +285,10 @@ serve(async (req) => {
     // ACTION: GET_CARD — Return user's active card info
     // ========================================
     if (action === 'get_card') {
+      // First try to get a fully active card
       const { data: card } = await supabase
         .from('card_tokens')
-        .select('id, card_last4, card_type, first_6digits, card_expiry, card_status, last_tokenized_at, created_at')
+        .select('id, card_last4, card_type, first_6digits, card_expiry, card_status, card_token, last_tokenized_at, created_at')
         .eq('user_id', user.id)
         .eq('is_active', true)
         .eq('card_status', 'active')
@@ -295,9 +296,143 @@ serve(async (req) => {
         .limit(1)
         .single();
 
+      // Check if there's a placeholder token that needs recovery
+      const needsRecovery = card?.card_token === 'placeholder_needs_verify';
+
+      // Strip card_token from response for security
+      const safeCard = card ? {
+        id: card.id,
+        card_last4: card.card_last4,
+        card_type: card.card_type,
+        first_6digits: card.first_6digits,
+        card_expiry: card.card_expiry,
+        card_status: card.card_status,
+        last_tokenized_at: card.last_tokenized_at,
+        created_at: card.created_at,
+        needs_recovery: needsRecovery,
+      } : null;
+
       return new Response(JSON.stringify({
         success: true,
-        card: card || null,
+        card: safeCard,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // ========================================
+    // ACTION: RECOVER_TOKEN_USER — User-initiated token recovery
+    // ========================================
+    if (action === 'recover_token_user') {
+      const secretKey = Deno.env.get('FLUTTERWAVE_SECRET_KEY');
+      if (!secretKey) throw new Error('Payment service not configured');
+
+      // Find the placeholder token for this user
+      const { data: placeholderToken } = await supabase
+        .from('card_tokens')
+        .select('id, created_at')
+        .eq('user_id', user.id)
+        .eq('card_token', 'placeholder_needs_verify')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (!placeholderToken) {
+        throw new Error('No card token pending recovery');
+      }
+
+      // Find the most recent transaction for this user (retoken- or token- prefixed)
+      // Look for transactions within the last 48 hours
+      const { data: recentTransactions } = await supabase
+        .from('ledger_entries')
+        .select('reference_id, created_at')
+        .eq('user_id', user.id)
+        .in('reference_type', ['card_reauthorization', 'card_authorization'])
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      // Also check wallet transactions for the tx_ref
+      const { data: walletTxns } = await supabase
+        .from('wallet_transactions')
+        .select('transaction_ref, flw_transaction_id, created_at')
+        .eq('user_id', user.id)
+        .in('transaction_type', ['card_authorization', 'card_reauthorization'])
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      // Try to find a Flutterwave transaction ID to verify
+      let flwTransactionId: string | null = null;
+
+      // Check wallet transactions first (most reliable source)
+      if (walletTxns) {
+        for (const txn of walletTxns) {
+          if (txn.flw_transaction_id) {
+            flwTransactionId = txn.flw_transaction_id;
+            break;
+          }
+        }
+      }
+
+      // If we still don't have a transaction ID, try to find via tx_ref pattern
+      if (!flwTransactionId) {
+        // Search for recent retoken transactions in pending_card_charges or similar
+        const { data: pendingCharges } = await supabase
+          .from('pending_card_charges')
+          .select('flw_transaction_id, tx_ref')
+          .eq('user_id', user.id)
+          .not('flw_transaction_id', 'is', null)
+          .order('created_at', { ascending: false })
+          .limit(3);
+
+        if (pendingCharges) {
+          for (const charge of pendingCharges) {
+            if (charge.flw_transaction_id && charge.tx_ref?.startsWith('retoken-')) {
+              flwTransactionId = charge.flw_transaction_id;
+              break;
+            }
+          }
+        }
+      }
+
+      if (!flwTransactionId) {
+        throw new Error('Could not find a recent payment transaction to recover the token from. Please try changing your card instead.');
+      }
+
+      // Verify with Flutterwave
+      const verifyResp = await fetch(`${FLUTTERWAVE_BASE_URL}/transactions/${flwTransactionId}/verify`, {
+        headers: { 'Authorization': `Bearer ${secretKey}` },
+      });
+      const verifyData = await verifyResp.json();
+      console.log('User recover token verify:', JSON.stringify(verifyData));
+
+      if (verifyData.status !== 'success' || verifyData.data?.status !== 'successful') {
+        throw new Error('Transaction verification failed. The original payment may not have completed.');
+      }
+
+      const cardData = verifyData.data.card;
+      if (!cardData?.token) {
+        throw new Error('No card token available from the payment provider. Please try changing your card instead.');
+      }
+
+      // Update the placeholder with the real token
+      const { error: updateError } = await supabase
+        .from('card_tokens')
+        .update({
+          card_token: cardData.token,
+          card_last4: cardData.last_4digits,
+          card_type: cardData.type,
+          card_expiry: cardData.expiry,
+          first_6digits: cardData.first_6digits,
+          last_tokenized_at: new Date().toISOString(),
+        })
+        .eq('id', placeholderToken.id);
+
+      if (updateError) throw new Error('Failed to update card token');
+
+      return new Response(JSON.stringify({
+        success: true,
+        message: 'Card token recovered successfully.',
+        card_last4: cardData.last_4digits,
+        card_type: cardData.type,
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
