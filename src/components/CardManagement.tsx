@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { CreditCard, RefreshCw, Shield, Loader2, CheckCircle } from "lucide-react";
+import { CreditCard, RefreshCw, Shield, Loader2, CheckCircle, AlertTriangle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +16,7 @@ interface CardInfo {
   card_status: string;
   last_tokenized_at: string | null;
   created_at: string;
+  needs_recovery?: boolean;
 }
 
 export function CardManagement() {
@@ -24,6 +25,7 @@ export function CardManagement() {
   const [loading, setLoading] = useState(true);
   const [retokenizing, setRetokenizing] = useState(false);
   const [verifying, setVerifying] = useState(false);
+  const [recovering, setRecovering] = useState(false);
 
   const fetchCard = async () => {
     if (!user) return;
@@ -122,6 +124,25 @@ export function CardManagement() {
     }
   };
 
+  const handleRecoverToken = async () => {
+    setRecovering(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("card-tokenization", {
+        body: { action: "recover_token_user" },
+      });
+
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || "Recovery failed");
+
+      toast.success(`Card token recovered! Card ending ${data.card_last4 || "****"} is now active.`);
+      await fetchCard();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to recover card token");
+    } finally {
+      setRecovering(false);
+    }
+  };
+
   const getMaskedPan = () => {
     if (!card) return null;
     const first6 = card.first_6digits || "••••••";
@@ -206,6 +227,41 @@ export function CardManagement() {
             </div>
           )}
         </div>
+
+        {/* Recovery Warning */}
+        {card.needs_recovery && (
+          <div className="flex items-center gap-2 p-3 bg-warning/10 border border-warning/30 rounded-lg">
+            <AlertTriangle className="h-4 w-4 text-warning shrink-0" />
+            <div className="flex-1">
+              <p className="text-xs font-medium text-warning">Card token needs recovery</p>
+              <p className="text-xs text-muted-foreground">
+                Your card authorization wasn't fully completed. Tap below to recover it.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Recover Token Button */}
+        {card.needs_recovery && (
+          <Button
+            variant="gold"
+            className="w-full"
+            onClick={handleRecoverToken}
+            disabled={recovering}
+          >
+            {recovering ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Recovering...
+              </>
+            ) : (
+              <>
+                <CheckCircle className="h-4 w-4 mr-2" />
+                Recover Token
+              </>
+            )}
+          </Button>
+        )}
 
         {/* Change Card Button */}
         {verifying ? (
