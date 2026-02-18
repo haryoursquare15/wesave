@@ -12,7 +12,7 @@ import { ChangePasswordDialog } from "@/components/security/ChangePasswordDialog
 import { useSecurity } from "@/hooks/useSecurity";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable";
+
 import { toast } from "sonner";
 
 export default function SecuritySettings() {
@@ -106,14 +106,6 @@ export default function SecuritySettings() {
       if (error) throw error;
 
       if (!data?.success) {
-        // Encourage OAuth upgrade when required
-        if (data?.code === "google_required") {
-          toast.error("Google sign-in is required for withdrawals. Redirecting…");
-          const redirectUrl = `${window.location.origin}/settings/security?action=withdraw&amount=${withdrawalIntent.amount}`;
-          await lovable.auth.signInWithOAuth("google", { redirect_uri: redirectUrl });
-          return;
-        }
-
         throw new Error(data?.error || "Withdrawal failed");
       }
 
