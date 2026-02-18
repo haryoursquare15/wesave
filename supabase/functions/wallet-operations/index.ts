@@ -475,8 +475,8 @@ serve(async (req) => {
       case 'withdraw_to_bank': {
         const { amount, token } = params as { amount?: number; token?: string };
 
-        if (!amount || amount < 1100) {
-          throw new Error('Minimum withdrawal amount is ₦1,100 (₦1,000 + ₦100 processing fee)');
+        if (!amount || amount < 1000) {
+          throw new Error('Minimum withdrawal amount is ₦1,000');
         }
 
         if (!token) {
@@ -527,12 +527,19 @@ serve(async (req) => {
           throw new Error('Unable to resolve bank code for your selected bank');
         }
 
-        const WITHDRAWAL_FEE = 100; // ₦100 flat withdrawal fee
-        const totalDebit = amount; // Full amount frozen from user
-        const transferAmount = amount - WITHDRAWAL_FEE; // Amount sent to bank
+        const WITHDRAWAL_FEE = 100; // ₦100 flat transfer fee — passed to user
+        const transferAmount = amount; // Exact amount user receives in bank
+        const totalDebit = amount + WITHDRAWAL_FEE; // Total deducted from wallet
 
-        if (transferAmount < 1000) {
-          throw new Error('Transfer amount after fees must be at least ₦1,000 (Flutterwave minimum)');
+        // Check balance covers amount + fee
+        const { data: walletCheck } = await supabase
+          .from('wallets')
+          .select('available_balance')
+          .eq('user_id', user.id)
+          .single();
+
+        if (!walletCheck || Number(walletCheck.available_balance) < totalDebit) {
+          throw new Error(`Insufficient balance. Withdrawal requires ₦${totalDebit.toLocaleString()} including ₦100 transfer fee.`);
         }
 
         const withdrawRef = `wd-${user.id}-${Date.now()}`;
@@ -549,14 +556,14 @@ serve(async (req) => {
           throw new Error(freezeResult?.error || 'Unable to freeze funds for withdrawal');
         }
 
-        // Create a pending transaction record
+        // Create a pending transaction record (amount = totalDebit so webhook knows full frozen amount)
         await supabase.from('transactions').insert({
           user_id: user.id,
           type: 'withdrawal',
           amount: totalDebit,
           status: 'pending',
           reference: withdrawRef,
-          description: `Withdrawal to bank (₦${WITHDRAWAL_FEE} fee applied)`,
+          description: `Withdrawal of ₦${amount.toLocaleString()} to bank (₦${WITHDRAWAL_FEE} transfer fee)`,
         });
 
         // ── STEP 2: Verify bank account ──
@@ -647,9 +654,10 @@ serve(async (req) => {
         result = {
           success: true,
           reference: withdrawRef,
-          message: `Withdrawal initiated. ₦${transferAmount.toLocaleString()} will be sent to ${verifiedAccountName}. You'll be notified when complete.`,
-          amount_sent: transferAmount,
-          fee: WITHDRAWAL_FEE,
+          message: `Withdrawal of ₦${transferAmount.toLocaleString()} initiated. ₦${WITHDRAWAL_FEE} transfer fee applied. Total debited: ₦${totalDebit.toLocaleString()}.`,
+          withdrawalAmount: transferAmount,
+          transferFee: WITHDRAWAL_FEE,
+          totalDebited: totalDebit,
           status: 'processing',
           verified_account_name: verifiedAccountName,
         };

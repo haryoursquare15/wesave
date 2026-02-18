@@ -24,7 +24,7 @@ export default function SecuritySettings() {
   const withdrawalIntent = useMemo(() => {
     const action = searchParams.get("action");
     const amount = Number(searchParams.get("amount") || 0);
-    if (action !== "withdraw" || !amount || amount <= 0) return null;
+    if (action !== "withdraw" || !amount || amount < 1000) return null;
     return { amount };
   }, [searchParams]);
 

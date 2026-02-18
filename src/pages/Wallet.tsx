@@ -220,12 +220,13 @@ export default function Wallet() {
 
   const handleWithdraw = async () => {
     const amount = Number(withdrawAmount);
-    if (!amount || amount < 1100) {
-      toast.error("Minimum withdrawal amount is ₦1,100 (₦1,000 + ₦100 fee)");
+    if (!amount || amount < 1000) {
+      toast.error("Minimum withdrawal amount is ₦1,000");
       return;
     }
-    if (amount > balance) {
-      toast.error("Insufficient balance");
+    const totalDebit = amount + 100;
+    if (totalDebit > balance) {
+      toast.error(`Insufficient balance. You need ₦${totalDebit.toLocaleString()} (₦${amount.toLocaleString()} + ₦100 transfer fee)`);
       return;
     }
 
@@ -565,22 +566,40 @@ export default function Wallet() {
             </button>
 
             <div className="space-y-2">
-              <Label htmlFor="withdrawAmount">Amount (₦)</Label>
+              <Label htmlFor="withdrawAmount">Amount to receive (₦)</Label>
               <Input
                 id="withdrawAmount"
                 type="number"
                 placeholder="Enter amount"
                 value={withdrawAmount}
                 onChange={(e) => setWithdrawAmount(e.target.value)}
-                min={1100}
-                max={balance}
+                min={1000}
+                max={balance - 100}
               />
-              <p className="text-xs text-muted-foreground">Minimum: ₦1,100 • 2FA required</p>
-              <p className="text-xs text-muted-foreground mt-1">A ₦100 withdrawal fee applies. Flutterwave requires ₦1,000 minimum transfer.</p>
+              <p className="text-xs text-muted-foreground">Minimum: ₦1,000 • 2FA required</p>
             </div>
+
+            {/* Fee breakdown */}
+            {withdrawAmount && Number(withdrawAmount) >= 1000 && (
+              <div className="p-3 rounded-lg bg-muted space-y-1">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Withdrawal Amount</span>
+                  <span className="text-foreground">₦{formatAmount(Number(withdrawAmount))}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Transfer Fee</span>
+                  <span className="text-foreground">₦100</span>
+                </div>
+                <div className="border-t border-border pt-1 flex justify-between text-sm font-semibold">
+                  <span className="text-foreground">Total Deduction</span>
+                  <span className="text-foreground">₦{formatAmount(Number(withdrawAmount) + 100)}</span>
+                </div>
+              </div>
+            )}
+
             <Button 
               onClick={handleWithdraw} 
-              disabled={withdrawing || !withdrawAmount || Number(withdrawAmount) > balance}
+              disabled={withdrawing || !withdrawAmount || (Number(withdrawAmount) + 100) > balance}
               className="w-full"
             >
               {withdrawing ? (
