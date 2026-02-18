@@ -20,10 +20,12 @@ interface LedgerWithdrawal {
   created_at: string;
 }
 
+type WithdrawalFilter = "all" | "freeze" | "unfreeze" | "debit";
+
 export function WithdrawalsTab() {
   const [withdrawals, setWithdrawals] = useState<LedgerWithdrawal[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<WithdrawalFilter>("all");
 
   const fetchWithdrawals = async () => {
     setLoading(true);
@@ -31,7 +33,7 @@ export function WithdrawalsTab() {
       let query = supabase
         .from("ledger_entries")
         .select("id, user_id, amount, entry_type, description, reference_type, reference_id, created_at")
-        .eq("reference_type", "withdrawal")
+        .in("reference_type", ["withdrawal", "withdrawal_reversal"])
         .order("created_at", { ascending: false })
         .limit(100);
 
@@ -53,11 +55,12 @@ export function WithdrawalsTab() {
 
   const totalAmount = withdrawals.reduce((sum, w) => sum + Math.abs(w.amount), 0);
 
-  const getEntryBadge = (entryType: string) => {
+  const getEntryBadge = (entryType: string, refType: string) => {
+    if (refType === "withdrawal_reversal") return <Badge variant="outline" className="text-warning border-warning/50"><RefreshCw className="h-3 w-3 mr-1" />Reversed</Badge>;
     switch (entryType) {
-      case "debit": return <Badge className="bg-success/10 text-success border-success/20"><CheckCircle className="h-3 w-3 mr-1" />Processed</Badge>;
-      case "pending": return <Badge variant="outline" className="text-warning border-warning/50"><Clock className="h-3 w-3 mr-1" />Processing</Badge>;
-      case "failed": return <Badge variant="destructive"><XCircle className="h-3 w-3 mr-1" />Failed</Badge>;
+      case "debit": return <Badge className="bg-success/10 text-success border-success/20"><CheckCircle className="h-3 w-3 mr-1" />Completed</Badge>;
+      case "freeze": return <Badge variant="outline" className="text-warning border-warning/50"><Clock className="h-3 w-3 mr-1" />Processing</Badge>;
+      case "unfreeze": return <Badge variant="destructive"><XCircle className="h-3 w-3 mr-1" />Failed/Released</Badge>;
       default: return <Badge variant="secondary">{entryType}</Badge>;
     }
   };
@@ -68,7 +71,7 @@ export function WithdrawalsTab() {
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <Card><CardContent className="pt-4 text-center"><div className="text-2xl font-bold">{withdrawals.length}</div><div className="text-xs text-muted-foreground">Total Withdrawals</div></CardContent></Card>
         <Card><CardContent className="pt-4 text-center"><div className="text-2xl font-bold">₦{totalAmount.toLocaleString()}</div><div className="text-xs text-muted-foreground">Total Volume</div></CardContent></Card>
-        <Card><CardContent className="pt-4 text-center"><div className="text-2xl font-bold text-warning">{withdrawals.filter(w => w.entry_type === "pending").length}</div><div className="text-xs text-muted-foreground">Processing</div></CardContent></Card>
+        <Card><CardContent className="pt-4 text-center"><div className="text-2xl font-bold text-warning">{withdrawals.filter(w => w.entry_type === "freeze").length}</div><div className="text-xs text-muted-foreground">Processing</div></CardContent></Card>
       </div>
 
       <Card>
@@ -79,13 +82,13 @@ export function WithdrawalsTab() {
               <CardDescription>All withdrawal entries from the ledger</CardDescription>
             </div>
             <div className="flex gap-2">
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as WithdrawalFilter)}>
                 <SelectTrigger className="w-36"><SelectValue placeholder="Filter" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All</SelectItem>
-                  <SelectItem value="debit">Processed</SelectItem>
-                  <SelectItem value="pending">Processing</SelectItem>
-                  <SelectItem value="failed">Failed</SelectItem>
+                  <SelectItem value="debit">Completed</SelectItem>
+                  <SelectItem value="freeze">Processing</SelectItem>
+                  <SelectItem value="unfreeze">Failed/Released</SelectItem>
                 </SelectContent>
               </Select>
               <Button variant="outline" size="sm" onClick={fetchWithdrawals}><RefreshCw className="h-4 w-4" /></Button>
@@ -113,7 +116,7 @@ export function WithdrawalsTab() {
                     <TableRow key={w.id}>
                       <TableCell className="font-mono text-xs">{w.user_id.slice(0, 8)}...</TableCell>
                       <TableCell className="font-medium">₦{Math.abs(w.amount).toLocaleString()}</TableCell>
-                      <TableCell>{getEntryBadge(w.entry_type)}</TableCell>
+                      <TableCell>{getEntryBadge(w.entry_type, w.reference_type)}</TableCell>
                       <TableCell className="max-w-[200px] truncate text-xs text-muted-foreground">{w.description || "—"}</TableCell>
                       <TableCell className="font-mono text-xs">{w.reference_id?.slice(0, 12) || "—"}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{format(new Date(w.created_at), "MMM d, HH:mm")}</TableCell>
