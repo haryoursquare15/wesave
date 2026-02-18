@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { CreditCard, Shield, CheckCircle, Loader2, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -6,8 +6,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-
-// FlutterwaveCheckout type declared in RecurringTestDashboard.tsx
 
 interface TokenizationGateProps {
   groupId: string;
@@ -24,9 +22,30 @@ export function TokenizationGate({
   period,
   onComplete,
 }: TokenizationGateProps) {
-  const [step, setStep] = useState<"terms" | "tokenize" | "verifying" | "success">("terms");
+  const [step, setStep] = useState<"loading" | "terms" | "tokenize" | "verifying" | "success">("loading");
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [hasExistingCard, setHasExistingCard] = useState(false);
+  const [existingCardLast4, setExistingCardLast4] = useState<string | null>(null);
+
+  // Check on mount if user already has an active card token
+  useEffect(() => {
+    const checkExistingToken = async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke("card-tokenization", {
+          body: { action: "get_card" },
+        });
+        if (!error && data?.success && data?.card && !data.card.needs_recovery) {
+          setHasExistingCard(true);
+          setExistingCardLast4(data.card.card_last4);
+        }
+      } catch {
+        // Ignore — will proceed with normal flow
+      }
+      setStep("terms");
+    };
+    checkExistingToken();
+  }, []);
 
   const loadFlutterwaveScript = (): Promise<void> => {
     return new Promise((resolve, reject) => {
@@ -40,6 +59,30 @@ export function TokenizationGate({
       script.onerror = () => reject(new Error("Failed to load payment script"));
       document.head.appendChild(script);
     });
+  };
+
+  const handleAcceptTermsOnly = async () => {
+    // User already has a card — just accept terms and activate group
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("card-tokenization", {
+        body: { action: "initiate", groupId },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || "Failed to activate group");
+
+      if (data.already_tokenized) {
+        toast.success("Existing card found — group activated!");
+      } else {
+        toast.success("Group activated successfully!");
+      }
+      setStep("success");
+      setTimeout(() => onComplete(), 1200);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to activate group");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleAcceptTerms = () => {
@@ -56,16 +99,13 @@ export function TokenizationGate({
       if (error) throw error;
       if (!data?.success) throw new Error(data?.error || "Failed to initiate tokenization");
 
-      // If user already has a valid token
       if (data.already_tokenized) {
         toast.success("Existing card found — group activated!");
         onComplete();
         return;
       }
 
-      // Load Flutterwave checkout
       await loadFlutterwaveScript();
-
       const config = data.payment_config;
 
       window.FlutterwaveCheckout?.({
@@ -117,6 +157,15 @@ export function TokenizationGate({
         animate={{ opacity: 1, y: 0 }}
         className="w-full max-w-md"
       >
+        {step === "loading" && (
+          <Card>
+            <CardContent className="pt-8 pb-8 text-center">
+              <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto mb-4" />
+              <p className="text-muted-foreground text-sm">Checking card status...</p>
+            </CardContent>
+          </Card>
+        )}
+
         {step === "terms" && (
           <Card>
             <CardHeader className="text-center">
@@ -127,6 +176,12 @@ export function TokenizationGate({
               <CardDescription>
                 Please review and accept the terms before joining <span className="font-semibold text-foreground">{groupName}</span>
               </CardDescription>
+              {hasExistingCard && (
+                <div className="mt-2 flex items-center justify-center gap-2 text-sm text-success">
+                  <CheckCircle className="h-4 w-4" />
+                  <span>Card ending {existingCardLast4} will be used — no new authorization needed</span>
+                </div>
+              )}
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="p-4 rounded-lg bg-muted/50 space-y-3 text-sm max-h-64 overflow-y-auto">
@@ -166,10 +221,22 @@ export function TokenizationGate({
               <Button
                 variant="hero"
                 className="w-full"
-                disabled={!termsAccepted}
-                onClick={handleAcceptTerms}
+                disabled={!termsAccepted || loading}
+                onClick={hasExistingCard ? handleAcceptTermsOnly : handleAcceptTerms}
               >
-                Continue to Card Authorization
+                {loading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Activating...
+                  </>
+                ) : hasExistingCard ? (
+                  <>
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    Accept & Join Group
+                  </>
+                ) : (
+                  "Continue to Card Authorization"
+                )}
               </Button>
             </CardContent>
           </Card>
@@ -247,7 +314,9 @@ export function TokenizationGate({
               >
                 <CheckCircle className="h-14 w-14 text-success mx-auto mb-4" />
               </motion.div>
-              <h3 className="font-semibold text-lg mb-2">Card Authorized</h3>
+              <h3 className="font-semibold text-lg mb-2">
+                {hasExistingCard ? "Group Activated" : "Card Authorized"}
+              </h3>
               <p className="text-muted-foreground text-sm">
                 Joining group...
               </p>
