@@ -8,7 +8,8 @@
  import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
  import { supabase } from "@/integrations/supabase/client";
  import { format } from "date-fns";
- import { Search, RefreshCw, Eye } from "lucide-react";
+import { Search, RefreshCw, Eye, Download } from "lucide-react";
+import { exportToCSV } from "@/lib/exportUtils";
  import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
  
 import { Database } from "@/integrations/supabase/types";
@@ -107,11 +108,25 @@ type TransactionStatus = Database["public"]["Enums"]["transaction_status"];
              <CardTitle>Transaction Explorer</CardTitle>
              <CardDescription>View and filter all platform transactions</CardDescription>
            </div>
-           <Button variant="outline" size="sm" onClick={fetchTransactions}>
-             <RefreshCw className="h-4 w-4 mr-2" />
-             Refresh
-           </Button>
-         </div>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={fetchTransactions}>
+                <RefreshCw className="h-4 w-4 mr-1" /> Refresh
+              </Button>
+              <Button variant="outline" size="sm" disabled={!filteredTransactions.length} onClick={() => {
+                exportToCSV(filteredTransactions.map(tx => ({
+                  Reference: tx.reference || tx.id,
+                  Type: tx.type,
+                  Amount: tx.amount,
+                  Status: tx.status,
+                  Description: tx.description || "",
+                  Date: format(new Date(tx.created_at), "yyyy-MM-dd HH:mm:ss"),
+                  "User ID": tx.user_id,
+                })), "transactions");
+              }}>
+                <Download className="h-4 w-4 mr-1" /> Export
+              </Button>
+            </div>
+          </div>
        </CardHeader>
        <CardContent>
          {/* Filters */}

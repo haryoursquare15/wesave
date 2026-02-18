@@ -13,7 +13,8 @@ import { Database } from "@/integrations/supabase/types";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
-import { Search, Snowflake, AlertTriangle, Shield, ChevronDown, ChevronRight, Wallet, Users, Trash2, UserX } from "lucide-react";
+import { Search, Snowflake, AlertTriangle, Shield, ChevronDown, ChevronRight, Wallet, Users, Trash2, UserX, Download } from "lucide-react";
+import { exportToCSV } from "@/lib/exportUtils";
 import { adminActionReasonSchema, validateInput } from "@/lib/validation";
 
 type AppRole = Database["public"]["Enums"]["app_role"];
@@ -302,9 +303,24 @@ export function UserManagementTab() {
             <CardTitle>User Management</CardTitle>
             <CardDescription>Search and manage user accounts. Click a row to expand details.</CardDescription>
           </div>
-          <div className="relative w-full sm:w-72">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Search by name, email, username..." className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <div className="flex items-center gap-2">
+            <div className="relative w-full sm:w-72">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input placeholder="Search by name, email, username..." className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} />
+            </div>
+            <Button variant="outline" size="sm" disabled={!filteredUsers.length} onClick={() => {
+              exportToCSV(filteredUsers.map(u => ({
+                Name: u.full_name || "",
+                Username: u.username || "",
+                Email: u.email || "",
+                Tier: u.membership_tier,
+                "Credit Score": u.credit_score || 0,
+                Role: u.role || "none",
+                Joined: u.created_at ? format(new Date(u.created_at), "yyyy-MM-dd") : "",
+              })), "users");
+            }}>
+              <Download className="h-4 w-4 mr-1" /> Export
+            </Button>
           </div>
         </div>
       </CardHeader>

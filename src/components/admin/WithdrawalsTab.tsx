@@ -7,11 +7,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
-import { RefreshCw, ArrowDownToLine, CheckCircle, Clock, XCircle, Loader2 } from "lucide-react";
+import { RefreshCw, ArrowDownToLine, CheckCircle, Clock, XCircle, Download } from "lucide-react";
+import { exportToCSV } from "@/lib/exportUtils";
 
 interface LedgerWithdrawal {
   id: string;
   user_id: string;
+  user_name?: string;
   amount: number;
   entry_type: string;
   description: string | null;
@@ -43,7 +45,18 @@ export function WithdrawalsTab() {
 
       const { data, error } = await query;
       if (error) throw error;
-      setWithdrawals(data || []);
+
+      let entries = data || [];
+
+      // Resolve usernames
+      const userIds = [...new Set(entries.map(e => e.user_id))];
+      if (userIds.length) {
+        const { data: profiles } = await supabase.from("profiles").select("id, full_name, username").in("id", userIds);
+        const profileMap = new Map((profiles || []).map(p => [p.id, p.full_name || p.username || p.id.slice(0, 8)]));
+        entries = entries.map(e => ({ ...e, user_name: profileMap.get(e.user_id) }));
+      }
+
+      setWithdrawals(entries);
     } catch (err) {
       console.error("Error fetching withdrawals:", err);
     } finally {
@@ -65,9 +78,19 @@ export function WithdrawalsTab() {
     }
   };
 
+  const handleExport = () => {
+    exportToCSV(withdrawals.map(w => ({
+      User: w.user_name || w.user_id,
+      Amount: Math.abs(w.amount),
+      Status: w.reference_type === "withdrawal_reversal" ? "Reversed" : w.entry_type === "debit" ? "Completed" : w.entry_type === "freeze" ? "Processing" : "Failed/Released",
+      Description: w.description || "",
+      Reference: w.reference_id || "",
+      Date: format(new Date(w.created_at), "yyyy-MM-dd HH:mm:ss"),
+    })), "withdrawals");
+  };
+
   return (
     <div className="space-y-6">
-      {/* Summary */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <Card><CardContent className="pt-4 text-center"><div className="text-2xl font-bold">{withdrawals.length}</div><div className="text-xs text-muted-foreground">Total Withdrawals</div></CardContent></Card>
         <Card><CardContent className="pt-4 text-center"><div className="text-2xl font-bold">₦{totalAmount.toLocaleString()}</div><div className="text-xs text-muted-foreground">Total Volume</div></CardContent></Card>
@@ -92,6 +115,7 @@ export function WithdrawalsTab() {
                 </SelectContent>
               </Select>
               <Button variant="outline" size="sm" onClick={fetchWithdrawals}><RefreshCw className="h-4 w-4" /></Button>
+              <Button variant="outline" size="sm" onClick={handleExport} disabled={!withdrawals.length}><Download className="h-4 w-4" /></Button>
             </div>
           </div>
         </CardHeader>
@@ -114,7 +138,7 @@ export function WithdrawalsTab() {
                 <TableBody>
                   {withdrawals.map(w => (
                     <TableRow key={w.id}>
-                      <TableCell className="font-mono text-xs">{w.user_id.slice(0, 8)}...</TableCell>
+                      <TableCell className="font-medium text-sm">{w.user_name || w.user_id.slice(0, 8) + "..."}</TableCell>
                       <TableCell className="font-medium">₦{Math.abs(w.amount).toLocaleString()}</TableCell>
                       <TableCell>{getEntryBadge(w.entry_type, w.reference_type)}</TableCell>
                       <TableCell className="max-w-[200px] truncate text-xs text-muted-foreground">{w.description || "—"}</TableCell>
