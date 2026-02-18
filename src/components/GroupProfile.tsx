@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { 
   Users, Calendar, Coins, Crown, Clock, 
-  TrendingUp, CheckCircle, AlertCircle, Wallet, Trophy
+  TrendingUp, CheckCircle, AlertCircle, Wallet, Trophy, XCircle
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -401,7 +401,13 @@ export function GroupProfile({ groupId, group, memberCount }: GroupProfileProps)
                               <span className="font-semibold text-sm">
                                 ₦{Number(audit.amount).toLocaleString()}
                               </span>
-                              <CheckCircle className="h-4 w-4 text-success" />
+                              {audit.status === "failed" ? (
+                                <XCircle className="h-4 w-4 text-destructive" />
+                              ) : audit.status === "pending" ? (
+                                <Clock className="h-4 w-4 text-warning" />
+                              ) : (
+                                <CheckCircle className="h-4 w-4 text-success" />
+                              )}
                             </div>
                           </div>
                         ))}
