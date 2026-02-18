@@ -340,55 +340,62 @@ serve(async (req) => {
         throw new Error('No card token pending recovery');
       }
 
-      // Find the most recent transaction for this user (retoken- or token- prefixed)
-      // Look for transactions within the last 48 hours
-      const { data: recentTransactions } = await supabase
-        .from('ledger_entries')
-        .select('reference_id, created_at')
-        .eq('user_id', user.id)
-        .in('reference_type', ['card_reauthorization', 'card_authorization'])
+      // Find the Flutterwave transaction ID from webhook_events
+      // The user_id is encoded in the tx_ref as retoken-{userId8chars}-{timestamp}
+      const userIdPrefix = user.id.slice(0, 8);
+      
+      const { data: webhookEvents } = await supabase
+        .from('webhook_events')
+        .select('payload')
+        .eq('event_type', 'charge.completed')
         .order('created_at', { ascending: false })
-        .limit(5);
+        .limit(20);
 
-      // Also check wallet transactions for the tx_ref
-      const { data: walletTxns } = await supabase
-        .from('wallet_transactions')
-        .select('transaction_ref, flw_transaction_id, created_at')
-        .eq('user_id', user.id)
-        .in('transaction_type', ['card_authorization', 'card_reauthorization'])
-        .order('created_at', { ascending: false })
-        .limit(5);
-
-      // Try to find a Flutterwave transaction ID to verify
       let flwTransactionId: string | null = null;
 
-      // Check wallet transactions first (most reliable source)
-      if (walletTxns) {
-        for (const txn of walletTxns) {
-          if (txn.flw_transaction_id) {
-            flwTransactionId = txn.flw_transaction_id;
-            break;
+      if (webhookEvents) {
+        for (const evt of webhookEvents) {
+          const payload = evt.payload as any;
+          const txRef = payload?.data?.tx_ref || payload?.txRef || '';
+          if (txRef.startsWith(`retoken-${userIdPrefix}`) || txRef.startsWith(`token-${userIdPrefix}`)) {
+            flwTransactionId = String(payload?.data?.id || payload?.id || '');
+            if (flwTransactionId) break;
           }
         }
       }
 
-      // If we still don't have a transaction ID, try to find via tx_ref pattern
+      // Fallback: check ledger_entries for the tx_ref and try to extract from reference
       if (!flwTransactionId) {
-        // Search for recent retoken transactions in pending_card_charges or similar
-        const { data: pendingCharges } = await supabase
-          .from('pending_card_charges')
-          .select('flw_transaction_id, tx_ref')
+        const { data: ledgerEntries } = await supabase
+          .from('ledger_entries')
+          .select('reference_id')
           .eq('user_id', user.id)
-          .not('flw_transaction_id', 'is', null)
+          .in('reference_type', ['card_reauthorization', 'card_authorization'])
           .order('created_at', { ascending: false })
-          .limit(3);
+          .limit(5);
 
-        if (pendingCharges) {
-          for (const charge of pendingCharges) {
-            if (charge.flw_transaction_id && charge.tx_ref?.startsWith('retoken-')) {
-              flwTransactionId = charge.flw_transaction_id;
-              break;
+        if (ledgerEntries?.length) {
+          // Use the tx_ref from ledger to search webhook_events more precisely
+          for (const entry of ledgerEntries) {
+            if (!entry.reference_id) continue;
+            const { data: matchedEvents } = await supabase
+              .from('webhook_events')
+              .select('payload')
+              .eq('event_type', 'charge.completed')
+              .order('created_at', { ascending: false })
+              .limit(50);
+
+            if (matchedEvents) {
+              for (const evt of matchedEvents) {
+                const payload = evt.payload as any;
+                const txRef = payload?.data?.tx_ref || '';
+                if (txRef === entry.reference_id) {
+                  flwTransactionId = String(payload?.data?.id || '');
+                  break;
+                }
+              }
             }
+            if (flwTransactionId) break;
           }
         }
       }
