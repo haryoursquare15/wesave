@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { 
   Search, ChevronDown, ChevronRight, Users, Wallet, Calendar, 
-  ExternalLink, Pause, Play, Trash2, UserMinus, Download
+  ExternalLink, Pause, Play, Trash2, UserMinus, Download, Zap, RefreshCw
 } from "lucide-react";
 import { exportToCSV } from "@/lib/exportUtils";
 
@@ -190,10 +190,33 @@ export function GroupManagementTab() {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [actionDialog, setActionDialog] = useState<{ group: any; action: string } | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [triggeringGroup, setTriggeringGroup] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const { groups, loading, refetch } = useAdminGroups();
   const { hasPermission } = useAdminPermissions();
   const { toast } = useToast();
+
+  const handleTriggerAutoContribution = async (groupId: string, groupName: string) => {
+    setTriggeringGroup(groupId);
+    try {
+      const { data, error } = await supabase.functions.invoke("auto-contribution", {
+        body: { force_group_id: groupId },
+      });
+
+      if (error) throw error;
+
+      if (data?.success) {
+        toast({ title: "Auto-Contribution Triggered", description: `Successfully triggered for "${groupName}". ${data.results?.length || 0} group(s) processed.` });
+      } else {
+        toast({ title: "Trigger Failed", description: data?.error || "Unknown error", variant: "destructive" });
+      }
+    } catch (err: any) {
+      console.error("Trigger error:", err);
+      toast({ title: "Error", description: err.message || "Failed to trigger auto-contribution.", variant: "destructive" });
+    } finally {
+      setTriggeringGroup(null);
+    }
+  };
 
   const filteredGroups = groups.filter(group => {
     const searchLower = search.toLowerCase();
@@ -360,6 +383,21 @@ export function GroupManagementTab() {
                             <Button variant="ghost" size="sm" onClick={() => navigate(`/groups/${group.id}`)}>
                               <ExternalLink className="h-4 w-4" />
                             </Button>
+                            {group.status === "active" && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                title="Trigger Auto-Contribution"
+                                disabled={triggeringGroup === group.id}
+                                onClick={() => handleTriggerAutoContribution(group.id, group.name)}
+                              >
+                                {triggeringGroup === group.id ? (
+                                  <RefreshCw className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Zap className="h-4 w-4 text-warning" />
+                                )}
+                              </Button>
+                            )}
                             {getAvailableActions(group.status).map(({ key, label, icon: Icon, variant }) => (
                               <Button
                                 key={key}
