@@ -226,12 +226,13 @@ serve(async (req) => {
           const groupIdPrefix = txParts[2]; // first 8 chars of group_id
 
           // Look up user by prefix match
-          const { data: matchedProfile } = await supabase
+          const { data: matchedProfiles } = await supabase
             .from('profiles')
             .select('id')
-            .like('id', `${userIdPrefix}%`)
-            .single();
+            .gte('id', `${userIdPrefix}-0000-0000-0000-000000000000`)
+            .lt('id', `${userIdPrefix.slice(0, 7)}${String.fromCharCode(userIdPrefix.charCodeAt(7) + 1)}-0000-0000-0000-000000000000`);
 
+          const matchedProfile = matchedProfiles?.[0];
           const userId = meta.user_id || matchedProfile?.id;
           if (!userId) {
             console.error('Could not determine user ID for tokenization tx_ref:', txRef);
@@ -239,11 +240,13 @@ serve(async (req) => {
           }
 
           // Look up group by prefix match
-          const { data: matchedGroup } = await supabase
+          const { data: matchedGroups } = await supabase
             .from('thrift_groups')
             .select('id, contribution_amount')
-            .like('id', `${groupIdPrefix}%`)
-            .single();
+            .gte('id', `${groupIdPrefix}-0000-0000-0000-000000000000`)
+            .lt('id', `${groupIdPrefix.slice(0, 7)}${String.fromCharCode(groupIdPrefix.charCodeAt(7) + 1)}-0000-0000-0000-000000000000`);
+
+          const matchedGroup = matchedGroups?.[0];
 
           const groupId = meta.group_id || matchedGroup?.id;
           if (!groupId) {
@@ -316,12 +319,14 @@ serve(async (req) => {
           const txParts = txRef.split('-');
           const userIdPrefix = txParts[1]; // first 8 chars of user_id
 
-          const { data: matchedProfile } = await supabase
+          // Use RPC or filter with text cast since .like() doesn't work on UUID columns
+          const { data: matchedProfiles } = await supabase
             .from('profiles')
             .select('id')
-            .like('id', `${userIdPrefix}%`)
-            .single();
+            .gte('id', `${userIdPrefix}-0000-0000-0000-000000000000`)
+            .lt('id', `${userIdPrefix.slice(0, 7)}${String.fromCharCode(userIdPrefix.charCodeAt(7) + 1)}-0000-0000-0000-000000000000`);
 
+          const matchedProfile = matchedProfiles?.[0];
           const userId = meta.user_id || matchedProfile?.id;
           if (!userId) {
             console.error('Could not determine user ID for retoken tx_ref:', txRef);
