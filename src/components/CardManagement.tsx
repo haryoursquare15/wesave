@@ -173,7 +173,7 @@ export function CardManagement() {
   if (!card) {
     return (
       <Card className="bg-card border border-border">
-        <CardContent className="p-6">
+        <CardContent className="p-6 space-y-4">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-lg bg-muted/50 flex items-center justify-center">
               <CreditCard className="h-5 w-5 text-muted-foreground" />
@@ -181,10 +181,36 @@ export function CardManagement() {
             <div>
               <h3 className="font-semibold text-foreground">No Card on File</h3>
               <p className="text-xs text-muted-foreground">
-                Join an auto-debit group to authorize a card
+                Add a card to enable auto-debit contributions
               </p>
             </div>
           </div>
+          <Button
+            variant="hero"
+            className="w-full"
+            onClick={handleRetokenize}
+            disabled={retokenizing}
+          >
+            {retokenizing ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Processing...
+              </>
+            ) : verifying ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Verifying...
+              </>
+            ) : (
+              <>
+                <CreditCard className="h-4 w-4 mr-2" />
+                Add Card
+              </>
+            )}
+          </Button>
+          <p className="text-xs text-muted-foreground text-center">
+            A ₦50 authorization charge will be credited to your wallet.
+          </p>
         </CardContent>
       </Card>
     );
