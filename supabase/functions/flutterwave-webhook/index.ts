@@ -16,6 +16,22 @@ function getCorsHeaders(origin: string | null): Record<string, string> {
   };
 }
 
+// Increment a hex prefix for UUID range queries (handles 9->a and f->next digit carry)
+function incrementHexPrefix(prefix: string): string {
+  const chars = prefix.split('');
+  for (let i = chars.length - 1; i >= 0; i--) {
+    const c = chars[i];
+    if (c === 'f') {
+      chars[i] = '0';
+      continue; // carry
+    }
+    chars[i] = c === '9' ? 'a' : String.fromCharCode(c.charCodeAt(0) + 1);
+    return chars.join('');
+  }
+  // All f's — return prefix that's higher than any valid hex
+  return 'g'.repeat(prefix.length);
+}
+
 serve(async (req) => {
   const origin = req.headers.get('origin');
   const corsHeaders = getCorsHeaders(origin);
@@ -230,7 +246,7 @@ serve(async (req) => {
             .from('profiles')
             .select('id')
             .gte('id', `${userIdPrefix}-0000-0000-0000-000000000000`)
-            .lt('id', `${userIdPrefix.slice(0, 7)}${String.fromCharCode(userIdPrefix.charCodeAt(7) + 1)}-0000-0000-0000-000000000000`);
+            .lt('id', `${incrementHexPrefix(userIdPrefix)}-0000-0000-0000-000000000000`);
 
           const matchedProfile = matchedProfiles?.[0];
           const userId = meta.user_id || matchedProfile?.id;
@@ -244,7 +260,7 @@ serve(async (req) => {
             .from('thrift_groups')
             .select('id, contribution_amount')
             .gte('id', `${groupIdPrefix}-0000-0000-0000-000000000000`)
-            .lt('id', `${groupIdPrefix.slice(0, 7)}${String.fromCharCode(groupIdPrefix.charCodeAt(7) + 1)}-0000-0000-0000-000000000000`);
+            .lt('id', `${incrementHexPrefix(groupIdPrefix)}-0000-0000-0000-000000000000`);
 
           const matchedGroup = matchedGroups?.[0];
 
@@ -324,7 +340,7 @@ serve(async (req) => {
             .from('profiles')
             .select('id')
             .gte('id', `${userIdPrefix}-0000-0000-0000-000000000000`)
-            .lt('id', `${userIdPrefix.slice(0, 7)}${String.fromCharCode(userIdPrefix.charCodeAt(7) + 1)}-0000-0000-0000-000000000000`);
+            .lt('id', `${incrementHexPrefix(userIdPrefix)}-0000-0000-0000-000000000000`);
 
           const matchedProfile = matchedProfiles?.[0];
           const userId = meta.user_id || matchedProfile?.id;
