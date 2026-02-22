@@ -116,8 +116,8 @@ export function PendingInvitesNotification() {
             )}
           </div>
 
-          <TabsContent value="all" className="mt-0">
-            <ScrollArea className="max-h-80">
+          <TabsContent value="all" className="mt-0 overflow-hidden">
+            <ScrollArea className="h-80">
               {notificationsLoading ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -156,8 +156,8 @@ export function PendingInvitesNotification() {
             </ScrollArea>
           </TabsContent>
 
-          <TabsContent value="invites" className="mt-0">
-            <ScrollArea className="max-h-80">
+          <TabsContent value="invites" className="mt-0 overflow-hidden">
+            <ScrollArea className="h-80">
               {invitesLoading ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
