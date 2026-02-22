@@ -55,7 +55,7 @@ serve(async (req) => {
         // Mark old pending charges as cancelled (sunsetted)
         if (isTimedOut) {
           await supabase.from('pending_card_charges').update({
-            status: 'cancelled',
+            status: 'failed',
             failure_reason: 'Card recurring charges sunsetted — please fund wallet instead',
             resolved_at: new Date().toISOString(),
             last_checked_at: new Date().toISOString(),
@@ -68,7 +68,7 @@ serve(async (req) => {
         // For recent ones, still try to verify if they have a transaction ID
         if (!charge.flw_transaction_id) {
           await supabase.from('pending_card_charges').update({
-            status: 'cancelled',
+            status: 'failed',
             failure_reason: 'No transaction ID — card charges sunsetted',
             resolved_at: new Date().toISOString(),
             last_checked_at: new Date().toISOString(),
@@ -89,7 +89,7 @@ serve(async (req) => {
             results.push({ tx_ref: charge.tx_ref, status: 'confirmed' });
           } else {
             await supabase.from('pending_card_charges').update({
-              status: 'cancelled',
+              status: 'failed',
               failure_reason: `Legacy charge — ${verifyData.data?.status || 'unknown'}. Card charges sunsetted.`,
               resolved_at: new Date().toISOString(),
               last_checked_at: new Date().toISOString(),
