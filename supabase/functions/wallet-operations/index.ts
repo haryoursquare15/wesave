@@ -651,6 +651,14 @@ serve(async (req) => {
           _source_user_id: user.id,
         });
 
+        // Notify user of withdrawal initiation
+        await supabase.from('user_notifications').insert({
+          user_id: user.id,
+          title: 'Withdrawal Initiated',
+          message: `Your withdrawal of ₦${transferAmount.toLocaleString()} to ${verifiedAccountName} (${bankName}) is being processed. ₦${WITHDRAWAL_FEE} transfer fee applied.`,
+          notification_type: 'withdrawal_initiated',
+        });
+
         result = {
           success: true,
           reference: withdrawRef,
