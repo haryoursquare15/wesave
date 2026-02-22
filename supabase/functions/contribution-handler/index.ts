@@ -62,6 +62,15 @@ serve(async (req) => {
           message_type: 'contribution_status',
         });
 
+        // Notify user of successful contribution
+        await supabase.from('user_notifications').insert({
+          user_id: user.id,
+          title: 'Contribution Successful',
+          message: `Your contribution of ₦${Number(amount).toLocaleString()} has been recorded.`,
+          notification_type: 'contribution_success',
+          group_id: groupId,
+        });
+
         result = {
           ...contribResult,
           payment_source: 'wallet',

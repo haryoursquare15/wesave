@@ -448,6 +448,14 @@ serve(async (req) => {
 
           console.log(`Wallet funded: ${userId}, Amount: ${data.amount}`);
 
+          // Send notification for wallet funding
+          await supabase.from('user_notifications').insert({
+            user_id: userId,
+            title: 'Wallet Funded',
+            message: `Your wallet has been credited with ₦${Number(data.amount).toLocaleString()}.`,
+            notification_type: 'wallet_credited',
+          });
+
           // Save card token if available (for future card fallback)
           if (data.card?.token && userId) {
             const { data: existingToken } = await supabase
@@ -533,6 +541,14 @@ serve(async (req) => {
 
             console.log(`Withdrawal COMPLETED: ${reference}, amount: ${data.amount}`);
 
+            // Notify user of successful withdrawal
+            await supabase.from('user_notifications').insert({
+              user_id: userId,
+              title: 'Withdrawal Completed',
+              message: `Your withdrawal of ₦${Number(data.amount).toLocaleString()} has been sent to your bank account.`,
+              notification_type: 'withdrawal_completed',
+            });
+
           } else {
             // ❌ Release frozen funds back to available
             const { data: releaseResult, error: releaseError } = await supabase.rpc('release_withdrawal_freeze', {
@@ -552,6 +568,14 @@ serve(async (req) => {
             }).eq('reference', reference);
 
             console.log(`Withdrawal FAILED: ${reference}, reason: ${data.complete_message || data.status}`);
+
+            // Notify user of failed withdrawal
+            await supabase.from('user_notifications').insert({
+              user_id: userId,
+              title: 'Withdrawal Failed',
+              message: `Your withdrawal could not be completed. Funds have been returned to your wallet. Reason: ${data.complete_message || 'Transfer unsuccessful'}.`,
+              notification_type: 'withdrawal_failed',
+            });
           }
         }
 
