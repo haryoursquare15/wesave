@@ -64,6 +64,7 @@ interface GroupData {
   contribution_day_of_month: number | null;
   contribution_day_of_week: number | null;
   contribution_hour: number | null;
+  contribution_minute: number | null;
 }
 
 export default function GroupDetail() {
@@ -1083,6 +1084,14 @@ export default function GroupDetail() {
               groupId={group.id}
               group={group}
               memberCount={memberCount}
+              onGroupUpdated={async () => {
+                const { data: updatedGroup } = await supabase
+                  .from("thrift_groups")
+                  .select("*")
+                  .eq("id", group.id)
+                  .single();
+                if (updatedGroup) setGroup(updatedGroup);
+              }}
             />
           </div>
         </TabsContent>
