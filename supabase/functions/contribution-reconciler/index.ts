@@ -22,7 +22,8 @@ serve(async (req) => {
     const { action } = body;
 
     // ================================================================
-    // ACTION: RECONCILE — Called by cron every 3 minutes
+    // ACTION: RECONCILE — Process any remaining legacy pending card charges
+    // Card charges are sunsetted; this only handles already-pending legacy records
     // ================================================================
     if (action === 'reconcile') {
       const flwSecret = Deno.env.get('FLUTTERWAVE_SECRET_KEY') || Deno.env.get('FLUTTERWAVE_TEST_SECRET_KEY');
@@ -32,20 +33,16 @@ serve(async (req) => {
         });
       }
 
-      const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
-      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-
-      // Find pending charges older than 2 minutes
+      // Only process legacy pending charges — no new ones will be created
       const { data: pendingCharges } = await supabase
         .from('pending_card_charges')
         .select('*')
         .eq('status', 'pending')
-        .lt('created_at', twoMinutesAgo)
         .order('created_at', { ascending: true })
         .limit(50);
 
       if (!pendingCharges || pendingCharges.length === 0) {
-        return new Response(JSON.stringify({ success: true, message: 'No pending charges to reconcile', processed: 0 }), {
+        return new Response(JSON.stringify({ success: true, message: 'No legacy pending charges to reconcile', processed: 0 }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
@@ -54,32 +51,33 @@ serve(async (req) => {
       for (const charge of pendingCharges) {
         const ageMs = Date.now() - new Date(charge.created_at).getTime();
         const isTimedOut = ageMs > 24 * 60 * 60 * 1000;
-        const isMaxRetries = charge.retry_count >= charge.max_retries;
 
-        // Mark as unresolved if timed out or max retries
-        if (isTimedOut || isMaxRetries) {
+        // Mark old pending charges as cancelled (sunsetted)
+        if (isTimedOut) {
           await supabase.from('pending_card_charges').update({
-            status: 'unresolved',
-            failure_reason: isTimedOut ? 'Timed out after 24 hours' : `Exceeded max retries (${charge.max_retries})`,
+            status: 'cancelled',
+            failure_reason: 'Card recurring charges sunsetted — please fund wallet instead',
             resolved_at: new Date().toISOString(),
             last_checked_at: new Date().toISOString(),
           }).eq('id', charge.id);
 
-          results.push({ tx_ref: charge.tx_ref, status: 'unresolved' });
+          results.push({ tx_ref: charge.tx_ref, status: 'cancelled_sunset' });
           continue;
         }
 
-        // Skip if no flw_transaction_id
+        // For recent ones, still try to verify if they have a transaction ID
         if (!charge.flw_transaction_id) {
           await supabase.from('pending_card_charges').update({
-            retry_count: charge.retry_count + 1,
+            status: 'cancelled',
+            failure_reason: 'No transaction ID — card charges sunsetted',
+            resolved_at: new Date().toISOString(),
             last_checked_at: new Date().toISOString(),
           }).eq('id', charge.id);
-          results.push({ tx_ref: charge.tx_ref, status: 'skipped_no_txn_id' });
+          results.push({ tx_ref: charge.tx_ref, status: 'cancelled_no_txn' });
           continue;
         }
 
-        // Verify with Flutterwave
+        // Verify with Flutterwave for already-initiated transactions
         try {
           const verifyResp = await fetch(`${FLUTTERWAVE_BASE_URL}/transactions/${charge.flw_transaction_id}/verify`, {
             headers: { 'Authorization': `Bearer ${flwSecret}` },
@@ -87,31 +85,19 @@ serve(async (req) => {
           const verifyData = await verifyResp.json();
 
           if (verifyData.status === 'success' && verifyData.data?.status === 'successful') {
-            // Confirmed! Process the contribution
             await processConfirmedCharge(supabase, charge);
             results.push({ tx_ref: charge.tx_ref, status: 'confirmed' });
-          } else if (verifyData.data?.status === 'failed') {
+          } else {
             await supabase.from('pending_card_charges').update({
-              status: 'failed',
-              failure_reason: verifyData.data?.processor_response || 'Transaction failed',
+              status: 'cancelled',
+              failure_reason: `Legacy charge — ${verifyData.data?.status || 'unknown'}. Card charges sunsetted.`,
               resolved_at: new Date().toISOString(),
               last_checked_at: new Date().toISOString(),
             }).eq('id', charge.id);
-            results.push({ tx_ref: charge.tx_ref, status: 'failed' });
-          } else {
-            // Still pending
-            await supabase.from('pending_card_charges').update({
-              retry_count: charge.retry_count + 1,
-              last_checked_at: new Date().toISOString(),
-            }).eq('id', charge.id);
-            results.push({ tx_ref: charge.tx_ref, status: 'still_pending' });
+            results.push({ tx_ref: charge.tx_ref, status: 'cancelled' });
           }
         } catch (err) {
           console.error(`Verify error for ${charge.tx_ref}:`, err);
-          await supabase.from('pending_card_charges').update({
-            retry_count: charge.retry_count + 1,
-            last_checked_at: new Date().toISOString(),
-          }).eq('id', charge.id);
           results.push({ tx_ref: charge.tx_ref, status: 'verify_error' });
         }
       }
@@ -122,78 +108,7 @@ serve(async (req) => {
     }
 
     // ================================================================
-    // ACTION: WEBHOOK — Called by Flutterwave webhook for contribution charges
-    // ================================================================
-    if (action === 'webhook') {
-      const { tx_ref, flw_ref, transaction_id, status: txStatus } = body;
-
-      if (!tx_ref) throw new Error('Missing tx_ref');
-
-      // Only process card-contrib transactions
-      if (!tx_ref.startsWith('card-contrib-')) {
-        return new Response(JSON.stringify({ success: true, message: 'Not a card contribution' }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      // Find the pending charge
-      const { data: charge } = await supabase
-        .from('pending_card_charges')
-        .select('*')
-        .eq('tx_ref', tx_ref)
-        .single();
-
-      if (!charge) {
-        console.log(`No pending charge found for tx_ref: ${tx_ref}`);
-        return new Response(JSON.stringify({ success: true, message: 'No matching charge' }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      if (charge.status !== 'pending') {
-        return new Response(JSON.stringify({ success: true, message: 'Already processed' }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      // Verify with Flutterwave for security
-      const flwSecret = Deno.env.get('FLUTTERWAVE_SECRET_KEY') || Deno.env.get('FLUTTERWAVE_TEST_SECRET_KEY');
-      if (!flwSecret) throw new Error('No Flutterwave key');
-
-      const verifyResp = await fetch(`${FLUTTERWAVE_BASE_URL}/transactions/${transaction_id || charge.flw_transaction_id}/verify`, {
-        headers: { 'Authorization': `Bearer ${flwSecret}` },
-      });
-      const verifyData = await verifyResp.json();
-
-      if (verifyData.status === 'success' && verifyData.data?.status === 'successful') {
-        // Update flw_transaction_id if we got it from webhook
-        if (transaction_id) {
-          await supabase.from('pending_card_charges').update({
-            flw_transaction_id: transaction_id.toString(),
-            flw_ref: flw_ref || charge.flw_ref,
-          }).eq('id', charge.id);
-          charge.flw_transaction_id = transaction_id.toString();
-        }
-
-        await processConfirmedCharge(supabase, charge);
-        return new Response(JSON.stringify({ success: true, message: 'Contribution confirmed via webhook' }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      } else if (verifyData.data?.status === 'failed') {
-        await supabase.from('pending_card_charges').update({
-          status: 'failed',
-          failure_reason: verifyData.data?.processor_response || 'Transaction failed',
-          resolved_at: new Date().toISOString(),
-        }).eq('id', charge.id);
-      }
-
-      return new Response(JSON.stringify({ success: true, message: 'Webhook processed' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // ================================================================
-    // ACTION: MANUAL_VERIFY — Admin manually verifies a pending charge
+    // ACTION: MANUAL_VERIFY — Admin manually verifies a legacy pending charge
     // ================================================================
     if (action === 'manual_verify') {
       const authHeader = req.headers.get('Authorization');
@@ -255,9 +170,7 @@ serve(async (req) => {
   }
 });
 
-// ========================================================================
-// Process a confirmed card charge — credit wallet, process contribution
-// ========================================================================
+// Process a confirmed legacy card charge — credit wallet, process contribution
 async function processConfirmedCharge(
   supabase: ReturnType<typeof createClient>,
   charge: Record<string, unknown>,
@@ -268,7 +181,7 @@ async function processConfirmedCharge(
   const amount = charge.amount as number;
   const txRef = charge.tx_ref as string;
 
-  // Idempotency: check if already processed
+  // Idempotency check
   const { data: existingContrib } = await supabase
     .from('cycle_contributions')
     .select('id')
@@ -278,7 +191,6 @@ async function processConfirmedCharge(
     .single();
 
   if (existingContrib) {
-    // Already processed, just update pending_card_charges
     await supabase.from('pending_card_charges').update({
       status: 'successful',
       verified_at: new Date().toISOString(),
@@ -292,7 +204,7 @@ async function processConfirmedCharge(
     _user_id: userId,
     _amount: amount,
     _tx_ref: txRef,
-    _description: 'Card charge confirmed — contribution funding',
+    _description: 'Legacy card charge confirmed — contribution funding',
   });
 
   if (creditError || !creditResult?.success) {
@@ -309,35 +221,19 @@ async function processConfirmedCharge(
 
   if (contribError || !contribResult?.success) {
     console.error('Contribution processing failed for confirmed charge:', contribError);
-    // Wallet is credited, contribution failed — acceptable state
     return;
   }
 
-  // Update pending charge status
   await supabase.from('pending_card_charges').update({
     status: 'successful',
     verified_at: new Date().toISOString(),
     resolved_at: new Date().toISOString(),
   }).eq('id', charge.id as string);
 
-  // Record in contribution_retries for audit
-  await supabase.from('contribution_retries').insert({
-    user_id: userId,
-    group_id: groupId,
-    cycle_id: cycleId,
-    contribution_amount: amount,
-    status: 'paid',
-    payment_source: 'card_reconciled',
-    transaction_reference: txRef,
-    retry_count: 1,
-    last_retry_at: new Date().toISOString(),
-  });
-
-  // Chat notification
   await supabase.from('chat_messages').insert({
     group_id: groupId,
     user_id: userId,
-    message: `has contributed ₦${Number(amount).toLocaleString()} to the pool (via card)`,
+    message: `has contributed ₦${Number(amount).toLocaleString()} to the pool (legacy card charge confirmed)`,
     message_type: 'contribution_status',
   });
 }

@@ -35,7 +35,7 @@ serve(async (req) => {
       // Check for active cycle
       const { data: activeCycle } = await supabase
         .from('contribution_cycles')
-        .select('id, cycle_number')
+        .select('id, cycle_number, contribution_deadline')
         .eq('group_id', group.id)
         .eq('status', 'active')
         .single();
@@ -47,7 +47,7 @@ serve(async (req) => {
         const deadline = new Date(activeCycle.contribution_deadline);
         const now = new Date();
         if (now > deadline) {
-          console.log(`Skipping group ${group.name}: cycle ${activeCycle.cycle_number} deadline has passed (${activeCycle.contribution_deadline})`);
+          console.log(`Skipping group ${group.name}: cycle ${activeCycle.cycle_number} deadline has passed`);
           continue;
         }
       }
@@ -91,15 +91,24 @@ serve(async (req) => {
           .limit(1);
 
         if (existingReminder && existingReminder.length > 0) {
-          continue; // Already reminded recently
+          continue;
         }
 
-        // Post reminder to group chat notifying others
+        // Post reminder to group chat — updated messaging for wallet-based system
         await supabase.from('chat_messages').insert({
           group_id: group.id,
           user_id: member.user_id,
-          message: `⏰ ${displayName} has not yet contributed ₦${group.contribution_amount.toLocaleString()} for Cycle ${activeCycle.cycle_number}. Please make your contribution.`,
+          message: `⏰ ${displayName} has not yet contributed ₦${group.contribution_amount.toLocaleString()} for Cycle ${activeCycle.cycle_number}. Please ensure your wallet is funded for auto-debit.`,
           message_type: 'contribution_reminder',
+        });
+
+        // Send wallet funding reminder notification
+        await supabase.from('user_notifications').insert({
+          user_id: member.user_id,
+          title: 'Fund Your Wallet',
+          message: `Your auto-contribution of ₦${group.contribution_amount.toLocaleString()} for ${group.name} is upcoming. Please ensure your wallet is funded.`,
+          notification_type: 'wallet_funding_reminder',
+          group_id: group.id,
         });
 
         notifiedCount++;
