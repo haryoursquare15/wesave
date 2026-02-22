@@ -2,14 +2,18 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { 
   Users, Calendar, Coins, Crown, Clock, 
-  TrendingUp, CheckCircle, AlertCircle, Wallet, Trophy, XCircle
+  TrendingUp, CheckCircle, AlertCircle, Wallet, Trophy, XCircle, Pencil
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { format } from "date-fns";
+import { toast } from "sonner";
 
 interface GroupProfileProps {
   groupId: string;
@@ -27,8 +31,10 @@ interface GroupProfileProps {
     contribution_day_of_month?: number | null;
     contribution_day_of_week?: number | null;
     contribution_hour?: number | null;
+    contribution_minute?: number | null;
   };
   memberCount: number;
+  onGroupUpdated?: () => void;
 }
 
 interface ContributionAudit {
@@ -63,12 +69,19 @@ interface MemberContributionStats {
   contribution_count: number;
 }
 
-export function GroupProfile({ groupId, group, memberCount }: GroupProfileProps) {
+export function GroupProfile({ groupId, group, memberCount, onGroupUpdated }: GroupProfileProps) {
+  const { user } = useAuth();
   const [contributionAudit, setContributionAudit] = useState<ContributionAudit[]>([]);
   const [cycles, setCycles] = useState<CycleInfo[]>([]);
   const [memberStats, setMemberStats] = useState<MemberContributionStats[]>([]);
   const [groupWalletBalance, setGroupWalletBalance] = useState<number>(0);
   const [loading, setLoading] = useState(true);
+  const [editingSchedule, setEditingSchedule] = useState(false);
+  const [editHour, setEditHour] = useState<number>(group.contribution_hour ?? 9);
+  const [editMinute, setEditMinute] = useState<number>(group.contribution_minute ?? 0);
+  const [savingSchedule, setSavingSchedule] = useState(false);
+
+  const isAdmin = group.admin_id === user?.id;
 
   useEffect(() => {
     async function fetchData() {
@@ -158,19 +171,40 @@ export function GroupProfile({ groupId, group, memberCount }: GroupProfileProps)
     return days[day] || "Unknown";
   };
 
-  const formatHour = (hour: number) => {
+  const formatHour = (hour: number, minute?: number | null) => {
     const ampm = hour >= 12 ? "PM" : "AM";
     const h = hour % 12 || 12;
-    return `${h}:00 ${ampm}`;
+    const m = (minute ?? 0).toString().padStart(2, "0");
+    return `${h}:${m} ${ampm}`;
   };
 
   const getScheduleText = () => {
+    const timeStr = formatHour(group.contribution_hour || 9, group.contribution_minute);
     if (group.period === "daily") {
-      return `Daily at ${formatHour(group.contribution_hour || 9)}`;
+      return `Daily at ${timeStr}`;
     } else if (group.period === "weekly") {
-      return `Every ${getDayName(group.contribution_day_of_week || 1)} at ${formatHour(group.contribution_hour || 9)}`;
+      return `Every ${getDayName(group.contribution_day_of_week || 1)} at ${timeStr}`;
     } else {
-      return `Day ${group.contribution_day_of_month || 1} of every month`;
+      return `Day ${group.contribution_day_of_month || 1} of every month at ${timeStr}`;
+    }
+  };
+
+  const saveSchedule = async () => {
+    setSavingSchedule(true);
+    try {
+      const { error } = await supabase
+        .from("thrift_groups")
+        .update({ contribution_hour: editHour, contribution_minute: editMinute })
+        .eq("id", groupId);
+
+      if (error) throw error;
+      toast.success(`Schedule updated to ${formatHour(editHour, editMinute)} WAT`);
+      setEditingSchedule(false);
+      onGroupUpdated?.();
+    } catch (err) {
+      toast.error("Failed to update schedule");
+    } finally {
+      setSavingSchedule(false);
     }
   };
 
@@ -217,11 +251,66 @@ export function GroupProfile({ groupId, group, memberCount }: GroupProfileProps)
 
           {/* Auto-Contribution Schedule */}
           <div className="p-4 rounded-xl bg-primary/5 border border-primary/20">
-            <div className="flex items-center gap-2 mb-2">
-              <Calendar className="h-4 w-4 text-primary" />
-              <span className="font-medium text-sm">Auto-Contribution Schedule</span>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-primary" />
+                <span className="font-medium text-sm">Auto-Contribution Schedule</span>
+              </div>
+              {isAdmin && !editingSchedule && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2"
+                  onClick={() => {
+                    setEditHour(group.contribution_hour ?? 9);
+                    setEditMinute(group.contribution_minute ?? 0);
+                    setEditingSchedule(true);
+                  }}
+                >
+                  <Pencil className="h-3.5 w-3.5 mr-1" />
+                  Edit
+                </Button>
+              )}
             </div>
-            <p className="text-sm text-muted-foreground">{getScheduleText()}</p>
+            {editingSchedule ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Select value={String(editHour)} onValueChange={(v) => setEditHour(Number(v))}>
+                    <SelectTrigger className="w-24 h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 24 }, (_, i) => (
+                        <SelectItem key={i} value={String(i)}>
+                          {(i % 12 || 12).toString()}:00 {i >= 12 ? "PM" : "AM"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <span className="text-sm text-muted-foreground">:</span>
+                  <Select value={String(editMinute)} onValueChange={(v) => setEditMinute(Number(v))}>
+                    <SelectTrigger className="w-20 h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">:00</SelectItem>
+                      <SelectItem value="30">:30</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <span className="text-xs text-muted-foreground">WAT</span>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={saveSchedule} disabled={savingSchedule}>
+                    {savingSchedule ? "Saving..." : "Save"}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setEditingSchedule(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">{getScheduleText()}</p>
+            )}
           </div>
         </CardContent>
       </Card>
