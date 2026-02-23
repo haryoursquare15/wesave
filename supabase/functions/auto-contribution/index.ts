@@ -164,14 +164,7 @@ serve(async (req) => {
 
           if (!rpcError && result?.success) {
             catchupSucceeded++;
-            await supabase.from('contribution_audit').insert({
-              user_id: member.user_id,
-              group_id: group.id,
-              cycle_id: activeCycle.id,
-              amount: group.contribution_amount,
-              contribution_type: 'auto',
-              status: 'completed',
-            });
+            // NOTE: contribution_audit is already inserted by process_contribution_ledger_atomic RPC
             await supabase.from('chat_messages').insert({
               group_id: group.id,
               user_id: member.user_id,
@@ -345,6 +338,7 @@ serve(async (req) => {
         if (rpcError || !result?.success) {
           failCount++;
           
+          // Only insert audit for failures — successes are handled by the RPC
           await supabase.from('contribution_audit').insert({
             user_id: member.user_id,
             group_id: group.id,
