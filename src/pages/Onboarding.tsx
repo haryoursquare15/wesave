@@ -35,6 +35,7 @@ export default function Onboarding() {
   const [isLoading, setIsLoading] = useState(false);
   const [usernameError, setUsernameError] = useState<string | null>(null);
   const [fullNameError, setFullNameError] = useState<string | null>(null);
+  const [bvnError, setBvnError] = useState<string | null>(null);
   const [bankValidating, setBankValidating] = useState(false);
   const [bankValidated, setBankValidated] = useState(false);
   const [bankError, setBankError] = useState<string | null>(null);
@@ -204,6 +205,23 @@ export default function Onboarding() {
     }
   };
 
+  const validateBvn = (bvn: string): boolean => {
+    if (!bvn || bvn.length === 0) {
+      setBvnError("BVN is required for identity verification");
+      return false;
+    }
+    if (bvn.length !== 11) {
+      setBvnError("BVN must be exactly 11 digits");
+      return false;
+    }
+    if (!/^\d{11}$/.test(bvn)) {
+      setBvnError("BVN must contain only digits");
+      return false;
+    }
+    setBvnError(null);
+    return true;
+  };
+
   const handleNext = async () => {
     if (currentStep === 1) {
       if (!validateFullName(formData.fullName)) return;
@@ -212,6 +230,10 @@ export default function Onboarding() {
     if (currentStep === 2) {
       const isValid = await validateUsername(formData.username);
       if (!isValid) return;
+    }
+
+    if (currentStep === 3) {
+      if (!validateBvn(formData.bvn)) return;
     }
 
     if (currentStep < steps.length) {
@@ -415,12 +437,26 @@ export default function Onboarding() {
                 type="text"
                 placeholder="Enter your 11-digit BVN"
                 maxLength={11}
-                className="h-12 text-center text-lg tracking-widest"
+                className={`h-12 text-center text-lg tracking-widest ${bvnError ? 'border-destructive' : formData.bvn.length === 11 ? 'border-success' : ''}`}
                 value={formData.bvn}
-                onChange={(e) =>
-                  setFormData({ ...formData, bvn: e.target.value.replace(/\D/g, "") })
-                }
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, "");
+                  setFormData({ ...formData, bvn: val });
+                  if (bvnError) setBvnError(null);
+                }}
               />
+              {bvnError && (
+                <p className="text-xs text-destructive flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  {bvnError}
+                </p>
+              )}
+              {formData.bvn.length === 11 && !bvnError && (
+                <p className="text-xs text-success flex items-center gap-1">
+                  <CheckCircle2 className="h-3 w-3" />
+                  Valid BVN format
+                </p>
+              )}
               <p className="text-xs text-muted-foreground">
                 Your BVN is encrypted and securely stored. We never share your data.
               </p>
@@ -735,6 +771,7 @@ export default function Onboarding() {
               bankValidating ||
               (currentStep === 1 && !formData.fullName) || 
               (currentStep === 2 && !formData.username) ||
+              (currentStep === 3 && formData.bvn.length !== 11) ||
               (currentStep === 5 && formData.bankName && formData.accountNumber.length === 10 && !bankValidated)
             }
           >
