@@ -178,7 +178,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: 'WeSave <onboarding@resend.dev>',
+        from: 'WeSave <noreply@wesave.ng>',
         to: [profile.email],
         subject,
         html,
