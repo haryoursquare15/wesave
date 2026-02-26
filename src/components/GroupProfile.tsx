@@ -2,14 +2,17 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { 
   Users, Calendar, Coins, Crown, Clock, 
-  TrendingUp, CheckCircle, AlertCircle, Wallet, Trophy, XCircle, Pencil
+  TrendingUp, CheckCircle, AlertCircle, Wallet, Trophy, XCircle, Pencil, Save, X
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { format } from "date-fns";
@@ -82,6 +85,60 @@ export function GroupProfile({ groupId, group, memberCount, onGroupUpdated }: Gr
   const [savingSchedule, setSavingSchedule] = useState(false);
 
   const isAdmin = group.admin_id === user?.id;
+  const canEditSettings = isAdmin && group.status === "pending";
+
+  // Group settings edit state
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [editName, setEditName] = useState(group.name);
+  const [editMaxMembers, setEditMaxMembers] = useState(group.max_members);
+  const [editAmount, setEditAmount] = useState(group.contribution_amount);
+  const [editPeriod, setEditPeriod] = useState<"daily" | "weekly" | "monthly">(group.period as "daily" | "weekly" | "monthly");
+  const [savingSettings, setSavingSettings] = useState(false);
+
+  const openEditDialog = () => {
+    setEditName(group.name);
+    setEditMaxMembers(group.max_members);
+    setEditAmount(group.contribution_amount);
+    setEditPeriod(group.period as "daily" | "weekly" | "monthly");
+    setShowEditDialog(true);
+  };
+
+  const saveGroupSettings = async () => {
+    if (!editName.trim()) {
+      toast.error("Group name is required");
+      return;
+    }
+    if (editMaxMembers < 2 || editMaxMembers > 30) {
+      toast.error("Members must be between 2 and 30");
+      return;
+    }
+    if (editAmount < 100) {
+      toast.error("Minimum contribution is ₦100");
+      return;
+    }
+
+    setSavingSettings(true);
+    try {
+      const { error } = await supabase
+        .from("thrift_groups")
+        .update({
+          name: editName.trim(),
+          max_members: editMaxMembers,
+          contribution_amount: editAmount,
+          period: editPeriod,
+        })
+        .eq("id", groupId);
+
+      if (error) throw error;
+      toast.success("Group settings updated");
+      setShowEditDialog(false);
+      onGroupUpdated?.();
+    } catch (err) {
+      toast.error("Failed to update settings");
+    } finally {
+      setSavingSettings(false);
+    }
+  };
 
   useEffect(() => {
     async function fetchData() {
@@ -224,10 +281,18 @@ export function GroupProfile({ groupId, group, memberCount, onGroupUpdated }: Gr
       {/* Group Overview */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Users className="h-5 w-5" />
-            Group Details
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              Group Details
+            </CardTitle>
+            {canEditSettings && (
+              <Button variant="outline" size="sm" onClick={openEditDialog}>
+                <Pencil className="h-3.5 w-3.5 mr-1" />
+                Edit Settings
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
@@ -509,6 +574,69 @@ export function GroupProfile({ groupId, group, memberCount, onGroupUpdated }: Gr
           )}
         </CardContent>
       </Card>
+
+      {/* Edit Group Settings Dialog */}
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Group Settings</DialogTitle>
+            <DialogDescription>
+              Modify group settings before contributions begin. This can only be done once while the group is pending.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Group Name</Label>
+              <Input
+                id="edit-name"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                placeholder="Enter group name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-members">Max Members</Label>
+              <Input
+                id="edit-members"
+                type="number"
+                min={2}
+                max={30}
+                value={editMaxMembers}
+                onChange={(e) => setEditMaxMembers(Number(e.target.value))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-amount">Contribution Amount (₦)</Label>
+              <Input
+                id="edit-amount"
+                type="number"
+                min={100}
+                value={editAmount}
+                onChange={(e) => setEditAmount(Number(e.target.value))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Period</Label>
+              <Select value={editPeriod} onValueChange={(v) => setEditPeriod(v as "daily" | "weekly" | "monthly")}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="daily">Daily</SelectItem>
+                  <SelectItem value="weekly">Weekly</SelectItem>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditDialog(false)}>Cancel</Button>
+            <Button onClick={saveGroupSettings} disabled={savingSettings}>
+              {savingSettings ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
