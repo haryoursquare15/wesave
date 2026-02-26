@@ -1,43 +1,33 @@
 project_id = "sdwkqwmqgpsjrmijkdix"
 
-[functions.flutterwave-payments]
-verify_jwt = false
-
-[functions.flutterwave-subaccount]
-verify_jwt = false
-
-[functions.flutterwave-webhook]
-verify_jwt = false
-
-[functions.encryption-utils]
-verify_jwt = false
-
-[functions.security-controls]
-verify_jwt = false
-
-[functions.platform-settlement]
-verify_jwt = false
-
-[functions.auto-contribution]
-verify_jwt = false
-
-[functions.wallet-operations]
-verify_jwt = false
-
-[functions.group-actions]
-verify_jwt = false
-
-[functions.contribution-handler]
-verify_jwt = false
-
-[functions.recurring-test-charge]
-verify_jwt = false
-
-[functions.recurring-test-webhook]
-verify_jwt = false
-
-[functions.card-tokenization]
-verify_jwt = false
-
-[functions.contribution-reconciler]
-verify_jwt = false
+[functions]
+  [functions.auth-email-hook]
+    verify_jwt = false
+  [functions.auto-contribution]
+    verify_jwt = false
+  [functions.card-tokenization]
+    verify_jwt = false
+  [functions.contribution-handler]
+    verify_jwt = false
+  [functions.contribution-reconciler]
+    verify_jwt = false
+  [functions.encryption-utils]
+    verify_jwt = false
+  [functions.flutterwave-payments]
+    verify_jwt = false
+  [functions.flutterwave-subaccount]
+    verify_jwt = false
+  [functions.flutterwave-webhook]
+    verify_jwt = false
+  [functions.group-actions]
+    verify_jwt = false
+  [functions.platform-settlement]
+    verify_jwt = false
+  [functions.recurring-test-charge]
+    verify_jwt = false
+  [functions.recurring-test-webhook]
+    verify_jwt = false
+  [functions.security-controls]
+    verify_jwt = false
+  [functions.wallet-operations]
+    verify_jwt = false
