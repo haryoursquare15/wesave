@@ -1,4 +1,5 @@
 import { useState } from "react";
+import wesaveLogoNew from "@/assets/wesave-logo-new.png";
 import { motion } from "framer-motion";
 import { Mail, ArrowLeft, Users } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -39,10 +40,9 @@ export default function ForgotPassword() {
     <div className="min-h-screen bg-background flex">
       {/* Left Panel - Branding */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-primary via-primary to-primary/80 p-12 flex-col justify-between">
-        <div className="flex items-center gap-2">
-          <img src="/wesave-logo.jpg" alt="WeSave" className="h-10 bg-white/90 rounded-lg p-1" />
-          <span className="text-xl font-bold text-primary-foreground">WeSave</span>
-        </div>
+        <Link to="/" className="flex items-center gap-2">
+          <img src={wesaveLogoNew} alt="WeSave" className="h-12 bg-white/90 rounded-lg p-1" />
+        </Link>
 
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -70,10 +70,9 @@ export default function ForgotPassword() {
           className="w-full max-w-md"
         >
           {/* Mobile Logo */}
-          <div className="flex lg:hidden items-center gap-2 mb-8">
-            <img src="/wesave-logo.jpg" alt="WeSave" className="h-10 rounded-lg" />
-            <span className="text-xl font-bold text-foreground">WeSave</span>
-          </div>
+          <Link to="/" className="flex lg:hidden items-center gap-2 mb-8">
+            <img src={wesaveLogoNew} alt="WeSave" className="h-12 rounded-lg" />
+          </Link>
 
           <Link
             to="/auth"
