@@ -4,7 +4,7 @@ const stats = [
   { value: "10,000+", label: "Active Users" },
   { value: "₦500M+", label: "Total Savings" },
   { value: "2,000+", label: "Groups Created" },
-  { value: "99.9%", label: "Payout Success" },
+  { value: "100%", label: "Payout Success" },
 ];
 
 export function LandingStats() {
