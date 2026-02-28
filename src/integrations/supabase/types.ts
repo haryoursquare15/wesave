@@ -820,6 +820,27 @@ export type Database = {
           },
         ]
       }
+      group_join_reminders: {
+        Row: {
+          id: string
+          reminder_count: number
+          sent_at: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          reminder_count?: number
+          sent_at?: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          reminder_count?: number
+          sent_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       group_memberships: {
         Row: {
           flw_mandate_id: string | null
