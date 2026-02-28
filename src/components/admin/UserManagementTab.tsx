@@ -261,6 +261,26 @@ export function UserManagementTab() {
   const { hasPermission } = useAdminPermissions();
   const { toast } = useToast();
 
+  // Real-time: auto-refresh user list when profiles or wallets change
+  useEffect(() => {
+    const channel = supabase
+      .channel("admin-users-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => {
+        refetch();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "wallets" }, () => {
+        refetch();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "group_memberships" }, () => {
+        refetch();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [refetch]);
+
   const filteredUsers = users.filter(user => {
     const searchLower = search.toLowerCase();
     return (
