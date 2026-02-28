@@ -76,43 +76,61 @@ export function AdminOverviewTab() {
   const [walletsLoading, setWalletsLoading] = useState(true);
   const [walletSearch, setWalletSearch] = useState("");
 
+  const fetchUserWallets = async () => {
+    setWalletsLoading(true);
+    try {
+      const { data: wallets } = await supabase
+        .from("wallets")
+        .select("user_id, available_balance, locked_balance")
+        .order("available_balance", { ascending: false })
+        .limit(200);
+
+      if (!wallets?.length) { setUserWallets([]); return; }
+
+      const userIds = wallets.map(w => w.user_id);
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, full_name, username, email")
+        .in("id", userIds);
+
+      const profileMap = new Map((profiles || []).map(p => [p.id, p]));
+      setUserWallets(wallets.map(w => {
+        const p = profileMap.get(w.user_id);
+        return {
+          id: w.user_id,
+          full_name: p?.full_name || null,
+          username: p?.username || null,
+          email: p?.email || null,
+          available_balance: w.available_balance || 0,
+          locked_balance: w.locked_balance || 0,
+        };
+      }));
+    } catch (err) {
+      console.error("Error fetching user wallets:", err);
+    } finally {
+      setWalletsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchUserWallets = async () => {
-      setWalletsLoading(true);
-      try {
-        const { data: wallets } = await supabase
-          .from("wallets")
-          .select("user_id, available_balance, locked_balance")
-          .order("available_balance", { ascending: false })
-          .limit(200);
-
-        if (!wallets?.length) { setUserWallets([]); return; }
-
-        const userIds = wallets.map(w => w.user_id);
-        const { data: profiles } = await supabase
-          .from("profiles")
-          .select("id, full_name, username, email")
-          .in("id", userIds);
-
-        const profileMap = new Map((profiles || []).map(p => [p.id, p]));
-        setUserWallets(wallets.map(w => {
-          const p = profileMap.get(w.user_id);
-          return {
-            id: w.user_id,
-            full_name: p?.full_name || null,
-            username: p?.username || null,
-            email: p?.email || null,
-            available_balance: w.available_balance || 0,
-            locked_balance: w.locked_balance || 0,
-          };
-        }));
-      } catch (err) {
-        console.error("Error fetching user wallets:", err);
-      } finally {
-        setWalletsLoading(false);
-      }
-    };
     fetchUserWallets();
+  }, []);
+
+  // Real-time: refresh wallets & stats when wallets or profiles change
+  useEffect(() => {
+    const channel = supabase
+      .channel("admin-overview-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "wallets" }, () => {
+        fetchUserWallets();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => {
+        fetchUserWallets();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const filteredWallets = userWallets.filter(u => {

@@ -218,6 +218,26 @@ export function GroupManagementTab() {
     }
   };
 
+  // Real-time: auto-refresh groups when thrift_groups or memberships change
+  useEffect(() => {
+    const channel = supabase
+      .channel("admin-groups-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "thrift_groups" }, () => {
+        refetch();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "group_memberships" }, () => {
+        refetch();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "group_wallets" }, () => {
+        refetch();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [refetch]);
+
   const filteredGroups = groups.filter(group => {
     const searchLower = search.toLowerCase();
     return (
