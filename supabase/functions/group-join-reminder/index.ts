@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 function buildReminderEmail(fullName: string): string {
-  const name = fullName || 'there';
+  const name = fullName ? fullName.split(' ')[0] : 'there';
   return `
     <!DOCTYPE html>
     <html>
@@ -63,7 +63,7 @@ function buildReminderEmail(fullName: string): string {
 }
 
 function buildGenericEmail(fullName: string, subject: string, body: string): string {
-  const name = fullName || 'there';
+  const name = fullName ? fullName.split(' ')[0] : 'there';
   return `
     <!DOCTYPE html>
     <html>
