@@ -15,7 +15,7 @@ import { useEffect } from "react";
 const quickActions = [
   { label: "Fund Wallet", icon: "💰", link: "/wallet" },
   { label: "New Group", icon: "👥", link: "/create-group" },
-  { label: "Groups", icon: "📨", link: "/groups" },
+  { label: "Referrals", icon: "🎁", link: "/referrals" },
   { label: "Support", icon: "💬", link: "/support/new" },
 ];
 
