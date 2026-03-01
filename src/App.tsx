@@ -26,6 +26,7 @@ import Associations from "./pages/Associations";
 import TermsOfService from "./pages/TermsOfService";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import RecurringTestDashboard from "./pages/RecurringTestDashboard";
+import Referrals from "./pages/Referrals";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -116,6 +117,7 @@ const App = () => {
                 <Route path="/help" element={<Support />} />
                 <Route path="/crowdfunding" element={<Crowdfunding />} />
                 <Route path="/associations" element={<Associations />} />
+                <Route path="/referrals" element={<Referrals />} />
                 <Route path="/terms" element={<TermsOfService />} />
                 <Route path="/privacy" element={<PrivacyPolicy />} />
                 <Route path="*" element={<NotFound />} />

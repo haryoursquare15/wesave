@@ -1670,6 +1670,8 @@ export type Database = {
           onboarding_completed: boolean | null
           phone: string | null
           phone_encrypted: string | null
+          referral_code: string | null
+          referred_by: string | null
           risk_level: string | null
           updated_at: string | null
           username: string | null
@@ -1707,6 +1709,8 @@ export type Database = {
           onboarding_completed?: boolean | null
           phone?: string | null
           phone_encrypted?: string | null
+          referral_code?: string | null
+          referred_by?: string | null
           risk_level?: string | null
           updated_at?: string | null
           username?: string | null
@@ -1744,6 +1748,8 @@ export type Database = {
           onboarding_completed?: boolean | null
           phone?: string | null
           phone_encrypted?: string | null
+          referral_code?: string | null
+          referred_by?: string | null
           risk_level?: string | null
           updated_at?: string | null
           username?: string | null
@@ -1793,6 +1799,45 @@ export type Database = {
           status?: string | null
           tx_ref?: string | null
           verification_source?: string | null
+        }
+        Relationships: []
+      }
+      referrals: {
+        Row: {
+          completed_at: string | null
+          created_at: string | null
+          fraud_flag: boolean | null
+          fraud_reason: string | null
+          id: string
+          referred_user_id: string
+          referrer_id: string
+          reward_amount: number | null
+          rewarded_at: string | null
+          status: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string | null
+          fraud_flag?: boolean | null
+          fraud_reason?: string | null
+          id?: string
+          referred_user_id: string
+          referrer_id: string
+          reward_amount?: number | null
+          rewarded_at?: string | null
+          status?: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string | null
+          fraud_flag?: boolean | null
+          fraud_reason?: string | null
+          id?: string
+          referred_user_id?: string
+          referrer_id?: string
+          reward_amount?: number | null
+          rewarded_at?: string | null
+          status?: string
         }
         Relationships: []
       }
@@ -2748,6 +2793,10 @@ export type Database = {
             }
             Returns: Json
           }
+      process_referral_reward: {
+        Args: { p_referred_user_id: string }
+        Returns: Json
+      }
       record_login_attempt: {
         Args: {
           _device_fingerprint?: string
@@ -2781,6 +2830,7 @@ export type Database = {
         }
         Returns: undefined
       }
+      release_referral_liens: { Args: { p_user_id: string }; Returns: Json }
       release_withdrawal_freeze: {
         Args: {
           _amount: number

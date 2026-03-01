@@ -158,6 +158,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           fetchAll(nextSession.user.id).catch((err) => {
             console.error("Post-auth fetch error:", err);
           });
+
+          // Record referral if signup ref code exists
+          const refCode = sessionStorage.getItem("wesave_referral_code");
+          if (refCode && event === "SIGNED_IN") {
+            sessionStorage.removeItem("wesave_referral_code");
+            fetch(
+              `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/referral-operations?action=record`,
+              {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${nextSession.access_token}`,
+                  "Content-Type": "application/json",
+                  apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+                },
+                body: JSON.stringify({ referral_code: refCode }),
+              }
+            ).catch((err) => console.error("Referral recording error:", err));
+          }
         }, 0);
       } else {
         setProfile(null);

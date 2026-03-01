@@ -33,3 +33,5 @@ project_id = "sdwkqwmqgpsjrmijkdix"
     verify_jwt = false
   [functions.group-join-reminder]
     verify_jwt = false
+  [functions.referral-operations]
+    verify_jwt = false

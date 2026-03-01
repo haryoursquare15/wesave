@@ -121,6 +121,12 @@ export default function Auth() {
 
     try {
       if (isSignUp) {
+        // Capture referral code from URL
+        const refCode = searchParams.get("ref");
+        if (refCode) {
+          sessionStorage.setItem("wesave_referral_code", refCode);
+        }
+
         const { error } = await signUp(formData.email, formData.password, formData.name);
         if (error) {
           if (error.message.includes("already registered")) {
@@ -130,8 +136,6 @@ export default function Auth() {
           }
         } else {
           toast.success("Account created! Please check your email to verify your account.");
-          // Stay on /auth after sign-up since email verification may be required before a session exists.
-          // Redirecting immediately can break onboarding actions that require authentication.
           navigate("/auth?mode=signin");
         }
       } else {
