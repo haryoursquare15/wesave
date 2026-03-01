@@ -90,6 +90,22 @@ export function useMyGroups() {
     fetchGroups();
   }, [fetchGroups]);
 
+  // Real-time: refresh when memberships change
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase
+      .channel("my-groups-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "group_memberships" }, () => {
+        fetchGroups();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "thrift_groups" }, () => {
+        fetchGroups();
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [user, fetchGroups]);
+
   return { groups, loading, error, refetch: fetchGroups };
 }
 
@@ -229,6 +245,24 @@ export function usePoolGroups() {
 
   useEffect(() => {
     fetchGroups();
+  }, [fetchGroups]);
+
+  // Real-time: refresh when memberships or groups change
+  useEffect(() => {
+    const channel = supabase
+      .channel("pool-groups-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "group_memberships" }, () => {
+        fetchGroups();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "thrift_groups" }, () => {
+        fetchGroups();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "pending_join_requests" }, () => {
+        fetchGroups();
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, [fetchGroups]);
 
   return { groups, loading, error, refetch: fetchGroups };
