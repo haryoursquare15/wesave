@@ -114,7 +114,8 @@ function buildEmailHtml(title: string, message: string, type: string, userName?:
   const { accent, bg, icon } = getTypeColors(type);
   const ctaLabel = getCTALabel(type);
   const ctaUrl = getCTAUrl(type);
-  const greeting = userName ? `Hi ${userName},` : 'Hi there,';
+  const firstName = userName ? userName.split(' ')[0] : null;
+  const greeting = firstName ? `Hello ${firstName},` : 'Hello,';
 
   return `<!DOCTYPE html>
 <html lang="en" dir="ltr">
