@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { 
   Shield, ArrowLeft, Banknote, Users, UsersRound, 
-  Activity, FileText, FlaskConical, CreditCard, ArrowDownToLine, Wallet, MessageSquare
+  Activity, FileText, FlaskConical, CreditCard, ArrowDownToLine, Wallet, MessageSquare, Mail
 } from "lucide-react";
 import { PlatformRevenueTab } from "@/components/admin/PlatformRevenueTab";
 import { AdminOverviewTab } from "@/components/admin/AdminOverviewTab";
@@ -21,6 +21,7 @@ import { ContributionsTab } from "@/components/admin/ContributionsTab";
 import { PaymentAuthTab } from "@/components/admin/PaymentAuthTab";
 import { WithdrawalsTab } from "@/components/admin/WithdrawalsTab";
 import { SupportTab } from "@/components/admin/SupportTab";
+import { AdminEmailTab } from "@/components/admin/AdminEmailTab";
 
 export default function Admin() {
   const navigate = useNavigate();
@@ -148,6 +149,10 @@ export default function Admin() {
                 Support
               </TabsTrigger>
             )}
+            <TabsTrigger value="emails" className="flex items-center gap-1">
+              <Mail className="h-4 w-4" />
+              Emails
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview">
@@ -188,6 +193,10 @@ export default function Admin() {
 
           <TabsContent value="support">
             <SupportTab />
+          </TabsContent>
+
+          <TabsContent value="emails">
+            <AdminEmailTab />
           </TabsContent>
         </Tabs>
       </div>

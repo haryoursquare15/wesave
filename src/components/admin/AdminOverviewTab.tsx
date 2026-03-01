@@ -2,14 +2,11 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { 
   Users, UsersRound, Activity, Wallet, TrendingUp, TrendingDown,
-  AlertTriangle, CheckCircle, Clock, Banknote, Shield, TicketCheck, Download, Search,
-  Mail, Eye, Send, Loader2
+  AlertTriangle, CheckCircle, Clock, Banknote, Shield, TicketCheck, Download, Search
 } from "lucide-react";
 import { useEnhancedAdminStats, TimeFilter } from "@/hooks/useEnhancedAdminStats";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -78,10 +75,8 @@ export function AdminOverviewTab() {
   const [userWallets, setUserWallets] = useState<UserWalletRow[]>([]);
   const [walletsLoading, setWalletsLoading] = useState(true);
   const [walletSearch, setWalletSearch] = useState("");
-  const [sendingReminders, setSendingReminders] = useState(false);
-  const [reminderResult, setReminderResult] = useState<{ sent: number; eligible: number; errors?: string[] } | null>(null);
-  const [showEmailPreview, setShowEmailPreview] = useState(false);
   const { toast } = useToast();
+
   const fetchUserWallets = async () => {
     setWalletsLoading(true);
     try {
@@ -155,58 +150,8 @@ export function AdminOverviewTab() {
     })), "user_wallets");
   };
 
-  const handleSendReminders = async () => {
-    setSendingReminders(true);
-    setReminderResult(null);
-    try {
-      const { data, error } = await supabase.functions.invoke("group-join-reminder");
-      if (error) throw error;
-      setReminderResult(data);
-      toast({
-        title: "Reminders Sent",
-        description: `${data.sent} of ${data.eligible} eligible users were emailed.`,
-      });
-    } catch (err: any) {
-      toast({
-        title: "Error",
-        description: err.message || "Failed to send reminders",
-        variant: "destructive",
-      });
-    } finally {
-      setSendingReminders(false);
-    }
-  };
 
-  const sampleEmailHtml = `
-    <!DOCTYPE html>
-    <html>
-    <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-    <body style="margin: 0; padding: 0; background-color: #f4f4f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #f4f4f5;">
-        <tr><td align="center" style="padding: 40px 20px;">
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 480px; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-            <tr><td style="background-color: #E8621A; padding: 24px 30px;"><h1 style="margin: 0; color: #ffffff; font-size: 20px; font-weight: 700;">WeSave</h1></td></tr>
-            <tr><td style="padding: 30px;">
-              <h2 style="margin: 0 0 12px; color: #1a1a1a; font-size: 18px; font-weight: 600;">Hey John, you're missing out! 👋</h2>
-              <p style="margin: 0 0 16px; color: #4b5563; font-size: 15px; line-height: 1.6;">You signed up for WeSave but haven't joined a savings group yet. Here's what you're missing:</p>
-              <ul style="margin: 0 0 20px; padding-left: 20px; color: #4b5563; font-size: 15px; line-height: 1.8;">
-                <li><strong>Save Together</strong> — Join a group and contribute alongside trusted members</li>
-                <li><strong>Earn Payouts</strong> — Receive your lump-sum payout when it's your turn</li>
-                <li><strong>Build Credit</strong> — Boost your WeSave credit score with every on-time contribution</li>
-                <li><strong>Zero Fees to Join</strong> — Getting started is completely free</li>
-              </ul>
-              <p style="margin: 0 0 24px; color: #4b5563; font-size: 15px; line-height: 1.6;">It only takes a minute to create or join a group. Start saving smarter today!</p>
-              <a href="#" style="display: inline-block; background-color: #E8621A; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 600;">Explore Groups</a>
-            </td></tr>
-            <tr><td style="padding: 20px 30px; border-top: 1px solid #e5e7eb;">
-              <p style="margin: 0; color: #9ca3af; font-size: 12px; line-height: 1.5;">You're receiving this because you have an account on WeSave. If you no longer wish to receive these emails, you can update your notification preferences in the app.</p>
-            </td></tr>
-          </table>
-        </td></tr>
-      </table>
-    </body>
-    </html>
-  `;
+
 
   return (
     <div className="space-y-6">
@@ -315,66 +260,6 @@ export function AdminOverviewTab() {
                   )}
                 </TableBody>
               </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-      {/* Group Join Reminder Emails */}
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <CardTitle className="flex items-center gap-2"><Mail className="h-5 w-5" /> Group Join Reminders</CardTitle>
-            <div className="flex gap-2">
-              <Dialog open={showEmailPreview} onOpenChange={setShowEmailPreview}>
-                <DialogTrigger asChild>
-                  <Button variant="outline" size="sm">
-                    <Eye className="h-4 w-4 mr-1" /> Preview Email
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
-                  <DialogHeader>
-                    <DialogTitle>Sample Reminder Email</DialogTitle>
-                  </DialogHeader>
-                  <div className="border rounded-lg overflow-hidden">
-                    <iframe
-                      srcDoc={sampleEmailHtml}
-                      className="w-full h-[500px] border-0"
-                      title="Email Preview"
-                      sandbox=""
-                    />
-                  </div>
-                </DialogContent>
-              </Dialog>
-              <Button size="sm" onClick={handleSendReminders} disabled={sendingReminders}>
-                {sendingReminders ? (
-                  <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Sending...</>
-                ) : (
-                  <><Send className="h-4 w-4 mr-1" /> Send Reminders Now</>
-                )}
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground mb-4">
-            Sends emails to users who signed up 3+ days ago but haven't joined or created a group. Runs automatically daily at 9 AM WAT, or trigger manually below.
-          </p>
-          {reminderResult && (
-            <div className="space-y-2">
-              <div className="flex gap-4">
-                <Badge variant="outline">{reminderResult.eligible} eligible</Badge>
-                <Badge variant="default">{reminderResult.sent} sent</Badge>
-                {reminderResult.errors && reminderResult.errors.length > 0 && (
-                  <Badge variant="destructive">{reminderResult.errors.length} failed</Badge>
-                )}
-              </div>
-              {reminderResult.errors && reminderResult.errors.length > 0 && (
-                <div className="mt-2 max-h-40 overflow-y-auto text-xs text-destructive bg-destructive/5 p-3 rounded-lg space-y-1">
-                  {reminderResult.errors.map((err, i) => (
-                    <p key={i}>{err}</p>
-                  ))}
-                </div>
-              )}
             </div>
           )}
         </CardContent>
