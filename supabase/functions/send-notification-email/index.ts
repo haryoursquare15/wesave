@@ -48,79 +48,168 @@ function getEmailSubject(type: string, title: string): string {
       return '🤝 WeSave — Welcome to the Group!';
     case 'cycle_started':
       return '🔄 WeSave — New Cycle Started';
+    case 'referral_reward':
+      return '🎁 WeSave — Referral Bonus Earned!';
     default:
       return `WeSave — ${title}`;
   }
 }
 
-function getNotificationColor(type: string): string {
+// ── Shared brand constants ────────────────────────────────────────
+const BRAND = {
+  orange: '#E8621A',
+  orangeLight: '#FFF5EB',
+  green: '#22c55e',
+  greenLight: '#f0fdf4',
+  red: '#ef4444',
+  redLight: '#fef2f2',
+  amber: '#f59e0b',
+  amberLight: '#fffbeb',
+  blue: '#3b82f6',
+  blueLight: '#eff6ff',
+  textDark: '#171717',
+  textBody: '#555555',
+  textMuted: '#999999',
+  white: '#ffffff',
+  border: '#e5e7eb',
+  logoUrl: 'https://sdwkqwmqgpsjrmijkdix.supabase.co/storage/v1/object/public/email-assets/wesave-logo.png',
+};
+
+function getTypeColors(type: string): { accent: string; bg: string; icon: string } {
   if (type.includes('success') || type.includes('completed') || type.includes('credited') || type === 'payout_received' || type === 'group_joined') {
-    return '#22c55e';
+    return { accent: BRAND.green, bg: BRAND.greenLight, icon: '✅' };
   }
   if (type.includes('failed') || type.includes('defaulted')) {
-    return '#ef4444';
+    return { accent: BRAND.red, bg: BRAND.redLight, icon: '⚠️' };
   }
-  if (type.includes('retry') || type.includes('reminder') || type.includes('initiated')) {
-    return '#f59e0b';
+  if (type.includes('retry') || type.includes('reminder') || type === 'withdrawal_initiated') {
+    return { accent: BRAND.amber, bg: BRAND.amberLight, icon: '🔄' };
   }
   if (type.includes('invite')) {
-    return '#3b82f6';
+    return { accent: BRAND.blue, bg: BRAND.blueLight, icon: '📨' };
   }
-  return '#6366f1';
+  if (type === 'referral_reward') {
+    return { accent: BRAND.orange, bg: BRAND.orangeLight, icon: '🎁' };
+  }
+  return { accent: BRAND.orange, bg: BRAND.orangeLight, icon: '📢' };
 }
 
-function buildEmailHtml(title: string, message: string, type: string): string {
-  const accentColor = getNotificationColor(type);
-  
-  return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    </head>
-    <body style="margin: 0; padding: 0; background-color: #f4f4f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #f4f4f5;">
-        <tr>
-          <td align="center" style="padding: 40px 20px;">
-            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 480px; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-              
-              <!-- Header -->
-              <tr>
-                <td style="background-color: ${accentColor}; padding: 24px 30px;">
-                  <h1 style="margin: 0; color: #ffffff; font-size: 20px; font-weight: 700;">WeSave</h1>
-                </td>
-              </tr>
-              
-              <!-- Content -->
-              <tr>
-                <td style="padding: 30px;">
-                  <h2 style="margin: 0 0 12px; color: #1a1a1a; font-size: 18px; font-weight: 600;">${title}</h2>
-                  <p style="margin: 0 0 24px; color: #4b5563; font-size: 15px; line-height: 1.6;">${message}</p>
-                  
-                  <a href="https://app.wesave.ng/wallet" style="display: inline-block; background-color: ${accentColor}; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 600;">
-                    Open WeSave
-                  </a>
-                </td>
-              </tr>
-              
-              <!-- Footer -->
-              <tr>
-                <td style="padding: 20px 30px; border-top: 1px solid #e5e7eb;">
-                  <p style="margin: 0; color: #9ca3af; font-size: 12px; line-height: 1.5;">
-                    You're receiving this because you have an account on WeSave. 
-                    If you no longer wish to receive these emails, you can update your notification preferences in the app.
-                  </p>
-                </td>
-              </tr>
-              
-            </table>
-          </td>
-        </tr>
-      </table>
-    </body>
-    </html>
-  `;
+function getCTALabel(type: string): string {
+  if (type.includes('wallet') || type === 'payout_received' || type.includes('withdrawal')) return 'View Wallet';
+  if (type.includes('contribution') || type.includes('cycle')) return 'View Group';
+  if (type.includes('invite') || type.includes('group')) return 'View Groups';
+  if (type === 'referral_reward') return 'View Referrals';
+  return 'Open WeSave';
+}
+
+function getCTAUrl(type: string): string {
+  if (type.includes('wallet') || type === 'payout_received' || type.includes('withdrawal')) return 'https://app.wesave.ng/wallet';
+  if (type.includes('contribution') || type.includes('cycle')) return 'https://app.wesave.ng/groups';
+  if (type.includes('invite') || type.includes('group')) return 'https://app.wesave.ng/groups';
+  if (type === 'referral_reward') return 'https://app.wesave.ng/referrals';
+  return 'https://app.wesave.ng/dashboard';
+}
+
+function buildEmailHtml(title: string, message: string, type: string, userName?: string): string {
+  const { accent, bg, icon } = getTypeColors(type);
+  const ctaLabel = getCTALabel(type);
+  const ctaUrl = getCTAUrl(type);
+  const greeting = userName ? `Hi ${userName},` : 'Hi there,';
+
+  return `<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title}</title>
+</head>
+<body style="margin:0;padding:0;background-color:${BRAND.white};font-family:'Roboto',Arial,sans-serif;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:${BRAND.white};">
+    <tr>
+      <td align="center" style="padding:32px 16px;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:520px;">
+
+          <!-- Logo -->
+          <tr>
+            <td style="padding:0 0 24px;">
+              <img src="${BRAND.logoUrl}" width="48" height="48" alt="WeSave" style="border-radius:8px;display:block;" />
+            </td>
+          </tr>
+
+          <!-- Status Badge -->
+          <tr>
+            <td style="padding:0 0 20px;">
+              <table role="presentation" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td style="background-color:${bg};border-radius:20px;padding:6px 16px;">
+                    <span style="font-size:13px;font-weight:600;color:${accent};">${icon} ${type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Heading -->
+          <tr>
+            <td style="padding:0 0 8px;">
+              <h1 style="margin:0;font-size:24px;font-weight:bold;color:${BRAND.textDark};line-height:1.3;">${title}</h1>
+            </td>
+          </tr>
+
+          <!-- Greeting -->
+          <tr>
+            <td style="padding:0 0 16px;">
+              <p style="margin:0;font-size:15px;color:${BRAND.textBody};line-height:1.6;">${greeting}</p>
+            </td>
+          </tr>
+
+          <!-- Message Card -->
+          <tr>
+            <td style="padding:0 0 24px;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f9fafb;border-radius:12px;border:1px solid ${BRAND.border};">
+                <tr>
+                  <td style="padding:20px 24px;">
+                    <p style="margin:0;font-size:15px;color:${BRAND.textBody};line-height:1.7;">${message}</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- CTA Button -->
+          <tr>
+            <td style="padding:0 0 28px;">
+              <a href="${ctaUrl}" style="display:inline-block;background-color:${BRAND.orange};color:${BRAND.orangeLight};font-size:15px;font-weight:600;text-decoration:none;border-radius:12px;padding:14px 28px;">
+                ${ctaLabel}
+              </a>
+            </td>
+          </tr>
+
+          <!-- Divider -->
+          <tr>
+            <td style="padding:0 0 16px;">
+              <hr style="border:none;border-top:1px solid ${BRAND.border};margin:0;" />
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td>
+              <p style="margin:0 0 8px;font-size:12px;color:${BRAND.textMuted};line-height:1.5;">
+                You're receiving this because you have a WeSave account. Update your notification preferences in the app.
+              </p>
+              <p style="margin:0;font-size:12px;color:${BRAND.orange};font-weight:500;">
+                WeSave — Save Together, Grow Together 🌍
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
 }
 
 serve(async (req) => {
@@ -167,7 +256,7 @@ serve(async (req) => {
     }
 
     const subject = getEmailSubject(record.notification_type, record.title);
-    const html = buildEmailHtml(record.title, record.message, record.notification_type);
+    const html = buildEmailHtml(record.title, record.message, record.notification_type, profile.full_name);
 
     console.log(`Sending email to ${profile.email}: ${subject}`);
 
