@@ -47,7 +47,7 @@ function buildReminderEmail(fullName: string): string {
                     It only takes a minute to create or join a group. Start saving smarter today!
                   </p>
                   
-                  <a href="https://wesave.lovable.app/groups" style="display: inline-block; background-color: #E8621A; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 600;">
+                  <a href="https://app.wesave.ng/groups" style="display: inline-block; background-color: #E8621A; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 600;">
                     Explore Groups
                   </a>
                 </td>
@@ -147,7 +147,14 @@ serve(async (req) => {
     let sentCount = 0;
     const errors: string[] = [];
 
-    for (const user of eligibleUsers) {
+    for (let i = 0; i < eligibleUsers.length; i++) {
+      const user = eligibleUsers[i];
+      
+      // Rate limit: wait 600ms between sends to stay under 2/sec
+      if (i > 0) {
+        await new Promise(resolve => setTimeout(resolve, 600));
+      }
+
       try {
         const html = buildReminderEmail(user.full_name || '');
 
@@ -158,7 +165,7 @@ serve(async (req) => {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            from: 'WeSave <noreply@wesave.ng>',
+            from: 'WeSave <noreply@notify.noreply.wesave.ng>',
             to: [user.email],
             subject: '🤝 WeSave — Your savings group is waiting for you!',
             html,
