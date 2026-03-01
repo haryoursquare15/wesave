@@ -98,7 +98,7 @@ function buildEmailHtml(title: string, message: string, type: string): string {
                   <h2 style="margin: 0 0 12px; color: #1a1a1a; font-size: 18px; font-weight: 600;">${title}</h2>
                   <p style="margin: 0 0 24px; color: #4b5563; font-size: 15px; line-height: 1.6;">${message}</p>
                   
-                  <a href="https://wesave.lovable.app/wallet" style="display: inline-block; background-color: ${accentColor}; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 600;">
+                  <a href="https://app.wesave.ng/wallet" style="display: inline-block; background-color: ${accentColor}; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 600;">
                     Open WeSave
                   </a>
                 </td>
@@ -178,7 +178,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: 'WeSave <noreply@wesave.ng>',
+        from: 'WeSave <notify@wesave.ng>',
         to: [profile.email],
         subject,
         html,
