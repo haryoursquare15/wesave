@@ -18,4 +18,35 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    // Remove source maps in production to prevent code inspection
+    sourcemap: false,
+    // Aggressive minification
+    minify: "terser",
+    terserOptions: {
+      compress: {
+        drop_console: true,
+        drop_debugger: true,
+        pure_funcs: ["console.log", "console.info", "console.debug", "console.warn"],
+      },
+      mangle: {
+        toplevel: true,
+        properties: {
+          regex: /^_/,
+        },
+      },
+      format: {
+        comments: false,
+      },
+    },
+    // Split chunks to obscure code structure
+    rollupOptions: {
+      output: {
+        manualChunks: undefined,
+        chunkFileNames: "assets/[hash].js",
+        entryFileNames: "assets/[hash].js",
+        assetFileNames: "assets/[hash].[ext]",
+      },
+    },
+  },
 }));

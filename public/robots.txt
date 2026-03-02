@@ -1,8 +1,19 @@
 User-agent: Googlebot
 Allow: /
+Disallow: /dashboard
+Disallow: /admin
+Disallow: /settings
+Disallow: /wallet
+Disallow: /groups
+Disallow: /profile
+Disallow: /security
 
 User-agent: Bingbot
 Allow: /
+Disallow: /dashboard
+Disallow: /admin
+Disallow: /settings
+Disallow: /wallet
 
 User-agent: Twitterbot
 Allow: /
@@ -10,5 +21,36 @@ Allow: /
 User-agent: facebookexternalhit
 Allow: /
 
+# Block AI crawlers and scrapers from copying content
+User-agent: GPTBot
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: ChatGPT-User
+Disallow: /
+
+User-agent: Google-Extended
+Disallow: /
+
+User-agent: anthropic-ai
+Disallow: /
+
+User-agent: ClaudeBot
+Disallow: /
+
+User-agent: Bytespider
+Disallow: /
+
 User-agent: *
 Allow: /
+Disallow: /dashboard
+Disallow: /admin
+Disallow: /settings
+Disallow: /wallet
+Disallow: /groups
+Disallow: /profile
+Disallow: /security
+
+Sitemap: https://wesave.ng/sitemap.xml

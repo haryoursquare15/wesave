@@ -3,10 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    
+    <!-- Security Headers -->
+    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+    <meta http-equiv="X-Frame-Options" content="DENY" />
+    <meta http-equiv="X-XSS-Protection" content="1; mode=block" />
+    <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin" />
+    <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=()" />
+    <meta http-equiv="Content-Security-Policy" content="frame-ancestors 'none';" />
+    
     <title>WeSave — Modern Ajo & Esusu Savings Platform</title>
     <meta name="description" content="Join WeSave, Africa's trusted rotating savings platform. Create thrift groups, automate contributions, build credit, and receive payouts securely." />
     <meta name="author" content="LLH Premium Enterprise" />
     <meta name="keywords" content="ajo, esusu, thrift, rotating savings, Nigeria, fintech, group savings, WeSave" />
+    <meta name="robots" content="noarchive, noimageindex" />
     <link rel="icon" type="image/jpeg" href="/wesave-logo.jpg" />
     <link rel="canonical" href="https://wesave.ng" />
 
@@ -45,5 +55,58 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // Anti-tampering: disable right-click context menu
+      document.addEventListener('contextmenu', function(e) { e.preventDefault(); });
+      
+      // Detect and warn about dev tools
+      (function() {
+        var threshold = 160;
+        var devToolsOpen = false;
+        
+        setInterval(function() {
+          var widthThreshold = window.outerWidth - window.innerWidth > threshold;
+          var heightThreshold = window.outerHeight - window.innerHeight > threshold;
+          
+          if (widthThreshold || heightThreshold) {
+            if (!devToolsOpen) {
+              devToolsOpen = true;
+              console.clear();
+              console.log('%c⚠️ WARNING', 'color: red; font-size: 40px; font-weight: bold;');
+              console.log('%cThis platform is protected by LLH Premium Enterprise.', 'font-size: 16px;');
+              console.log('%cUnauthorized access, copying, or reverse engineering of this application is strictly prohibited and may result in legal action.', 'font-size: 14px; color: #E8621A;');
+              console.log('%c© 2025 WeSave by LLH Premium Enterprise. All rights reserved.', 'font-size: 12px; color: gray;');
+            }
+          } else {
+            devToolsOpen = false;
+          }
+        }, 1000);
+        
+        // Disable common keyboard shortcuts for dev tools
+        document.addEventListener('keydown', function(e) {
+          // F12
+          if (e.key === 'F12') { e.preventDefault(); return false; }
+          // Ctrl+Shift+I / Cmd+Option+I (Inspector)
+          if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'I') { e.preventDefault(); return false; }
+          // Ctrl+Shift+J / Cmd+Option+J (Console)
+          if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'J') { e.preventDefault(); return false; }
+          // Ctrl+Shift+C (Element picker)
+          if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'C') { e.preventDefault(); return false; }
+          // Ctrl+U / Cmd+U (View Source)
+          if ((e.ctrlKey || e.metaKey) && e.key === 'u') { e.preventDefault(); return false; }
+          // Ctrl+S / Cmd+S (Save page)
+          if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); return false; }
+        });
+        
+        // Disable text selection on the page (except inputs/textareas)
+        document.addEventListener('selectstart', function(e) {
+          if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
+          e.preventDefault();
+        });
+        
+        // Disable drag
+        document.addEventListener('dragstart', function(e) { e.preventDefault(); });
+      })();
+    </script>
   </body>
 </html>
