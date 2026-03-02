@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeSecureFunction } from "@/lib/secureApi";
 import { toast } from "sonner";
 import { nigerianBanks } from "@/lib/nigerianBanks";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -82,12 +83,10 @@ export function WithdrawalBankForm({ open, onOpenChange, onComplete }: Withdrawa
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return;
 
-        const response = await supabase.functions.invoke("flutterwave-payments", {
-          body: {
-            action: "validate_bank_account",
-            bank_name: bankName,
-            account_number: debouncedAccountNumber,
-          },
+        const response = await invokeSecureFunction({
+          action: "validate_bank_account",
+          bank_name: bankName,
+          account_number: debouncedAccountNumber,
         });
 
         if (response.error) throw new Error(response.error.message);

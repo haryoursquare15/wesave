@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { invokeSecureFunction } from "@/lib/secureApi";
 import { motion } from "framer-motion";
 import { useParams, useNavigate } from "react-router-dom";
 import { 
@@ -319,12 +320,10 @@ export default function GroupDetail() {
 
     setContributing(true);
     try {
-      const { data, error } = await supabase.functions.invoke("flutterwave-payments", {
-        body: {
-          action: "initiate_contribution",
-          groupId,
-          amount: group.contribution_amount,
-        },
+      const { data, error } = await invokeSecureFunction({
+        action: "initiate_contribution",
+        groupId,
+        amount: group.contribution_amount,
       });
 
       if (error) throw error;
@@ -375,11 +374,9 @@ export default function GroupDetail() {
 
     setProcessingPayout(true);
     try {
-      const { data, error } = await supabase.functions.invoke("flutterwave-payments", {
-        body: {
-          action: "process_payout",
-          groupId,
-        },
+      const { data, error } = await invokeSecureFunction({
+        action: "process_payout",
+        groupId,
       });
 
       if (error) throw error;
@@ -418,11 +415,9 @@ export default function GroupDetail() {
 
     setExitingGroup(true);
     try {
-      const { data, error } = await supabase.functions.invoke("flutterwave-payments", {
-        body: {
-          action: "exit_group",
-          groupId,
-        },
+      const { data, error } = await invokeSecureFunction({
+        action: "exit_group",
+        groupId,
       });
 
       if (error) throw error;
@@ -447,11 +442,9 @@ export default function GroupDetail() {
 
     setConfirmingContinue(true);
     try {
-      const { data, error } = await supabase.functions.invoke("flutterwave-payments", {
-        body: {
-          action: "confirm_continue",
-          groupId,
-        },
+      const { data, error } = await invokeSecureFunction({
+        action: "confirm_continue",
+        groupId,
       });
 
       if (error) throw error;
@@ -481,12 +474,10 @@ export default function GroupDetail() {
 
     setRestartingGroup(true);
     try {
-      const { data, error } = await supabase.functions.invoke("flutterwave-payments", {
-        body: {
-          action: "restart_group",
-          groupId,
-          termsAccepted: true,
-        },
+      const { data, error } = await invokeSecureFunction({
+        action: "restart_group",
+        groupId,
+        termsAccepted: true,
       });
 
       if (error) throw error;

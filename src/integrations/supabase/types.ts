@@ -1757,6 +1757,33 @@ export type Database = {
         }
         Relationships: []
       }
+      rate_limits: {
+        Row: {
+          created_at: string
+          endpoint: string
+          id: string
+          identifier: string
+          request_count: number
+          window_start: string
+        }
+        Insert: {
+          created_at?: string
+          endpoint: string
+          id?: string
+          identifier: string
+          request_count?: number
+          window_start?: string
+        }
+        Update: {
+          created_at?: string
+          endpoint?: string
+          id?: string
+          identifier?: string
+          request_count?: number
+          window_start?: string
+        }
+        Relationships: []
+      }
       recurring_webhook_logs_test: {
         Row: {
           amount: number | null
@@ -1838,6 +1865,30 @@ export type Database = {
           reward_amount?: number | null
           rewarded_at?: string | null
           status?: string
+        }
+        Relationships: []
+      }
+      request_nonces: {
+        Row: {
+          created_at: string
+          endpoint: string
+          id: string
+          nonce: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          endpoint: string
+          id?: string
+          nonce: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          endpoint?: string
+          id?: string
+          nonce?: string
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -2603,6 +2654,15 @@ export type Database = {
         Args: { _email: string; _ip_address?: string }
         Returns: Json
       }
+      check_rate_limit: {
+        Args: {
+          _endpoint: string
+          _identifier: string
+          _max_requests?: number
+          _window_seconds?: number
+        }
+        Returns: Json
+      }
       check_velocity: {
         Args: { _amount?: number; _event_type: string; _user_id: string }
         Returns: Json
@@ -2611,6 +2671,7 @@ export type Database = {
         Args: { _amount: number; _user_id: string }
         Returns: Json
       }
+      cleanup_rate_limits: { Args: never; Returns: undefined }
       commence_thrift: { Args: { target_group_id: string }; Returns: Json }
       confirm_continue_group: { Args: { _group_id: string }; Returns: Json }
       confirm_withdrawal_debit: {
@@ -2621,6 +2682,15 @@ export type Database = {
           _user_id: string
         }
         Returns: Json
+      }
+      consume_nonce: {
+        Args: {
+          _endpoint: string
+          _max_age_seconds?: number
+          _nonce: string
+          _user_id?: string
+        }
+        Returns: boolean
       }
       create_thrift_group: {
         Args: {
