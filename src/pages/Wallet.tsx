@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
+import { invokeSecureFunction } from "@/lib/secureApi";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -63,9 +64,7 @@ export default function Wallet() {
           // Verify each pending transaction
           for (const tx of pendingTxs) {
             if (tx.reference) {
-              const { data } = await supabase.functions.invoke("flutterwave-payments", {
-                body: { action: "verify_transaction", tx_ref: tx.reference },
-              });
+              const { data } = await invokeSecureFunction({ action: "verify_transaction", tx_ref: tx.reference });
               
               if (data?.success && data?.verified && !data?.already_completed) {
                 toast.success(`₦${data.amount?.toLocaleString()} added to wallet!`);
@@ -255,9 +254,7 @@ export default function Wallet() {
 
     setFunding(true);
     try {
-      const { data, error } = await supabase.functions.invoke("flutterwave-payments", {
-        body: { action: "fund_wallet", amount },
-      });
+      const { data, error } = await invokeSecureFunction({ action: "fund_wallet", amount });
 
       if (error) throw error;
 

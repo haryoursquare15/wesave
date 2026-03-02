@@ -9,8 +9,9 @@
     <meta http-equiv="X-Frame-Options" content="DENY" />
     <meta http-equiv="X-XSS-Protection" content="1; mode=block" />
     <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin" />
-    <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=()" />
-    <meta http-equiv="Content-Security-Policy" content="frame-ancestors 'none';" />
+    <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=(), payment=(self), usb=()" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://checkout.flutterwave.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://*.supabase.co https://*.flutterwave.com; connect-src 'self' https://*.supabase.co https://api.flutterwave.com wss://*.supabase.co; frame-src https://checkout.flutterwave.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none';" />
+    <meta http-equiv="Strict-Transport-Security" content="max-age=31536000; includeSubDomains; preload" />
     
     <title>WeSave — Modern Ajo & Esusu Savings Platform</title>
     <meta name="description" content="Join WeSave, Africa's trusted rotating savings platform. Create thrift groups, automate contributions, build credit, and receive payouts securely." />

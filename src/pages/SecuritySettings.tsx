@@ -12,6 +12,7 @@ import { ChangePasswordDialog } from "@/components/security/ChangePasswordDialog
 import { useSecurity } from "@/hooks/useSecurity";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeSecureFunction } from "@/lib/secureApi";
 
 import { toast } from "sonner";
 
@@ -95,12 +96,10 @@ export default function SecuritySettings() {
     if (!withdrawalIntent) return;
 
     try {
-      const { data, error } = await supabase.functions.invoke("flutterwave-payments", {
-        body: {
-          action: "withdraw_to_bank",
-          amount: withdrawalIntent.amount,
-          token,
-        },
+      const { data, error } = await invokeSecureFunction({
+        action: "withdraw_to_bank",
+        amount: withdrawalIntent.amount,
+        token,
       });
 
       if (error) throw error;
