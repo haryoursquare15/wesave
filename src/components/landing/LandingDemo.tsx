@@ -1,28 +1,18 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Users, CreditCard, ArrowLeftRight, Wallet, Banknote, RefreshCw,
-  ChevronLeft, ChevronRight, Shield, CheckCircle2, Clock, ArrowDown
+  Users, UserPlus, Settings, Send, CheckCircle2,
+  ChevronLeft, ChevronRight, PlusCircle, Mail
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 
-interface DemoStep {
-  id: string;
-  title: string;
-  subtitle: string;
-  icon: React.ElementType;
-  color: string;
-  mockUI: React.ReactNode;
-}
-
 function MockPhone({ children }: { children: React.ReactNode }) {
   return (
     <div className="mx-auto w-full max-w-[280px]">
       <div className="rounded-[2rem] border-2 border-border bg-card shadow-xl overflow-hidden">
-        {/* Notch */}
         <div className="flex justify-center pt-2 pb-1">
           <div className="w-20 h-1 rounded-full bg-border" />
         </div>
@@ -34,236 +24,186 @@ function MockPhone({ children }: { children: React.ReactNode }) {
   );
 }
 
-// Step 1: Joining a group
-function JoinGroupMock() {
+// Step 1: Admin creates group
+function CreateGroupMock() {
   return (
     <div className="space-y-2.5">
-      <div className="text-xs font-semibold text-foreground mb-2">Available Groups</div>
-      {[
-        { name: "Emerald Circle", amount: "₦20,000", members: "5/6", badge: "Gold" },
-        { name: "Savings Warriors", amount: "₦5,000", members: "3/4", badge: "Bronze" },
-      ].map((g) => (
-        <div key={g.name} className="rounded-lg border border-border bg-background p-2.5 space-y-1.5">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-foreground">{g.name}</span>
-            <Badge variant="outline" className="text-[9px] h-4">{g.badge}</Badge>
-          </div>
-          <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-            <span>{g.amount}/month</span>
-            <span>{g.members} members</span>
-          </div>
-          <Progress value={parseInt(g.members) / parseInt(g.members.split("/")[1]) * 100} className="h-1.5" />
-          <Button size="sm" className="w-full h-6 text-[10px]">Request to Join</Button>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// Step 2: Contributing
-function ContributionMock() {
-  return (
-    <div className="space-y-3">
-      <div className="rounded-lg border border-success/30 bg-success/5 p-3 text-center">
-        <div className="text-[10px] text-muted-foreground mb-1">Cycle 2 — Due in 3 days</div>
-        <div className="text-xl font-bold text-foreground">₦20,000</div>
-        <div className="text-[10px] text-muted-foreground">Monthly Contribution</div>
-      </div>
-      <div className="space-y-1.5">
-        <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-          <CheckCircle2 className="h-3 w-3 text-success" />
-          <span>Cycle 1 — Paid ₦20,000</span>
-          <span className="ml-auto text-success text-[9px]">✓ On time</span>
-        </div>
-        <div className="flex items-center gap-2 text-[10px] text-foreground font-medium">
-          <Clock className="h-3 w-3 text-warning" />
-          <span>Cycle 2 — ₦20,000 due</span>
-          <span className="ml-auto text-warning text-[9px]">Pending</span>
-        </div>
-      </div>
-      <Button className="w-full h-7 text-[10px]">
-        <CreditCard className="h-3 w-3 mr-1" />
-        Pay ₦20,000 Now
-      </Button>
-      <div className="text-center text-[9px] text-muted-foreground">
-        or enable auto-debit from your card
-      </div>
-    </div>
-  );
-}
-
-// Step 3: Auto-sweep
-function AutoSweepMock() {
-  return (
-    <div className="space-y-3">
-      <div className="text-xs font-semibold text-foreground">Auto-Contribution Sweep</div>
-      <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2">
-        <div className="flex items-center gap-2">
-          <RefreshCw className="h-3.5 w-3.5 text-primary" />
-          <span className="text-[10px] font-medium text-foreground">Recurring Charge Active</span>
-        </div>
-        <div className="text-[10px] text-muted-foreground">
-          Your card ending <span className="font-mono">•••• 4521</span> is charged automatically on each cycle date.
-        </div>
-      </div>
-      <div className="space-y-1.5 text-[10px]">
-        {["Jan 15 — ₦20,000 swept ✓", "Feb 15 — ₦20,000 swept ✓", "Mar 15 — Scheduled"].map((item, i) => (
-          <div key={i} className={cn("flex items-center gap-2 rounded-md px-2 py-1",
-            i < 2 ? "bg-success/10 text-success" : "bg-muted/30 text-muted-foreground"
-          )}>
-            {i < 2 ? <CheckCircle2 className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
-            <span>{item}</span>
+      <div className="text-xs font-semibold text-foreground mb-1">Create Thrift Group</div>
+      <div className="space-y-2">
+        {[
+          { label: "Group Name", value: "Emerald Circle" },
+          { label: "Contribution Amount", value: "₦20,000" },
+          { label: "Period", value: "Monthly" },
+          { label: "Max Members", value: "6" },
+        ].map((field) => (
+          <div key={field.label} className="rounded-md border border-border bg-background px-2.5 py-1.5">
+            <div className="text-[9px] text-muted-foreground">{field.label}</div>
+            <div className="text-xs font-medium text-foreground">{field.value}</div>
           </div>
         ))}
       </div>
-    </div>
-  );
-}
-
-// Step 4: Payout
-function PayoutMock() {
-  return (
-    <div className="space-y-3">
-      <div className="rounded-lg bg-gradient-to-br from-success/20 to-success/5 border border-success/30 p-3 text-center space-y-1">
-        <CheckCircle2 className="h-6 w-6 text-success mx-auto" />
-        <div className="text-xs font-semibold text-foreground">Payout Received!</div>
-        <div className="text-2xl font-bold text-foreground">₦114,000</div>
-        <div className="text-[10px] text-muted-foreground">
-          ₦120,000 total · ₦6,000 platform fee (5%)
-        </div>
-      </div>
-      <div className="rounded-md border border-border p-2 text-[10px] space-y-1">
-        <div className="flex justify-between text-muted-foreground">
-          <span>Sent to</span>
-          <span className="font-medium text-foreground">GTBank •••4821</span>
-        </div>
-        <div className="flex justify-between text-muted-foreground">
-          <span>Reference</span>
-          <span className="font-mono text-foreground">WS-PAY-00238</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Step 5: Swap position
-function SwapMock() {
-  return (
-    <div className="space-y-3">
-      <div className="text-xs font-semibold text-foreground">Position Swap Request</div>
-      <div className="rounded-lg border border-warning/30 bg-warning/5 p-3 space-y-2">
-        <div className="flex items-center justify-between text-[10px]">
-          <div className="text-center">
-            <div className="font-medium text-foreground">You</div>
-            <div className="text-lg font-bold text-foreground">Pos #5</div>
-            <div className="text-muted-foreground">Payout: June</div>
-          </div>
-          <ArrowLeftRight className="h-5 w-5 text-warning" />
-          <div className="text-center">
-            <div className="font-medium text-foreground">Ada O.</div>
-            <div className="text-lg font-bold text-foreground">Pos #2</div>
-            <div className="text-muted-foreground">Payout: March</div>
-          </div>
-        </div>
-      </div>
-      <div className="text-[10px] text-muted-foreground text-center">
-        Both members must agree. One swap per cycle allowed.
-      </div>
-      <Button className="w-full h-7 text-[10px]" variant="outline">
-        <ArrowLeftRight className="h-3 w-3 mr-1" />
-        Request Swap
+      <Button className="w-full h-7 text-[10px] mt-1">
+        <PlusCircle className="h-3 w-3 mr-1" />
+        Create Group
       </Button>
     </div>
   );
 }
 
-// Step 6: Fund & Withdraw
-function FundWithdrawMock() {
+// Step 2: Group created confirmation
+function GroupCreatedMock() {
   return (
     <div className="space-y-3">
-      <div className="rounded-lg border border-border bg-background p-3 text-center space-y-1">
-        <div className="text-[10px] text-muted-foreground">Wallet Balance</div>
-        <div className="text-xl font-bold text-foreground">₦134,500</div>
-        <div className="text-[9px] text-muted-foreground">Available for withdrawal</div>
+      <div className="rounded-lg bg-success/10 border border-success/30 p-3 text-center space-y-1.5">
+        <CheckCircle2 className="h-7 w-7 text-success mx-auto" />
+        <div className="text-xs font-semibold text-foreground">Group Created!</div>
+        <div className="text-sm font-bold text-foreground">Emerald Circle</div>
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        <Button size="sm" className="h-8 text-[10px]">
-          <ArrowDown className="h-3 w-3 mr-1" />
-          Fund Wallet
-        </Button>
-        <Button size="sm" variant="outline" className="h-8 text-[10px]">
-          <Banknote className="h-3 w-3 mr-1" />
-          Withdraw
-        </Button>
+      <div className="rounded-md border border-border p-2.5 space-y-1.5 text-[10px]">
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">Contribution</span>
+          <span className="font-medium text-foreground">₦20,000/month</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">Members</span>
+          <span className="font-medium text-foreground">1/6 (You)</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">Status</span>
+          <Badge variant="secondary" className="text-[9px] h-4">Pending</Badge>
+        </div>
       </div>
-      <div className="text-[10px] text-muted-foreground space-y-1">
-        <div className="flex items-center gap-1.5">
-          <Shield className="h-3 w-3 text-primary" />
-          Withdrawals processed to verified bank only
-        </div>
-        <div className="flex items-center gap-1.5">
-          <Shield className="h-3 w-3 text-primary" />
-          Daily limit: ₦500,000
-        </div>
+      <div className="text-center text-[9px] text-muted-foreground">
+        Add members to fill your group and start the cycle.
       </div>
     </div>
   );
+}
+
+// Step 3: Admin adds members via invite
+function AddMembersMock() {
+  return (
+    <div className="space-y-2.5">
+      <div className="text-xs font-semibold text-foreground">Add Members</div>
+      <div className="rounded-md border border-primary/20 bg-primary/5 px-2.5 py-2 text-[10px] text-muted-foreground">
+        <div className="flex items-center gap-1.5 mb-1">
+          <Mail className="h-3 w-3 text-primary" />
+          <span className="font-medium text-foreground">Invite via Email</span>
+        </div>
+        Share an invite link or enter emails directly.
+      </div>
+      <div className="space-y-1.5">
+        {["ada@email.com", "chidi@email.com", "kemi@email.com"].map((email) => (
+          <div key={email} className="flex items-center gap-2 rounded-md border border-border bg-background px-2.5 py-1.5 text-[10px]">
+            <div className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center text-[8px] font-bold text-primary">
+              {email.charAt(0).toUpperCase()}
+            </div>
+            <span className="flex-1 text-foreground">{email}</span>
+            <Badge variant="outline" className="text-[8px] h-3.5">Invited</Badge>
+          </div>
+        ))}
+      </div>
+      <Button className="w-full h-7 text-[10px]">
+        <Send className="h-3 w-3 mr-1" />
+        Send Invites
+      </Button>
+    </div>
+  );
+}
+
+// Step 4: Members join and group fills up
+function MembersJoinMock() {
+  const members = [
+    { name: "You (Admin)", status: "joined" },
+    { name: "Ada O.", status: "joined" },
+    { name: "Chidi N.", status: "joined" },
+    { name: "Kemi B.", status: "joined" },
+    { name: "Emeka A.", status: "joined" },
+    { name: "Slot 6", status: "waiting" },
+  ];
+  return (
+    <div className="space-y-2.5">
+      <div className="text-xs font-semibold text-foreground">Emerald Circle — Members</div>
+      <Progress value={83} className="h-2" />
+      <div className="text-[10px] text-muted-foreground text-right">5/6 members joined</div>
+      <div className="space-y-1">
+        {members.map((m, i) => (
+          <div key={i} className={cn(
+            "flex items-center gap-2 rounded-md px-2.5 py-1.5 text-[10px]",
+            m.status === "joined" ? "bg-success/5 border border-success/20" : "bg-muted/20 border border-dashed border-border"
+          )}>
+            <div className={cn(
+              "h-5 w-5 rounded-full flex items-center justify-center text-[8px] font-bold",
+              m.status === "joined" ? "bg-success/20 text-success" : "bg-muted/30 text-muted-foreground"
+            )}>
+              {m.status === "joined" ? "✓" : "?"}
+            </div>
+            <span className={cn(
+              "flex-1",
+              m.status === "joined" ? "text-foreground" : "text-muted-foreground"
+            )}>
+              {m.name}
+            </span>
+            {i === 0 && <Badge variant="outline" className="text-[8px] h-3.5">Admin</Badge>}
+            {m.status === "joined" && i > 0 && (
+              <span className="text-success text-[9px]">Joined</span>
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="text-center text-[9px] text-muted-foreground">
+        Once all members join, payout order is randomized and the cycle begins.
+      </div>
+    </div>
+  );
+}
+
+interface DemoStep {
+  id: string;
+  title: string;
+  subtitle: string;
+  icon: React.ElementType;
+  color: string;
+  mockUI: React.ReactNode;
 }
 
 const DEMO_STEPS: DemoStep[] = [
   {
-    id: "join",
-    title: "Join a Thrift Group",
-    subtitle: "Browse the pool, find a group that fits your budget, and request to join.",
+    id: "create",
+    title: "Admin Creates a Group",
+    subtitle: "Set the group name, contribution amount, frequency, and max members.",
+    icon: Settings,
+    color: "text-primary",
+    mockUI: <CreateGroupMock />,
+  },
+  {
+    id: "created",
+    title: "Group is Created",
+    subtitle: "Your group is live in pending status, waiting for members to join.",
+    icon: CheckCircle2,
+    color: "text-success",
+    mockUI: <GroupCreatedMock />,
+  },
+  {
+    id: "invite",
+    title: "Admin Invites Members",
+    subtitle: "Send invite links via email. Members receive a link to join your group.",
+    icon: UserPlus,
+    color: "text-primary",
+    mockUI: <AddMembersMock />,
+  },
+  {
+    id: "fill",
+    title: "Members Join the Group",
+    subtitle: "As members accept invites, the group fills up. The cycle starts once it's full.",
     icon: Users,
-    color: "text-primary",
-    mockUI: <JoinGroupMock />,
-  },
-  {
-    id: "contribute",
-    title: "Make Contributions",
-    subtitle: "Pay your share each cycle — manually or by auto-debit from your card.",
-    icon: CreditCard,
     color: "text-success",
-    mockUI: <ContributionMock />,
-  },
-  {
-    id: "sweep",
-    title: "Auto-Sweep Contributions",
-    subtitle: "Link your card once. Contributions are charged automatically each cycle.",
-    icon: RefreshCw,
-    color: "text-primary",
-    mockUI: <AutoSweepMock />,
-  },
-  {
-    id: "payout",
-    title: "Receive Your Payout",
-    subtitle: "When it's your turn, the full pot is paid to your wallet instantly.",
-    icon: Banknote,
-    color: "text-success",
-    mockUI: <PayoutMock />,
-  },
-  {
-    id: "swap",
-    title: "Swap Positions",
-    subtitle: "Need funds sooner? Request a swap with another member in your group.",
-    icon: ArrowLeftRight,
-    color: "text-warning",
-    mockUI: <SwapMock />,
-  },
-  {
-    id: "wallet",
-    title: "Fund & Withdraw",
-    subtitle: "Top up your wallet or withdraw earnings to your verified bank account.",
-    icon: Wallet,
-    color: "text-primary",
-    mockUI: <FundWithdrawMock />,
+    mockUI: <MembersJoinMock />,
   },
 ];
 
 export function LandingDemo() {
   const [active, setActive] = useState(0);
-
   const goTo = (i: number) => setActive(Math.max(0, Math.min(DEMO_STEPS.length - 1, i)));
 
   return (
@@ -277,10 +217,10 @@ export function LandingDemo() {
         >
           <Badge variant="outline" className="mb-3 text-xs">Interactive Demo</Badge>
           <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-3">
-            See How WeSave Works
+            See How It Works
           </h2>
           <p className="text-muted-foreground max-w-xl mx-auto text-sm">
-            Walk through every step — from joining a group to receiving your payout. No sign-up needed.
+            Walk through how a thrift group is created and members are added — step by step.
           </p>
         </motion.div>
 
@@ -353,7 +293,6 @@ export function LandingDemo() {
               </motion.div>
             </AnimatePresence>
 
-            {/* Navigation */}
             <div className="flex items-center gap-3">
               <Button
                 size="icon"
