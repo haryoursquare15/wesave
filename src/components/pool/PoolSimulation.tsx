@@ -45,7 +45,7 @@ export function PoolSimulation() {
       >
         <Sparkles className="h-4 w-4 text-warning" />
         <span>
-          Over <span className="font-semibold text-foreground">200+</span> thrift cycles completed this month.
+          <span className="font-semibold text-foreground">8 groups</span> created &amp; <span className="font-semibold text-foreground">1 cycle</span> completed since launch.
         </span>
       </motion.div>
 
