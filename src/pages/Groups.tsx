@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Search, Filter, Users, TrendingUp } from "lucide-react";
+import { Search, Filter, Users } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { ThriftGroupCard } from "@/components/ThriftGroupCard";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { BottomNav } from "@/components/BottomNav";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import { useMyGroups, usePoolGroups } from "@/hooks/useThriftGroups";
+import { PoolSimulation } from "@/components/pool/PoolSimulation";
 
 export default function Groups() {
   const navigate = useNavigate();
@@ -133,32 +134,12 @@ export default function Groups() {
           </TabsContent>
 
           <TabsContent value="pool" className="space-y-6">
-            {/* Info Banner */}
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="p-4 rounded-xl bg-primary/5 border border-primary/20"
-            >
-              <div className="flex items-start gap-3">
-                <TrendingUp className="h-5 w-5 text-primary mt-0.5" />
-                <div>
-                  <p className="text-sm font-medium text-foreground">
-                    Gold &amp; Silver members can request to join groups
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Earn an excellent badge (credit score ≥750) to join groups from the pool
-                  </p>
-                </div>
-              </div>
-            </motion.div>
+            <PoolSimulation />
 
-            {/* Pool Groups */}
-            {poolGroupsLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="h-6 w-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-              </div>
-            ) : filteredPoolGroups.length > 0 ? (
-              <div className="space-y-4">
+            {/* Real pool groups below simulation */}
+            {!poolGroupsLoading && filteredPoolGroups.length > 0 && (
+              <div className="space-y-4 mt-6">
+                <h3 className="text-sm font-medium text-muted-foreground">Live Pool Groups</h3>
                 {filteredPoolGroups.map((group) => (
                   <ThriftGroupCard
                     key={group.id}
@@ -174,12 +155,6 @@ export default function Groups() {
                     isCompleted={group.status === "completed"}
                   />
                 ))}
-              </div>
-            ) : (
-              <div className="text-center py-12">
-                <p className="text-muted-foreground">
-                  No groups available in the pool yet
-                </p>
               </div>
             )}
           </TabsContent>
