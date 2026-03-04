@@ -41,10 +41,6 @@ export function ActivityTicker() {
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
-      {/* Simulated badge */}
-      <div className="absolute top-1 right-2 text-[10px] text-muted-foreground/50 select-none">
-        Simulated Activity
-      </div>
 
       <div className="flex items-center gap-3 min-h-[40px]">
         {/* Pulsing dot */}

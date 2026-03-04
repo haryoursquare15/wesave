@@ -159,10 +159,6 @@ export function SimulatedPoolCard({ group, userBadge = "silver", index }: Simula
         </TooltipProvider>
       </div>
 
-      {/* Simulated indicator */}
-      <div className="absolute bottom-1 right-2 text-[8px] text-muted-foreground/30 select-none">
-        demo
-      </div>
     </motion.div>
   );
 }
