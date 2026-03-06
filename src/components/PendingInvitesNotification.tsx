@@ -284,13 +284,17 @@ export function PendingInvitesNotification() {
                           disabled={responding && respondingId === invite.id}
                         >
                           {responding && respondingId === invite.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <span className="flex items-center gap-1.5">
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              <span className="text-xs truncate">{acceptPhase || "Processing..."}</span>
+                            </span>
                           ) : (
                             <>
                               <Check className="h-4 w-4 mr-1" />
-                              Accept
+                              Accept & Pay
                             </>
                           )}
+                        </Button>
                         </Button>
                         <Button
                           size="sm"
