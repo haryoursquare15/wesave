@@ -117,22 +117,21 @@ export function SplitInviteDialog({ open, onOpenChange, splitRequestId, amountPe
       toast({ title: "Limit reached", description: "All participant slots are filled.", variant: "destructive" });
       return;
     }
-    const { error } = await supabase.from("split_participants").insert({
-      split_request_id: splitRequestId,
-      user_id: targetUser.id,
-      amount_due: amountPerPerson,
-      status: "pending",
+    const { data, error } = await supabase.rpc("send_split_invite", {
+      _split_request_id: splitRequestId,
+      _inviter_id: user.id,
+      _invitee_id: targetUser.id,
+      _amount_due: amountPerPerson,
     });
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
       return;
     }
-    await supabase.from("user_notifications").insert({
-      user_id: targetUser.id,
-      title: "SplitPay Request",
-      message: `You've been invited to split "₦${amountPerPerson.toLocaleString()}" for "${purpose}".`,
-      notification_type: "split_invite",
-    });
+    const result = data as { success: boolean; error?: string };
+    if (!result.success) {
+      toast({ title: "Error", description: result.error || "Could not send invite", variant: "destructive" });
+      return;
+    }
     setInvitedIds((prev) => new Set(prev).add(targetUser.id));
     toast({ title: "Invited!", description: `${targetUser.full_name || targetUser.username} has been invited.` });
   };
