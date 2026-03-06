@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Plus, Search, Shield } from "lucide-react";
+import { Plus, Search, Shield, Target } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { WalletCard } from "@/components/WalletCard";
 import { ThriftGroupCard } from "@/components/ThriftGroupCard";
@@ -15,8 +15,8 @@ import { useEffect } from "react";
 const quickActions = [
   { label: "Fund Wallet", icon: "💰", link: "/wallet" },
   { label: "New Group", icon: "👥", link: "/create-group" },
+  { label: "Goal Funding", icon: "🎯", link: "/goal-funding" },
   { label: "Referrals", icon: "🎁", link: "/referrals" },
-  { label: "Support", icon: "💬", link: "/support/new" },
 ];
 
 export default function Dashboard() {
@@ -149,6 +149,30 @@ export default function Dashboard() {
             </div>
           )}
         </section>
+
+        {/* Goal Funding CTA */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="p-6 rounded-2xl bg-gradient-to-br from-secondary/10 to-secondary/5 border border-secondary/20"
+        >
+          <div className="flex items-center gap-4">
+            <div className="h-12 w-12 rounded-xl bg-secondary/20 flex items-center justify-center">
+              <Target className="h-6 w-6 text-secondary" />
+            </div>
+            <div className="flex-1">
+              <h4 className="font-semibold text-foreground">Goal Funding</h4>
+              <p className="text-sm text-muted-foreground">
+                Create or contribute to a funding campaign
+              </p>
+            </div>
+            <Link to="/goal-funding">
+              <Button size="sm">
+                Explore
+              </Button>
+            </Link>
+          </div>
+        </motion.div>
 
         {/* Create Group CTA */}
         <motion.div

@@ -22,6 +22,9 @@ import SecuritySettings from "./pages/SecuritySettings";
 import Settings from "./pages/Settings";
 import Support from "./pages/Support";
 import Crowdfunding from "./pages/Crowdfunding";
+import GoalFunding from "./pages/GoalFunding";
+import CreateGoalCampaign from "./pages/CreateGoalCampaign";
+import GoalCampaignDetail from "./pages/GoalCampaignDetail";
 import Associations from "./pages/Associations";
 import TermsOfService from "./pages/TermsOfService";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
@@ -31,11 +34,11 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-const PUBLIC_ROUTES = ["/", "/auth", "/forgot-password", "/invite", "/onboarding", "/terms", "/privacy"];
+const PUBLIC_ROUTES = ["/", "/auth", "/forgot-password", "/invite", "/onboarding", "/terms", "/privacy", "/goal"];
 
 function isPublicRoute(pathname: string) {
   return PUBLIC_ROUTES.some(route => 
-    pathname === route || pathname.startsWith("/invite/")
+    pathname === route || pathname.startsWith("/invite/") || pathname.startsWith("/goal/")
   );
 }
 
@@ -116,6 +119,9 @@ const App = () => {
                 <Route path="/support/new" element={<Support />} />
                 <Route path="/help" element={<Support />} />
                 <Route path="/crowdfunding" element={<Crowdfunding />} />
+                <Route path="/goal-funding" element={<GoalFunding />} />
+                <Route path="/goal-funding/create" element={<CreateGoalCampaign />} />
+                <Route path="/goal-funding/:campaignId" element={<GoalCampaignDetail />} />
                 <Route path="/associations" element={<Associations />} />
                 <Route path="/referrals" element={<Referrals />} />
                 <Route path="/terms" element={<TermsOfService />} />
