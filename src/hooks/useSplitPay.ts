@@ -187,5 +187,18 @@ export function useSplitRequestDetail(requestId: string | undefined) {
       .eq("id", request.id);
   }, [user, request]);
 
-  return { request, participants, transactions, creatorProfile, loading, isGroupComplete, payShare, declineShare, cancelRequest, refetch: fetchDetail };
+  const removeParticipant = useCallback(async (participantUserId: string) => {
+    if (!user || !request) return { success: false, error: "Not ready" };
+    const { data, error } = await supabase.rpc("remove_split_participant", {
+      _split_request_id: request.id,
+      _creator_id: user.id,
+      _participant_user_id: participantUserId,
+    });
+    if (error) return { success: false, error: error.message };
+    const result = data as { success: boolean; error?: string };
+    if (result.success) await fetchDetail();
+    return result;
+  }, [user, request, fetchDetail]);
+
+  return { request, participants, transactions, creatorProfile, loading, isGroupComplete, payShare, declineShare, cancelRequest, removeParticipant, refetch: fetchDetail };
 }
