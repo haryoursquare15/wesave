@@ -53,6 +53,7 @@ export function PendingInvitesNotification() {
   const { notifications, loading: notificationsLoading, unreadCount, clearAll, markAllRead, refetch: refetchNotifs } = useNotifications();
   const [respondingId, setRespondingId] = useState<string | null>(null);
   const [decliningNotifId, setDecliningNotifId] = useState<string | null>(null);
+  const [payingSplitId, setPayingSplitId] = useState<string | null>(null);
 
   useEffect(() => {
     refetch();
