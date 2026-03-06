@@ -285,6 +285,38 @@ export type Database = {
         }
         Relationships: []
       }
+      campaign_updates: {
+        Row: {
+          campaign_id: string
+          created_at: string
+          created_by: string
+          id: string
+          update_message: string
+        }
+        Insert: {
+          campaign_id: string
+          created_at?: string
+          created_by: string
+          id?: string
+          update_message: string
+        }
+        Update: {
+          campaign_id?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          update_message?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_updates_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "goal_campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       card_tokens: {
         Row: {
           card_expiry: string | null
@@ -768,6 +800,110 @@ export type Database = {
             columns: ["group_id"]
             isOneToOne: false
             referencedRelation: "thrift_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      goal_campaigns: {
+        Row: {
+          amount_raised: number
+          beneficiary_account_name: string | null
+          beneficiary_account_number: string | null
+          beneficiary_bank_name: string | null
+          campaign_deadline: string | null
+          campaign_image: string | null
+          campaign_owner_user_id: string
+          campaign_slug: string | null
+          campaign_status: string
+          campaign_title: string
+          contribution_visibility: string
+          contributor_count: number
+          created_at: string
+          description: string | null
+          goal_amount: number
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          amount_raised?: number
+          beneficiary_account_name?: string | null
+          beneficiary_account_number?: string | null
+          beneficiary_bank_name?: string | null
+          campaign_deadline?: string | null
+          campaign_image?: string | null
+          campaign_owner_user_id: string
+          campaign_slug?: string | null
+          campaign_status?: string
+          campaign_title: string
+          contribution_visibility?: string
+          contributor_count?: number
+          created_at?: string
+          description?: string | null
+          goal_amount: number
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          amount_raised?: number
+          beneficiary_account_name?: string | null
+          beneficiary_account_number?: string | null
+          beneficiary_bank_name?: string | null
+          campaign_deadline?: string | null
+          campaign_image?: string | null
+          campaign_owner_user_id?: string
+          campaign_slug?: string | null
+          campaign_status?: string
+          campaign_title?: string
+          contribution_visibility?: string
+          contributor_count?: number
+          created_at?: string
+          description?: string | null
+          goal_amount?: number
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      goal_contributions: {
+        Row: {
+          anonymous: boolean
+          campaign_id: string
+          contribution_amount: number
+          contribution_reference: string | null
+          contribution_status: string
+          contributor_name: string | null
+          contributor_user_id: string
+          created_at: string
+          id: string
+        }
+        Insert: {
+          anonymous?: boolean
+          campaign_id: string
+          contribution_amount: number
+          contribution_reference?: string | null
+          contribution_status?: string
+          contributor_name?: string | null
+          contributor_user_id: string
+          created_at?: string
+          id?: string
+        }
+        Update: {
+          anonymous?: boolean
+          campaign_id?: string
+          contribution_amount?: number
+          contribution_reference?: string | null
+          contribution_status?: string
+          contributor_name?: string | null
+          contributor_user_id?: string
+          created_at?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "goal_contributions_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "goal_campaigns"
             referencedColumns: ["id"]
           },
         ]
