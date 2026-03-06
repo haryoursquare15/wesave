@@ -544,7 +544,7 @@ export default function GroupDetail() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="min-h-screen min-h-[100dvh] bg-background pb-24 safe-bottom">
       {/* Header */}
       <header className="bg-card border-b border-border sticky top-0 z-40">
         <div className="container mx-auto px-4 py-4">
@@ -789,7 +789,7 @@ export default function GroupDetail() {
         </div>
 
         <TabsContent value="chat" className="mt-0">
-          <div className="container mx-auto px-4 flex flex-col" style={{ height: "calc(100vh - 320px)" }}>
+          <div className="container mx-auto px-3 sm:px-4 flex flex-col" style={{ height: "calc(100vh - 320px)", maxHeight: "calc(100dvh - 320px)" }}>
             {/* Messages */}
             <ScrollArea ref={scrollRef} className="flex-1 py-4">
               <div className="space-y-4">
