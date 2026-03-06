@@ -29,6 +29,8 @@ function buildReceiptHtml(
   merchantAccount: string,
   participants: { name: string; amount: number; paid_at: string }[],
   completedAt: string,
+  splitReference: string,
+  settlementReference: string | null,
 ): string {
   const participantRows = participants
     .map(
