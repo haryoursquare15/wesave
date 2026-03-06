@@ -217,9 +217,31 @@ export default function SplitPayDetail() {
                     <p className="text-xs text-muted-foreground">₦{Number(p.amount_due).toLocaleString()}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  {statusIcon[p.status as keyof typeof statusIcon]}
-                  <span className="text-xs capitalize text-muted-foreground">{p.status}</span>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
+                    {statusIcon[p.status as keyof typeof statusIcon]}
+                    <span className="text-xs capitalize text-muted-foreground">{p.status}</span>
+                  </div>
+                  {isCreator && p.status === "pending" && p.user_id !== user?.id && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                      disabled={removingId === p.user_id}
+                      onClick={async () => {
+                        setRemovingId(p.user_id);
+                        const result = await removeParticipant(p.user_id);
+                        setRemovingId(null);
+                        if (result.success) {
+                          toast({ title: "Removed", description: `${p.profile?.full_name || "Participant"} has been removed.` });
+                        } else {
+                          toast({ title: "Error", description: result.error || "Could not remove", variant: "destructive" });
+                        }
+                      }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
                 </div>
               </div>
             ))}
