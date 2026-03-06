@@ -187,5 +187,5 @@ export function useSplitRequestDetail(requestId: string | undefined) {
       .eq("id", request.id);
   }, [user, request]);
 
-  return { request, participants, transactions, creatorProfile, loading, payShare, declineShare, cancelRequest, refetch: fetchDetail };
+  return { request, participants, transactions, creatorProfile, loading, isGroupComplete, payShare, declineShare, cancelRequest, refetch: fetchDetail };
 }
