@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Bell, Check, X, Users, Loader2, Trash2, AlertTriangle, CheckCircle, Info, CreditCard } from "lucide-react";
+import { Bell, Check, X, Users, Loader2, Trash2, AlertTriangle, CheckCircle, Info, CreditCard, Receipt } from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -19,16 +19,28 @@ function getNotificationIcon(type: string) {
   switch (type) {
     case "contribution_success":
     case "card_fallback_success":
-      return <CheckCircle className="h-5 w-5 text-green-500" />;
+      return <CheckCircle className="h-5 w-5 text-secondary" />;
     case "contribution_failed":
     case "card_fallback_failed":
     case "contribution_defaulted":
       return <AlertTriangle className="h-5 w-5 text-destructive" />;
     case "contribution_retry":
-      return <CreditCard className="h-5 w-5 text-yellow-500" />;
+      return <CreditCard className="h-5 w-5 text-accent-foreground" />;
+    case "split_invite":
+    case "split_decline":
+      return <Receipt className="h-5 w-5 text-primary" />;
     default:
       return <Info className="h-5 w-5 text-primary" />;
   }
+}
+
+function extractDeepLink(message: string): string | null {
+  const match = message.match(/→\s*(\/split-pay\/[a-f0-9-]+)/);
+  return match ? match[1] : null;
+}
+
+function cleanMessage(message: string): string {
+  return message.replace(/\nTap to view and respond → \/split-pay\/[a-f0-9-]+/, "");
 }
 
 export function PendingInvitesNotification() {
@@ -129,28 +141,38 @@ export function PendingInvitesNotification() {
                 </div>
               ) : (
                 <div className="divide-y divide-border">
-                  {notifications.map((notif) => (
-                    <div
-                      key={notif.id}
-                      className={`p-3 hover:bg-muted/50 transition-colors ${!notif.is_read ? "bg-primary/5" : ""}`}
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                          {getNotificationIcon(notif.notification_type)}
+                    {notifications.map((notif) => {
+                      const deepLink = extractDeepLink(notif.message);
+                      const displayMessage = cleanMessage(notif.message);
+                      const isClickable = !!deepLink;
+
+                      return (
+                        <div
+                          key={notif.id}
+                          className={`p-3 transition-colors ${!notif.is_read ? "bg-primary/5" : ""} ${isClickable ? "cursor-pointer hover:bg-muted/50" : "hover:bg-muted/50"}`}
+                          onClick={() => isClickable && navigate(deepLink!)}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                              {getNotificationIcon(notif.notification_type)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-foreground">{notif.title}</p>
+                              <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-line">{displayMessage}</p>
+                              {isClickable && (
+                                <p className="text-xs text-primary font-medium mt-1">Tap to view →</p>
+                              )}
+                              <p className="text-[10px] text-muted-foreground mt-1">
+                                {formatDistanceToNow(new Date(notif.created_at), { addSuffix: true })}
+                              </p>
+                            </div>
+                            {!notif.is_read && (
+                              <div className="h-2 w-2 rounded-full bg-primary flex-shrink-0 mt-2" />
+                            )}
+                          </div>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-foreground">{notif.title}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">{notif.message}</p>
-                          <p className="text-[10px] text-muted-foreground mt-1">
-                            {formatDistanceToNow(new Date(notif.created_at), { addSuffix: true })}
-                          </p>
-                        </div>
-                        {!notif.is_read && (
-                          <div className="h-2 w-2 rounded-full bg-primary flex-shrink-0 mt-2" />
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                      );
+                    })}
                 </div>
               )}
             </ScrollArea>

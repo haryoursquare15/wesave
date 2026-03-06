@@ -3475,6 +3475,15 @@ export type Database = {
         Args: { target_group_id: string; target_user_id: string }
         Returns: Json
       }
+      send_split_invite: {
+        Args: {
+          _amount_due: number
+          _invitee_id: string
+          _inviter_id: string
+          _split_request_id: string
+        }
+        Returns: Json
+      }
       update_credit_score: {
         Args: {
           _change_amount: number
