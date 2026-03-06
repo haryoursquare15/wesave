@@ -47,10 +47,12 @@ function cleanMessage(message: string): string {
 
 export function PendingInvitesNotification() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { invites, loading: invitesLoading, refetch } = usePendingInvites();
   const { respond, loading: responding } = useRespondToInvite();
-  const { notifications, loading: notificationsLoading, unreadCount, clearAll, markAllRead } = useNotifications();
+  const { notifications, loading: notificationsLoading, unreadCount, clearAll, markAllRead, refetch: refetchNotifs } = useNotifications();
   const [respondingId, setRespondingId] = useState<string | null>(null);
+  const [decliningNotifId, setDecliningNotifId] = useState<string | null>(null);
 
   useEffect(() => {
     refetch();
