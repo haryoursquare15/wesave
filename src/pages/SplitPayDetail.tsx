@@ -114,7 +114,7 @@ export default function SplitPayDetail() {
               <p className="text-lg font-bold text-primary">₦{Number(request.amount_per_person).toLocaleString()}</p>
               {request.platform_fee > 0 && (
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  + ₦{Math.ceil((request.platform_fee / request.number_of_people) * 100 / 100).toLocaleString()} fee
+                  + ₦{(Math.ceil((request.platform_fee / request.number_of_people) * 100) / 100).toLocaleString()} fee
                 </p>
               )}
             </div>
