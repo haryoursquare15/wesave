@@ -287,6 +287,8 @@ serve(async (req) => {
     });
 
     const completedAt = splitReq.updated_at || new Date().toISOString();
+    const splitReference = `split-${split_request_id}`;
+    const settlementReference = splitReq.settlement_reference || null;
     let sentCount = 0;
 
     // Send receipt to each participant + creator
@@ -304,6 +306,8 @@ serve(async (req) => {
         splitReq.merchant_account_number,
         participantDetails,
         completedAt,
+        splitReference,
+        settlementReference,
       );
 
       const emailRes = await fetch('https://api.resend.com/emails', {
