@@ -16,6 +16,7 @@ interface Props {
   amountPerPerson: number;
   purpose: string;
   existingParticipantIds: string[];
+  maxParticipants: number;
 }
 
 interface SearchResult {
@@ -25,7 +26,7 @@ interface SearchResult {
   avatar_url: string | null;
 }
 
-export function SplitInviteDialog({ open, onOpenChange, splitRequestId, amountPerPerson, purpose, existingParticipantIds }: Props) {
+export function SplitInviteDialog({ open, onOpenChange, splitRequestId, amountPerPerson, purpose, existingParticipantIds, maxParticipants }: Props) {
   const { user } = useAuth();
   const { toast } = useToast();
   const [search, setSearch] = useState("");
@@ -48,8 +49,14 @@ export function SplitInviteDialog({ open, onOpenChange, splitRequestId, amountPe
     doSearch();
   }, [debouncedSearch]);
 
+  const remainingSlots = maxParticipants - existingParticipantIds.length - invitedIds.size;
+
   const handleInvite = async (targetUser: SearchResult) => {
     if (!user) return;
+    if (remainingSlots <= 0) {
+      toast({ title: "Limit reached", description: "All participant slots are filled.", variant: "destructive" });
+      return;
+    }
     // Insert participant
     const { error } = await supabase.from("split_participants").insert({
       split_request_id: splitRequestId,
@@ -79,7 +86,11 @@ export function SplitInviteDialog({ open, onOpenChange, splitRequestId, amountPe
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Invite Participants</DialogTitle>
-          <DialogDescription>Search for users to split this bill with.</DialogDescription>
+          <DialogDescription>
+            Search for users to split this bill with. {remainingSlots > 0
+              ? `${remainingSlots} slot${remainingSlots === 1 ? "" : "s"} remaining.`
+              : "All slots filled."}
+          </DialogDescription>
         </DialogHeader>
 
         <div className="relative">
