@@ -85,16 +85,17 @@ export function useSplitRequestDetail(requestId: string | undefined) {
     setRequest(reqData);
     setTransactions((txRes.data as SplitTransaction[]) || []);
 
-    // Fetch participant profiles
+    // Fetch participant profiles using SECURITY DEFINER RPC (bypasses profile RLS)
     const parts = (partRes.data as SplitParticipant[]) || [];
     if (parts.length > 0) {
       const userIds = parts.map((p) => p.user_id);
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("id, full_name, username, avatar_url")
-        .in("id", userIds);
+      const { data: profiles } = await supabase.rpc("get_public_profiles", { user_ids: userIds });
 
-      const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+      const profileMap = new Map((profiles || []).map((p: any) => [p.id, { 
+        full_name: p.full_name, 
+        username: p.username, 
+        avatar_url: p.avatar_url 
+      }]));
       const enriched = parts.map((p) => ({
         ...p,
         profile: profileMap.get(p.user_id) || null,
@@ -104,14 +105,11 @@ export function useSplitRequestDetail(requestId: string | undefined) {
       setParticipants([]);
     }
 
-    // Fetch creator profile
+    // Fetch creator profile using SECURITY DEFINER RPC
     if (reqData) {
-      const { data: cp } = await supabase
-        .from("profiles")
-        .select("full_name, username")
-        .eq("id", reqData.creator_user_id)
-        .single();
-      setCreatorProfile(cp as any);
+      const { data: cpArr } = await supabase.rpc("get_public_profiles", { user_ids: [reqData.creator_user_id] });
+      const cp = cpArr && cpArr.length > 0 ? cpArr[0] : null;
+      setCreatorProfile(cp ? { full_name: cp.full_name, username: cp.username } : null);
     }
 
     setLoading(false);
