@@ -140,6 +140,24 @@ function buildReceiptHtml(
             </td>
           </tr>
 
+          <!-- Reference Info -->
+          <tr>
+            <td style="padding:0 0 20px;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f9fafb;border-radius:12px;border:1px solid ${BRAND.border};">
+                <tr>
+                  <td style="padding:16px 24px;">
+                    <p style="margin:0 0 4px;font-size:12px;font-weight:600;color:${BRAND.textMuted};text-transform:uppercase;letter-spacing:0.5px;">Transaction Reference</p>
+                    <p style="margin:0 0 8px;font-size:13px;font-family:monospace;color:${BRAND.textDark};">${splitReference}</p>
+                    ${settlementReference ? `
+                    <p style="margin:0 0 4px;font-size:12px;font-weight:600;color:${BRAND.textMuted};text-transform:uppercase;letter-spacing:0.5px;">Settlement Reference</p>
+                    <p style="margin:0;font-size:13px;font-family:monospace;color:${BRAND.textDark};">${settlementReference}</p>
+                    ` : ''}
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
           <!-- Participants Table -->
           <tr>
             <td style="padding:0 0 24px;">
