@@ -2111,6 +2111,265 @@ export type Database = {
         }
         Relationships: []
       }
+      target_ajo_contributions: {
+        Row: {
+          amount: number
+          contribution_date: string
+          created_at: string
+          group_id: string
+          id: string
+          reference: string | null
+          source: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          contribution_date?: string
+          created_at?: string
+          group_id: string
+          id?: string
+          reference?: string | null
+          source?: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          contribution_date?: string
+          created_at?: string
+          group_id?: string
+          id?: string
+          reference?: string | null
+          source?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "target_ajo_contributions_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "target_ajo_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      target_ajo_groups: {
+        Row: {
+          admin_user_id: string
+          amount_raised: number
+          beneficiary_account_name: string | null
+          beneficiary_account_number: string | null
+          beneficiary_bank_name: string | null
+          contribution_amount: number
+          created_at: string
+          description: string | null
+          frequency: string
+          id: string
+          max_members: number
+          member_count: number
+          name: string
+          reason: string | null
+          status: string
+          target_amount: number
+          target_date: string | null
+          updated_at: string
+        }
+        Insert: {
+          admin_user_id: string
+          amount_raised?: number
+          beneficiary_account_name?: string | null
+          beneficiary_account_number?: string | null
+          beneficiary_bank_name?: string | null
+          contribution_amount: number
+          created_at?: string
+          description?: string | null
+          frequency?: string
+          id?: string
+          max_members?: number
+          member_count?: number
+          name: string
+          reason?: string | null
+          status?: string
+          target_amount: number
+          target_date?: string | null
+          updated_at?: string
+        }
+        Update: {
+          admin_user_id?: string
+          amount_raised?: number
+          beneficiary_account_name?: string | null
+          beneficiary_account_number?: string | null
+          beneficiary_bank_name?: string | null
+          contribution_amount?: number
+          created_at?: string
+          description?: string | null
+          frequency?: string
+          id?: string
+          max_members?: number
+          member_count?: number
+          name?: string
+          reason?: string | null
+          status?: string
+          target_amount?: number
+          target_date?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      target_ajo_invites: {
+        Row: {
+          created_at: string
+          group_id: string
+          id: string
+          invitee_id: string
+          inviter_id: string
+          responded_at: string | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          group_id: string
+          id?: string
+          invitee_id: string
+          inviter_id: string
+          responded_at?: string | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          group_id?: string
+          id?: string
+          invitee_id?: string
+          inviter_id?: string
+          responded_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "target_ajo_invites_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "target_ajo_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      target_ajo_memberships: {
+        Row: {
+          group_id: string
+          id: string
+          joined_at: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          group_id: string
+          id?: string
+          joined_at?: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          group_id?: string
+          id?: string
+          joined_at?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "target_ajo_memberships_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "target_ajo_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      target_ajo_withdrawal_requests: {
+        Row: {
+          amount: number
+          approval_count: number
+          created_at: string
+          group_id: string
+          id: string
+          reason: string | null
+          rejection_count: number
+          requested_by: string
+          required_votes: number
+          resolved_at: string | null
+          status: string
+        }
+        Insert: {
+          amount: number
+          approval_count?: number
+          created_at?: string
+          group_id: string
+          id?: string
+          reason?: string | null
+          rejection_count?: number
+          requested_by: string
+          required_votes?: number
+          resolved_at?: string | null
+          status?: string
+        }
+        Update: {
+          amount?: number
+          approval_count?: number
+          created_at?: string
+          group_id?: string
+          id?: string
+          reason?: string | null
+          rejection_count?: number
+          requested_by?: string
+          required_votes?: number
+          resolved_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "target_ajo_withdrawal_requests_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "target_ajo_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      target_ajo_withdrawal_votes: {
+        Row: {
+          created_at: string
+          id: string
+          user_id: string
+          vote: string
+          withdrawal_request_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          user_id: string
+          vote: string
+          withdrawal_request_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          user_id?: string
+          vote?: string
+          withdrawal_request_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "target_ajo_withdrawal_votes_withdrawal_request_id_fkey"
+            columns: ["withdrawal_request_id"]
+            isOneToOne: false
+            referencedRelation: "target_ajo_withdrawal_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       test_ledger_entries: {
         Row: {
           amount: number
@@ -2963,6 +3222,8 @@ export type Database = {
       is_any_admin: { Args: { _user_id?: string }; Returns: boolean }
       is_group_admin: { Args: { _group_id: string }; Returns: boolean }
       is_group_member: { Args: { _group_id: string }; Returns: boolean }
+      is_target_ajo_admin: { Args: { p_group_id: string }; Returns: boolean }
+      is_target_ajo_member: { Args: { p_group_id: string }; Returns: boolean }
       join_group_via_invite: { Args: { token: string }; Returns: Json }
       log_audit_event: {
         Args: {
