@@ -17,6 +17,7 @@ const quickActions = [
   { label: "New Group", icon: "👥", link: "/create-group" },
   { label: "Goal Funding", icon: "🎯", link: "/goal-funding" },
   { label: "Target Ajo", icon: "🏦", link: "/target-ajo" },
+  { label: "SplitPay", icon: "🧾", link: "/split-pay" },
 ];
 
 export default function Dashboard() {
@@ -87,7 +88,7 @@ export default function Dashboard() {
         />
 
         {/* Quick Actions */}
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           {quickActions.map((action) => (
             <motion.button
               key={action.label}
