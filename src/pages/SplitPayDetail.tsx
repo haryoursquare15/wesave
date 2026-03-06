@@ -163,9 +163,26 @@ export default function SplitPayDetail() {
           </div>
         )}
 
+        {/* Add More Participants Prompt */}
+        {isCreator && request.status === "active" && participants.length < request.number_of_people && (
+          <div className="bg-primary/5 border border-primary/20 rounded-2xl p-5 flex items-center justify-between">
+            <div>
+              <p className="font-semibold text-foreground">
+                {participants.length} of {request.number_of_people} participants added
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Invite {request.number_of_people - participants.length} more {request.number_of_people - participants.length === 1 ? "person" : "people"} to complete this split.
+              </p>
+            </div>
+            <Button size="sm" onClick={() => setInviteOpen(true)}>
+              <UserPlus className="h-4 w-4 mr-1" /> Add
+            </Button>
+          </div>
+        )}
+
         {/* Participants */}
         <div className="bg-card border border-border rounded-2xl p-5">
-          <h3 className="font-semibold text-foreground mb-4">Participants ({participants.length})</h3>
+          <h3 className="font-semibold text-foreground mb-4">Participants ({participants.length}/{request.number_of_people})</h3>
           <div className="space-y-3">
             {participants.map((p) => (
               <div key={p.id} className="flex items-center justify-between">
