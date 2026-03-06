@@ -36,8 +36,8 @@ function getNotificationIcon(type: string) {
   }
 }
 
-function extractDeepLink(message: string): string | null {
-  const match = message.match(/→\s*(\/split-pay\/[a-f0-9-]+)/);
+function extractSplitRequestId(message: string): string | null {
+  const match = message.match(/\/split-pay\/([a-f0-9-]+)/);
   return match ? match[1] : null;
 }
 
