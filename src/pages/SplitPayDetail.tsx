@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, UserPlus, Receipt, CheckCircle, XCircle, Clock, Ban } from "lucide-react";
+import { ArrowLeft, UserPlus, Receipt, CheckCircle, XCircle, Clock, Ban, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -143,11 +143,25 @@ export default function SplitPayDetail() {
           )}
         </div>
 
+        {/* Incomplete Group Warning */}
+        {request.status === "active" && !isGroupComplete && (
+          <div className="bg-destructive/10 border border-destructive/20 rounded-2xl p-4 flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold text-foreground text-sm">Group Incomplete</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {participants.length} of {request.number_of_people} participants. Payments are blocked until the group is full.
+                {isCreator && " Invite more people to proceed."}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Action Buttons */}
         {myParticipation && request.status === "active" && myParticipation.status === "pending" && (
           <div className="flex gap-3">
-            <Button className="flex-1" onClick={handlePay} disabled={paying}>
-              {paying ? "Processing..." : "Accept & Pay"}
+            <Button className="flex-1" onClick={handlePay} disabled={paying || !isGroupComplete}>
+              {paying ? "Processing..." : !isGroupComplete ? "Waiting for group..." : "Accept & Pay"}
             </Button>
             <Button variant="outline" className="flex-1" onClick={handleDecline}>
               Decline
