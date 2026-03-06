@@ -2077,6 +2077,7 @@ export type Database = {
           merchant_account_number: string
           merchant_bank_name: string
           number_of_people: number
+          platform_fee: number
           purpose: string
           status: string
           total_amount: number
@@ -2092,6 +2093,7 @@ export type Database = {
           merchant_account_number: string
           merchant_bank_name: string
           number_of_people: number
+          platform_fee?: number
           purpose: string
           status?: string
           total_amount: number
@@ -2107,6 +2109,7 @@ export type Database = {
           merchant_account_number?: string
           merchant_bank_name?: string
           number_of_people?: number
+          platform_fee?: number
           purpose?: string
           status?: string
           total_amount?: number
