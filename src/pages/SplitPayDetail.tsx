@@ -21,6 +21,7 @@ export default function SplitPayDetail() {
   const [paying, setPaying] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [nudgingId, setNudgingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/auth");
