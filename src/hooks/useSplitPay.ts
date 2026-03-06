@@ -132,8 +132,17 @@ export function useSplitRequestDetail(requestId: string | undefined) {
     return () => { supabase.removeChannel(channel); };
   }, [requestId, fetchDetail]);
 
+  const isGroupComplete = participants.length >= (request?.number_of_people ?? 0);
+
   const payShare = useCallback(async () => {
     if (!user || !request) return { success: false, error: "Not ready" };
+    
+    // Block payment if the group isn't complete
+    const currentCount = participants.length;
+    if (currentCount < request.number_of_people) {
+      return { success: false, error: `Group is incomplete (${currentCount}/${request.number_of_people}). Wait for the creator to fill all slots.` };
+    }
+
     const participant = participants.find((p) => p.user_id === user.id);
     if (!participant) return { success: false, error: "You are not a participant" };
 
@@ -158,12 +167,16 @@ export function useSplitRequestDetail(requestId: string | undefined) {
 
   const declineShare = useCallback(async () => {
     if (!user || !request) return;
-    await supabase
-      .from("split_participants")
-      .update({ status: "declined" })
-      .eq("split_request_id", request.id)
-      .eq("user_id", user.id);
-  }, [user, request]);
+    const { data, error } = await supabase.rpc("decline_split_participation", {
+      _split_request_id: request.id,
+      _user_id: user.id,
+    });
+    if (error) {
+      console.error("Decline failed:", error.message);
+    }
+    // Refetch to update participant list
+    await fetchDetail();
+  }, [user, request, fetchDetail]);
 
   const cancelRequest = useCallback(async () => {
     if (!user || !request) return;
@@ -174,5 +187,5 @@ export function useSplitRequestDetail(requestId: string | undefined) {
       .eq("id", request.id);
   }, [user, request]);
 
-  return { request, participants, transactions, creatorProfile, loading, payShare, declineShare, cancelRequest, refetch: fetchDetail };
+  return { request, participants, transactions, creatorProfile, loading, isGroupComplete, payShare, declineShare, cancelRequest, refetch: fetchDetail };
 }

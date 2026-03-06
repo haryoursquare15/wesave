@@ -3287,6 +3287,10 @@ export type Database = {
         }
         Returns: Json
       }
+      decline_split_participation: {
+        Args: { _split_request_id: string; _user_id: string }
+        Returns: Json
+      }
       exit_completed_group: { Args: { _group_id: string }; Returns: Json }
       freeze_wallet_for_withdrawal: {
         Args: {
