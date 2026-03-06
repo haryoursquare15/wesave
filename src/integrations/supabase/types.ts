@@ -3492,6 +3492,10 @@ export type Database = {
         }
         Returns: Json
       }
+      send_split_payment_reminder: {
+        Args: { _split_request_id: string; _target_user_id: string }
+        Returns: Json
+      }
       update_credit_score: {
         Args: {
           _change_amount: number
