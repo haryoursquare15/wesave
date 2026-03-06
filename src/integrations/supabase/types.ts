@@ -3346,6 +3346,11 @@ export type Database = {
       is_any_admin: { Args: { _user_id?: string }; Returns: boolean }
       is_group_admin: { Args: { _group_id: string }; Returns: boolean }
       is_group_member: { Args: { _group_id: string }; Returns: boolean }
+      is_split_participant: { Args: { _user_id: string }; Returns: string[] }
+      is_split_request_creator: {
+        Args: { _request_id: string }
+        Returns: boolean
+      }
       is_target_ajo_admin: { Args: { p_group_id: string }; Returns: boolean }
       is_target_ajo_member: { Args: { p_group_id: string }; Returns: boolean }
       join_group_via_invite: { Args: { token: string }; Returns: Json }
