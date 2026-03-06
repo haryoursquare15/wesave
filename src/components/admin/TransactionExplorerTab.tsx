@@ -149,8 +149,9 @@ type TransactionStatus = Database["public"]["Enums"]["transaction_status"];
                <SelectItem value="contribution">Contribution</SelectItem>
                <SelectItem value="payout">Payout</SelectItem>
                <SelectItem value="funding">Funding</SelectItem>
-               <SelectItem value="withdrawal">Withdrawal</SelectItem>
-               <SelectItem value="service_fee">Service Fee</SelectItem>
+                <SelectItem value="withdrawal">Withdrawal</SelectItem>
+                <SelectItem value="split_payment">Split Payment</SelectItem>
+                <SelectItem value="service_fee">Service Fee</SelectItem>
              </SelectContent>
            </Select>
            <Select value={statusFilter} onValueChange={setStatusFilter}>

@@ -287,6 +287,7 @@ export default function Wallet() {
         return <ArrowDownLeft className="h-5 w-5" />;
       case "contribution":
       case "withdrawal":
+      case "split_payment":
         return <ArrowUpRight className="h-5 w-5" />;
       case "lock":
         return <CreditCard className="h-4 w-4" />;
@@ -302,6 +303,7 @@ export default function Wallet() {
         return "bg-success/10 text-success";
       case "contribution":
       case "withdrawal":
+      case "split_payment":
         return "bg-coral/10 text-coral";
       default:
         return "bg-muted text-muted-foreground";
@@ -338,6 +340,8 @@ export default function Wallet() {
         return "Unlocked savings";
       case "service_fee":
         return "Platform service fee";
+      case "split_payment":
+        return "SplitPay payment";
       default:
         return tx.type.replace("_", " ");
     }
@@ -487,6 +491,9 @@ export default function Wallet() {
                     }`}>
                       {tx.type === "funding" || tx.type === "payout" ? "+" : "-"}₦{formatAmount(tx.amount)}
                     </span>
+                    {tx.type === "split_payment" && (
+                      <p className="text-[10px] text-muted-foreground">incl. fee</p>
+                    )}
                   </div>
                 </motion.div>
               ))}
