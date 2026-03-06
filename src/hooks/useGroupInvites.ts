@@ -110,11 +110,13 @@ export function useRespondToInvite() {
     setError(null);
 
     try {
+      console.log("Calling respond_to_invite RPC:", { inviteId, accept });
       const { data, error: respondError } = await supabase.rpc("respond_to_invite", {
         invite_id: inviteId,
         accept,
       });
 
+      console.log("respond_to_invite result:", { data, error: respondError });
       if (respondError) throw respondError;
 
       const result = data as { success: boolean; error?: string; message?: string; group_id?: string };
