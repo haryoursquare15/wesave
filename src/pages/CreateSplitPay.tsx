@@ -4,19 +4,18 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { BottomNav } from "@/components/BottomNav";
+import { BankAccountInput } from "@/components/BankAccountInput";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import nigerianBanks from "@/lib/nigerianBanks";
 
 export default function CreateSplitPay() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const [submitting, setSubmitting] = useState(false);
+  const [bankValidated, setBankValidated] = useState(false);
 
   const [form, setForm] = useState({
     purpose: "",
@@ -45,6 +44,10 @@ export default function CreateSplitPay() {
     }
     if (!form.merchantAccountName || !form.merchantBankName || !form.merchantAccountNumber) {
       toast({ title: "Missing merchant details", description: "Fill in all merchant account fields.", variant: "destructive" });
+      return;
+    }
+    if (!bankValidated) {
+      toast({ title: "Bank not verified", description: "Please wait for bank account verification.", variant: "destructive" });
       return;
     }
 
@@ -131,36 +134,15 @@ export default function CreateSplitPay() {
 
           <div className="space-y-4 border-t border-border pt-4">
             <h3 className="font-semibold text-foreground">Merchant Details</h3>
-            <div>
-              <Label>Account Name</Label>
-              <Input
-                placeholder="Business account name"
-                value={form.merchantAccountName}
-                onChange={(e) => setForm({ ...form, merchantAccountName: e.target.value })}
-                required
-              />
-            </div>
-            <div>
-              <Label>Bank Name</Label>
-              <Select value={form.merchantBankName} onValueChange={(v) => setForm({ ...form, merchantBankName: v })}>
-                <SelectTrigger><SelectValue placeholder="Select bank" /></SelectTrigger>
-                <SelectContent>
-                  {nigerianBanks.map((bank) => (
-                    <SelectItem key={bank} value={bank}>{bank}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Account Number</Label>
-              <Input
-                placeholder="0123456789"
-                maxLength={10}
-                value={form.merchantAccountNumber}
-                onChange={(e) => setForm({ ...form, merchantAccountNumber: e.target.value.replace(/\D/g, "") })}
-                required
-              />
-            </div>
+            <BankAccountInput
+              accountNumber={form.merchantAccountNumber}
+              onAccountNumberChange={(v) => setForm({ ...form, merchantAccountNumber: v })}
+              bankName={form.merchantBankName}
+              onBankNameChange={(v) => setForm({ ...form, merchantBankName: v })}
+              accountName={form.merchantAccountName}
+              onAccountNameChange={(v) => setForm({ ...form, merchantAccountName: v })}
+              onValidated={setBankValidated}
+            />
           </div>
 
           <div>
@@ -172,7 +154,7 @@ export default function CreateSplitPay() {
             />
           </div>
 
-          <Button type="submit" className="w-full" disabled={submitting}>
+          <Button type="submit" className="w-full" disabled={submitting || !bankValidated}>
             {submitting ? "Creating..." : "Create Split Request"}
           </Button>
         </form>
