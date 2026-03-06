@@ -2028,6 +2028,130 @@ export type Database = {
         }
         Relationships: []
       }
+      split_participants: {
+        Row: {
+          amount_due: number
+          created_at: string
+          id: string
+          paid_at: string | null
+          split_request_id: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          amount_due: number
+          created_at?: string
+          id?: string
+          paid_at?: string | null
+          split_request_id: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          amount_due?: number
+          created_at?: string
+          id?: string
+          paid_at?: string | null
+          split_request_id?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "split_participants_split_request_id_fkey"
+            columns: ["split_request_id"]
+            isOneToOne: false
+            referencedRelation: "split_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      split_requests: {
+        Row: {
+          amount_per_person: number
+          created_at: string
+          creator_user_id: string
+          expiry_date: string | null
+          id: string
+          merchant_account_name: string
+          merchant_account_number: string
+          merchant_bank_name: string
+          number_of_people: number
+          purpose: string
+          status: string
+          total_amount: number
+          updated_at: string
+        }
+        Insert: {
+          amount_per_person: number
+          created_at?: string
+          creator_user_id: string
+          expiry_date?: string | null
+          id?: string
+          merchant_account_name: string
+          merchant_account_number: string
+          merchant_bank_name: string
+          number_of_people: number
+          purpose: string
+          status?: string
+          total_amount: number
+          updated_at?: string
+        }
+        Update: {
+          amount_per_person?: number
+          created_at?: string
+          creator_user_id?: string
+          expiry_date?: string | null
+          id?: string
+          merchant_account_name?: string
+          merchant_account_number?: string
+          merchant_bank_name?: string
+          number_of_people?: number
+          purpose?: string
+          status?: string
+          total_amount?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      split_transactions: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          split_request_id: string
+          status: string
+          user_id: string
+          wallet_ledger_id: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          split_request_id: string
+          status?: string
+          user_id: string
+          wallet_ledger_id?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          split_request_id?: string
+          status?: string
+          user_id?: string
+          wallet_ledger_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "split_transactions_split_request_id_fkey"
+            columns: ["split_request_id"]
+            isOneToOne: false
+            referencedRelation: "split_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       support_ticket_comments: {
         Row: {
           author_id: string
@@ -3262,6 +3386,10 @@ export type Database = {
           }
       process_referral_reward: {
         Args: { p_referred_user_id: string }
+        Returns: Json
+      }
+      process_split_payment: {
+        Args: { _amount: number; _split_request_id: string; _user_id: string }
         Returns: Json
       }
       record_login_attempt: {

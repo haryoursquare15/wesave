@@ -33,6 +33,9 @@ import TermsOfService from "./pages/TermsOfService";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import RecurringTestDashboard from "./pages/RecurringTestDashboard";
 import Referrals from "./pages/Referrals";
+import SplitPay from "./pages/SplitPay";
+import CreateSplitPay from "./pages/CreateSplitPay";
+import SplitPayDetail from "./pages/SplitPayDetail";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -130,6 +133,9 @@ const App = () => {
                 <Route path="/target-ajo/:groupId" element={<TargetAjoDetail />} />
                 <Route path="/associations" element={<Associations />} />
                 <Route path="/referrals" element={<Referrals />} />
+                <Route path="/split-pay" element={<SplitPay />} />
+                <Route path="/split-pay/create" element={<CreateSplitPay />} />
+                <Route path="/split-pay/:requestId" element={<SplitPayDetail />} />
                 <Route path="/terms" element={<TermsOfService />} />
                 <Route path="/privacy" element={<PrivacyPolicy />} />
                 <Route path="*" element={<NotFound />} />
