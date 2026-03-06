@@ -580,6 +580,76 @@ serve(async (req) => {
           }
         }
 
+        // Handle split merchant settlement transfers (split-merchant-* references)
+        if (reference?.startsWith('split-merchant-')) {
+          // Extract split_request_id from reference: split-merchant-<uuid>
+          const splitRequestId = reference.replace('split-merchant-', '');
+
+          if (data.status === 'SUCCESSFUL') {
+            await supabase.from('split_requests').update({
+              settlement_status: 'completed',
+              settlement_completed_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            }).eq('id', splitRequestId);
+
+            // Get creator to notify
+            const { data: splitReq } = await supabase
+              .from('split_requests')
+              .select('creator_user_id, purpose, total_amount, merchant_account_name')
+              .eq('id', splitRequestId)
+              .single();
+
+            if (splitReq) {
+              await supabase.from('user_notifications').insert({
+                user_id: splitReq.creator_user_id,
+                title: 'Merchant Payment Sent!',
+                message: `₦${Number(data.amount).toLocaleString()} has been successfully transferred to ${splitReq.merchant_account_name} for "${splitReq.purpose}".`,
+                notification_type: 'split_settlement_completed',
+              });
+
+              await supabase.from('audit_logs').insert({
+                user_id: splitReq.creator_user_id,
+                action: 'split_merchant_transfer_completed',
+                resource_type: 'split_request',
+                resource_id: splitRequestId,
+                details: {
+                  amount: data.amount,
+                  merchant: splitReq.merchant_account_name,
+                  purpose: splitReq.purpose,
+                  flw_transfer_id: data.id,
+                  reference: reference,
+                },
+              });
+            }
+
+            console.log(`Split merchant settlement COMPLETED: ${reference}, amount: ${data.amount}`);
+
+          } else {
+            await supabase.from('split_requests').update({
+              settlement_status: 'failed',
+              settlement_failure_reason: data.complete_message || 'Transfer failed',
+              updated_at: new Date().toISOString(),
+            }).eq('id', splitRequestId);
+
+            const { data: splitReq } = await supabase
+              .from('split_requests')
+              .select('creator_user_id, purpose, merchant_account_name')
+              .eq('id', splitRequestId)
+              .single();
+
+            if (splitReq) {
+              await supabase.from('user_notifications').insert({
+                user_id: splitReq.creator_user_id,
+                title: 'Merchant Payment Failed',
+                message: `Transfer to ${splitReq.merchant_account_name} for "${splitReq.purpose}" failed: ${data.complete_message || 'Transfer unsuccessful'}. Please contact support.`,
+                notification_type: 'split_settlement_failed',
+              });
+            }
+
+            console.log(`Split merchant settlement FAILED: ${reference}, reason: ${data.complete_message || data.status}`);
+          }
+        }
+
         console.log(`Transfer ${data.status}: ${reference}`);
         break;
       }

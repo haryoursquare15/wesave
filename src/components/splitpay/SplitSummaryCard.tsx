@@ -1,4 +1,4 @@
-import { Receipt, Clock } from "lucide-react";
+import { Receipt, Clock, CheckCircle2, Loader2, AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { format } from "date-fns";
@@ -66,6 +66,28 @@ export function SplitSummaryCard({ request, participants, creatorName }: Props) 
           {request.merchant_bank_name} — {request.merchant_account_number}
         </p>
       </div>
+
+      {/* Settlement Status */}
+      {request.status === "completed" && request.settlement_status && (
+        <div className={`rounded-lg p-3 flex items-center gap-2 text-sm ${
+          request.settlement_status === 'completed' 
+            ? 'bg-success/10 text-success border border-success/20'
+            : request.settlement_status === 'failed'
+            ? 'bg-destructive/10 text-destructive border border-destructive/20'
+            : 'bg-warning/10 text-warning border border-warning/20'
+        }`}>
+          {request.settlement_status === 'completed' && <CheckCircle2 className="h-4 w-4 shrink-0" />}
+          {request.settlement_status === 'processing' && <Loader2 className="h-4 w-4 shrink-0 animate-spin" />}
+          {request.settlement_status === 'failed' && <AlertTriangle className="h-4 w-4 shrink-0" />}
+          {request.settlement_status === 'pending' && <Clock className="h-4 w-4 shrink-0" />}
+          <span className="font-medium">
+            {request.settlement_status === 'completed' && `₦${Number(request.total_amount).toLocaleString()} sent to ${request.merchant_account_name}`}
+            {request.settlement_status === 'processing' && `Transferring ₦${Number(request.total_amount).toLocaleString()} to ${request.merchant_account_name}...`}
+            {request.settlement_status === 'failed' && `Settlement failed: ${request.settlement_failure_reason || 'Unknown error'}`}
+            {request.settlement_status === 'pending' && 'Merchant settlement pending'}
+          </span>
+        </div>
+      )}
 
       {request.expiry_date && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">

@@ -17,6 +17,10 @@ export interface SplitRequest {
   expiry_date: string | null;
   created_at: string;
   updated_at: string;
+  settlement_status: string | null;
+  settlement_reference: string | null;
+  settlement_completed_at: string | null;
+  settlement_failure_reason: string | null;
 }
 
 export interface SplitParticipant {
