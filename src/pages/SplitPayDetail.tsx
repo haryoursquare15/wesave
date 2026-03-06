@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, UserPlus, Receipt, CheckCircle, XCircle, Clock, Ban, AlertTriangle } from "lucide-react";
+import { ArrowLeft, UserPlus, Receipt, CheckCircle, XCircle, Clock, Ban, AlertTriangle, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
