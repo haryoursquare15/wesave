@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, UserPlus, Receipt, CheckCircle, XCircle, Clock, Ban, AlertTriangle, Trash2 } from "lucide-react";
+import { ArrowLeft, UserPlus, Receipt, CheckCircle, XCircle, Clock, Ban, AlertTriangle, Trash2, BellRing } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -9,6 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useSplitRequestDetail } from "@/hooks/useSplitPay";
 import { useToast } from "@/hooks/use-toast";
 import { SplitInviteDialog } from "@/components/splitpay/SplitInviteDialog";
+import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 
 export default function SplitPayDetail() {
@@ -20,6 +21,7 @@ export default function SplitPayDetail() {
   const [paying, setPaying] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [nudgingId, setNudgingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/auth");
@@ -223,24 +225,49 @@ export default function SplitPayDetail() {
                     <span className="text-xs capitalize text-muted-foreground">{p.status}</span>
                   </div>
                   {isCreator && p.status === "pending" && p.user_id !== user?.id && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                      disabled={removingId === p.user_id}
-                      onClick={async () => {
-                        setRemovingId(p.user_id);
-                        const result = await removeParticipant(p.user_id);
-                        setRemovingId(null);
-                        if (result.success) {
-                          toast({ title: "Removed", description: `${p.profile?.full_name || "Participant"} has been removed.` });
-                        } else {
-                          toast({ title: "Error", description: result.error || "Could not remove", variant: "destructive" });
-                        }
-                      }}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-primary"
+                        title="Remind to pay"
+                        disabled={nudgingId === p.user_id}
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          setNudgingId(p.user_id);
+                          const { error } = await supabase.rpc("send_split_payment_reminder" as any, {
+                            _split_request_id: request.id,
+                            _target_user_id: p.user_id,
+                          } as any);
+                          setNudgingId(null);
+                          if (error) {
+                            toast({ title: "Error", description: error.message, variant: "destructive" });
+                          } else {
+                            toast({ title: "Reminder sent!", description: `${p.profile?.full_name || "Participant"} has been notified to pay.` });
+                          }
+                        }}
+                      >
+                        <BellRing className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                        disabled={removingId === p.user_id}
+                        onClick={async () => {
+                          setRemovingId(p.user_id);
+                          const result = await removeParticipant(p.user_id);
+                          setRemovingId(null);
+                          if (result.success) {
+                            toast({ title: "Removed", description: `${p.profile?.full_name || "Participant"} has been removed.` });
+                          } else {
+                            toast({ title: "Error", description: result.error || "Could not remove", variant: "destructive" });
+                          }
+                        }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </>
                   )}
                 </div>
               </div>
