@@ -29,6 +29,8 @@ function buildReceiptHtml(
   merchantAccount: string,
   participants: { name: string; amount: number; paid_at: string }[],
   completedAt: string,
+  splitReference: string,
+  settlementReference: string | null,
 ): string {
   const participantRows = participants
     .map(
@@ -132,6 +134,24 @@ function buildReceiptHtml(
                     <p style="margin:0 0 4px;font-size:12px;font-weight:600;color:${BRAND.orange};text-transform:uppercase;letter-spacing:0.5px;">Merchant</p>
                     <p style="margin:0 0 2px;font-size:15px;font-weight:600;color:${BRAND.textDark};">${merchantName}</p>
                     <p style="margin:0;font-size:13px;color:${BRAND.textBody};">${merchantBank} — ${merchantAccount}</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Reference Info -->
+          <tr>
+            <td style="padding:0 0 20px;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f9fafb;border-radius:12px;border:1px solid ${BRAND.border};">
+                <tr>
+                  <td style="padding:16px 24px;">
+                    <p style="margin:0 0 4px;font-size:12px;font-weight:600;color:${BRAND.textMuted};text-transform:uppercase;letter-spacing:0.5px;">Transaction Reference</p>
+                    <p style="margin:0 0 8px;font-size:13px;font-family:monospace;color:${BRAND.textDark};">${splitReference}</p>
+                    ${settlementReference ? `
+                    <p style="margin:0 0 4px;font-size:12px;font-weight:600;color:${BRAND.textMuted};text-transform:uppercase;letter-spacing:0.5px;">Settlement Reference</p>
+                    <p style="margin:0;font-size:13px;font-family:monospace;color:${BRAND.textDark};">${settlementReference}</p>
+                    ` : ''}
                   </td>
                 </tr>
               </table>
@@ -267,6 +287,8 @@ serve(async (req) => {
     });
 
     const completedAt = splitReq.updated_at || new Date().toISOString();
+    const splitReference = `split-${split_request_id}`;
+    const settlementReference = splitReq.settlement_reference || null;
     let sentCount = 0;
 
     // Send receipt to each participant + creator
@@ -284,6 +306,8 @@ serve(async (req) => {
         splitReq.merchant_account_number,
         participantDetails,
         completedAt,
+        splitReference,
+        settlementReference,
       );
 
       const emailRes = await fetch('https://api.resend.com/emails', {
