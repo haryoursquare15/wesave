@@ -11,6 +11,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { usePendingInvites, useRespondToInvite } from "@/hooks/useGroupInvites";
 import { useNotifications } from "@/hooks/useNotifications";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
@@ -34,8 +36,8 @@ function getNotificationIcon(type: string) {
   }
 }
 
-function extractDeepLink(message: string): string | null {
-  const match = message.match(/→\s*(\/split-pay\/[a-f0-9-]+)/);
+function extractSplitRequestId(message: string): string | null {
+  const match = message.match(/\/split-pay\/([a-f0-9-]+)/);
   return match ? match[1] : null;
 }
 
@@ -45,10 +47,12 @@ function cleanMessage(message: string): string {
 
 export function PendingInvitesNotification() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { invites, loading: invitesLoading, refetch } = usePendingInvites();
   const { respond, loading: responding } = useRespondToInvite();
-  const { notifications, loading: notificationsLoading, unreadCount, clearAll, markAllRead } = useNotifications();
+  const { notifications, loading: notificationsLoading, unreadCount, clearAll, markAllRead, refetch: refetchNotifs } = useNotifications();
   const [respondingId, setRespondingId] = useState<string | null>(null);
+  const [decliningNotifId, setDecliningNotifId] = useState<string | null>(null);
 
   useEffect(() => {
     refetch();
@@ -142,15 +146,38 @@ export function PendingInvitesNotification() {
               ) : (
                 <div className="divide-y divide-border">
                     {notifications.map((notif) => {
-                      const deepLink = extractDeepLink(notif.message);
+                      const splitRequestId = extractSplitRequestId(notif.message);
                       const displayMessage = cleanMessage(notif.message);
-                      const isClickable = !!deepLink;
+                      const isSplitInvite = notif.notification_type === "split_invite" && !!splitRequestId;
+                      const deepLink = splitRequestId ? `/split-pay/${splitRequestId}` : null;
+
+                      const handleDeclineSplit = async (e: React.MouseEvent) => {
+                        e.stopPropagation();
+                        if (!user || !splitRequestId) return;
+                        setDecliningNotifId(notif.id);
+                        const { data, error } = await supabase.rpc("decline_split_participation", {
+                          _split_request_id: splitRequestId,
+                          _user_id: user.id,
+                        });
+                        setDecliningNotifId(null);
+                        if (error) {
+                          toast.error(error.message);
+                        } else {
+                          toast.success("Split request declined");
+                          refetchNotifs();
+                        }
+                      };
+
+                      const handleAcceptSplit = (e: React.MouseEvent) => {
+                        e.stopPropagation();
+                        if (deepLink) navigate(deepLink);
+                      };
 
                       return (
                         <div
                           key={notif.id}
-                          className={`p-3 transition-colors ${!notif.is_read ? "bg-primary/5" : ""} ${isClickable ? "cursor-pointer hover:bg-muted/50" : "hover:bg-muted/50"}`}
-                          onClick={() => isClickable && navigate(deepLink!)}
+                          className={`p-3 transition-colors ${!notif.is_read ? "bg-primary/5" : ""} ${deepLink ? "cursor-pointer hover:bg-muted/50" : "hover:bg-muted/50"}`}
+                          onClick={() => deepLink && navigate(deepLink)}
                         >
                           <div className="flex items-start gap-3">
                             <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
@@ -159,9 +186,6 @@ export function PendingInvitesNotification() {
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-medium text-foreground">{notif.title}</p>
                               <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-line">{displayMessage}</p>
-                              {isClickable && (
-                                <p className="text-xs text-primary font-medium mt-1">Tap to view →</p>
-                              )}
                               <p className="text-[10px] text-muted-foreground mt-1">
                                 {formatDistanceToNow(new Date(notif.created_at), { addSuffix: true })}
                               </p>
@@ -170,6 +194,34 @@ export function PendingInvitesNotification() {
                               <div className="h-2 w-2 rounded-full bg-primary flex-shrink-0 mt-2" />
                             )}
                           </div>
+                          {isSplitInvite && (
+                            <div className="flex gap-2 mt-3">
+                              <Button
+                                size="sm"
+                                className="flex-1 h-8"
+                                onClick={handleAcceptSplit}
+                              >
+                                <Check className="h-4 w-4 mr-1" />
+                                View & Pay
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="flex-1 h-8"
+                                onClick={handleDeclineSplit}
+                                disabled={decliningNotifId === notif.id}
+                              >
+                                {decliningNotifId === notif.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <>
+                                    <X className="h-4 w-4 mr-1" />
+                                    Decline
+                                  </>
+                                )}
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
