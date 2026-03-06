@@ -295,7 +295,6 @@ export function PendingInvitesNotification() {
                             </>
                           )}
                         </Button>
-                        </Button>
                         <Button
                           size="sm"
                           variant="outline"
