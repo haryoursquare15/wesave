@@ -19,16 +19,28 @@ function getNotificationIcon(type: string) {
   switch (type) {
     case "contribution_success":
     case "card_fallback_success":
-      return <CheckCircle className="h-5 w-5 text-green-500" />;
+      return <CheckCircle className="h-5 w-5 text-secondary" />;
     case "contribution_failed":
     case "card_fallback_failed":
     case "contribution_defaulted":
       return <AlertTriangle className="h-5 w-5 text-destructive" />;
     case "contribution_retry":
-      return <CreditCard className="h-5 w-5 text-yellow-500" />;
+      return <CreditCard className="h-5 w-5 text-accent-foreground" />;
+    case "split_invite":
+    case "split_decline":
+      return <Receipt className="h-5 w-5 text-primary" />;
     default:
       return <Info className="h-5 w-5 text-primary" />;
   }
+}
+
+function extractDeepLink(message: string): string | null {
+  const match = message.match(/→\s*(\/split-pay\/[a-f0-9-]+)/);
+  return match ? match[1] : null;
+}
+
+function cleanMessage(message: string): string {
+  return message.replace(/\nTap to view and respond → \/split-pay\/[a-f0-9-]+/, "");
 }
 
 export function PendingInvitesNotification() {
