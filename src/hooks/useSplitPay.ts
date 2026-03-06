@@ -143,7 +143,17 @@ export function useSplitRequestDetail(requestId: string | undefined) {
       _amount: participant.amount_due,
     });
     if (error) return { success: false, error: error.message };
-    return data as { success: boolean; error?: string };
+
+    const result = data as { success: boolean; error?: string; all_paid?: boolean };
+
+    // If all participants have paid, trigger receipt emails
+    if (result.success && result.all_paid) {
+      supabase.functions.invoke("splitpay-receipt", {
+        body: { split_request_id: request.id },
+      }).catch((err) => console.error("Receipt email trigger failed:", err));
+    }
+
+    return result;
   }, [user, request, participants]);
 
   const declineShare = useCallback(async () => {
