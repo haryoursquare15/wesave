@@ -114,12 +114,16 @@ export function SplitInviteDialog({ open, onOpenChange, splitRequestId, amountPe
       toast({ title: "Limit reached", description: "All participant slots are filled.", variant: "destructive" });
       return;
     }
+    console.log("[SplitInvite] Calling send_split_invite with:", {
+      splitRequestId, inviterId: user.id, inviteeId: targetUser.id, amountPerPerson
+    });
     const { data, error } = await supabase.rpc("send_split_invite", {
       _split_request_id: splitRequestId,
       _inviter_id: user.id,
       _invitee_id: targetUser.id,
       _amount_due: amountPerPerson,
     });
+    console.log("[SplitInvite] Result:", { data, error });
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
       return;
