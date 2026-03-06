@@ -2079,6 +2079,12 @@ export type Database = {
           number_of_people: number
           platform_fee: number
           purpose: string
+          settlement_completed_at: string | null
+          settlement_failure_reason: string | null
+          settlement_flw_transfer_id: string | null
+          settlement_initiated_at: string | null
+          settlement_reference: string | null
+          settlement_status: string | null
           status: string
           total_amount: number
           updated_at: string
@@ -2095,6 +2101,12 @@ export type Database = {
           number_of_people: number
           platform_fee?: number
           purpose: string
+          settlement_completed_at?: string | null
+          settlement_failure_reason?: string | null
+          settlement_flw_transfer_id?: string | null
+          settlement_initiated_at?: string | null
+          settlement_reference?: string | null
+          settlement_status?: string | null
           status?: string
           total_amount: number
           updated_at?: string
@@ -2111,6 +2123,12 @@ export type Database = {
           number_of_people?: number
           platform_fee?: number
           purpose?: string
+          settlement_completed_at?: string | null
+          settlement_failure_reason?: string | null
+          settlement_flw_transfer_id?: string | null
+          settlement_initiated_at?: string | null
+          settlement_reference?: string | null
+          settlement_status?: string | null
           status?: string
           total_amount?: number
           updated_at?: string
