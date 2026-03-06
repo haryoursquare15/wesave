@@ -58,10 +58,21 @@ export function PendingInvitesNotification() {
     refetch();
   }, [refetch]);
 
+  const [acceptPhase, setAcceptPhase] = useState<string | null>(null);
+
   const handleRespond = async (inviteId: string, accept: boolean) => {
     setRespondingId(inviteId);
     try {
+      if (accept) {
+        setAcceptPhase("Checking wallet...");
+        await new Promise(r => setTimeout(r, 400));
+        setAcceptPhase("Sweeping contribution...");
+      }
       const result = await respond(inviteId, accept);
+      if (accept) {
+        setAcceptPhase("Paid! Joining group...");
+        await new Promise(r => setTimeout(r, 600));
+      }
       toast.success(result.message || (accept ? "You joined the group!" : "Invite declined"));
       refetch();
       
@@ -72,6 +83,7 @@ export function PendingInvitesNotification() {
       toast.error(err.message || "Failed to respond");
     } finally {
       setRespondingId(null);
+      setAcceptPhase(null);
     }
   };
 
