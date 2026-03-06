@@ -1,0 +1,1 @@
+ALTER TABLE public.split_requests ADD COLUMN platform_fee numeric NOT NULL DEFAULT 100;
