@@ -193,9 +193,57 @@ export function PendingInvitesNotification() {
                         }
                       };
 
-                      const handleAcceptSplit = (e: React.MouseEvent) => {
+                      const handlePaySplitInline = async (e: React.MouseEvent) => {
                         e.stopPropagation();
-                        if (deepLink) navigate(deepLink);
+                        if (!user || !splitRequestId) return;
+                        setPayingSplitId(notif.id);
+                        try {
+                          // Get participant amount_due
+                          const { data: partData } = await supabase
+                            .from("split_participants")
+                            .select("amount_due, status")
+                            .eq("split_request_id", splitRequestId)
+                            .eq("user_id", user.id)
+                            .single();
+
+                          if (!partData) {
+                            toast.error("You are not a participant in this split");
+                            return;
+                          }
+                          if (partData.status === "paid") {
+                            toast.success("You've already paid your share!");
+                            refetchNotifs();
+                            return;
+                          }
+
+                          const { data, error } = await supabase.rpc("process_split_payment", {
+                            _split_request_id: splitRequestId,
+                            _user_id: user.id,
+                            _amount: partData.amount_due,
+                          });
+                          if (error) {
+                            toast.error(error.message);
+                            return;
+                          }
+                          const result = data as { success: boolean; error?: string; all_paid?: boolean };
+                          if (!result.success) {
+                            toast.error(result.error || "Payment failed");
+                            return;
+                          }
+                          toast.success("Payment successful! Your share has been paid.");
+                          
+                          // Trigger receipt if all paid
+                          if (result.all_paid) {
+                            supabase.functions.invoke("splitpay-receipt", {
+                              body: { split_request_id: splitRequestId },
+                            }).catch(console.error);
+                          }
+                          refetchNotifs();
+                        } catch (err: any) {
+                          toast.error(err?.message || "Payment failed");
+                        } finally {
+                          setPayingSplitId(null);
+                        }
                       };
 
                       return (
@@ -224,10 +272,20 @@ export function PendingInvitesNotification() {
                               <Button
                                 size="sm"
                                 className="flex-1 h-8"
-                                onClick={handleAcceptSplit}
+                                onClick={handlePaySplitInline}
+                                disabled={payingSplitId === notif.id}
                               >
-                                <Check className="h-4 w-4 mr-1" />
-                                View & Pay
+                                {payingSplitId === notif.id ? (
+                                  <span className="flex items-center gap-1.5">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    <span className="text-xs">Paying...</span>
+                                  </span>
+                                ) : (
+                                  <>
+                                    <Check className="h-4 w-4 mr-1" />
+                                    Pay Now
+                                  </>
+                                )}
                               </Button>
                               <Button
                                 size="sm"
