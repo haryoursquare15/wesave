@@ -235,10 +235,10 @@ export default function SplitPayDetail() {
                         onClick={async (e) => {
                           e.stopPropagation();
                           setNudgingId(p.user_id);
-                          const { error } = await supabase.rpc("send_split_payment_reminder", {
+                          const { error } = await supabase.rpc("send_split_payment_reminder" as any, {
                             _split_request_id: request.id,
                             _target_user_id: p.user_id,
-                          });
+                          } as any);
                           setNudgingId(null);
                           if (error) {
                             toast({ title: "Error", description: error.message, variant: "destructive" });
