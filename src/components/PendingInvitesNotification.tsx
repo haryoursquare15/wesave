@@ -141,28 +141,38 @@ export function PendingInvitesNotification() {
                 </div>
               ) : (
                 <div className="divide-y divide-border">
-                  {notifications.map((notif) => (
-                    <div
-                      key={notif.id}
-                      className={`p-3 hover:bg-muted/50 transition-colors ${!notif.is_read ? "bg-primary/5" : ""}`}
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                          {getNotificationIcon(notif.notification_type)}
+                    {notifications.map((notif) => {
+                      const deepLink = extractDeepLink(notif.message);
+                      const displayMessage = cleanMessage(notif.message);
+                      const isClickable = !!deepLink;
+
+                      return (
+                        <div
+                          key={notif.id}
+                          className={`p-3 transition-colors ${!notif.is_read ? "bg-primary/5" : ""} ${isClickable ? "cursor-pointer hover:bg-muted/50" : "hover:bg-muted/50"}`}
+                          onClick={() => isClickable && navigate(deepLink!)}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                              {getNotificationIcon(notif.notification_type)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-foreground">{notif.title}</p>
+                              <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-line">{displayMessage}</p>
+                              {isClickable && (
+                                <p className="text-xs text-primary font-medium mt-1">Tap to view →</p>
+                              )}
+                              <p className="text-[10px] text-muted-foreground mt-1">
+                                {formatDistanceToNow(new Date(notif.created_at), { addSuffix: true })}
+                              </p>
+                            </div>
+                            {!notif.is_read && (
+                              <div className="h-2 w-2 rounded-full bg-primary flex-shrink-0 mt-2" />
+                            )}
+                          </div>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-foreground">{notif.title}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">{notif.message}</p>
-                          <p className="text-[10px] text-muted-foreground mt-1">
-                            {formatDistanceToNow(new Date(notif.created_at), { addSuffix: true })}
-                          </p>
-                        </div>
-                        {!notif.is_read && (
-                          <div className="h-2 w-2 rounded-full bg-primary flex-shrink-0 mt-2" />
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                      );
+                    })}
                 </div>
               )}
             </ScrollArea>
