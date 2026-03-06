@@ -60,6 +60,17 @@ export function useSplitRequests() {
     fetchRequests();
   }, [fetchRequests]);
 
+  // Realtime: refresh when split_requests or split_participants change
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase
+      .channel("split-requests-list")
+      .on("postgres_changes", { event: "*", schema: "public", table: "split_requests" }, () => fetchRequests())
+      .on("postgres_changes", { event: "*", schema: "public", table: "split_participants" }, () => fetchRequests())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user, fetchRequests]);
+
   return { requests, loading, refetch: fetchRequests };
 }
 

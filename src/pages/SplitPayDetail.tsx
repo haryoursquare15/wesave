@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, UserPlus, Receipt, CheckCircle, XCircle, Clock, Ban, AlertTriangle, Trash2, BellRing } from "lucide-react";
+import { ArrowLeft, UserPlus, CheckCircle, XCircle, Ban, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { BottomNav } from "@/components/BottomNav";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSplitRequestDetail } from "@/hooks/useSplitPay";
 import { useToast } from "@/hooks/use-toast";
 import { SplitInviteDialog } from "@/components/splitpay/SplitInviteDialog";
+import { SplitSummaryCard } from "@/components/splitpay/SplitSummaryCard";
+import { SplitParticipantList } from "@/components/splitpay/SplitParticipantList";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 
@@ -37,8 +37,7 @@ export default function SplitPayDetail() {
 
   const isCreator = user?.id === request.creator_user_id;
   const myParticipation = participants.find((p) => p.user_id === user?.id);
-  const paidCount = participants.filter((p) => p.status === "paid").length;
-  const progressPct = participants.length > 0 ? (paidCount / participants.length) * 100 : 0;
+  const creatorName = creatorProfile?.full_name || creatorProfile?.username || "Unknown";
 
   const handlePay = async () => {
     setPaying(true);
@@ -61,11 +60,29 @@ export default function SplitPayDetail() {
     toast({ title: "Cancelled", description: "Split request has been cancelled." });
   };
 
-  const statusIcon = {
-    paid: <CheckCircle className="h-4 w-4 text-secondary" />,
-    declined: <XCircle className="h-4 w-4 text-destructive" />,
-    pending: <Clock className="h-4 w-4 text-muted-foreground" />,
-    accepted: <Clock className="h-4 w-4 text-primary" />,
+  const handleNudge = async (p: any) => {
+    setNudgingId(p.user_id);
+    const { error } = await supabase.rpc("send_split_payment_reminder" as any, {
+      _split_request_id: request.id,
+      _target_user_id: p.user_id,
+    } as any);
+    setNudgingId(null);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Reminder sent!", description: `${p.profile?.full_name || "Participant"} has been notified.` });
+    }
+  };
+
+  const handleRemove = async (p: any) => {
+    setRemovingId(p.user_id);
+    const result = await removeParticipant(p.user_id);
+    setRemovingId(null);
+    if (result.success) {
+      toast({ title: "Removed", description: `${p.profile?.full_name || "Participant"} has been removed.` });
+    } else {
+      toast({ title: "Error", description: result.error || "Could not remove", variant: "destructive" });
+    }
   };
 
   return (
@@ -89,62 +106,7 @@ export default function SplitPayDetail() {
       </header>
 
       <main className="container mx-auto px-4 py-6 space-y-6 max-w-lg">
-        {/* Summary Card */}
-        <div className="bg-card border border-border rounded-2xl p-5 space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
-              <Receipt className="h-6 w-6 text-primary" />
-            </div>
-            <div className="flex-1">
-              <h2 className="text-lg font-bold text-foreground">{request.purpose}</h2>
-              <p className="text-sm text-muted-foreground">
-                Created by {creatorProfile?.full_name || creatorProfile?.username || "Unknown"}
-              </p>
-            </div>
-            <Badge variant={request.status === "active" ? "default" : request.status === "completed" ? "secondary" : "destructive"}>
-              {request.status}
-            </Badge>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-muted/20 rounded-lg p-3 text-center">
-              <p className="text-xs text-muted-foreground">Total Bill</p>
-              <p className="text-lg font-bold text-foreground">₦{Number(request.total_amount).toLocaleString()}</p>
-            </div>
-            <div className="bg-primary/5 rounded-lg p-3 text-center border border-primary/20">
-              <p className="text-xs text-muted-foreground">Your Share</p>
-              <p className="text-lg font-bold text-primary">₦{Number(request.amount_per_person).toLocaleString()}</p>
-              {request.platform_fee > 0 && (
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  + ₦{(Math.ceil((request.platform_fee / request.number_of_people) * 100) / 100).toLocaleString()} fee
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Progress */}
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Payment Progress</span>
-              <span className="font-semibold text-foreground">{paidCount} of {participants.length} paid</span>
-            </div>
-            <Progress value={progressPct} className="h-3" />
-          </div>
-
-          {/* Merchant Info */}
-          <div className="bg-muted/20 rounded-lg p-3 space-y-1 text-sm">
-            <p className="font-semibold text-foreground">Merchant Details</p>
-            <p className="text-muted-foreground">{request.merchant_account_name}</p>
-            <p className="text-muted-foreground">{request.merchant_bank_name} — {request.merchant_account_number}</p>
-          </div>
-
-          {request.expiry_date && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Clock className="h-4 w-4" />
-              <span>Expires: {format(new Date(request.expiry_date), "MMM d, yyyy HH:mm")}</span>
-            </div>
-          )}
-        </div>
+        <SplitSummaryCard request={request} participants={participants} creatorName={creatorName} />
 
         {/* Incomplete Group Warning */}
         {request.status === "active" && !isGroupComplete && (
@@ -175,7 +137,10 @@ export default function SplitPayDetail() {
           <div className="bg-secondary/10 border border-secondary/20 rounded-xl p-4 text-center">
             <CheckCircle className="h-6 w-6 text-secondary mx-auto mb-1" />
             <p className="font-semibold text-foreground">You've paid your share</p>
-            <p className="text-sm text-muted-foreground">₦{Number(myParticipation.amount_due).toLocaleString()} on {myParticipation.paid_at ? format(new Date(myParticipation.paid_at), "MMM d, HH:mm") : ""}</p>
+            <p className="text-sm text-muted-foreground">
+              ₦{Number(myParticipation.amount_due).toLocaleString()} on{" "}
+              {myParticipation.paid_at ? format(new Date(myParticipation.paid_at), "MMM d, HH:mm") : ""}
+            </p>
           </div>
         )}
         {myParticipation?.status === "declined" && (
@@ -193,7 +158,8 @@ export default function SplitPayDetail() {
                 {participants.length} of {request.number_of_people} participants added
               </p>
               <p className="text-sm text-muted-foreground">
-                Invite {request.number_of_people - participants.length} more {request.number_of_people - participants.length === 1 ? "person" : "people"} to complete this split.
+                Invite {request.number_of_people - participants.length} more{" "}
+                {request.number_of_people - participants.length === 1 ? "person" : "people"} to complete this split.
               </p>
             </div>
             <Button size="sm" onClick={() => setInviteOpen(true)}>
@@ -203,82 +169,16 @@ export default function SplitPayDetail() {
         )}
 
         {/* Participants */}
-        <div className="bg-card border border-border rounded-2xl p-5">
-          <h3 className="font-semibold text-foreground mb-4">Participants ({participants.length}/{request.number_of_people})</h3>
-          <div className="space-y-3">
-            {participants.map((p) => (
-              <div key={p.id} className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-sm font-semibold text-primary">
-                    {(p.profile?.full_name || p.profile?.username || "?")[0]?.toUpperCase()}
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-foreground">
-                      {p.profile?.full_name || p.profile?.username || "Unknown"}
-                    </p>
-                    <p className="text-xs text-muted-foreground">₦{Number(p.amount_due).toLocaleString()}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-1.5">
-                    {statusIcon[p.status as keyof typeof statusIcon]}
-                    <span className="text-xs capitalize text-muted-foreground">{p.status}</span>
-                  </div>
-                  {isCreator && p.status === "pending" && p.user_id !== user?.id && (
-                    <>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-muted-foreground hover:text-primary"
-                        title="Remind to pay"
-                        disabled={nudgingId === p.user_id}
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          setNudgingId(p.user_id);
-                          const { error } = await supabase.rpc("send_split_payment_reminder" as any, {
-                            _split_request_id: request.id,
-                            _target_user_id: p.user_id,
-                          } as any);
-                          setNudgingId(null);
-                          if (error) {
-                            toast({ title: "Error", description: error.message, variant: "destructive" });
-                          } else {
-                            toast({ title: "Reminder sent!", description: `${p.profile?.full_name || "Participant"} has been notified to pay.` });
-                          }
-                        }}
-                      >
-                        <BellRing className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                        disabled={removingId === p.user_id}
-                        onClick={async () => {
-                          setRemovingId(p.user_id);
-                          const result = await removeParticipant(p.user_id);
-                          setRemovingId(null);
-                          if (result.success) {
-                            toast({ title: "Removed", description: `${p.profile?.full_name || "Participant"} has been removed.` });
-                          } else {
-                            toast({ title: "Error", description: result.error || "Could not remove", variant: "destructive" });
-                          }
-                        }}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </div>
-            ))}
-            {participants.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-4">
-                No participants yet. Invite people to split this bill.
-              </p>
-            )}
-          </div>
-        </div>
+        <SplitParticipantList
+          participants={participants}
+          totalSlots={request.number_of_people}
+          isCreator={isCreator}
+          currentUserId={user?.id}
+          nudgingId={nudgingId}
+          removingId={removingId}
+          onNudge={handleNudge}
+          onRemove={handleRemove}
+        />
 
         {/* Creator Actions */}
         {isCreator && request.status === "active" && (

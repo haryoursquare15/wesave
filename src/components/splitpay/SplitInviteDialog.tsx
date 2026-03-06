@@ -73,11 +73,8 @@ export function SplitInviteDialog({ open, onOpenChange, splitRequestId, amountPe
 
     const uniqueIds = [...new Set(coParticipants.map((p) => p.user_id))];
 
-    // Fetch profiles
-    const { data: profiles } = await supabase
-      .from("profiles")
-      .select("id, full_name, username, avatar_url")
-      .in("id", uniqueIds);
+    // Use RPC to fetch profiles (bypasses RLS restrictions on profiles table)
+    const { data: profiles } = await supabase.rpc("get_public_profiles", { user_ids: uniqueIds });
 
     setFriends((profiles as UserResult[]) || []);
     setLoadingFriends(false);
