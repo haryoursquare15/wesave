@@ -8,15 +8,16 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { BottomNav } from "@/components/BottomNav";
+import { BankAccountInput } from "@/components/BankAccountInput";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { nigerianBanks } from "@/lib/nigerianBanks";
 
 export default function CreateTargetAjo() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
   const [submitting, setSubmitting] = useState(false);
+  const [bankValidated, setBankValidated] = useState(false);
 
   const [form, setForm] = useState({
     name: "",
@@ -51,7 +52,9 @@ export default function CreateTargetAjo() {
     if (!form.beneficiary_bank_name || !form.beneficiary_account_number || !form.beneficiary_account_name) {
       toast.error("Beneficiary bank details required"); return;
     }
-    if (form.beneficiary_account_number.length !== 10) { toast.error("Account number must be 10 digits"); return; }
+    if (!bankValidated) {
+      toast.error("Please wait for bank account verification"); return;
+    }
 
     setSubmitting(true);
     try {
@@ -73,7 +76,6 @@ export default function CreateTargetAjo() {
 
       if (error) throw error;
 
-      // Auto-add admin as member
       await (supabase as any).from("target_ajo_memberships").insert({
         group_id: group.id,
         user_id: user.id,
@@ -174,30 +176,18 @@ export default function CreateTargetAjo() {
 
           <div className="border-t border-border pt-5">
             <h3 className="text-sm font-semibold text-foreground mb-3">Beneficiary Bank Details *</h3>
-            <div className="space-y-3">
-              <div>
-                <Label>Account Name</Label>
-                <Input placeholder="Account holder name" value={form.beneficiary_account_name} onChange={(e) => update("beneficiary_account_name", e.target.value)} />
-              </div>
-              <div>
-                <Label>Bank</Label>
-                <Select value={form.beneficiary_bank_name} onValueChange={(v) => update("beneficiary_bank_name", v)}>
-                  <SelectTrigger><SelectValue placeholder="Select bank" /></SelectTrigger>
-                  <SelectContent>
-                    {nigerianBanks.map((bank) => (
-                      <SelectItem key={bank} value={bank}>{bank}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Account Number</Label>
-                <Input placeholder="0123456789" value={form.beneficiary_account_number} onChange={(e) => update("beneficiary_account_number", e.target.value.replace(/\D/g, "").slice(0, 10))} maxLength={10} />
-              </div>
-            </div>
+            <BankAccountInput
+              accountNumber={form.beneficiary_account_number}
+              onAccountNumberChange={(v) => update("beneficiary_account_number", v)}
+              bankName={form.beneficiary_bank_name}
+              onBankNameChange={(v) => update("beneficiary_bank_name", v)}
+              accountName={form.beneficiary_account_name}
+              onAccountNameChange={(v) => update("beneficiary_account_name", v)}
+              onValidated={setBankValidated}
+            />
           </div>
 
-          <Button type="submit" className="w-full" disabled={submitting}>
+          <Button type="submit" className="w-full" disabled={submitting || !bankValidated}>
             {submitting ? "Creating..." : "Create Target Ajo"}
           </Button>
         </form>
