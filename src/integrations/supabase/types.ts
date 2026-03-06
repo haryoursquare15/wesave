@@ -3447,6 +3447,14 @@ export type Database = {
         }
         Returns: Json
       }
+      remove_split_participant: {
+        Args: {
+          _creator_id: string
+          _participant_user_id: string
+          _split_request_id: string
+        }
+        Returns: Json
+      }
       request_position_swap: {
         Args: { _group_id: string; _target_user_id: string }
         Returns: Json
