@@ -160,9 +160,9 @@ export function useSplitRequestDetail(requestId: string | undefined) {
     if (!participant) return { success: false, error: "You are not a participant" };
 
     const { data, error } = await supabase.rpc("process_split_payment", {
-      _split_request_id: request.id,
-      _user_id: user.id,
-      _amount: participant.amount_due,
+      _split_request_id: request.id as string,
+      _user_id: user.id as string,
+      _amount: Number(participant.amount_due),
     });
     if (error) return { success: false, error: error.message };
 
