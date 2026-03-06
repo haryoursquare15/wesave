@@ -111,6 +111,11 @@ export default function SplitPayDetail() {
             <div className="bg-primary/5 rounded-lg p-3 text-center border border-primary/20">
               <p className="text-xs text-muted-foreground">Your Share</p>
               <p className="text-lg font-bold text-primary">₦{Number(request.amount_per_person).toLocaleString()}</p>
+              {request.platform_fee > 0 && (
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  + ₦{Math.ceil((request.platform_fee / request.number_of_people) * 100 / 100).toLocaleString()} fee
+                </p>
+              )}
             </div>
           </div>
 
@@ -227,6 +232,7 @@ export default function SplitPayDetail() {
           amountPerPerson={Number(request.amount_per_person)}
           purpose={request.purpose}
           existingParticipantIds={participants.map((p) => p.user_id)}
+          maxParticipants={request.number_of_people}
         />
       )}
 

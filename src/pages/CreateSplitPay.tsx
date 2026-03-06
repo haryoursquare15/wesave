@@ -31,9 +31,12 @@ export default function CreateSplitPay() {
     if (!authLoading && !user) navigate("/auth");
   }, [user, authLoading, navigate]);
 
+  const PLATFORM_FEE = 100;
   const totalAmount = parseFloat(form.totalAmount) || 0;
   const numberOfPeople = parseInt(form.numberOfPeople) || 0;
   const amountPerPerson = numberOfPeople > 0 ? Math.ceil((totalAmount / numberOfPeople) * 100) / 100 : 0;
+  const feePerPerson = numberOfPeople > 0 ? Math.ceil((PLATFORM_FEE / numberOfPeople) * 100) / 100 : 0;
+  const totalPerPerson = amountPerPerson + feePerPerson;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,14 +65,25 @@ export default function CreateSplitPay() {
       merchant_account_number: form.merchantAccountNumber,
       purpose: form.purpose,
       expiry_date: form.expiryDate || null,
+      platform_fee: PLATFORM_FEE,
     }).select("id").single();
 
-    setSubmitting(false);
     if (error) {
+      setSubmitting(false);
       toast({ title: "Error", description: error.message, variant: "destructive" });
       return;
     }
-    toast({ title: "Split Created!", description: "Now invite participants." });
+
+    // Auto-add creator as participant
+    await supabase.from("split_participants").insert({
+      split_request_id: data.id,
+      user_id: user.id,
+      amount_due: amountPerPerson,
+      status: "pending",
+    });
+
+    setSubmitting(false);
+    toast({ title: "Split Created!", description: "You've been added. Now invite others." });
     navigate(`/split-pay/${data.id}`);
   };
 
@@ -112,7 +126,7 @@ export default function CreateSplitPay() {
               />
             </div>
             <div>
-              <Label>Number of Participants</Label>
+              <Label>Total People (incl. you)</Label>
               <Input
                 type="number"
                 min="2"
@@ -126,9 +140,18 @@ export default function CreateSplitPay() {
           </div>
 
           {amountPerPerson > 0 && (
-            <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 text-center">
-              <p className="text-sm text-muted-foreground">Amount per person</p>
-              <p className="text-2xl font-bold text-primary">₦{amountPerPerson.toLocaleString()}</p>
+            <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 space-y-2">
+              <div className="text-center">
+                <p className="text-sm text-muted-foreground">Amount per person</p>
+                <p className="text-2xl font-bold text-primary">₦{totalPerPerson.toLocaleString()}</p>
+              </div>
+              <div className="flex justify-between text-xs text-muted-foreground border-t border-primary/10 pt-2">
+                <span>Bill share: ₦{amountPerPerson.toLocaleString()}</span>
+                <span>Platform fee: ₦{feePerPerson.toLocaleString()}</span>
+              </div>
+              <p className="text-xs text-muted-foreground text-center">
+                Includes you + {numberOfPeople - 1} {numberOfPeople - 1 === 1 ? "other person" : "others"}
+              </p>
             </div>
           )}
 

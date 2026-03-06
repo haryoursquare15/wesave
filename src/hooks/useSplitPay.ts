@@ -13,6 +13,7 @@ export interface SplitRequest {
   merchant_account_number: string;
   purpose: string;
   status: string;
+  platform_fee: number;
   expiry_date: string | null;
   created_at: string;
   updated_at: string;
