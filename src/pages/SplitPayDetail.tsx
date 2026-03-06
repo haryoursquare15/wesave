@@ -9,6 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useSplitRequestDetail } from "@/hooks/useSplitPay";
 import { useToast } from "@/hooks/use-toast";
 import { SplitInviteDialog } from "@/components/splitpay/SplitInviteDialog";
+import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 
 export default function SplitPayDetail() {
