@@ -356,7 +356,7 @@ export default function Wallet() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="min-h-screen min-h-[100dvh] bg-background pb-24 safe-bottom">
       {/* Header with Wallet */}
       <div className="bg-gradient-to-br from-primary via-primary to-primary/80 pb-8">
         <header className="container mx-auto px-4 py-4">

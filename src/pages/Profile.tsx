@@ -189,7 +189,7 @@ export default function Profile() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="min-h-screen min-h-[100dvh] bg-background pb-24 safe-bottom">
       {/* Header */}
       <header className="bg-gradient-to-br from-primary to-primary/80 pb-16 pt-6">
         <div className="container mx-auto px-4">
