@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Bell, Check, X, Users, Loader2, Trash2, AlertTriangle, CheckCircle, Info, CreditCard } from "lucide-react";
+import { Bell, Check, X, Users, Loader2, Trash2, AlertTriangle, CheckCircle, Info, CreditCard, Receipt } from "lucide-react";
 import {
   Popover,
   PopoverContent,
