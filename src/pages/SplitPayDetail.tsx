@@ -16,8 +16,9 @@ export default function SplitPayDetail() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
-  const { request, participants, creatorProfile, loading, isGroupComplete, payShare, declineShare, cancelRequest } = useSplitRequestDetail(requestId);
+  const { request, participants, creatorProfile, loading, isGroupComplete, payShare, declineShare, cancelRequest, removeParticipant } = useSplitRequestDetail(requestId);
   const [paying, setPaying] = useState(false);
+  const [removingId, setRemovingId] = useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
 
   useEffect(() => {
