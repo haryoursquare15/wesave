@@ -1,4 +1,4 @@
-import { Receipt, Clock } from "lucide-react";
+import { Receipt, Clock, CheckCircle2, Loader2, AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { format } from "date-fns";
