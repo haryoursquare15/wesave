@@ -164,13 +164,36 @@
     @apply border-border;
   }
 
+  html {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
+  }
+
   body {
     @apply bg-background text-foreground antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
+    overscroll-behavior-y: contain;
   }
 
   h1, h2, h3, h4, h5, h6 {
     @apply font-semibold tracking-tight;
+  }
+
+  /* Ensure minimum touch target sizes */
+  button, a, [role="button"], input, select, textarea {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Exceptions for inline/icon elements that are already sized */
+  .min-touch-none, span, label, p, div, badge {
+    min-height: unset;
+    min-width: unset;
+  }
+
+  input, select, textarea {
+    min-width: unset;
+    font-size: 16px; /* Prevent iOS zoom on focus */
   }
 }
 

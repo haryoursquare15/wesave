@@ -88,17 +88,16 @@ export default function Dashboard() {
         />
 
         {/* Quick Actions */}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 sm:gap-3">
           {quickActions.map((action) => (
             <motion.button
               key={action.label}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
+              whileTap={{ scale: 0.92 }}
               onClick={() => action.link && navigate(action.link)}
-              className="flex flex-col items-center gap-2 p-4 rounded-xl bg-card border border-border hover:border-primary/30 transition-colors"
+              className="flex flex-col items-center gap-1.5 sm:gap-2 p-3 sm:p-4 rounded-xl bg-card border border-border hover:border-primary/30 active:bg-muted/50 transition-colors touch-manipulation"
             >
-              <span className="text-2xl">{action.icon}</span>
-              <span className="text-xs font-medium text-muted-foreground">
+              <span className="text-xl sm:text-2xl">{action.icon}</span>
+              <span className="text-[11px] sm:text-xs font-medium text-muted-foreground leading-tight text-center">
                 {action.label}
               </span>
             </motion.button>

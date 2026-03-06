@@ -69,28 +69,29 @@ export default function Admin() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <div className="border-b bg-card">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
+      <div className="border-b bg-card sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 sm:gap-4 min-w-0">
             <Button variant="ghost" size="icon" onClick={() => navigate("/dashboard")}>
               <ArrowLeft className="h-5 w-5" />
             </Button>
-            <div className="flex items-center gap-2">
-              <Shield className="h-6 w-6 text-primary" />
-              <h1 className="text-2xl font-bold">Admin Dashboard</h1>
+            <div className="flex items-center gap-2 min-w-0">
+              <Shield className="h-5 w-5 sm:h-6 sm:w-6 text-primary flex-shrink-0" />
+              <h1 className="text-lg sm:text-2xl font-bold truncate">Admin Dashboard</h1>
             </div>
           </div>
-          <Button variant="outline" size="sm" onClick={() => navigate("/admin/recurring-test")} className="flex items-center gap-1">
+          <Button variant="outline" size="sm" onClick={() => navigate("/admin/recurring-test")} className="flex items-center gap-1 flex-shrink-0 text-xs sm:text-sm">
             <FlaskConical className="h-4 w-4" />
-            Recurring Test Lab
+            <span className="hidden sm:inline">Recurring Test Lab</span>
+            <span className="sm:hidden">Test</span>
           </Button>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
         {/* Tabs for different admin sections */}
         <Tabs defaultValue="overview" className="space-y-4">
-          <TabsList className="flex-wrap h-auto gap-1">
+          <TabsList className="flex overflow-x-auto h-auto gap-1 w-full justify-start no-scrollbar pb-1">
             <TabsTrigger value="overview" className="flex items-center gap-1">
               <Activity className="h-4 w-4" />
               Overview
