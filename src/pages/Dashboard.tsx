@@ -16,7 +16,7 @@ const quickActions = [
   { label: "Fund Wallet", icon: "💰", link: "/wallet" },
   { label: "New Group", icon: "👥", link: "/create-group" },
   { label: "Goal Funding", icon: "🎯", link: "/goal-funding" },
-  { label: "Referrals", icon: "🎁", link: "/referrals" },
+  { label: "Target Ajo", icon: "🏦", link: "/target-ajo" },
 ];
 
 export default function Dashboard() {
