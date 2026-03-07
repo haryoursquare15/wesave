@@ -24,6 +24,61 @@ const supportItems = [
   { icon: MessageSquare, label: "Contact Support", path: "/support/new", description: "Lodge a complaint or get help" },
 ];
 
+function PushNotificationSettings() {
+  const { supported, permission, isSubscribed, loading, subscribe, unsubscribe } = usePushNotifications();
+
+  if (!supported) return null;
+
+  const handleToggle = async (checked: boolean) => {
+    if (checked) {
+      const success = await subscribe();
+      if (success) {
+        toast.success("Push notifications enabled!");
+      } else if (Notification.permission === "denied") {
+        toast.error("Notifications blocked. Please enable them in your browser settings.");
+      }
+    } else {
+      await unsubscribe();
+      toast.success("Push notifications disabled");
+    }
+  };
+
+  return (
+    <section>
+      <h2 className="text-sm font-medium text-muted-foreground mb-3 px-1">Notifications</h2>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.15 }}
+        className="bg-card rounded-2xl border border-border p-4"
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+              <Bell className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <p className="font-medium text-foreground">Push Notifications</p>
+              <p className="text-xs text-muted-foreground">
+                {permission === "denied"
+                  ? "Blocked in browser settings"
+                  : isSubscribed
+                  ? "You'll receive alerts even when the app is closed"
+                  : "Get notified about contributions, payouts & invites"}
+              </p>
+            </div>
+          </div>
+          <Switch
+            checked={isSubscribed}
+            onCheckedChange={handleToggle}
+            disabled={loading || permission === "denied"}
+          />
+        </div>
+      </motion.div>
+    </section>
+  );
+}
+
 export default function Settings() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
