@@ -37,7 +37,7 @@ export default function ForgotPassword() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex">
+    <div className="min-h-screen min-h-[100dvh] bg-background flex overflow-y-auto">
       {/* Left Panel - Branding */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-primary via-primary to-primary/80 p-12 flex-col justify-between">
         <Link to="/" className="flex items-center gap-2">

@@ -222,7 +222,7 @@ export default function Auth() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex">
+    <div className="min-h-screen min-h-[100dvh] bg-background flex overflow-y-auto">
       {/* Left Panel - Branding */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-primary via-primary to-primary/80 p-12 flex-col justify-between">
         <Link to="/" className="flex items-center gap-2">
@@ -250,7 +250,7 @@ export default function Auth() {
       </div>
 
       {/* Right Panel - Form */}
-      <div className="flex-1 flex items-center justify-center p-6 md:p-12">
+      <div className="flex-1 flex items-start justify-center p-6 md:p-12 overflow-y-auto py-8">
         <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
