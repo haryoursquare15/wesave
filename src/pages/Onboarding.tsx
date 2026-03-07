@@ -703,7 +703,7 @@ export default function Onboarding() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen min-h-[100dvh] bg-background flex flex-col overflow-y-auto">
       {/* Progress Header */}
       <header className="border-b border-border py-4">
         <div className="container mx-auto px-4">
@@ -749,7 +749,7 @@ export default function Onboarding() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 container mx-auto px-4 py-8 max-w-md">
+      <main className="flex-1 container mx-auto px-4 py-8 max-w-md overflow-y-auto">
         <AnimatePresence mode="wait">{renderStep()}</AnimatePresence>
       </main>
 
