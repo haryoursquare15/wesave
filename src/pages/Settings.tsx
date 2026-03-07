@@ -5,9 +5,12 @@ import {
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { BottomNav } from "@/components/BottomNav";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { useEffect } from "react";
+import { toast } from "sonner";
 
 const settingsItems = [
   { icon: User, label: "Edit Profile", path: "/settings/profile", description: "Update your personal information" },
@@ -112,6 +115,9 @@ export default function Settings() {
             ))}
           </motion.div>
         </section>
+
+        {/* Push Notifications */}
+        <PushNotificationSettings />
 
         {/* App Info */}
         <motion.div
