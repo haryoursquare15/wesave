@@ -35,3 +35,5 @@ project_id = "sdwkqwmqgpsjrmijkdix"
     verify_jwt = false
   [functions.referral-operations]
     verify_jwt = false
+  [functions.push-notification]
+    verify_jwt = false

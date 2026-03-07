@@ -7,6 +7,7 @@ import { UserBadge } from "@/components/UserBadge";
 import { Button } from "@/components/ui/button";
 import { BottomNav } from "@/components/BottomNav";
 import { PendingInvitesNotification } from "@/components/PendingInvitesNotification";
+import { PushNotificationPrompt } from "@/components/PushNotificationPrompt";
 import { useAuth } from "@/contexts/AuthContext";
 import { useMyGroups } from "@/hooks/useThriftGroups";
 import { useIsAdmin } from "@/hooks/useAdmin";
@@ -78,6 +79,8 @@ export default function Dashboard() {
           </div>
         </div>
       </header>
+
+      <PushNotificationPrompt />
 
       <main className="container mx-auto px-4 py-6 space-y-6">
         {/* Wallet Card */}
