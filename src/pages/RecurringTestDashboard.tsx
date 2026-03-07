@@ -363,7 +363,7 @@ export default function RecurringTestDashboard() {
   const totalAmount = confirmedLedger.reduce((sum, e) => sum + Number(e.amount), 0);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen min-h-[100dvh] bg-background pb-8">
       {/* Header */}
       <header className="sticky top-0 z-30 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
