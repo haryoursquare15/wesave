@@ -36,11 +36,12 @@ import Referrals from "./pages/Referrals";
 import SplitPay from "./pages/SplitPay";
 import CreateSplitPay from "./pages/CreateSplitPay";
 import SplitPayDetail from "./pages/SplitPayDetail";
+import DeleteAccount from "./pages/DeleteAccount";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-const PUBLIC_ROUTES = ["/", "/auth", "/forgot-password", "/invite", "/onboarding", "/terms", "/privacy", "/goal"];
+const PUBLIC_ROUTES = ["/", "/auth", "/forgot-password", "/invite", "/onboarding", "/terms", "/privacy", "/goal", "/delete-account"];
 
 function isPublicRoute(pathname: string) {
   return PUBLIC_ROUTES.some(route => 
@@ -138,6 +139,7 @@ const App = () => {
                 <Route path="/split-pay/:requestId" element={<SplitPayDetail />} />
                 <Route path="/terms" element={<TermsOfService />} />
                 <Route path="/privacy" element={<PrivacyPolicy />} />
+                <Route path="/delete-account" element={<DeleteAccount />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </OnboardingRedirect>
