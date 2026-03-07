@@ -81,7 +81,7 @@ export function usePushNotifications() {
       }
 
       const registration = await registerServiceWorker();
-      const applicationServerKey = urlBase64ToUint8Array(vapidData.vapid_public_key);
+      const applicationServerKey = urlBase64ToUint8Array(vapidData.vapid_public_key) as BufferSource;
 
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
