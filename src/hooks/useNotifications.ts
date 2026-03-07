@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 
 export interface UserNotification {
   id: string;
@@ -34,7 +35,10 @@ export function useNotifications() {
     fetchNotifications();
   }, [fetchNotifications]);
 
-  // Realtime subscription
+  // Track if initial load is done to avoid toasting on mount
+  const initialLoadDone = useRef(false);
+
+  // Realtime subscription with in-app toast
   useEffect(() => {
     if (!user) return;
     const channel = supabase
@@ -42,7 +46,39 @@ export function useNotifications() {
       .on(
         "postgres_changes",
         {
-          event: "*",
+          event: "INSERT",
+          schema: "public",
+          table: "user_notifications",
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          fetchNotifications();
+          // Show in-app toast for new notifications
+          if (initialLoadDone.current && payload.new) {
+            const n = payload.new as UserNotification;
+            toast(n.title, {
+              description: n.message?.slice(0, 100),
+              duration: 5000,
+            });
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "user_notifications",
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          fetchNotifications();
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "DELETE",
           schema: "public",
           table: "user_notifications",
           filter: `user_id=eq.${user.id}`,
@@ -53,7 +89,13 @@ export function useNotifications() {
       )
       .subscribe();
 
+    // Mark initial load as done after a short delay
+    const timer = setTimeout(() => {
+      initialLoadDone.current = true;
+    }, 2000);
+
     return () => {
+      clearTimeout(timer);
       supabase.removeChannel(channel);
     };
   }, [user, fetchNotifications]);
