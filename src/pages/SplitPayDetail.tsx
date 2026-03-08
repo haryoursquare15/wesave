@@ -119,7 +119,7 @@ export default function SplitPayDetail() {
             <div>
               <p className="font-semibold text-foreground text-sm">Group Incomplete</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {participants.length} of {request.number_of_people} participants. Payments are blocked until the group is full.
+                {participants.filter((p) => p.status !== "declined").length} of {request.number_of_people} participants. Payments are blocked until the group is full.
                 {isCreator && " Invite more people to proceed."}
               </p>
             </div>
