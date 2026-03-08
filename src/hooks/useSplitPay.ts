@@ -145,7 +145,8 @@ export function useSplitRequestDetail(requestId: string | undefined) {
     return () => { supabase.removeChannel(channel); };
   }, [requestId, fetchDetail]);
 
-  const isGroupComplete = participants.length >= (request?.number_of_people ?? 0);
+  const activeParticipants = participants.filter((p) => p.status !== "declined");
+  const isGroupComplete = activeParticipants.length >= (request?.number_of_people ?? 0);
 
   const payShare = useCallback(async () => {
     if (!user || !request) return { success: false, error: "Not ready" };
