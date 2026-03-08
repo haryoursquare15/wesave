@@ -185,7 +185,27 @@ export default function Settings() {
           </motion.div>
         </section>
 
-        {/* Push Notifications */}
+        {/* Sign Out */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.18 }}
+        >
+          <Button
+            variant="outline"
+            className="w-full h-12 text-destructive hover:text-destructive hover:bg-destructive/10"
+            onClick={handleSignOut}
+            disabled={signingOut}
+          >
+            {signingOut ? (
+              <div className="h-4 w-4 border-2 border-destructive/30 border-t-destructive rounded-full animate-spin mr-2" />
+            ) : (
+              <LogOut className="h-4 w-4 mr-2" />
+            )}
+            Sign Out
+          </Button>
+        </motion.div>
+
         <PushNotificationSettings />
 
         {/* App Info */}
