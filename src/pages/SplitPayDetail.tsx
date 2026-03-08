@@ -40,8 +40,19 @@ export default function SplitPayDetail() {
   const creatorName = creatorProfile?.full_name || creatorProfile?.username || "Unknown";
 
   const handlePay = async () => {
+    console.log("[SplitPay] handlePay called", {
+      userId: user?.id,
+      requestId: request?.id,
+      requestStatus: request?.status,
+      participantsCount: participants.length,
+      activeParticipants: participants.filter(p => p.status !== "declined").length,
+      numberOfPeople: request?.number_of_people,
+      isGroupComplete,
+      myParticipation: myParticipation ? { status: myParticipation.status, amount: myParticipation.amount_due } : null,
+    });
     setPaying(true);
     const result = await payShare();
+    console.log("[SplitPay] payShare result:", result);
     setPaying(false);
     if (result.success) {
       toast({ title: "Payment Successful!", description: "Your share has been paid." });

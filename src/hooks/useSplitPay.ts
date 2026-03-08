@@ -149,6 +149,7 @@ export function useSplitRequestDetail(requestId: string | undefined) {
   const isGroupComplete = activeParticipants.length >= (request?.number_of_people ?? 0);
 
   const payShare = useCallback(async () => {
+    console.log("[useSplitPay] payShare called", { user: user?.id, request: request?.id, participantsLen: participants.length, participants: participants.map(p => ({ id: p.user_id, status: p.status })) });
     if (!user || !request) return { success: false, error: "Not ready" };
     
     // Block payment if the group isn't complete (exclude declined participants)
