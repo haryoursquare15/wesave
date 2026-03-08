@@ -54,7 +54,7 @@ export default function DeleteAccount() {
   }
 
   return (
-    <div className="min-h-[100dvh] bg-background pb-24 safe-bottom">
+    <div className="min-h-[100dvh] bg-background pb-32 safe-bottom">
       <header className="bg-card border-b border-border sticky top-0 z-10">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center gap-3">
