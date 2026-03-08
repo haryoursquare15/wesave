@@ -114,27 +114,46 @@ export function SplitInviteDialog({ open, onOpenChange, splitRequestId, amountPe
       toast({ title: "Limit reached", description: "All participant slots are filled.", variant: "destructive" });
       return;
     }
-    console.log("[SplitInvite] Calling send_split_invite with:", {
-      splitRequestId, inviterId: user.id, inviteeId: targetUser.id, amountPerPerson
-    });
-    const { data, error } = await supabase.rpc("send_split_invite" as any, {
-      _split_request_id: splitRequestId,
-      _inviter_id: user.id,
-      _invitee_id: targetUser.id,
-      _amount_due: amountPerPerson,
-    } as any);
-    console.log("[SplitInvite] Result:", JSON.stringify({ data, error }));
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-      return;
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token || supabaseKey;
+
+      const response = await fetch(`${supabaseUrl}/rest/v1/rpc/send_split_invite`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": supabaseKey,
+          "Authorization": `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          _split_request_id: splitRequestId,
+          _inviter_id: user.id,
+          _invitee_id: targetUser.id,
+          _amount_due: amountPerPerson,
+        }),
+      });
+
+      const result = await response.json();
+      console.log("[SplitInvite] Direct fetch result:", JSON.stringify(result), "status:", response.status);
+
+      if (!response.ok) {
+        toast({ title: "Error", description: result?.message || result?.error || "Could not send invite", variant: "destructive" });
+        return;
+      }
+
+      if (result && result.success === false) {
+        toast({ title: "Error", description: result.error || "Could not send invite", variant: "destructive" });
+        return;
+      }
+
+      setInvitedIds((prev) => new Set(prev).add(targetUser.id));
+      toast({ title: "Invited!", description: `${targetUser.full_name || targetUser.username} has been invited.` });
+    } catch (err: any) {
+      console.error("[SplitInvite] Exception:", err);
+      toast({ title: "Error", description: err.message || "Something went wrong", variant: "destructive" });
     }
-    const result = data as { success: boolean; error?: string };
-    if (!result.success) {
-      toast({ title: "Error", description: result.error || "Could not send invite", variant: "destructive" });
-      return;
-    }
-    setInvitedIds((prev) => new Set(prev).add(targetUser.id));
-    toast({ title: "Invited!", description: `${targetUser.full_name || targetUser.username} has been invited.` });
   };
 
   const renderUserRow = (u: UserResult) => {
