@@ -42,7 +42,7 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-const PUBLIC_ROUTES = ["/", "/auth", "/forgot-password", "/invite", "/onboarding", "/terms", "/privacy", "/goal", "/delete-account"];
+const PUBLIC_ROUTES = ["/", "/auth", "/forgot-password", "/invite", "/onboarding", "/terms", "/privacy", "/goal", "/delete-account", "/app-home"];
 
 function isPublicRoute(pathname: string) {
   return PUBLIC_ROUTES.some(route => 
@@ -107,6 +107,7 @@ const App = () => {
             <OnboardingRedirect>
               <Routes>
                 <Route path="/" element={<Landing />} />
+                <Route path="/app-home" element={<AppHome />} />
                 <Route path="/auth" element={<Auth />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 <Route path="/onboarding" element={<Onboarding />} />
