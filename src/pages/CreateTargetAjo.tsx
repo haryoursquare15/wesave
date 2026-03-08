@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Target } from "lucide-react";
+import { ArrowLeft, Target, Users, User } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,7 +31,14 @@ export default function CreateTargetAjo() {
     beneficiary_bank_name: "",
     beneficiary_account_number: "",
     max_members: "20",
+    savings_type: "group" as "group" | "independent",
   });
+
+  // Member invitation state
+  const [memberQuery, setMemberQuery] = useState("");
+  const [memberResults, setMemberResults] = useState<any[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [selectedMembers, setSelectedMembers] = useState<any[]>([]);
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/auth");
@@ -39,6 +46,36 @@ export default function CreateTargetAjo() {
 
   const update = (field: string, value: string) =>
     setForm((f) => ({ ...f, [field]: value }));
+
+  const searchUsers = async () => {
+    if (!memberQuery.trim() || memberQuery.trim().length < 2) return;
+    setSearching(true);
+    try {
+      const escaped = memberQuery.trim().replace(/[%_\\]/g, "\\$&");
+      const { data } = await supabase
+        .from("profiles")
+        .select("id, full_name, username, email")
+        .or(`username.ilike.%${escaped}%,full_name.ilike.%${escaped}%`)
+        .neq("id", user?.id || "")
+        .limit(10);
+      // Filter out already selected
+      const selectedIds = new Set(selectedMembers.map(m => m.id));
+      setMemberResults((data || []).filter(u => !selectedIds.has(u.id)));
+    } catch {
+      toast.error("Search failed");
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const addMember = (member: any) => {
+    setSelectedMembers(prev => [...prev, member]);
+    setMemberResults(prev => prev.filter(m => m.id !== member.id));
+  };
+
+  const removeMember = (memberId: string) => {
+    setSelectedMembers(prev => prev.filter(m => m.id !== memberId));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -71,18 +108,30 @@ export default function CreateTargetAjo() {
         beneficiary_account_number: form.beneficiary_account_number.trim(),
         admin_user_id: user.id,
         max_members: parseInt(form.max_members) || 20,
-        member_count: 1,
+        member_count: 1 + selectedMembers.length,
+        savings_type: form.savings_type,
       }).select().single();
 
       if (error) throw error;
 
+      // Add admin as member
       await (supabase as any).from("target_ajo_memberships").insert({
         group_id: group.id,
         user_id: user.id,
         status: "active",
       });
 
-      toast.success("Target Ajo created!");
+      // Send invites to selected members
+      if (selectedMembers.length > 0) {
+        const invites = selectedMembers.map(m => ({
+          group_id: group.id,
+          inviter_id: user.id,
+          invitee_id: m.id,
+        }));
+        await (supabase as any).from("target_ajo_invites").insert(invites);
+      }
+
+      toast.success("Target Ajo created!" + (selectedMembers.length > 0 ? ` ${selectedMembers.length} invite(s) sent.` : ""));
       navigate(`/target-ajo/${group.id}`);
     } catch (err: any) {
       toast.error(err.message || "Failed to create target");
@@ -130,6 +179,43 @@ export default function CreateTargetAjo() {
             <Input placeholder="e.g. Office Rent Fund" value={form.name} onChange={(e) => update("name", e.target.value)} maxLength={100} />
           </div>
 
+          {/* Savings Type */}
+          <div>
+            <Label className="mb-2 block">Savings Type *</Label>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setForm(f => ({ ...f, savings_type: "group" }))}
+                className={`p-4 rounded-xl border-2 text-left transition-all ${
+                  form.savings_type === "group"
+                    ? "border-primary bg-primary/5"
+                    : "border-border bg-card hover:border-muted-foreground/30"
+                }`}
+              >
+                <Users className={`h-6 w-6 mb-2 ${form.savings_type === "group" ? "text-primary" : "text-muted-foreground"}`} />
+                <p className="text-sm font-semibold text-foreground">Group Wallet</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Everyone contributes to one shared pot. Total is pooled together.
+                </p>
+              </button>
+              <button
+                type="button"
+                onClick={() => setForm(f => ({ ...f, savings_type: "independent" }))}
+                className={`p-4 rounded-xl border-2 text-left transition-all ${
+                  form.savings_type === "independent"
+                    ? "border-primary bg-primary/5"
+                    : "border-border bg-card hover:border-muted-foreground/30"
+                }`}
+              >
+                <User className={`h-6 w-6 mb-2 ${form.savings_type === "independent" ? "text-primary" : "text-muted-foreground"}`} />
+                <p className="text-sm font-semibold text-foreground">Independent</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Each member has their own sub-wallet. Everyone sees aggregate progress.
+                </p>
+              </button>
+            </div>
+          </div>
+
           <div>
             <Label>Reason / Purpose</Label>
             <Textarea placeholder="Why are we saving?" value={form.reason} onChange={(e) => update("reason", e.target.value)} rows={2} maxLength={500} />
@@ -172,6 +258,55 @@ export default function CreateTargetAjo() {
           <div>
             <Label>Target Date</Label>
             <Input type="date" value={form.target_date} onChange={(e) => update("target_date", e.target.value)} min={new Date().toISOString().split("T")[0]} />
+          </div>
+
+          {/* Add Members */}
+          <div className="border-t border-border pt-5">
+            <h3 className="text-sm font-semibold text-foreground mb-3">Add Members (Invite)</h3>
+            <p className="text-xs text-muted-foreground mb-3">
+              Search and invite members to join. Only invited members can participate.
+            </p>
+            <div className="flex gap-2 mb-3">
+              <Input
+                placeholder="Search by name or username..."
+                value={memberQuery}
+                onChange={(e) => setMemberQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), searchUsers())}
+              />
+              <Button type="button" size="sm" variant="outline" onClick={searchUsers} disabled={searching}>
+                {searching ? "..." : "Search"}
+              </Button>
+            </div>
+
+            {/* Search results */}
+            {memberResults.length > 0 && (
+              <div className="space-y-1 mb-3 max-h-40 overflow-y-auto">
+                {memberResults.map(u => (
+                  <div key={u.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/30">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">{u.full_name || u.username || "User"}</p>
+                      <p className="text-xs text-muted-foreground">@{u.username || u.email?.split("@")[0]}</p>
+                    </div>
+                    <Button type="button" size="sm" variant="outline" onClick={() => addMember(u)}>Add</Button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Selected members */}
+            {selectedMembers.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground mb-1">{selectedMembers.length} member(s) to invite:</p>
+                {selectedMembers.map(m => (
+                  <div key={m.id} className="flex items-center justify-between p-2 rounded-lg bg-primary/5 border border-primary/20">
+                    <p className="text-sm font-medium text-foreground">{m.full_name || m.username || "User"}</p>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => removeMember(m.id)} className="text-destructive h-7 px-2">
+                      Remove
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="border-t border-border pt-5">

@@ -19,7 +19,16 @@ export interface TargetAjoGroup {
   status: string;
   member_count: number;
   max_members: number;
+  savings_type: "group" | "independent";
   created_at: string;
+  updated_at: string;
+}
+
+export interface TargetAjoMemberContribution {
+  id: string;
+  group_id: string;
+  user_id: string;
+  total_contributed: number;
   updated_at: string;
 }
 
