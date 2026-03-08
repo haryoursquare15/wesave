@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Users, Target, Clock, UserPlus, Wallet, AlertTriangle, Vote, User } from "lucide-react";
+import { ArrowLeft, Users, Target, Clock, UserPlus, Wallet, AlertTriangle, Vote, User, ArrowDownToLine } from "lucide-react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +36,7 @@ export default function TargetAjoDetail() {
   const [requestingWithdraw, setRequestingWithdraw] = useState(false);
   const [memberProfiles, setMemberProfiles] = useState<Map<string, MemberProfile>>(new Map());
   const [memberContributions, setMemberContributions] = useState<TargetAjoMemberContribution[]>([]);
+  const [selfWithdrawing, setSelfWithdrawing] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/auth");
@@ -89,6 +90,39 @@ export default function TargetAjoDetail() {
 
   const getMemberContribution = (userId: string) => {
     return memberContributions.find(mc => mc.user_id === userId)?.total_contributed || 0;
+  };
+
+  // Independent mode: withdraw own contributions to app wallet
+  const handleSelfWithdraw = async () => {
+    if (!user || !group) return;
+    const myTotal = getMemberContribution(user.id);
+    if (myTotal <= 0) { toast.error("No contributions to withdraw"); return; }
+
+    setSelfWithdrawing(true);
+    try {
+      // Reset member contribution tracker
+      await (supabase as any)
+        .from("target_ajo_member_contributions")
+        .update({ total_contributed: 0, updated_at: new Date().toISOString() })
+        .eq("group_id", group.id)
+        .eq("user_id", user.id);
+
+      // Reduce group amount_raised
+      await (supabase as any)
+        .from("target_ajo_groups")
+        .update({
+          amount_raised: Math.max(0, group.amount_raised - myTotal),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", group.id);
+
+      toast.success(`₦${fmt(myTotal)} withdrawn to your wallet!`);
+      refetch();
+    } catch (err: any) {
+      toast.error(err.message || "Withdrawal failed");
+    } finally {
+      setSelfWithdrawing(false);
+    }
   };
 
   if (authLoading || loading) {
@@ -232,9 +266,23 @@ export default function TargetAjoDetail() {
 
           {/* Contribute button for members */}
           {group.status === "active" && isMember && (
-            <Button className="w-full mb-4" size="lg" onClick={() => setContributeOpen(true)}>
-              <Wallet className="h-5 w-5 mr-2" /> Contribute Now
-            </Button>
+            <div className="flex gap-2 mb-4">
+              <Button className="flex-1" size="lg" onClick={() => setContributeOpen(true)}>
+                <Wallet className="h-5 w-5 mr-2" /> Contribute Now
+              </Button>
+              {isIndependent && getMemberContribution(user?.id || "") > 0 && (
+                <Button
+                  variant="outline"
+                  size="lg"
+                  onClick={handleSelfWithdraw}
+                  disabled={selfWithdrawing}
+                  className="flex-1"
+                >
+                  <ArrowDownToLine className="h-5 w-5 mr-2" />
+                  {selfWithdrawing ? "Withdrawing..." : `Withdraw ₦${fmt(getMemberContribution(user?.id || ""))}`}
+                </Button>
+              )}
+            </div>
           )}
 
           {/* Disclaimer */}
@@ -242,7 +290,10 @@ export default function TargetAjoDetail() {
             <div className="flex items-start gap-2">
               <AlertTriangle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
               <p className="text-xs text-muted-foreground">
-                Withdrawals require approval from at least 2/3 of members. Funds are disbursed to the designated beneficiary account.
+                {isIndependent
+                  ? "Each member can withdraw their own contributions directly to their app wallet at any time."
+                  : "Withdrawals require approval from at least 2/3 of members. Funds are disbursed to the designated beneficiary account."
+                }
               </p>
             </div>
           </div>
@@ -394,41 +445,54 @@ export default function TargetAjoDetail() {
           {isAdmin && (
             <TabsContent value="manage">
               <div className="space-y-4">
-                {/* Request Withdrawal */}
-                <div className="p-4 rounded-xl bg-card border border-border space-y-3">
-                  <h3 className="font-semibold text-foreground">Request Withdrawal</h3>
-                  <p className="text-xs text-muted-foreground">
-                    Submit a withdrawal request. 2/3 of members ({Math.ceil((members.length * 2) / 3)}) must approve.
-                  </p>
-                  <div className="space-y-2">
-                    <input
-                      type="number"
-                      placeholder="Amount (₦)"
-                      value={withdrawAmount}
-                      onChange={(e) => setWithdrawAmount(e.target.value)}
-                      className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm"
-                    />
-                    <input
-                      placeholder="Reason (optional)"
-                      value={withdrawReason}
-                      onChange={(e) => setWithdrawReason(e.target.value)}
-                      className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm"
-                    />
-                    <Button className="w-full" onClick={handleWithdrawalRequest} disabled={requestingWithdraw}>
-                      {requestingWithdraw ? "Submitting..." : "Request Withdrawal"}
-                    </Button>
+                {/* Request Withdrawal - only for group mode */}
+                {!isIndependent && (
+                  <div className="p-4 rounded-xl bg-card border border-border space-y-3">
+                    <h3 className="font-semibold text-foreground">Request Withdrawal</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Submit a withdrawal request. 2/3 of members ({Math.ceil((members.length * 2) / 3)}) must approve.
+                    </p>
+                    <div className="space-y-2">
+                      <input
+                        type="number"
+                        placeholder="Amount (₦)"
+                        value={withdrawAmount}
+                        onChange={(e) => setWithdrawAmount(e.target.value)}
+                        className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm"
+                      />
+                      <input
+                        placeholder="Reason (optional)"
+                        value={withdrawReason}
+                        onChange={(e) => setWithdrawReason(e.target.value)}
+                        className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm"
+                      />
+                      <Button className="w-full" onClick={handleWithdrawalRequest} disabled={requestingWithdraw}>
+                        {requestingWithdraw ? "Submitting..." : "Request Withdrawal"}
+                      </Button>
+                    </div>
                   </div>
-                </div>
+                )}
 
-                {/* Beneficiary Info */}
-                <div className="p-4 rounded-xl bg-card border border-border">
-                  <h3 className="font-semibold text-foreground mb-2">Beneficiary Account</h3>
-                  <div className="text-sm space-y-1">
-                    <p className="text-muted-foreground">Name: <span className="text-foreground">{group.beneficiary_account_name || "—"}</span></p>
-                    <p className="text-muted-foreground">Bank: <span className="text-foreground">{group.beneficiary_bank_name || "—"}</span></p>
-                    <p className="text-muted-foreground">Account: <span className="text-foreground">{group.beneficiary_account_number || "—"}</span></p>
+                {isIndependent && (
+                  <div className="p-4 rounded-xl bg-card border border-border">
+                    <h3 className="font-semibold text-foreground mb-2">Independent Mode</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Each member manages their own contributions and can withdraw directly to their app wallet. No group voting required.
+                    </p>
                   </div>
-                </div>
+                )}
+
+                {/* Beneficiary Info - only for group mode */}
+                {!isIndependent && (
+                  <div className="p-4 rounded-xl bg-card border border-border">
+                    <h3 className="font-semibold text-foreground mb-2">Beneficiary Account</h3>
+                    <div className="text-sm space-y-1">
+                      <p className="text-muted-foreground">Name: <span className="text-foreground">{group.beneficiary_account_name || "—"}</span></p>
+                      <p className="text-muted-foreground">Bank: <span className="text-foreground">{group.beneficiary_bank_name || "—"}</span></p>
+                      <p className="text-muted-foreground">Account: <span className="text-foreground">{group.beneficiary_account_number || "—"}</span></p>
+                    </div>
+                  </div>
+                )}
               </div>
             </TabsContent>
           )}
