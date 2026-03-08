@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowRight, Shield, Users, Zap, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import wesaveLogo from "@/assets/wesave-logo-new.png";
+import wesaveLogo from "@/assets/wesave-app-logo.jpeg";
 
 const slides = [
   {
