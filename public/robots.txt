@@ -52,5 +52,6 @@ Disallow: /wallet
 Disallow: /groups
 Disallow: /profile
 Disallow: /security
+Disallow: /app-home
 
 Sitemap: https://wesave.ng/sitemap.xml
