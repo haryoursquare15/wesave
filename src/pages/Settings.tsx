@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { 
   ArrowLeft, User, Shield, CreditCard, Bell, HelpCircle, 
-  ChevronRight, MessageSquare, ExternalLink 
+  ChevronRight, MessageSquare, ExternalLink, LogOut 
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { BottomNav } from "@/components/BottomNav";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 const settingsItems = [
@@ -81,7 +81,21 @@ function PushNotificationSettings() {
 
 export default function Settings() {
   const navigate = useNavigate();
-  const { user, loading: authLoading } = useAuth();
+  const { user, signOut, loading: authLoading } = useAuth();
+  const [signingOut, setSigningOut] = useState(false);
+
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    try {
+      await signOut();
+      toast.success("Signed out successfully");
+      navigate("/");
+    } catch (err) {
+      toast.error("Failed to sign out");
+    } finally {
+      setSigningOut(false);
+    }
+  };
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -171,7 +185,27 @@ export default function Settings() {
           </motion.div>
         </section>
 
-        {/* Push Notifications */}
+        {/* Sign Out */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.18 }}
+        >
+          <Button
+            variant="outline"
+            className="w-full h-12 text-destructive hover:text-destructive hover:bg-destructive/10"
+            onClick={handleSignOut}
+            disabled={signingOut}
+          >
+            {signingOut ? (
+              <div className="h-4 w-4 border-2 border-destructive/30 border-t-destructive rounded-full animate-spin mr-2" />
+            ) : (
+              <LogOut className="h-4 w-4 mr-2" />
+            )}
+            Sign Out
+          </Button>
+        </motion.div>
+
         <PushNotificationSettings />
 
         {/* App Info */}
