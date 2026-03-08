@@ -171,7 +171,7 @@ export default function AppHome() {
             variant="hero"
             size="xl"
             className="w-full"
-            onClick={handleGetStarted}
+            onClick={isLastSlide ? handleGetStarted : () => setCurrentSlide((p) => p + 1)}
           >
             {isLastSlide ? "Get Started" : "Next"}
             <ArrowRight className="h-5 w-5" />
