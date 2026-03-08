@@ -38,8 +38,8 @@ export default function TargetAjo() {
               <h1 className="text-xl font-bold text-foreground">Target Ajo</h1>
             </div>
             <Link to="/target-ajo/create">
-              <Button size="sm">
-                <Plus className="h-4 w-4 mr-1" /> Create
+              <Button size="default" className="shadow-md">
+                <Plus className="h-5 w-5 mr-1" /> Create
               </Button>
             </Link>
           </div>
