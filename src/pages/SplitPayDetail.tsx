@@ -101,8 +101,8 @@ export default function SplitPayDetail() {
               <h1 className="text-lg font-bold text-foreground">Split Details</h1>
             </div>
             {isCreator && request.status === "active" && (
-              <Button variant="outline" size="sm" onClick={() => setInviteOpen(true)}>
-                <UserPlus className="h-4 w-4 mr-1" /> Invite
+              <Button variant="outline" size="default" onClick={() => setInviteOpen(true)}>
+                <UserPlus className="h-5 w-5 mr-1" /> Invite
               </Button>
             )}
           </div>
@@ -129,10 +129,10 @@ export default function SplitPayDetail() {
         {/* Action Buttons */}
         {myParticipation && request.status === "active" && myParticipation.status === "pending" && (
           <div className="flex gap-3">
-            <Button className="flex-1" onClick={handlePay} disabled={paying || !isGroupComplete}>
+            <Button className="flex-1 min-h-[48px] text-base" onClick={handlePay} disabled={paying || !isGroupComplete}>
               {paying ? "Processing..." : !isGroupComplete ? "Waiting for group..." : "Accept & Pay"}
             </Button>
-            <Button variant="outline" className="flex-1" onClick={handleDecline}>
+            <Button variant="outline" className="flex-1 min-h-[48px] text-base" onClick={handleDecline}>
               Decline
             </Button>
           </div>
@@ -186,8 +186,8 @@ export default function SplitPayDetail() {
 
         {/* Creator Actions */}
         {isCreator && request.status === "active" && (
-          <Button variant="destructive" className="w-full" onClick={handleCancel}>
-            <Ban className="h-4 w-4 mr-1" /> Cancel Split Request
+          <Button variant="destructive" className="w-full min-h-[48px] text-base" onClick={handleCancel}>
+            <Ban className="h-5 w-5 mr-1" /> Cancel Split Request
           </Button>
         )}
       </main>
