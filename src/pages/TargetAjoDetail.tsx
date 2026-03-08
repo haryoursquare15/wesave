@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Users, Target, Clock, UserPlus, Wallet, AlertTriangle, Vote, User } from "lucide-react";
+import { ArrowLeft, Users, Target, Clock, UserPlus, Wallet, AlertTriangle, Vote, User, ArrowDownToLine } from "lucide-react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +36,7 @@ export default function TargetAjoDetail() {
   const [requestingWithdraw, setRequestingWithdraw] = useState(false);
   const [memberProfiles, setMemberProfiles] = useState<Map<string, MemberProfile>>(new Map());
   const [memberContributions, setMemberContributions] = useState<TargetAjoMemberContribution[]>([]);
+  const [selfWithdrawing, setSelfWithdrawing] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/auth");
