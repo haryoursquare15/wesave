@@ -117,13 +117,13 @@ export function SplitInviteDialog({ open, onOpenChange, splitRequestId, amountPe
     console.log("[SplitInvite] Calling send_split_invite with:", {
       splitRequestId, inviterId: user.id, inviteeId: targetUser.id, amountPerPerson
     });
-    const { data, error } = await supabase.rpc("send_split_invite", {
+    const { data, error } = await supabase.rpc("send_split_invite" as any, {
       _split_request_id: splitRequestId,
       _inviter_id: user.id,
       _invitee_id: targetUser.id,
       _amount_due: amountPerPerson,
-    });
-    console.log("[SplitInvite] Result:", { data, error });
+    } as any);
+    console.log("[SplitInvite] Result:", JSON.stringify({ data, error }));
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
       return;
