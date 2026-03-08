@@ -445,41 +445,54 @@ export default function TargetAjoDetail() {
           {isAdmin && (
             <TabsContent value="manage">
               <div className="space-y-4">
-                {/* Request Withdrawal */}
-                <div className="p-4 rounded-xl bg-card border border-border space-y-3">
-                  <h3 className="font-semibold text-foreground">Request Withdrawal</h3>
-                  <p className="text-xs text-muted-foreground">
-                    Submit a withdrawal request. 2/3 of members ({Math.ceil((members.length * 2) / 3)}) must approve.
-                  </p>
-                  <div className="space-y-2">
-                    <input
-                      type="number"
-                      placeholder="Amount (₦)"
-                      value={withdrawAmount}
-                      onChange={(e) => setWithdrawAmount(e.target.value)}
-                      className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm"
-                    />
-                    <input
-                      placeholder="Reason (optional)"
-                      value={withdrawReason}
-                      onChange={(e) => setWithdrawReason(e.target.value)}
-                      className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm"
-                    />
-                    <Button className="w-full" onClick={handleWithdrawalRequest} disabled={requestingWithdraw}>
-                      {requestingWithdraw ? "Submitting..." : "Request Withdrawal"}
-                    </Button>
+                {/* Request Withdrawal - only for group mode */}
+                {!isIndependent && (
+                  <div className="p-4 rounded-xl bg-card border border-border space-y-3">
+                    <h3 className="font-semibold text-foreground">Request Withdrawal</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Submit a withdrawal request. 2/3 of members ({Math.ceil((members.length * 2) / 3)}) must approve.
+                    </p>
+                    <div className="space-y-2">
+                      <input
+                        type="number"
+                        placeholder="Amount (₦)"
+                        value={withdrawAmount}
+                        onChange={(e) => setWithdrawAmount(e.target.value)}
+                        className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm"
+                      />
+                      <input
+                        placeholder="Reason (optional)"
+                        value={withdrawReason}
+                        onChange={(e) => setWithdrawReason(e.target.value)}
+                        className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm"
+                      />
+                      <Button className="w-full" onClick={handleWithdrawalRequest} disabled={requestingWithdraw}>
+                        {requestingWithdraw ? "Submitting..." : "Request Withdrawal"}
+                      </Button>
+                    </div>
                   </div>
-                </div>
+                )}
 
-                {/* Beneficiary Info */}
-                <div className="p-4 rounded-xl bg-card border border-border">
-                  <h3 className="font-semibold text-foreground mb-2">Beneficiary Account</h3>
-                  <div className="text-sm space-y-1">
-                    <p className="text-muted-foreground">Name: <span className="text-foreground">{group.beneficiary_account_name || "—"}</span></p>
-                    <p className="text-muted-foreground">Bank: <span className="text-foreground">{group.beneficiary_bank_name || "—"}</span></p>
-                    <p className="text-muted-foreground">Account: <span className="text-foreground">{group.beneficiary_account_number || "—"}</span></p>
+                {isIndependent && (
+                  <div className="p-4 rounded-xl bg-card border border-border">
+                    <h3 className="font-semibold text-foreground mb-2">Independent Mode</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Each member manages their own contributions and can withdraw directly to their app wallet. No group voting required.
+                    </p>
                   </div>
-                </div>
+                )}
+
+                {/* Beneficiary Info - only for group mode */}
+                {!isIndependent && (
+                  <div className="p-4 rounded-xl bg-card border border-border">
+                    <h3 className="font-semibold text-foreground mb-2">Beneficiary Account</h3>
+                    <div className="text-sm space-y-1">
+                      <p className="text-muted-foreground">Name: <span className="text-foreground">{group.beneficiary_account_name || "—"}</span></p>
+                      <p className="text-muted-foreground">Bank: <span className="text-foreground">{group.beneficiary_bank_name || "—"}</span></p>
+                      <p className="text-muted-foreground">Account: <span className="text-foreground">{group.beneficiary_account_number || "—"}</span></p>
+                    </div>
+                  </div>
+                )}
               </div>
             </TabsContent>
           )}
