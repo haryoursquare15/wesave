@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Users, Target, Clock, UserPlus, Wallet, AlertTriangle, Vote } from "lucide-react";
+import { ArrowLeft, Users, Target, Clock, UserPlus, Wallet, AlertTriangle, Vote, LogIn } from "lucide-react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +16,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
+interface MemberProfile {
+  id: string;
+  full_name: string | null;
+  username: string | null;
+  avatar_url: string | null;
+}
+
 export default function TargetAjoDetail() {
   const { groupId } = useParams();
   const navigate = useNavigate();
@@ -26,12 +33,78 @@ export default function TargetAjoDetail() {
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawReason, setWithdrawReason] = useState("");
   const [requestingWithdraw, setRequestingWithdraw] = useState(false);
+  const [memberProfiles, setMemberProfiles] = useState<Map<string, MemberProfile>>(new Map());
+  const [joining, setJoining] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/auth");
   }, [user, authLoading, navigate]);
 
+  // Fetch member profiles
+  useEffect(() => {
+    const fetchProfiles = async () => {
+      if (!members.length && !group) return;
+      const userIds = [...new Set([
+        ...members.map(m => m.user_id),
+        ...(group ? [group.admin_user_id] : []),
+      ])];
+      if (!userIds.length) return;
+
+      const { data } = await supabase
+        .from("profiles")
+        .select("id, full_name, username, avatar_url")
+        .in("id", userIds);
+
+      if (data) {
+        const map = new Map<string, MemberProfile>();
+        data.forEach(p => map.set(p.id, p));
+        setMemberProfiles(map);
+      }
+    };
+    fetchProfiles();
+  }, [members, group]);
+
   const fmt = (n: number) => new Intl.NumberFormat("en-NG").format(n);
+
+  const getMemberName = (userId: string) => {
+    if (userId === user?.id) return "You";
+    const profile = memberProfiles.get(userId);
+    if (profile) return profile.full_name || profile.username || userId.slice(0, 8);
+    return userId.slice(0, 8);
+  };
+
+  const handleJoinGroup = async () => {
+    if (!user || !group) return;
+    if (group.member_count >= group.max_members) {
+      toast.error("This group is full");
+      return;
+    }
+    setJoining(true);
+    try {
+      const { error } = await (supabase as any).from("target_ajo_memberships").insert({
+        group_id: group.id,
+        user_id: user.id,
+        status: "active",
+      });
+      if (error) {
+        if (error.code === "23505") toast.error("You're already a member");
+        else throw error;
+        return;
+      }
+
+      // Update member count
+      await (supabase as any).from("target_ajo_groups")
+        .update({ member_count: group.member_count + 1, updated_at: new Date().toISOString() })
+        .eq("id", group.id);
+
+      toast.success("You've joined the group!");
+      refetch();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to join");
+    } finally {
+      setJoining(false);
+    }
+  };
 
   if (authLoading || loading) {
     return (
@@ -82,12 +155,6 @@ export default function TargetAjoDetail() {
     }
   };
 
-  // Get member profiles for display
-  const getMemberName = (userId: string) => {
-    if (userId === user?.id) return "You";
-    return userId.slice(0, 8);
-  };
-
   return (
     <div className="min-h-screen min-h-[100dvh] bg-background pb-24 safe-bottom">
       <header className="bg-card border-b border-border sticky top-0 z-40">
@@ -98,7 +165,7 @@ export default function TargetAjoDetail() {
             </Button>
             <h1 className="text-lg font-bold text-foreground line-clamp-1">{group.name}</h1>
           </div>
-          {isAdmin && (
+          {isMember && (
             <Button variant="outline" size="sm" onClick={() => setInviteOpen(true)}>
               <UserPlus className="h-4 w-4 mr-1" /> Invite
             </Button>
@@ -113,10 +180,15 @@ export default function TargetAjoDetail() {
             <Badge variant={group.status === "active" ? "default" : "secondary"}>{group.status}</Badge>
             <Badge variant="outline">{group.frequency}</Badge>
             {isAdmin && <Badge variant="outline">Admin</Badge>}
+            {isMember && !isAdmin && <Badge variant="outline">Member</Badge>}
           </div>
 
           {group.reason && (
             <p className="text-sm text-muted-foreground mb-4">{group.reason}</p>
+          )}
+
+          {group.description && (
+            <p className="text-sm text-muted-foreground mb-4">{group.description}</p>
           )}
 
           {/* Progress Card */}
@@ -143,9 +215,9 @@ export default function TargetAjoDetail() {
           </div>
 
           {/* Meta */}
-          <div className="flex items-center gap-4 text-sm text-muted-foreground mb-4">
+          <div className="flex items-center gap-4 text-sm text-muted-foreground mb-4 flex-wrap">
             <span className="flex items-center gap-1">
-              <Users className="h-4 w-4" /> {members.length} members
+              <Users className="h-4 w-4" /> {members.length} / {group.max_members} members
             </span>
             <span className="flex items-center gap-1">
               <Wallet className="h-4 w-4" /> ₦{fmt(group.contribution_amount)} / {group.frequency}
@@ -157,7 +229,15 @@ export default function TargetAjoDetail() {
             )}
           </div>
 
-          {/* Contribute button */}
+          {/* Join button for non-members */}
+          {!isMember && group.status === "active" && (
+            <Button className="w-full mb-4" size="lg" onClick={handleJoinGroup} disabled={joining}>
+              <LogIn className="h-5 w-5 mr-2" />
+              {joining ? "Joining..." : "Join This Target"}
+            </Button>
+          )}
+
+          {/* Contribute button for members */}
           {group.status === "active" && isMember && (
             <Button className="w-full mb-4" size="lg" onClick={() => setContributeOpen(true)}>
               <Wallet className="h-5 w-5 mr-2" /> Contribute Now
@@ -217,19 +297,48 @@ export default function TargetAjoDetail() {
           {/* Members Tab */}
           <TabsContent value="members">
             <div className="space-y-2">
-              {members.map((m) => (
-                <div key={m.id} className="p-3 rounded-lg bg-card border border-border flex items-center justify-between">
+              {/* Admin */}
+              <div className="p-3 rounded-lg bg-card border border-border flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm">
+                    {(getMemberName(group.admin_user_id)?.[0] || "?").toUpperCase()}
+                  </div>
                   <div>
                     <p className="text-sm font-medium text-foreground">
-                      {m.user_id === group.admin_user_id ? "👑 " : ""}{getMemberName(m.user_id)}
+                      👑 {getMemberName(group.admin_user_id)}
                     </p>
-                    <p className="text-xs text-muted-foreground">
-                      Joined {format(new Date(m.joined_at), "MMM d, yyyy")}
-                    </p>
+                    <p className="text-xs text-muted-foreground">Creator</p>
                   </div>
-                  <Badge variant="outline">{m.status}</Badge>
                 </div>
-              ))}
+                <Badge variant="default">Admin</Badge>
+              </div>
+
+              {/* Other members */}
+              {members
+                .filter(m => m.user_id !== group.admin_user_id)
+                .map((m) => {
+                  const name = getMemberName(m.user_id);
+                  return (
+                    <div key={m.id} className="p-3 rounded-lg bg-card border border-border flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="h-9 w-9 rounded-full bg-muted flex items-center justify-center text-muted-foreground font-bold text-sm">
+                          {(name?.[0] || "?").toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-foreground">{name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Joined {format(new Date(m.joined_at), "MMM d, yyyy")}
+                          </p>
+                        </div>
+                      </div>
+                      <Badge variant="outline">{m.status}</Badge>
+                    </div>
+                  );
+                })}
+
+              {members.length === 0 && (
+                <p className="text-center py-4 text-sm text-muted-foreground">No other members yet. Invite friends to join!</p>
+              )}
             </div>
           </TabsContent>
 
