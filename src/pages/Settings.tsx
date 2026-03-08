@@ -81,7 +81,21 @@ function PushNotificationSettings() {
 
 export default function Settings() {
   const navigate = useNavigate();
-  const { user, loading: authLoading } = useAuth();
+  const { user, signOut, loading: authLoading } = useAuth();
+  const [signingOut, setSigningOut] = useState(false);
+
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    try {
+      await signOut();
+      toast.success("Signed out successfully");
+      navigate("/");
+    } catch (err) {
+      toast.error("Failed to sign out");
+    } finally {
+      setSigningOut(false);
+    }
+  };
 
   useEffect(() => {
     if (!authLoading && !user) {
