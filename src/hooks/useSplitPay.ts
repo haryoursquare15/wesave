@@ -145,15 +145,16 @@ export function useSplitRequestDetail(requestId: string | undefined) {
     return () => { supabase.removeChannel(channel); };
   }, [requestId, fetchDetail]);
 
-  const isGroupComplete = participants.length >= (request?.number_of_people ?? 0);
+  const activeParticipants = participants.filter((p) => p.status !== "declined");
+  const isGroupComplete = activeParticipants.length >= (request?.number_of_people ?? 0);
 
   const payShare = useCallback(async () => {
     if (!user || !request) return { success: false, error: "Not ready" };
     
-    // Block payment if the group isn't complete
-    const currentCount = participants.length;
-    if (currentCount < request.number_of_people) {
-      return { success: false, error: `Group is incomplete (${currentCount}/${request.number_of_people}). Wait for the creator to fill all slots.` };
+    // Block payment if the group isn't complete (exclude declined participants)
+    const activeCount = participants.filter((p) => p.status !== "declined").length;
+    if (activeCount < request.number_of_people) {
+      return { success: false, error: `Group is incomplete (${activeCount}/${request.number_of_people}). Wait for the creator to fill all slots.` };
     }
 
     const participant = participants.find((p) => p.user_id === user.id);

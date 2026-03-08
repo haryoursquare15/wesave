@@ -119,7 +119,7 @@ export default function SplitPayDetail() {
             <div>
               <p className="font-semibold text-foreground text-sm">Group Incomplete</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {participants.length} of {request.number_of_people} participants. Payments are blocked until the group is full.
+                {participants.filter((p) => p.status !== "declined").length} of {request.number_of_people} participants. Payments are blocked until the group is full.
                 {isCreator && " Invite more people to proceed."}
               </p>
             </div>
@@ -155,15 +155,15 @@ export default function SplitPayDetail() {
         )}
 
         {/* Add More Participants Prompt */}
-        {isCreator && request.status === "active" && participants.length < request.number_of_people && (
+        {isCreator && request.status === "active" && participants.filter((p) => p.status !== "declined").length < request.number_of_people && (
           <div className="bg-primary/5 border border-primary/20 rounded-2xl p-5 flex items-center justify-between">
             <div>
               <p className="font-semibold text-foreground">
-                {participants.length} of {request.number_of_people} participants added
+                {participants.filter((p) => p.status !== "declined").length} of {request.number_of_people} participants added
               </p>
               <p className="text-sm text-muted-foreground">
-                Invite {request.number_of_people - participants.length} more{" "}
-                {request.number_of_people - participants.length === 1 ? "person" : "people"} to complete this split.
+                Invite {request.number_of_people - participants.filter((p) => p.status !== "declined").length} more{" "}
+                {request.number_of_people - participants.filter((p) => p.status !== "declined").length === 1 ? "person" : "people"} to complete this split.
               </p>
             </div>
             <Button size="sm" onClick={() => setInviteOpen(true)}>
