@@ -13,9 +13,9 @@ import { useTargetAjoGroups } from "@/hooks/useTargetAjo";
 export default function TargetAjo() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
-  const { groups, myGroups, loading } = useTargetAjoGroups();
+  const { myGroups, loading } = useTargetAjoGroups();
   const [search, setSearch] = useState("");
-  const [tab, setTab] = useState<"discover" | "mine">("discover");
+  const tab = "mine";
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/auth");
@@ -23,7 +23,7 @@ export default function TargetAjo() {
 
   const fmt = (n: number) => new Intl.NumberFormat("en-NG").format(n);
 
-  const displayed = tab === "mine" ? myGroups : groups;
+  const displayed = myGroups;
   const filtered = displayed.filter((g) =>
     g.name.toLowerCase().includes(search.toLowerCase())
   );
@@ -47,22 +47,11 @@ export default function TargetAjo() {
       </header>
 
       <main className="container mx-auto px-4 py-6 space-y-4">
-        {/* Tabs */}
-        <div className="flex gap-2">
-          <Button
-            variant={tab === "discover" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setTab("discover")}
-          >
-            Discover
-          </Button>
-          <Button
-            variant={tab === "mine" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setTab("mine")}
-          >
-            My Targets
-          </Button>
+        {/* Info */}
+        <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
+          <p className="text-xs text-muted-foreground">
+            Target Ajo groups are invite-only. Create one and invite your friends, or accept an invite to join.
+          </p>
         </div>
 
         {/* Search */}
