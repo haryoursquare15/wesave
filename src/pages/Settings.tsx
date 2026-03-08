@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { 
   ArrowLeft, User, Shield, CreditCard, Bell, HelpCircle, 
-  ChevronRight, MessageSquare, ExternalLink 
+  ChevronRight, MessageSquare, ExternalLink, LogOut 
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
