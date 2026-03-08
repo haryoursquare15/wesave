@@ -266,9 +266,23 @@ export default function TargetAjoDetail() {
 
           {/* Contribute button for members */}
           {group.status === "active" && isMember && (
-            <Button className="w-full mb-4" size="lg" onClick={() => setContributeOpen(true)}>
-              <Wallet className="h-5 w-5 mr-2" /> Contribute Now
-            </Button>
+            <div className="flex gap-2 mb-4">
+              <Button className="flex-1" size="lg" onClick={() => setContributeOpen(true)}>
+                <Wallet className="h-5 w-5 mr-2" /> Contribute Now
+              </Button>
+              {isIndependent && getMemberContribution(user?.id || "") > 0 && (
+                <Button
+                  variant="outline"
+                  size="lg"
+                  onClick={handleSelfWithdraw}
+                  disabled={selfWithdrawing}
+                  className="flex-1"
+                >
+                  <ArrowDownToLine className="h-5 w-5 mr-2" />
+                  {selfWithdrawing ? "Withdrawing..." : `Withdraw ₦${fmt(getMemberContribution(user?.id || ""))}`}
+                </Button>
+              )}
+            </div>
           )}
 
           {/* Disclaimer */}
@@ -276,7 +290,10 @@ export default function TargetAjoDetail() {
             <div className="flex items-start gap-2">
               <AlertTriangle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
               <p className="text-xs text-muted-foreground">
-                Withdrawals require approval from at least 2/3 of members. Funds are disbursed to the designated beneficiary account.
+                {isIndependent
+                  ? "Each member can withdraw their own contributions directly to their app wallet at any time."
+                  : "Withdrawals require approval from at least 2/3 of members. Funds are disbursed to the designated beneficiary account."
+                }
               </p>
             </div>
           </div>
