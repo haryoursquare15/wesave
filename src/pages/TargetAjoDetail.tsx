@@ -92,6 +92,39 @@ export default function TargetAjoDetail() {
     return memberContributions.find(mc => mc.user_id === userId)?.total_contributed || 0;
   };
 
+  // Independent mode: withdraw own contributions to app wallet
+  const handleSelfWithdraw = async () => {
+    if (!user || !group) return;
+    const myTotal = getMemberContribution(user.id);
+    if (myTotal <= 0) { toast.error("No contributions to withdraw"); return; }
+
+    setSelfWithdrawing(true);
+    try {
+      // Reset member contribution tracker
+      await (supabase as any)
+        .from("target_ajo_member_contributions")
+        .update({ total_contributed: 0, updated_at: new Date().toISOString() })
+        .eq("group_id", group.id)
+        .eq("user_id", user.id);
+
+      // Reduce group amount_raised
+      await (supabase as any)
+        .from("target_ajo_groups")
+        .update({
+          amount_raised: Math.max(0, group.amount_raised - myTotal),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", group.id);
+
+      toast.success(`₦${fmt(myTotal)} withdrawn to your wallet!`);
+      refetch();
+    } catch (err: any) {
+      toast.error(err.message || "Withdrawal failed");
+    } finally {
+      setSelfWithdrawing(false);
+    }
+  };
+
   if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
