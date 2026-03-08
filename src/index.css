@@ -28,12 +28,12 @@
     --secondary-foreground: 0 0% 98%;
 
     /* Muted */
-    --muted: 0 0% 63%;
-    --muted-foreground: 0 0% 9%;
+    --muted: 30 10% 93%;
+    --muted-foreground: 0 0% 40%;
 
     /* Accent: Warm Gold - Premium/Success */
-    --accent: 47 100% 96%;
-    --accent-foreground: 37 92% 50%;
+    --accent: 30 20% 93%;
+    --accent-foreground: 0 0% 15%;
 
     /* Destructive */
     --destructive: 0 72% 50%;
@@ -218,7 +218,7 @@
   }
 
   .gradient-text {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/70;
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary;
   }
 
   .badge-gold {
