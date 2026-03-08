@@ -49,6 +49,27 @@ export function TargetAjoContributeDialog({ open, onOpenChange, group, onSuccess
         .update({ amount_raised: group.amount_raised + amt, updated_at: new Date().toISOString() })
         .eq("id", group.id);
 
+      // For independent mode, track per-member contribution
+      if (group.savings_type === "independent") {
+        const { data: existing } = await (supabase as any)
+          .from("target_ajo_member_contributions")
+          .select("*")
+          .eq("group_id", group.id)
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (existing) {
+          await (supabase as any)
+            .from("target_ajo_member_contributions")
+            .update({ total_contributed: existing.total_contributed + amt, updated_at: new Date().toISOString() })
+            .eq("id", existing.id);
+        } else {
+          await (supabase as any)
+            .from("target_ajo_member_contributions")
+            .insert({ group_id: group.id, user_id: user.id, total_contributed: amt });
+        }
+      }
+
       toast.success(`₦${fmt(amt)} contributed!`);
       onOpenChange(false);
       onSuccess();
