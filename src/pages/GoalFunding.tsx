@@ -44,8 +44,8 @@ export default function GoalFunding() {
               <h1 className="text-xl font-bold text-foreground">Goal Funding</h1>
             </div>
             <Link to="/goal-funding/create">
-              <Button size="sm">
-                <Plus className="h-4 w-4 mr-2" />
+              <Button size="default" className="shadow-md">
+                <Plus className="h-5 w-5 mr-1" />
                 New Campaign
               </Button>
             </Link>

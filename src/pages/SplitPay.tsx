@@ -32,8 +32,8 @@ export default function SplitPay() {
               </div>
             </div>
             <Link to="/split-pay/create">
-              <Button size="sm">
-                <Plus className="h-4 w-4 mr-1" /> New Split
+              <Button size="default" className="shadow-md">
+                <Plus className="h-5 w-5 mr-1" /> New Split
               </Button>
             </Link>
           </div>

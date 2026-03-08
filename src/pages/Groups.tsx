@@ -50,8 +50,8 @@ export default function Groups() {
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-xl font-bold text-foreground">Thrift Groups</h1>
             <Link to="/create-group">
-              <Button size="sm">
-                <Users className="h-4 w-4 mr-2" />
+              <Button size="default" className="shadow-md">
+                <Users className="h-5 w-5 mr-1" />
                 New Group
               </Button>
             </Link>

@@ -177,7 +177,7 @@ export default function CreateSplitPay() {
             />
           </div>
 
-          <Button type="submit" className="w-full" disabled={submitting || !bankValidated}>
+          <Button type="submit" className="w-full min-h-[48px] text-base" disabled={submitting || !bankValidated}>
             {submitting ? "Creating..." : "Create Split Request"}
           </Button>
         </form>
