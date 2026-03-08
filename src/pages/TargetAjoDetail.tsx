@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Users, Target, Clock, UserPlus, Wallet, AlertTriangle, Vote, LogIn } from "lucide-react";
+import { ArrowLeft, Users, Target, Clock, UserPlus, Wallet, AlertTriangle, Vote, User } from "lucide-react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,7 @@ import { WithdrawalVoteCard } from "@/components/target-ajo/WithdrawalVoteCard";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import type { TargetAjoMemberContribution } from "@/hooks/useTargetAjo";
 
 interface MemberProfile {
   id: string;
@@ -34,7 +35,7 @@ export default function TargetAjoDetail() {
   const [withdrawReason, setWithdrawReason] = useState("");
   const [requestingWithdraw, setRequestingWithdraw] = useState(false);
   const [memberProfiles, setMemberProfiles] = useState<Map<string, MemberProfile>>(new Map());
-  const [joining, setJoining] = useState(false);
+  const [memberContributions, setMemberContributions] = useState<TargetAjoMemberContribution[]>([]);
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/auth");
@@ -64,6 +65,19 @@ export default function TargetAjoDetail() {
     fetchProfiles();
   }, [members, group]);
 
+  // Fetch per-member contribution totals for independent mode
+  useEffect(() => {
+    const fetchMemberContribs = async () => {
+      if (!groupId || !group || group.savings_type !== "independent") return;
+      const { data } = await (supabase as any)
+        .from("target_ajo_member_contributions")
+        .select("*")
+        .eq("group_id", groupId);
+      setMemberContributions(data || []);
+    };
+    fetchMemberContribs();
+  }, [groupId, group, contributions]);
+
   const fmt = (n: number) => new Intl.NumberFormat("en-NG").format(n);
 
   const getMemberName = (userId: string) => {
@@ -73,37 +87,8 @@ export default function TargetAjoDetail() {
     return userId.slice(0, 8);
   };
 
-  const handleJoinGroup = async () => {
-    if (!user || !group) return;
-    if (group.member_count >= group.max_members) {
-      toast.error("This group is full");
-      return;
-    }
-    setJoining(true);
-    try {
-      const { error } = await (supabase as any).from("target_ajo_memberships").insert({
-        group_id: group.id,
-        user_id: user.id,
-        status: "active",
-      });
-      if (error) {
-        if (error.code === "23505") toast.error("You're already a member");
-        else throw error;
-        return;
-      }
-
-      // Update member count
-      await (supabase as any).from("target_ajo_groups")
-        .update({ member_count: group.member_count + 1, updated_at: new Date().toISOString() })
-        .eq("id", group.id);
-
-      toast.success("You've joined the group!");
-      refetch();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to join");
-    } finally {
-      setJoining(false);
-    }
+  const getMemberContribution = (userId: string) => {
+    return memberContributions.find(mc => mc.user_id === userId)?.total_contributed || 0;
   };
 
   if (authLoading || loading) {
@@ -126,6 +111,7 @@ export default function TargetAjoDetail() {
 
   const progress = group.target_amount > 0 ? (group.amount_raised / group.target_amount) * 100 : 0;
   const remaining = Math.max(0, group.target_amount - group.amount_raised);
+  const isIndependent = group.savings_type === "independent";
 
   const handleWithdrawalRequest = async () => {
     if (!user) return;
@@ -176,9 +162,13 @@ export default function TargetAjoDetail() {
       <main className="container mx-auto px-4 py-6 max-w-2xl">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
           {/* Status & Info */}
-          <div className="flex items-center gap-2 mb-3">
+          <div className="flex items-center gap-2 mb-3 flex-wrap">
             <Badge variant={group.status === "active" ? "default" : "secondary"}>{group.status}</Badge>
             <Badge variant="outline">{group.frequency}</Badge>
+            <Badge variant="outline" className="flex items-center gap-1">
+              {isIndependent ? <User className="h-3 w-3" /> : <Users className="h-3 w-3" />}
+              {isIndependent ? "Independent" : "Group Wallet"}
+            </Badge>
             {isAdmin && <Badge variant="outline">Admin</Badge>}
             {isMember && !isAdmin && <Badge variant="outline">Member</Badge>}
           </div>
@@ -194,7 +184,9 @@ export default function TargetAjoDetail() {
           {/* Progress Card */}
           <div className="p-4 rounded-xl bg-card border border-border mb-4">
             <div className="flex justify-between text-sm mb-2">
-              <span className="text-muted-foreground">Target Progress</span>
+              <span className="text-muted-foreground">
+                {isIndependent ? "Aggregate Progress" : "Target Progress"}
+              </span>
               <span className="font-bold text-primary">{progress.toFixed(0)}%</span>
             </div>
             <Progress value={Math.min(progress, 100)} className="h-3 mb-3" />
@@ -229,12 +221,13 @@ export default function TargetAjoDetail() {
             )}
           </div>
 
-          {/* Join button for non-members */}
-          {!isMember && group.status === "active" && (
-            <Button className="w-full mb-4" size="lg" onClick={handleJoinGroup} disabled={joining}>
-              <LogIn className="h-5 w-5 mr-2" />
-              {joining ? "Joining..." : "Join This Target"}
-            </Button>
+          {/* Non-member notice */}
+          {!isMember && (
+            <div className="p-4 rounded-xl bg-muted/30 border border-border mb-4 text-center">
+              <p className="text-sm text-muted-foreground">
+                This is an invite-only group. Ask a member or the admin to invite you.
+              </p>
+            </div>
           )}
 
           {/* Contribute button for members */}
@@ -298,19 +291,36 @@ export default function TargetAjoDetail() {
           <TabsContent value="members">
             <div className="space-y-2">
               {/* Admin */}
-              <div className="p-3 rounded-lg bg-card border border-border flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm">
-                    {(getMemberName(group.admin_user_id)?.[0] || "?").toUpperCase()}
+              <div className="p-3 rounded-lg bg-card border border-border">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm">
+                      {(getMemberName(group.admin_user_id)?.[0] || "?").toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-foreground">
+                        👑 {getMemberName(group.admin_user_id)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Creator</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-foreground">
-                      👑 {getMemberName(group.admin_user_id)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">Creator</p>
+                  <div className="text-right">
+                    <Badge variant="default">Admin</Badge>
+                    {isIndependent && (
+                      <p className="text-xs font-semibold text-primary mt-1">
+                        ₦{fmt(getMemberContribution(group.admin_user_id))}
+                      </p>
+                    )}
                   </div>
                 </div>
-                <Badge variant="default">Admin</Badge>
+                {isIndependent && (
+                  <div className="mt-2">
+                    <Progress
+                      value={group.target_amount > 0 ? (getMemberContribution(group.admin_user_id) / (group.target_amount / Math.max(members.length, 1))) * 100 : 0}
+                      className="h-1.5"
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Other members */}
@@ -318,20 +328,39 @@ export default function TargetAjoDetail() {
                 .filter(m => m.user_id !== group.admin_user_id)
                 .map((m) => {
                   const name = getMemberName(m.user_id);
+                  const memberTotal = getMemberContribution(m.user_id);
+                  const perMemberTarget = group.target_amount / Math.max(members.length, 1);
                   return (
-                    <div key={m.id} className="p-3 rounded-lg bg-card border border-border flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="h-9 w-9 rounded-full bg-muted flex items-center justify-center text-muted-foreground font-bold text-sm">
-                          {(name?.[0] || "?").toUpperCase()}
+                    <div key={m.id} className="p-3 rounded-lg bg-card border border-border">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="h-9 w-9 rounded-full bg-muted flex items-center justify-center text-muted-foreground font-bold text-sm">
+                            {(name?.[0] || "?").toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-foreground">{name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              Joined {format(new Date(m.joined_at), "MMM d, yyyy")}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-sm font-medium text-foreground">{name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            Joined {format(new Date(m.joined_at), "MMM d, yyyy")}
-                          </p>
+                        <div className="text-right">
+                          <Badge variant="outline">{m.status}</Badge>
+                          {isIndependent && (
+                            <p className="text-xs font-semibold text-primary mt-1">
+                              ₦{fmt(memberTotal)}
+                            </p>
+                          )}
                         </div>
                       </div>
-                      <Badge variant="outline">{m.status}</Badge>
+                      {isIndependent && (
+                        <div className="mt-2">
+                          <Progress
+                            value={perMemberTarget > 0 ? (memberTotal / perMemberTarget) * 100 : 0}
+                            className="h-1.5"
+                          />
+                        </div>
+                      )}
                     </div>
                   );
                 })}
