@@ -2346,6 +2346,7 @@ export type Database = {
           member_count: number
           name: string
           reason: string | null
+          savings_type: string
           status: string
           target_amount: number
           target_date: string | null
@@ -2366,6 +2367,7 @@ export type Database = {
           member_count?: number
           name: string
           reason?: string | null
+          savings_type?: string
           status?: string
           target_amount: number
           target_date?: string | null
@@ -2386,6 +2388,7 @@ export type Database = {
           member_count?: number
           name?: string
           reason?: string | null
+          savings_type?: string
           status?: string
           target_amount?: number
           target_date?: string | null
@@ -2424,6 +2427,38 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "target_ajo_invites_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "target_ajo_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      target_ajo_member_contributions: {
+        Row: {
+          group_id: string
+          id: string
+          total_contributed: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          group_id: string
+          id?: string
+          total_contributed?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          group_id?: string
+          id?: string
+          total_contributed?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "target_ajo_member_contributions_group_id_fkey"
             columns: ["group_id"]
             isOneToOne: false
             referencedRelation: "target_ajo_groups"
