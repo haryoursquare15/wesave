@@ -97,7 +97,7 @@ export default function Dashboard() {
               key={action.label}
               whileTap={{ scale: 0.92 }}
               onClick={() => action.link && navigate(action.link)}
-              className="flex flex-col items-center gap-1.5 sm:gap-2 p-3 sm:p-4 rounded-xl bg-card border border-border hover:border-primary/30 active:bg-muted/50 transition-colors touch-manipulation"
+              className="flex flex-col items-center gap-1.5 sm:gap-2 p-3 sm:p-4 rounded-xl bg-card border border-border hover:border-primary/30 active:bg-muted/50 transition-colors touch-manipulation min-h-[72px]"
             >
               <span className="text-xl sm:text-2xl">{action.icon}</span>
               <span className="text-[11px] sm:text-xs font-medium text-muted-foreground leading-tight text-center">
