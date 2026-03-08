@@ -51,8 +51,12 @@ export default function SplitPayDetail() {
   };
 
   const handleDecline = async () => {
-    await declineShare();
-    toast({ title: "Declined", description: "You have declined this split request." });
+    const result = await declineShare();
+    if (result?.success === false) {
+      toast({ title: "Error", description: result.error || "Could not decline", variant: "destructive" });
+    } else {
+      toast({ title: "Declined", description: "You have declined this split request." });
+    }
   };
 
   const handleCancel = async () => {

@@ -179,16 +179,19 @@ export function useSplitRequestDetail(requestId: string | undefined) {
   }, [user, request, participants]);
 
   const declineShare = useCallback(async () => {
-    if (!user || !request) return;
+    if (!user || !request) return { success: false, error: "Not ready" };
     const { data, error } = await supabase.rpc("decline_split_participation", {
       _split_request_id: request.id,
       _user_id: user.id,
     });
     if (error) {
       console.error("Decline failed:", error.message);
+      return { success: false, error: error.message };
     }
+    const result = data as { success: boolean; error?: string };
     // Refetch to update participant list
     await fetchDetail();
+    return result;
   }, [user, request, fetchDetail]);
 
   const cancelRequest = useCallback(async () => {
