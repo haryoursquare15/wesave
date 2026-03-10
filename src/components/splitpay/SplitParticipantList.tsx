@@ -7,6 +7,7 @@ interface Props {
   participants: SplitParticipant[];
   totalSlots: number;
   isCreator: boolean;
+  allowManagementActions: boolean;
   currentUserId: string | undefined;
   nudgingId: string | null;
   removingId: string | null;
@@ -25,6 +26,7 @@ export function SplitParticipantList({
   participants,
   totalSlots,
   isCreator,
+  allowManagementActions,
   currentUserId,
   nudgingId,
   removingId,
@@ -58,7 +60,7 @@ export function SplitParticipantList({
                 {statusIcon[p.status] || statusIcon.pending}
                 <span className="text-xs capitalize text-muted-foreground">{p.status}</span>
               </div>
-              {isCreator && p.status === "pending" && p.user_id !== currentUserId && (
+              {allowManagementActions && isCreator && p.status === "pending" && p.user_id !== currentUserId && (
                 <>
                   <Button
                     variant="ghost"
