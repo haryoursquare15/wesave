@@ -26,6 +26,7 @@ export function SplitParticipantList({
   participants,
   totalSlots,
   isCreator,
+  allowManagementActions,
   currentUserId,
   nudgingId,
   removingId,
