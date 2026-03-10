@@ -7,6 +7,7 @@ interface Props {
   participants: SplitParticipant[];
   totalSlots: number;
   isCreator: boolean;
+  allowManagementActions: boolean;
   currentUserId: string | undefined;
   nudgingId: string | null;
   removingId: string | null;
