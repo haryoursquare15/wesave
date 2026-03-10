@@ -65,10 +65,9 @@ export default function SplitPayDetail() {
   const activeParticipantsCount = participants.filter((p) => p.status !== "declined").length;
   const slotsRemaining = Math.max(request.number_of_people - activeParticipantsCount, 0);
 
-  const feePerPerson = useMemo(
-    () => (request.number_of_people > 0 ? Math.ceil((Number(request.platform_fee) / request.number_of_people) * 100) / 100 : 0),
-    [request.platform_fee, request.number_of_people]
-  );
+  const feePerPerson = request.number_of_people > 0
+    ? Math.ceil((Number(request.platform_fee) / request.number_of_people) * 100) / 100
+    : 0;
 
   const myAmountDue = myParticipation ? Number(myParticipation.amount_due) : Number(request.amount_per_person);
   const totalDue = myAmountDue + feePerPerson;
