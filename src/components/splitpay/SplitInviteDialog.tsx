@@ -115,34 +115,23 @@ export function SplitInviteDialog({ open, onOpenChange, splitRequestId, amountPe
       return;
     }
     try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData?.session?.access_token || supabaseKey;
+      console.log("[SplitInvite] Sending invite", { splitRequestId, inviterId: user.id, inviteeId: targetUser.id, amountPerPerson });
+      
+      const { data, error } = await supabase.rpc("send_split_invite" as any, {
+        _split_request_id: splitRequestId,
+        _inviter_id: user.id,
+        _invitee_id: targetUser.id,
+        _amount_due: amountPerPerson,
+      } as any);
 
-      const response = await fetch(`${supabaseUrl}/rest/v1/rpc/send_split_invite`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "apikey": supabaseKey,
-          "Authorization": `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          _split_request_id: splitRequestId,
-          _inviter_id: user.id,
-          _invitee_id: targetUser.id,
-          _amount_due: amountPerPerson,
-        }),
-      });
+      console.log("[SplitInvite] RPC result:", JSON.stringify(data), "error:", error);
 
-      const result = await response.json();
-      console.log("[SplitInvite] Direct fetch result:", JSON.stringify(result), "status:", response.status);
-
-      if (!response.ok) {
-        toast({ title: "Error", description: result?.message || result?.error || "Could not send invite", variant: "destructive" });
+      if (error) {
+        toast({ title: "Error", description: error.message || "Could not send invite", variant: "destructive" });
         return;
       }
 
+      const result = data as { success?: boolean; error?: string } | null;
       if (result && result.success === false) {
         toast({ title: "Error", description: result.error || "Could not send invite", variant: "destructive" });
         return;
