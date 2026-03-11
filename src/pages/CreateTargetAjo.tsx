@@ -259,7 +259,7 @@ export default function CreateTargetAjo() {
                 ₦{new Intl.NumberFormat("en-NG").format(contributionAmount)}
               </p>
               <p className="text-xs text-muted-foreground">
-                ₦{new Intl.NumberFormat("en-NG").format(targetAmount)} ÷ {maxMembers} members
+                ₦{new Intl.NumberFormat("en-NG").format(targetAmount)} ÷ {maxMembers} members (incl. you)
               </p>
             </div>
           )}
