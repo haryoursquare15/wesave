@@ -89,11 +89,14 @@ export default function SplitPayDetail() {
       await fetchWalletBalance();
 
       if (result.success) {
+        const allPaid = 'all_paid' in result ? result.all_paid : false;
+        const paidCountResult = 'paid_count' in result ? result.paid_count : paidCount + 1;
+        const requiredCount = 'required_count' in result ? result.required_count : request.number_of_people;
         toast({
           title: "Payment Successful!",
-          description: result.all_paid
+          description: allPaid
             ? "All participants have paid! Merchant settlement is processing."
-            : `Your share has been paid. ${result.paid_count || paidCount + 1}/${result.required_count || request.number_of_people} paid so far.`,
+            : `Your share has been paid. ${paidCountResult}/${requiredCount} paid so far.`,
         });
       } else {
         console.error("[SplitPay] Payment failed result:", result);
