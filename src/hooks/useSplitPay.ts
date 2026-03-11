@@ -149,17 +149,41 @@ export function useSplitRequestDetail(requestId: string | undefined) {
   const isGroupComplete = activeParticipants.length >= (request?.number_of_people ?? 0);
 
   const payShare = useCallback(async () => {
-    if (!user || !request) return { success: false, error: "Not ready" };
+    if (!user || !request) {
+      console.error("[SplitPay] payShare blocked: user or request missing", { user: !!user, request: !!request });
+      return { success: false, error: "Not ready" };
+    }
 
-    const participant = participants.find((p) => p.user_id === user.id);
-    if (!participant) return { success: false, error: "You are not a participant" };
+    // Re-fetch participants fresh to avoid stale closure
+    const { data: freshParts, error: partError } = await supabase
+      .from("split_participants")
+      .select("*")
+      .eq("split_request_id", request.id)
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (partError || !freshParts) {
+      console.error("[SplitPay] Could not find participant record", { partError, userId: user.id, requestId: request.id });
+      return { success: false, error: "You are not a participant in this split" };
+    }
+
+    const amountDue = Number(freshParts.amount_due);
+    console.log("[SplitPay] Calling process_split_payment", { 
+      requestId: request.id, userId: user.id, amount: amountDue 
+    });
 
     const { data, error } = await supabase.rpc("process_split_payment", {
-      _split_request_id: request.id as string,
-      _user_id: user.id as string,
-      _amount: Number(participant.amount_due),
+      _split_request_id: request.id,
+      _user_id: user.id,
+      _amount: amountDue,
     });
-    if (error) return { success: false, error: error.message };
+
+    console.log("[SplitPay] RPC response", { data, error });
+
+    if (error) {
+      console.error("[SplitPay] RPC error", error);
+      return { success: false, error: error.message };
+    }
 
     const result = data as { success: boolean; error?: string; all_paid?: boolean; paid_count?: number; required_count?: number };
 
