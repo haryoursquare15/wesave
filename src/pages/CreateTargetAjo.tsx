@@ -17,7 +17,6 @@ export default function CreateTargetAjo() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
   const [submitting, setSubmitting] = useState(false);
-  const [bankValidated, setBankValidated] = useState(false);
 
   const [form, setForm] = useState({
     name: "",
