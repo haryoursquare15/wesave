@@ -182,12 +182,14 @@ export default function TargetAjoDetail() {
       }));
 
       for (const notif of notifications) {
-        await supabase.rpc("insert_user_notification" as any, {
-          _user_id: notif.user_id,
-          _title: notif.title,
-          _message: notif.message,
-          _notification_type: notif.notification_type,
-        } as any).catch(() => {});
+        try {
+          await (supabase.rpc as any)("insert_user_notification", {
+            _user_id: notif.user_id,
+            _title: notif.title,
+            _message: notif.message,
+            _notification_type: notif.notification_type,
+          });
+        } catch {}
       }
 
       toast.success(`Reminder sent to ${memberIds.length} member(s)`);
