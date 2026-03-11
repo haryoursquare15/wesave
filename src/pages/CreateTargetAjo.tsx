@@ -104,7 +104,7 @@ export default function CreateTargetAjo() {
         name: form.name.trim(),
         description: form.description.trim() || null,
         target_amount: targetAmount,
-        contribution_amount: contribAmount,
+        contribution_amount: contributionAmount,
         frequency: form.frequency,
         target_date: form.target_date ? new Date(form.target_date).toISOString() : null,
         reason: form.reason.trim() || null,
