@@ -32,45 +32,26 @@ export function TargetAjoContributeDialog({ open, onOpenChange, group, onSuccess
 
     setSubmitting(true);
     try {
-      // Record contribution
-      const ref = `tajo-${group.id.slice(0, 8)}-${Date.now().toString(36)}`;
-      const { error } = await (supabase as any).from("target_ajo_contributions").insert({
-        group_id: group.id,
-        user_id: user.id,
-        amount: amt,
-        source: "wallet",
-        reference: ref,
-        status: "confirmed",
-      });
+      const { data, error } = await supabase.rpc("process_target_ajo_contribution" as any, {
+        _group_id: group.id,
+        _user_id: user.id,
+        _amount: amt,
+      } as any);
+
       if (error) throw error;
 
-      // Update group amount_raised
-      await (supabase as any).from("target_ajo_groups")
-        .update({ amount_raised: group.amount_raised + amt, updated_at: new Date().toISOString() })
-        .eq("id", group.id);
+      const result = data as { success: boolean; error?: string; target_reached?: boolean };
 
-      // For independent mode, track per-member contribution
-      if (group.savings_type === "independent") {
-        const { data: existing } = await (supabase as any)
-          .from("target_ajo_member_contributions")
-          .select("*")
-          .eq("group_id", group.id)
-          .eq("user_id", user.id)
-          .maybeSingle();
-
-        if (existing) {
-          await (supabase as any)
-            .from("target_ajo_member_contributions")
-            .update({ total_contributed: existing.total_contributed + amt, updated_at: new Date().toISOString() })
-            .eq("id", existing.id);
-        } else {
-          await (supabase as any)
-            .from("target_ajo_member_contributions")
-            .insert({ group_id: group.id, user_id: user.id, total_contributed: amt });
-        }
+      if (!result.success) {
+        toast.error(result.error || "Contribution failed");
+        return;
       }
 
-      toast.success(`₦${fmt(amt)} contributed!`);
+      if (result.target_reached) {
+        toast.success(`₦${fmt(amt)} contributed! 🎯 Target achieved!`);
+      } else {
+        toast.success(`₦${fmt(amt)} contributed!`);
+      }
       onOpenChange(false);
       onSuccess();
     } catch (err: any) {
