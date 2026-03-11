@@ -181,12 +181,13 @@ export default function TargetAjoDetail() {
         notification_type: "target_ajo_reminder",
       }));
 
-      // Insert notifications via edge function or direct insert won't work due to RLS
-      // Use a simple approach: insert one at a time via the admin's context
       for (const notif of notifications) {
-        await supabase.functions.invoke("send-notification-email", {
-          body: { type: "in_app_only", ...notif },
-        }).catch(() => {});
+        await supabase.rpc("insert_user_notification" as any, {
+          _user_id: notif.user_id,
+          _title: notif.title,
+          _message: notif.message,
+          _notification_type: notif.notification_type,
+        } as any).catch(() => {});
       }
 
       toast.success(`Reminder sent to ${memberIds.length} member(s)`);

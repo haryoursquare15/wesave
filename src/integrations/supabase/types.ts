@@ -3436,6 +3436,15 @@ export type Database = {
         }
         Returns: boolean
       }
+      insert_user_notification: {
+        Args: {
+          _message: string
+          _notification_type?: string
+          _title: string
+          _user_id: string
+        }
+        Returns: undefined
+      }
       is_admin: { Args: never; Returns: boolean }
       is_any_admin: { Args: { _user_id?: string }; Returns: boolean }
       is_group_admin: { Args: { _group_id: string }; Returns: boolean }
