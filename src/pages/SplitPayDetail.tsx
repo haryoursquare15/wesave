@@ -83,19 +83,26 @@ export default function SplitPayDetail() {
     }
 
     setPaying(true);
-    const result = await payShare();
-    setPaying(false);
-    await fetchWalletBalance();
+    try {
+      const result = await payShare();
+      setPaying(false);
+      await fetchWalletBalance();
 
-    if (result.success) {
-      toast({
-        title: "Payment Successful!",
-        description: result.all_paid
-          ? "All participants have paid! Merchant settlement is processing."
-          : `Your share has been paid. ${result.paid_count || paidCount + 1}/${result.required_count || request.number_of_people} paid so far.`,
-      });
-    } else {
-      toast({ title: "Payment Failed", description: result.error || "Something went wrong", variant: "destructive" });
+      if (result.success) {
+        toast({
+          title: "Payment Successful!",
+          description: result.all_paid
+            ? "All participants have paid! Merchant settlement is processing."
+            : `Your share has been paid. ${result.paid_count || paidCount + 1}/${result.required_count || request.number_of_people} paid so far.`,
+        });
+      } else {
+        console.error("[SplitPay] Payment failed result:", result);
+        toast({ title: "Payment Failed", description: result.error || "Something went wrong", variant: "destructive" });
+      }
+    } catch (err: any) {
+      setPaying(false);
+      console.error("[SplitPay] Payment exception:", err);
+      toast({ title: "Payment Failed", description: err?.message || "An unexpected error occurred", variant: "destructive" });
     }
   };
 
