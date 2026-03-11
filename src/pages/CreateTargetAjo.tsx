@@ -120,7 +120,7 @@ export default function CreateTargetAjo() {
         target_amount: targetAmount,
         contribution_amount: contributionAmount,
         frequency: form.frequency,
-        target_date: form.target_date ? new Date(form.target_date).toISOString() : null,
+        target_date: autoTargetDate.toISOString(),
         reason: form.reason.trim() || null,
         beneficiary_account_name: form.savings_type === "group" ? form.beneficiary_account_name.trim() : null,
         beneficiary_bank_name: form.savings_type === "group" ? form.beneficiary_bank_name : null,
