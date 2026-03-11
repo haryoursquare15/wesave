@@ -97,16 +97,6 @@ export default function CreateTargetAjo() {
     if (isNaN(targetAmount) || targetAmount < 1000) { toast.error("Target must be at least ₦1,000"); return; }
     if (contributionAmount < 100) { toast.error("Contribution per member is too low. Increase target or reduce members."); return; }
 
-    // Bank details only required for group mode
-    if (form.savings_type === "group") {
-      if (!form.beneficiary_bank_name || !form.beneficiary_account_number || !form.beneficiary_account_name) {
-        toast.error("Beneficiary bank details required for group wallet"); return;
-      }
-      if (!bankValidated) {
-        toast.error("Please wait for bank account verification"); return;
-      }
-    }
-
     setSubmitting(true);
     try {
       const { data: group, error } = await (supabase as any).from("target_ajo_groups").insert({
