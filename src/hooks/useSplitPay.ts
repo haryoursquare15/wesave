@@ -195,7 +195,7 @@ export function useSplitRequestDetail(requestId: string | undefined) {
     }
 
     return result;
-  }, [user, request, participants]);
+  }, [user, request]);
 
   const declineShare = useCallback(async () => {
     if (!user || !request) return { success: false, error: "Not ready" };
