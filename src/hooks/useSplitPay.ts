@@ -154,47 +154,70 @@ export function useSplitRequestDetail(requestId: string | undefined) {
       return { success: false, error: "Not ready" };
     }
 
-    // Re-fetch participants fresh to avoid stale closure
-    const { data: freshParts, error: partError } = await supabase
-      .from("split_participants")
-      .select("*")
-      .eq("split_request_id", request.id)
-      .eq("user_id", user.id)
-      .maybeSingle();
+    try {
+      // Re-fetch participants fresh to avoid stale closure
+      console.log("[SplitPay] Fetching participant record", { requestId: request.id, userId: user.id });
+      const { data: freshParts, error: partError } = await supabase
+        .from("split_participants")
+        .select("*")
+        .eq("split_request_id", request.id)
+        .eq("user_id", user.id)
+        .maybeSingle();
 
-    if (partError || !freshParts) {
-      console.error("[SplitPay] Could not find participant record", { partError, userId: user.id, requestId: request.id });
-      return { success: false, error: "You are not a participant in this split" };
+      if (partError) {
+        console.error("[SplitPay] Participant query error", { code: partError.code, message: partError.message, details: partError.details, hint: partError.hint });
+        return { success: false, error: `Could not verify participation: ${partError.message}` };
+      }
+      
+      if (!freshParts) {
+        console.error("[SplitPay] No participant record found", { userId: user.id, requestId: request.id });
+        return { success: false, error: "You are not a participant in this split" };
+      }
+
+      if (freshParts.status === 'paid') {
+        return { success: false, error: "You have already paid your share" };
+      }
+      if (freshParts.status === 'declined') {
+        return { success: false, error: "You have declined this split" };
+      }
+
+      const amountDue = Number(freshParts.amount_due);
+      console.log("[SplitPay] Calling process_split_payment", { 
+        requestId: request.id, userId: user.id, amount: amountDue, participantStatus: freshParts.status
+      });
+
+      const { data, error } = await supabase.rpc("process_split_payment", {
+        _split_request_id: request.id,
+        _user_id: user.id,
+        _amount: amountDue,
+      });
+
+      console.log("[SplitPay] RPC response", { data, error });
+
+      if (error) {
+        console.error("[SplitPay] RPC error", { code: error.code, message: error.message, details: error.details, hint: error.hint });
+        return { success: false, error: error.message };
+      }
+
+      if (!data) {
+        console.error("[SplitPay] RPC returned null data");
+        return { success: false, error: "No response from payment processor" };
+      }
+
+      const result = data as { success: boolean; error?: string; all_paid?: boolean; paid_count?: number; required_count?: number };
+
+      // If all participants have paid, trigger receipt emails
+      if (result.success && result.all_paid) {
+        supabase.functions.invoke("splitpay-receipt", {
+          body: { split_request_id: request.id },
+        }).catch((err) => console.error("Receipt email trigger failed:", err));
+      }
+
+      return result;
+    } catch (err: any) {
+      console.error("[SplitPay] payShare exception", err);
+      return { success: false, error: err?.message || "Unexpected error during payment" };
     }
-
-    const amountDue = Number(freshParts.amount_due);
-    console.log("[SplitPay] Calling process_split_payment", { 
-      requestId: request.id, userId: user.id, amount: amountDue 
-    });
-
-    const { data, error } = await supabase.rpc("process_split_payment", {
-      _split_request_id: request.id,
-      _user_id: user.id,
-      _amount: amountDue,
-    });
-
-    console.log("[SplitPay] RPC response", { data, error });
-
-    if (error) {
-      console.error("[SplitPay] RPC error", error);
-      return { success: false, error: error.message };
-    }
-
-    const result = data as { success: boolean; error?: string; all_paid?: boolean; paid_count?: number; required_count?: number };
-
-    // If all participants have paid, trigger receipt emails
-    if (result.success && result.all_paid) {
-      supabase.functions.invoke("splitpay-receipt", {
-        body: { split_request_id: request.id },
-      }).catch((err) => console.error("Receipt email trigger failed:", err));
-    }
-
-    return result;
   }, [user, request]);
 
   const declineShare = useCallback(async () => {
