@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Target, Users, User } from "lucide-react";
+import { ArrowLeft, Target, Users, User, CalendarDays } from "lucide-react";
+import { addDays, addWeeks, addMonths, format } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,7 +25,6 @@ export default function CreateTargetAjo() {
     description: "",
     target_amount: "",
     frequency: "monthly",
-    target_date: "",
     reason: "",
     beneficiary_account_name: "",
     beneficiary_bank_name: "",
@@ -36,6 +36,20 @@ export default function CreateTargetAjo() {
   const targetAmount = parseFloat(form.target_amount) || 0;
   const maxMembers = parseInt(form.max_members) || 1;
   const contributionAmount = maxMembers > 0 ? Math.ceil(targetAmount / maxMembers) : 0;
+
+  // Auto-calculate target date based on frequency and members
+  const autoTargetDate = useMemo(() => {
+    const members = parseInt(form.max_members) || 1;
+    const startDate = new Date();
+    switch (form.frequency) {
+      case "daily": return addDays(startDate, members);
+      case "weekly": return addWeeks(startDate, members);
+      case "monthly": return addMonths(startDate, members);
+      default: return addDays(startDate, members);
+    }
+  }, [form.frequency, form.max_members]);
+
+  const frequencyLabel = form.frequency === "daily" ? "days" : form.frequency === "weekly" ? "weeks" : "months";
 
   // Member invitation state
   const [memberQuery, setMemberQuery] = useState("");
@@ -106,7 +120,7 @@ export default function CreateTargetAjo() {
         target_amount: targetAmount,
         contribution_amount: contributionAmount,
         frequency: form.frequency,
-        target_date: form.target_date ? new Date(form.target_date).toISOString() : null,
+        target_date: autoTargetDate.toISOString(),
         reason: form.reason.trim() || null,
         beneficiary_account_name: form.savings_type === "group" ? form.beneficiary_account_name.trim() : null,
         beneficiary_bank_name: form.savings_type === "group" ? form.beneficiary_bank_name : null,
@@ -267,9 +281,18 @@ export default function CreateTargetAjo() {
             </div>
           )}
 
-          <div>
-            <Label>Target Date</Label>
-            <Input type="date" value={form.target_date} onChange={(e) => update("target_date", e.target.value)} min={new Date().toISOString().split("T")[0]} />
+          {/* Auto-calculated target date */}
+          <div className="p-3 rounded-lg bg-secondary/5 border border-secondary/20">
+            <div className="flex items-center gap-2 mb-1">
+              <CalendarDays className="h-4 w-4 text-muted-foreground" />
+              <p className="text-xs text-muted-foreground">Target completion date (auto-calculated)</p>
+            </div>
+            <p className="text-lg font-bold text-foreground">
+              {format(autoTargetDate, "PPP")}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {maxMembers} {frequencyLabel} from today ({form.frequency} × {maxMembers} members)
+            </p>
           </div>
 
           {/* Add Members */}
