@@ -38,6 +38,20 @@ export default function CreateTargetAjo() {
   const maxMembers = parseInt(form.max_members) || 1;
   const contributionAmount = maxMembers > 0 ? Math.ceil(targetAmount / maxMembers) : 0;
 
+  // Auto-calculate target date based on frequency and members
+  const autoTargetDate = useMemo(() => {
+    const members = parseInt(form.max_members) || 1;
+    const startDate = new Date();
+    switch (form.frequency) {
+      case "daily": return addDays(startDate, members);
+      case "weekly": return addWeeks(startDate, members);
+      case "monthly": return addMonths(startDate, members);
+      default: return addDays(startDate, members);
+    }
+  }, [form.frequency, form.max_members]);
+
+  const frequencyLabel = form.frequency === "daily" ? "days" : form.frequency === "weekly" ? "weeks" : "months";
+
   // Member invitation state
   const [memberQuery, setMemberQuery] = useState("");
   const [memberResults, setMemberResults] = useState<any[]>([]);
