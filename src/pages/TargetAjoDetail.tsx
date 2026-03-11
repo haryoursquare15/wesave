@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Users, Target, Clock, UserPlus, Wallet, AlertTriangle, Vote, User, ArrowDownToLine } from "lucide-react";
+import { ArrowLeft, Users, Target, Clock, UserPlus, Wallet, AlertTriangle, Vote, User, ArrowDownToLine, Ban, Bell, UserMinus, CalendarPlus } from "lucide-react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +37,8 @@ export default function TargetAjoDetail() {
   const [memberProfiles, setMemberProfiles] = useState<Map<string, MemberProfile>>(new Map());
   const [memberContributions, setMemberContributions] = useState<TargetAjoMemberContribution[]>([]);
   const [selfWithdrawing, setSelfWithdrawing] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const [removingId, setRemovingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/auth");
@@ -66,10 +68,10 @@ export default function TargetAjoDetail() {
     fetchProfiles();
   }, [members, group]);
 
-  // Fetch per-member contribution totals for independent mode
+  // Fetch per-member contribution totals
   useEffect(() => {
     const fetchMemberContribs = async () => {
-      if (!groupId || !group || group.savings_type !== "independent") return;
+      if (!groupId) return;
       const { data } = await (supabase as any)
         .from("target_ajo_member_contributions")
         .select("*")
@@ -77,7 +79,7 @@ export default function TargetAjoDetail() {
       setMemberContributions(data || []);
     };
     fetchMemberContribs();
-  }, [groupId, group, contributions]);
+  }, [groupId, contributions]);
 
   const fmt = (n: number) => new Intl.NumberFormat("en-NG").format(n);
 
@@ -92,7 +94,7 @@ export default function TargetAjoDetail() {
     return memberContributions.find(mc => mc.user_id === userId)?.total_contributed || 0;
   };
 
-  // Independent mode: withdraw own contributions to app wallet
+  // Independent mode: withdraw own contributions via atomic RPC
   const handleSelfWithdraw = async () => {
     if (!user || !group) return;
     const myTotal = getMemberContribution(user.id);
@@ -100,28 +102,99 @@ export default function TargetAjoDetail() {
 
     setSelfWithdrawing(true);
     try {
-      // Reset member contribution tracker
-      await (supabase as any)
-        .from("target_ajo_member_contributions")
-        .update({ total_contributed: 0, updated_at: new Date().toISOString() })
-        .eq("group_id", group.id)
-        .eq("user_id", user.id);
+      const { data, error } = await supabase.rpc("target_ajo_self_withdraw" as any, {
+        _group_id: group.id,
+        _user_id: user.id,
+      } as any);
 
-      // Reduce group amount_raised
-      await (supabase as any)
-        .from("target_ajo_groups")
-        .update({
-          amount_raised: Math.max(0, group.amount_raised - myTotal),
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", group.id);
-
-      toast.success(`₦${fmt(myTotal)} withdrawn to your wallet!`);
+      if (error) throw error;
+      const result = data as { success: boolean; error?: string; amount?: number };
+      if (!result.success) {
+        toast.error(result.error || "Withdrawal failed");
+        return;
+      }
+      toast.success(`₦${fmt(result.amount || myTotal)} withdrawn to your wallet!`);
       refetch();
     } catch (err: any) {
       toast.error(err.message || "Withdrawal failed");
     } finally {
       setSelfWithdrawing(false);
+    }
+  };
+
+  // Admin: Close group and refund all members
+  const handleCloseAndRefund = async () => {
+    if (!user || !group) return;
+    setClosing(true);
+    try {
+      const { data, error } = await supabase.rpc("complete_target_ajo_and_refund" as any, {
+        _group_id: group.id,
+        _admin_id: user.id,
+      } as any);
+
+      if (error) throw error;
+      const result = data as { success: boolean; error?: string; refund_count?: number; total_refunded?: number };
+      if (!result.success) {
+        toast.error(result.error || "Failed to close group");
+        return;
+      }
+      toast.success(`Group closed! ₦${fmt(result.total_refunded || 0)} refunded to ${result.refund_count || 0} member(s).`);
+      refetch();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to close group");
+    } finally {
+      setClosing(false);
+    }
+  };
+
+  // Admin: Remove member
+  const handleRemoveMember = async (memberId: string, memberUserId: string) => {
+    if (!user || !group) return;
+    setRemovingId(memberUserId);
+    try {
+      await (supabase as any).from("target_ajo_memberships").delete().eq("id", memberId);
+      // Update member count
+      await (supabase as any).from("target_ajo_groups")
+        .update({ member_count: Math.max(0, (group.member_count || members.length) - 1), updated_at: new Date().toISOString() })
+        .eq("id", group.id);
+
+      toast.success(`${getMemberName(memberUserId)} removed`);
+      refetch();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to remove member");
+    } finally {
+      setRemovingId(null);
+    }
+  };
+
+  // Admin: Send reminder
+  const handleSendReminder = async () => {
+    if (!user || !group) return;
+    try {
+      const memberIds = members.map(m => m.user_id).filter(id => id !== user.id);
+      if (memberIds.length === 0) { toast.info("No members to remind"); return; }
+
+      const notifications = memberIds.map(uid => ({
+        user_id: uid,
+        title: "Contribution Reminder 💰",
+        message: `Don't forget to contribute to "${group.name}". Target: ₦${fmt(group.target_amount)}, Raised: ₦${fmt(group.amount_raised)}.`,
+        notification_type: "target_ajo_reminder",
+      }));
+
+      for (const notif of notifications) {
+        try {
+          await (supabase.rpc as any)("insert_user_notification", {
+            _user_id: notif.user_id,
+            _title: notif.title,
+            _message: notif.message,
+            _notification_type: notif.notification_type,
+          });
+        } catch {}
+      }
+
+      toast.success(`Reminder sent to ${memberIds.length} member(s)`);
+    } catch (err: any) {
+      toast.error("Failed to send reminders");
     }
   };
 
@@ -146,6 +219,7 @@ export default function TargetAjoDetail() {
   const progress = group.target_amount > 0 ? (group.amount_raised / group.target_amount) * 100 : 0;
   const remaining = Math.max(0, group.target_amount - group.amount_raised);
   const isIndependent = group.savings_type === "independent";
+  const isGroupClosed = group.status === "closed" || group.status === "completed" || group.status === "cancelled";
 
   const handleWithdrawalRequest = async () => {
     if (!user) return;
@@ -185,7 +259,7 @@ export default function TargetAjoDetail() {
             </Button>
             <h1 className="text-lg font-bold text-foreground line-clamp-1">{group.name}</h1>
           </div>
-          {isMember && (
+          {isMember && group.status === "active" && (
             <Button variant="outline" size="sm" onClick={() => setInviteOpen(true)}>
               <UserPlus className="h-4 w-4 mr-1" /> Invite
             </Button>
@@ -197,7 +271,9 @@ export default function TargetAjoDetail() {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
           {/* Status & Info */}
           <div className="flex items-center gap-2 mb-3 flex-wrap">
-            <Badge variant={group.status === "active" ? "default" : "secondary"}>{group.status}</Badge>
+            <Badge variant={group.status === "active" ? "default" : group.status === "closed" ? "secondary" : "outline"}>
+              {group.status === "closed" ? "Completed — Funds Returned" : group.status}
+            </Badge>
             <Badge variant="outline">{group.frequency}</Badge>
             <Badge variant="outline" className="flex items-center gap-1">
               {isIndependent ? <User className="h-3 w-3" /> : <Users className="h-3 w-3" />}
@@ -255,8 +331,16 @@ export default function TargetAjoDetail() {
             )}
           </div>
 
+          {/* Closed notice */}
+          {isGroupClosed && (
+            <div className="p-4 rounded-xl bg-secondary/10 border border-secondary/20 mb-4 text-center">
+              <p className="font-semibold text-foreground">This Target Ajo is closed</p>
+              <p className="text-sm text-muted-foreground mt-1">All contributed funds have been returned to members' wallets.</p>
+            </div>
+          )}
+
           {/* Non-member notice */}
-          {!isMember && (
+          {!isMember && !isGroupClosed && (
             <div className="p-4 rounded-xl bg-muted/30 border border-border mb-4 text-center">
               <p className="text-sm text-muted-foreground">
                 This is an invite-only group. Ask a member or the admin to invite you.
@@ -292,7 +376,7 @@ export default function TargetAjoDetail() {
               <p className="text-xs text-muted-foreground">
                 {isIndependent
                   ? "Each member can withdraw their own contributions directly to their app wallet at any time."
-                  : "Withdrawals require approval from at least 2/3 of members. Funds are disbursed to the designated beneficiary account."
+                  : "When this Target Ajo is closed, all contributed funds are returned to each member's wallet based on their individual contributions."
                 }
               </p>
             </div>
@@ -357,21 +441,11 @@ export default function TargetAjoDetail() {
                   </div>
                   <div className="text-right">
                     <Badge variant="default">Admin</Badge>
-                    {isIndependent && (
-                      <p className="text-xs font-semibold text-primary mt-1">
-                        ₦{fmt(getMemberContribution(group.admin_user_id))}
-                      </p>
-                    )}
+                    <p className="text-xs font-semibold text-primary mt-1">
+                      ₦{fmt(getMemberContribution(group.admin_user_id))}
+                    </p>
                   </div>
                 </div>
-                {isIndependent && (
-                  <div className="mt-2">
-                    <Progress
-                      value={group.target_amount > 0 ? (getMemberContribution(group.admin_user_id) / (group.target_amount / Math.max(members.length, 1))) * 100 : 0}
-                      className="h-1.5"
-                    />
-                  </div>
-                )}
               </div>
 
               {/* Other members */}
@@ -380,7 +454,6 @@ export default function TargetAjoDetail() {
                 .map((m) => {
                   const name = getMemberName(m.user_id);
                   const memberTotal = getMemberContribution(m.user_id);
-                  const perMemberTarget = group.target_amount / Math.max(members.length, 1);
                   return (
                     <div key={m.id} className="p-3 rounded-lg bg-card border border-border">
                       <div className="flex items-center justify-between">
@@ -395,23 +468,23 @@ export default function TargetAjoDetail() {
                             </p>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <Badge variant="outline">{m.status}</Badge>
-                          {isIndependent && (
-                            <p className="text-xs font-semibold text-primary mt-1">
-                              ₦{fmt(memberTotal)}
-                            </p>
+                        <div className="text-right flex items-center gap-2">
+                          <div>
+                            <p className="text-xs font-semibold text-primary">₦{fmt(memberTotal)}</p>
+                          </div>
+                          {isAdmin && group.status === "active" && m.user_id !== user?.id && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-destructive"
+                              onClick={() => handleRemoveMember(m.id, m.user_id)}
+                              disabled={removingId === m.user_id}
+                            >
+                              <UserMinus className="h-3.5 w-3.5" />
+                            </Button>
                           )}
                         </div>
                       </div>
-                      {isIndependent && (
-                        <div className="mt-2">
-                          <Progress
-                            value={perMemberTarget > 0 ? (memberTotal / perMemberTarget) * 100 : 0}
-                            className="h-1.5"
-                          />
-                        </div>
-                      )}
                     </div>
                   );
                 })}
@@ -425,6 +498,11 @@ export default function TargetAjoDetail() {
           {/* Withdrawals / Votes Tab */}
           <TabsContent value="withdrawals">
             <div className="space-y-3">
+              {!isIndependent && (
+                <p className="text-xs text-muted-foreground mb-2">
+                  Group wallet withdrawals require 2/3 member approval. When the group is closed by the admin, all funds are automatically returned to each member.
+                </p>
+              )}
               {withdrawalRequests.length === 0 ? (
                 <p className="text-center py-6 text-sm text-muted-foreground">No withdrawal requests</p>
               ) : (
@@ -445,8 +523,23 @@ export default function TargetAjoDetail() {
           {isAdmin && (
             <TabsContent value="manage">
               <div className="space-y-4">
+                {/* Send Reminders */}
+                {group.status === "active" && (
+                  <div className="p-4 rounded-xl bg-card border border-border space-y-3">
+                    <h3 className="font-semibold text-foreground flex items-center gap-2">
+                      <Bell className="h-4 w-4" /> Send Reminder
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      Notify all members to contribute to this target.
+                    </p>
+                    <Button variant="outline" className="w-full" onClick={handleSendReminder}>
+                      <Bell className="h-4 w-4 mr-2" /> Send Contribution Reminder
+                    </Button>
+                  </div>
+                )}
+
                 {/* Request Withdrawal - only for group mode */}
-                {!isIndependent && (
+                {!isIndependent && group.status === "active" && (
                   <div className="p-4 rounded-xl bg-card border border-border space-y-3">
                     <h3 className="font-semibold text-foreground">Request Withdrawal</h3>
                     <p className="text-xs text-muted-foreground">
@@ -493,13 +586,34 @@ export default function TargetAjoDetail() {
                     </div>
                   </div>
                 )}
+
+                {/* Close Group */}
+                {group.status === "active" && (
+                  <div className="p-4 rounded-xl bg-destructive/5 border border-destructive/20 space-y-3">
+                    <h3 className="font-semibold text-foreground flex items-center gap-2">
+                      <Ban className="h-4 w-4 text-destructive" /> Close Target Ajo
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      Closing this group will immediately return all contributed funds to each member's wallet based on their total contributions. This action cannot be undone.
+                    </p>
+                    {group.amount_raised > 0 && (
+                      <p className="text-xs text-foreground font-medium">
+                        ₦{fmt(group.amount_raised)} will be distributed back to {memberContributions.filter(mc => mc.total_contributed > 0).length} member(s).
+                      </p>
+                    )}
+                    <Button variant="destructive" className="w-full" onClick={handleCloseAndRefund} disabled={closing}>
+                      <Ban className="h-4 w-4 mr-2" />
+                      {closing ? "Closing..." : "Close & Return Funds"}
+                    </Button>
+                  </div>
+                )}
               </div>
             </TabsContent>
           )}
         </Tabs>
       </main>
 
-      {group && (
+      {group && group.status === "active" && (
         <>
           <TargetAjoInviteDialog
             open={inviteOpen}
