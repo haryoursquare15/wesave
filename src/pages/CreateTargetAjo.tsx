@@ -326,33 +326,13 @@ export default function CreateTargetAjo() {
             )}
           </div>
 
-          {form.savings_type === "group" && (
-            <div className="border-t border-border pt-5">
-              <h3 className="text-sm font-semibold text-foreground mb-3">Beneficiary Bank Details *</h3>
-              <p className="text-xs text-muted-foreground mb-3">
-                This is where group funds will be disbursed upon approved withdrawal.
-              </p>
-              <BankAccountInput
-                accountNumber={form.beneficiary_account_number}
-                onAccountNumberChange={(v) => update("beneficiary_account_number", v)}
-                bankName={form.beneficiary_bank_name}
-                onBankNameChange={(v) => update("beneficiary_bank_name", v)}
-                accountName={form.beneficiary_account_name}
-                onAccountNameChange={(v) => update("beneficiary_account_name", v)}
-                onValidated={setBankValidated}
-              />
-            </div>
-          )}
+          <div className="p-3 rounded-lg bg-muted/30 border border-border">
+            <p className="text-xs text-muted-foreground">
+              💡 When the target date arrives, each member's contributions are automatically returned to their personal wallet.
+            </p>
+          </div>
 
-          {form.savings_type === "independent" && (
-            <div className="p-3 rounded-lg bg-muted/30 border border-border">
-              <p className="text-xs text-muted-foreground">
-                💡 In independent mode, each member can withdraw their own contributions directly to their app wallet. No bank account needed.
-              </p>
-            </div>
-          )}
-
-          <Button type="submit" className="w-full" disabled={submitting || (form.savings_type === "group" && !bankValidated)}>
+          <Button type="submit" className="w-full" disabled={submitting}>
             {submitting ? "Creating..." : "Create Target Ajo"}
           </Button>
         </form>
