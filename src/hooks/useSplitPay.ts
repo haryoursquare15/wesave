@@ -150,12 +150,6 @@ export function useSplitRequestDetail(requestId: string | undefined) {
 
   const payShare = useCallback(async () => {
     if (!user || !request) return { success: false, error: "Not ready" };
-    
-    // Block payment if the group isn't complete (exclude declined participants)
-    const activeCount = participants.filter((p) => p.status !== "declined").length;
-    if (activeCount < request.number_of_people) {
-      return { success: false, error: `Group is incomplete (${activeCount}/${request.number_of_people}). Wait for the creator to fill all slots.` };
-    }
 
     const participant = participants.find((p) => p.user_id === user.id);
     if (!participant) return { success: false, error: "You are not a participant" };
@@ -167,7 +161,7 @@ export function useSplitRequestDetail(requestId: string | undefined) {
     });
     if (error) return { success: false, error: error.message };
 
-    const result = data as { success: boolean; error?: string; all_paid?: boolean };
+    const result = data as { success: boolean; error?: string; all_paid?: boolean; paid_count?: number; required_count?: number };
 
     // If all participants have paid, trigger receipt emails
     if (result.success && result.all_paid) {
@@ -196,13 +190,19 @@ export function useSplitRequestDetail(requestId: string | undefined) {
   }, [user, request, fetchDetail]);
 
   const cancelRequest = useCallback(async () => {
-    if (!user || !request) return;
-    if (request.creator_user_id !== user.id) return;
-    await supabase
-      .from("split_requests")
-      .update({ status: "cancelled", updated_at: new Date().toISOString() })
-      .eq("id", request.id);
-  }, [user, request]);
+    if (!user || !request) return { success: false, error: "Not ready" };
+    if (request.creator_user_id !== user.id) return { success: false, error: "Only the creator can cancel" };
+    
+    const { data, error } = await supabase.rpc("cancel_split_request" as any, {
+      _split_request_id: request.id,
+      _creator_id: user.id,
+    } as any);
+    
+    if (error) return { success: false, error: error.message };
+    const result = data as { success: boolean; error?: string; refunded_count?: number };
+    if (result.success) await fetchDetail();
+    return result;
+  }, [user, request, fetchDetail]);
 
   const removeParticipant = useCallback(async (participantUserId: string) => {
     if (!user || !request) return { success: false, error: "Not ready" };

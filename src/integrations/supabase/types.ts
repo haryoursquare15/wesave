@@ -3255,6 +3255,10 @@ export type Database = {
         Args: { _group_id: string; _user_id: string }
         Returns: undefined
       }
+      cancel_split_request: {
+        Args: { _creator_id: string; _split_request_id: string }
+        Returns: Json
+      }
       check_login_allowed: {
         Args: { _email: string; _ip_address?: string }
         Returns: Json
