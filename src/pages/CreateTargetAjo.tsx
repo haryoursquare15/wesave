@@ -282,9 +282,18 @@ export default function CreateTargetAjo() {
             </div>
           )}
 
-          <div>
-            <Label>Target Date</Label>
-            <Input type="date" value={form.target_date} onChange={(e) => update("target_date", e.target.value)} min={new Date().toISOString().split("T")[0]} />
+          {/* Auto-calculated target date */}
+          <div className="p-3 rounded-lg bg-secondary/5 border border-secondary/20">
+            <div className="flex items-center gap-2 mb-1">
+              <CalendarDays className="h-4 w-4 text-muted-foreground" />
+              <p className="text-xs text-muted-foreground">Target completion date (auto-calculated)</p>
+            </div>
+            <p className="text-lg font-bold text-foreground">
+              {format(autoTargetDate, "PPP")}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {maxMembers} {frequencyLabel} from today ({form.frequency} × {maxMembers} members)
+            </p>
           </div>
 
           {/* Add Members */}
