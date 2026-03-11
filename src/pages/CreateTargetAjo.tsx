@@ -64,12 +64,13 @@ export default function CreateTargetAjo() {
     setSearching(true);
     try {
       const escaped = memberQuery.trim().replace(/[%_\\]/g, "\\$&");
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("profiles")
         .select("id, full_name, username, email")
-        .or(`username.ilike.%${escaped}%,full_name.ilike.%${escaped}%`)
+        .or(`username.ilike.%${escaped}%,full_name.ilike.%${escaped}%,email.ilike.%${escaped}%`)
         .neq("id", user?.id || "")
         .limit(10);
+      if (error) { toast.error("Search failed"); return; }
       // Filter out already selected
       const selectedIds = new Set(selectedMembers.map(m => m.id));
       setMemberResults((data || []).filter(u => !selectedIds.has(u.id)));
