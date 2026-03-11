@@ -254,6 +254,19 @@ export default function CreateTargetAjo() {
             </div>
           </div>
 
+          {/* Auto-calculated contribution */}
+          {targetAmount > 0 && maxMembers > 0 && (
+            <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
+              <p className="text-xs text-muted-foreground mb-1">Contribution per member (auto-calculated)</p>
+              <p className="text-lg font-bold text-foreground">
+                ₦{new Intl.NumberFormat("en-NG").format(contributionAmount)}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                ₦{new Intl.NumberFormat("en-NG").format(targetAmount)} ÷ {maxMembers} members
+              </p>
+            </div>
+          )}
+
           <div>
             <Label>Target Date</Label>
             <Input type="date" value={form.target_date} onChange={(e) => update("target_date", e.target.value)} min={new Date().toISOString().split("T")[0]} />
