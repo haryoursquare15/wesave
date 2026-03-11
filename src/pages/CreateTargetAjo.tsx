@@ -24,9 +24,6 @@ export default function CreateTargetAjo() {
     target_amount: "",
     frequency: "monthly",
     reason: "",
-    beneficiary_account_name: "",
-    beneficiary_bank_name: "",
-    beneficiary_account_number: "",
     max_members: "20",
     savings_type: "group" as "group" | "independent",
   });
