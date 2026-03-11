@@ -23,7 +23,6 @@ export default function CreateTargetAjo() {
     name: "",
     description: "",
     target_amount: "",
-    contribution_amount: "",
     frequency: "monthly",
     target_date: "",
     reason: "",
@@ -33,6 +32,10 @@ export default function CreateTargetAjo() {
     max_members: "20",
     savings_type: "group" as "group" | "independent",
   });
+
+  const targetAmount = parseFloat(form.target_amount) || 0;
+  const maxMembers = parseInt(form.max_members) || 1;
+  const contributionAmount = maxMembers > 0 ? Math.ceil(targetAmount / maxMembers) : 0;
 
   // Member invitation state
   const [memberQuery, setMemberQuery] = useState("");
@@ -82,10 +85,8 @@ export default function CreateTargetAjo() {
     if (!user) return;
 
     if (!form.name.trim()) { toast.error("Name is required"); return; }
-    const targetAmount = parseFloat(form.target_amount);
     if (isNaN(targetAmount) || targetAmount < 1000) { toast.error("Target must be at least ₦1,000"); return; }
-    const contribAmount = parseFloat(form.contribution_amount);
-    if (isNaN(contribAmount) || contribAmount < 100) { toast.error("Contribution must be at least ₦100"); return; }
+    if (contributionAmount < 100) { toast.error("Contribution per member is too low. Increase target or reduce members."); return; }
 
     // Bank details only required for group mode
     if (form.savings_type === "group") {
@@ -103,7 +104,7 @@ export default function CreateTargetAjo() {
         name: form.name.trim(),
         description: form.description.trim() || null,
         target_amount: targetAmount,
-        contribution_amount: contribAmount,
+        contribution_amount: contributionAmount,
         frequency: form.frequency,
         target_date: form.target_date ? new Date(form.target_date).toISOString() : null,
         reason: form.reason.trim() || null,
@@ -230,15 +231,9 @@ export default function CreateTargetAjo() {
             <Textarea placeholder="Additional details..." value={form.description} onChange={(e) => update("description", e.target.value)} rows={3} maxLength={1000} />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>Target Amount (₦) *</Label>
-              <Input type="number" placeholder="500000" value={form.target_amount} onChange={(e) => update("target_amount", e.target.value)} min={1000} />
-            </div>
-            <div>
-              <Label>Contribution (₦) *</Label>
-              <Input type="number" placeholder="10000" value={form.contribution_amount} onChange={(e) => update("contribution_amount", e.target.value)} min={100} />
-            </div>
+          <div>
+            <Label>Target Amount (₦) *</Label>
+            <Input type="number" placeholder="500000" value={form.target_amount} onChange={(e) => update("target_amount", e.target.value)} min={1000} />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -258,6 +253,19 @@ export default function CreateTargetAjo() {
               <Input type="number" value={form.max_members} onChange={(e) => update("max_members", e.target.value)} min={2} max={100} />
             </div>
           </div>
+
+          {/* Auto-calculated contribution */}
+          {targetAmount > 0 && maxMembers > 0 && (
+            <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
+              <p className="text-xs text-muted-foreground mb-1">Contribution per member (auto-calculated)</p>
+              <p className="text-lg font-bold text-foreground">
+                ₦{new Intl.NumberFormat("en-NG").format(contributionAmount)}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                ₦{new Intl.NumberFormat("en-NG").format(targetAmount)} ÷ {maxMembers} members
+              </p>
+            </div>
+          )}
 
           <div>
             <Label>Target Date</Label>
