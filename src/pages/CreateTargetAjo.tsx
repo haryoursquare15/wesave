@@ -81,6 +81,10 @@ export default function CreateTargetAjo() {
   };
 
   const addMember = (member: any) => {
+    if (selectedMembers.length >= maxMembers - 1) {
+      toast.error(`Maximum ${maxMembers - 1} invites allowed (you are member 1)`);
+      return;
+    }
     setSelectedMembers(prev => [...prev, member]);
     setMemberResults(prev => prev.filter(m => m.id !== member.id));
   };
