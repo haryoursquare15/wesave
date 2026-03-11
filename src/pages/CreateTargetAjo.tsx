@@ -231,15 +231,9 @@ export default function CreateTargetAjo() {
             <Textarea placeholder="Additional details..." value={form.description} onChange={(e) => update("description", e.target.value)} rows={3} maxLength={1000} />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>Target Amount (₦) *</Label>
-              <Input type="number" placeholder="500000" value={form.target_amount} onChange={(e) => update("target_amount", e.target.value)} min={1000} />
-            </div>
-            <div>
-              <Label>Contribution (₦) *</Label>
-              <Input type="number" placeholder="10000" value={form.contribution_amount} onChange={(e) => update("contribution_amount", e.target.value)} min={100} />
-            </div>
+          <div>
+            <Label>Target Amount (₦) *</Label>
+            <Input type="number" placeholder="500000" value={form.target_amount} onChange={(e) => update("target_amount", e.target.value)} min={1000} />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
