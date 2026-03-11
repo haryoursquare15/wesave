@@ -575,15 +575,15 @@ export default function TargetAjoDetail() {
                   </div>
                 )}
 
-                {/* Beneficiary Info - only for group mode */}
+                {/* Funds Distribution Info - group mode */}
                 {!isIndependent && (
                   <div className="p-4 rounded-xl bg-card border border-border">
-                    <h3 className="font-semibold text-foreground mb-2">Beneficiary Account</h3>
-                    <div className="text-sm space-y-1">
-                      <p className="text-muted-foreground">Name: <span className="text-foreground">{group.beneficiary_account_name || "—"}</span></p>
-                      <p className="text-muted-foreground">Bank: <span className="text-foreground">{group.beneficiary_bank_name || "—"}</span></p>
-                      <p className="text-muted-foreground">Account: <span className="text-foreground">{group.beneficiary_account_number || "—"}</span></p>
-                    </div>
+                    <h3 className="font-semibold text-foreground mb-2 flex items-center gap-2">
+                      <Wallet className="h-4 w-4 text-primary" /> Funds Distribution
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      When the target is achieved or the group is closed, all contributed funds are automatically split and returned to each member's personal wallet based on their individual contributions.
+                    </p>
                   </div>
                 )}
 

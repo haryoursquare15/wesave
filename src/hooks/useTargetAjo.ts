@@ -12,9 +12,6 @@ export interface TargetAjoGroup {
   frequency: string;
   target_date: string | null;
   reason: string | null;
-  beneficiary_account_name: string | null;
-  beneficiary_bank_name: string | null;
-  beneficiary_account_number: string | null;
   admin_user_id: string;
   status: string;
   member_count: number;
