@@ -245,8 +245,9 @@ export default function CreateTargetAjo() {
               </Select>
             </div>
             <div>
-              <Label>Max Members</Label>
+              <Label>Max Members (including you)</Label>
               <Input type="number" value={form.max_members} onChange={(e) => update("max_members", e.target.value)} min={2} max={100} />
+              <p className="text-xs text-muted-foreground mt-1">You are automatically member 1 of {maxMembers}</p>
             </div>
           </div>
 
