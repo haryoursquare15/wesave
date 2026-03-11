@@ -280,9 +280,9 @@ export default function CreateTargetAjo() {
 
           {/* Add Members */}
           <div className="border-t border-border pt-5">
-            <h3 className="text-sm font-semibold text-foreground mb-3">Add Members (Invite)</h3>
+            <h3 className="text-sm font-semibold text-foreground mb-3">Invite Members ({selectedMembers.length + 1}/{maxMembers} joined incl. you)</h3>
             <p className="text-xs text-muted-foreground mb-3">
-              Search and invite members to join. Only invited members can participate.
+              Search and invite up to {maxMembers - 1} other members to join.
             </p>
             <div className="flex gap-2 mb-3">
               <Input
