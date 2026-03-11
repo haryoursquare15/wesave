@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Plus, Target, Search } from "lucide-react";
+import { Plus, Target, Search, Mail, Check, X } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,13 +8,17 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { BottomNav } from "@/components/BottomNav";
 import { useAuth } from "@/contexts/AuthContext";
-import { useTargetAjoGroups } from "@/hooks/useTargetAjo";
+import { useTargetAjoGroups, useTargetAjoInvites } from "@/hooks/useTargetAjo";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 export default function TargetAjo() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
-  const { myGroups, loading } = useTargetAjoGroups();
+  const { myGroups, loading, refetch: refetchGroups } = useTargetAjoGroups();
+  const { pendingInvites, loading: invitesLoading, refetch: refetchInvites } = useTargetAjoInvites();
   const [search, setSearch] = useState("");
+  const [respondingId, setRespondingId] = useState<string | null>(null);
   const tab = "mine";
 
   useEffect(() => {
@@ -27,6 +31,51 @@ export default function TargetAjo() {
   const filtered = displayed.filter((g) =>
     g.name.toLowerCase().includes(search.toLowerCase())
   );
+
+  const handleInviteResponse = async (inviteId: string, groupId: string, accept: boolean) => {
+    if (!user) return;
+    setRespondingId(inviteId);
+    try {
+      // Update invite status
+      const { error: updateErr } = await (supabase as any)
+        .from("target_ajo_invites")
+        .update({ status: accept ? "accepted" : "declined", responded_at: new Date().toISOString() })
+        .eq("id", inviteId);
+      if (updateErr) throw updateErr;
+
+      if (accept) {
+        // Add as member
+        const { error: memberErr } = await (supabase as any)
+          .from("target_ajo_memberships")
+          .insert({ group_id: groupId, user_id: user.id, status: "active" });
+        if (memberErr) throw memberErr;
+
+        // Increment member_count
+        const { data: grp } = await (supabase as any)
+          .from("target_ajo_groups")
+          .select("member_count")
+          .eq("id", groupId)
+          .single();
+        if (grp) {
+          await (supabase as any)
+            .from("target_ajo_groups")
+            .update({ member_count: (grp.member_count || 0) + 1 })
+            .eq("id", groupId);
+        }
+
+        toast.success("You've joined the Target Ajo group!");
+      } else {
+        toast.info("Invite declined.");
+      }
+
+      refetchInvites();
+      refetchGroups();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to respond to invite");
+    } finally {
+      setRespondingId(null);
+    }
+  };
 
   return (
     <div className="min-h-screen min-h-[100dvh] bg-background pb-32 safe-bottom">
@@ -53,6 +102,50 @@ export default function TargetAjo() {
             Target Ajo groups are invite-only. Create one and invite your friends, or accept an invite to join.
           </p>
         </div>
+
+        {/* Pending Invites */}
+        {!invitesLoading && pendingInvites.length > 0 && (
+          <div className="space-y-2">
+            <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <Mail className="h-4 w-4 text-primary" />
+              Pending Invites ({pendingInvites.length})
+            </h2>
+            {pendingInvites.map((inv) => (
+              <motion.div
+                key={inv.id}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="p-4 rounded-xl bg-card border-2 border-primary/30 shadow-sm"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">{inv.group_name || "Target Ajo Group"}</p>
+                    <p className="text-xs text-muted-foreground">You've been invited to join</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-destructive border-destructive/30 h-8"
+                      disabled={respondingId === inv.id}
+                      onClick={() => handleInviteResponse(inv.id, inv.group_id, false)}
+                    >
+                      <X className="h-3.5 w-3.5 mr-1" /> Decline
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="h-8"
+                      disabled={respondingId === inv.id}
+                      onClick={() => handleInviteResponse(inv.id, inv.group_id, true)}
+                    >
+                      <Check className="h-3.5 w-3.5 mr-1" /> Accept
+                    </Button>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        )}
 
         {/* Search */}
         <div className="relative">
