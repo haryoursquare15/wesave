@@ -81,6 +81,10 @@ export default function CreateTargetAjo() {
   };
 
   const addMember = (member: any) => {
+    if (selectedMembers.length >= maxMembers - 1) {
+      toast.error(`Maximum ${maxMembers - 1} invites allowed (you are member 1)`);
+      return;
+    }
     setSelectedMembers(prev => [...prev, member]);
     setMemberResults(prev => prev.filter(m => m.id !== member.id));
   };
@@ -245,8 +249,9 @@ export default function CreateTargetAjo() {
               </Select>
             </div>
             <div>
-              <Label>Max Members</Label>
+              <Label>Max Members (including you)</Label>
               <Input type="number" value={form.max_members} onChange={(e) => update("max_members", e.target.value)} min={2} max={100} />
+              <p className="text-xs text-muted-foreground mt-1">You are automatically member 1 of {maxMembers}</p>
             </div>
           </div>
 
@@ -258,7 +263,7 @@ export default function CreateTargetAjo() {
                 ₦{new Intl.NumberFormat("en-NG").format(contributionAmount)}
               </p>
               <p className="text-xs text-muted-foreground">
-                ₦{new Intl.NumberFormat("en-NG").format(targetAmount)} ÷ {maxMembers} members
+                ₦{new Intl.NumberFormat("en-NG").format(targetAmount)} ÷ {maxMembers} members (incl. you)
               </p>
             </div>
           )}
@@ -279,9 +284,9 @@ export default function CreateTargetAjo() {
 
           {/* Add Members */}
           <div className="border-t border-border pt-5">
-            <h3 className="text-sm font-semibold text-foreground mb-3">Add Members (Invite)</h3>
+            <h3 className="text-sm font-semibold text-foreground mb-3">Invite Members ({selectedMembers.length + 1}/{maxMembers} joined incl. you)</h3>
             <p className="text-xs text-muted-foreground mb-3">
-              Search and invite members to join. Only invited members can participate.
+              Search and invite up to {maxMembers - 1} other members to join.
             </p>
             <div className="flex gap-2 mb-3">
               <Input
