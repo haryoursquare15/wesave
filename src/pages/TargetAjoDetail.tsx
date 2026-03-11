@@ -171,7 +171,6 @@ export default function TargetAjoDetail() {
   const handleSendReminder = async () => {
     if (!user || !group) return;
     try {
-      // Send notification to all active members
       const memberIds = members.map(m => m.user_id).filter(id => id !== user.id);
       if (memberIds.length === 0) { toast.info("No members to remind"); return; }
 
@@ -182,14 +181,12 @@ export default function TargetAjoDetail() {
         notification_type: "target_ajo_reminder",
       }));
 
-      // Use RPC to insert notifications (bypasses RLS)
+      // Insert notifications via edge function or direct insert won't work due to RLS
+      // Use a simple approach: insert one at a time via the admin's context
       for (const notif of notifications) {
-        await supabase.rpc("insert_user_notification" as any, {
-          _user_id: notif.user_id,
-          _title: notif.title,
-          _message: notif.message,
-          _notification_type: notif.notification_type,
-        } as any).catch(() => {});
+        await supabase.functions.invoke("send-notification-email", {
+          body: { type: "in_app_only", ...notif },
+        }).catch(() => {});
       }
 
       toast.success(`Reminder sent to ${memberIds.length} member(s)`);
