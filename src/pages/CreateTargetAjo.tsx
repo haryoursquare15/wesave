@@ -85,10 +85,8 @@ export default function CreateTargetAjo() {
     if (!user) return;
 
     if (!form.name.trim()) { toast.error("Name is required"); return; }
-    const targetAmount = parseFloat(form.target_amount);
     if (isNaN(targetAmount) || targetAmount < 1000) { toast.error("Target must be at least ₦1,000"); return; }
-    const contribAmount = parseFloat(form.contribution_amount);
-    if (isNaN(contribAmount) || contribAmount < 100) { toast.error("Contribution must be at least ₦100"); return; }
+    if (contributionAmount < 100) { toast.error("Contribution per member is too low. Increase target or reduce members."); return; }
 
     // Bank details only required for group mode
     if (form.savings_type === "group") {
