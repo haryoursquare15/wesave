@@ -23,7 +23,6 @@ export default function CreateTargetAjo() {
     name: "",
     description: "",
     target_amount: "",
-    contribution_amount: "",
     frequency: "monthly",
     target_date: "",
     reason: "",
@@ -33,6 +32,10 @@ export default function CreateTargetAjo() {
     max_members: "20",
     savings_type: "group" as "group" | "independent",
   });
+
+  const targetAmount = parseFloat(form.target_amount) || 0;
+  const maxMembers = parseInt(form.max_members) || 1;
+  const contributionAmount = maxMembers > 0 ? Math.ceil(targetAmount / maxMembers) : 0;
 
   // Member invitation state
   const [memberQuery, setMemberQuery] = useState("");
