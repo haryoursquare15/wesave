@@ -25,7 +25,6 @@ export default function CreateTargetAjo() {
     description: "",
     target_amount: "",
     frequency: "monthly",
-    target_date: "",
     reason: "",
     beneficiary_account_name: "",
     beneficiary_bank_name: "",
