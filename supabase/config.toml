@@ -37,3 +37,5 @@ project_id = "sdwkqwmqgpsjrmijkdix"
     verify_jwt = false
   [functions.push-notification]
     verify_jwt = false
+  [functions.target-ajo-auto-contribution]
+    verify_jwt = false
