@@ -3505,6 +3505,10 @@ export type Database = {
         Args: { _amount: number; _split_request_id: string; _user_id: string }
         Returns: Json
       }
+      process_target_ajo_contribution: {
+        Args: { _amount: number; _group_id: string; _user_id: string }
+        Returns: Json
+      }
       record_login_attempt: {
         Args: {
           _device_fingerprint?: string
