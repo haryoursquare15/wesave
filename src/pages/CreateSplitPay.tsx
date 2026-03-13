@@ -121,7 +121,7 @@ export default function CreateSplitPay() {
               <Label>Total Bill (₦)</Label>
               <Input
                 type="number"
-                min="100"
+                min="1000"
                 step="0.01"
                 placeholder="50,000"
                 value={form.totalAmount}
