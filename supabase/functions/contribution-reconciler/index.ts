@@ -258,6 +258,8 @@ serve(async (req) => {
     }
 
     throw new Error(`Unknown action: ${action}`);
+
+  } catch (error: unknown) {
     console.error('Contribution reconciliation error:', error);
     const message = error instanceof Error ? error.message : 'An error occurred';
     return new Response(JSON.stringify({ success: false, error: message }), {
