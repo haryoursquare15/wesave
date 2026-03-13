@@ -41,8 +41,12 @@ export default function CreateSplitPay() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
-    if (totalAmount <= 0 || numberOfPeople < 2) {
-      toast({ title: "Invalid input", description: "Enter a valid amount and at least 2 participants.", variant: "destructive" });
+    if (totalAmount < 1000) {
+      toast({ title: "Minimum ₦1,000", description: "The total bill must be at least ₦1,000 to meet transfer requirements.", variant: "destructive" });
+      return;
+    }
+    if (numberOfPeople < 2) {
+      toast({ title: "Invalid input", description: "You need at least 2 participants.", variant: "destructive" });
       return;
     }
     if (!form.merchantAccountName || !form.merchantBankName || !form.merchantAccountNumber) {
