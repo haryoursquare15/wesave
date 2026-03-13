@@ -209,8 +209,55 @@ serve(async (req) => {
     // ACTION: MANUAL_VERIFY — Admin manually verifies a legacy pending charge
     // ================================================================
     if (action === 'manual_verify') {
+      const authHeader = req.headers.get('Authorization');
+      if (!authHeader) throw new Error('Unauthorized');
 
-  } catch (error: unknown) {
+      const token = authHeader.replace('Bearer ', '');
+      const { data: { user }, error: authErr } = await supabase.auth.getUser(token);
+      if (authErr || !user) throw new Error('Unauthorized');
+
+      const { data: isAdmin } = await supabase.rpc('is_any_admin', { _user_id: user.id });
+      if (!isAdmin) throw new Error('Admin access required');
+
+      const { chargeId } = body;
+      if (!chargeId) throw new Error('Charge ID required');
+
+      const { data: charge } = await supabase
+        .from('pending_card_charges')
+        .select('*')
+        .eq('id', chargeId)
+        .single();
+
+      if (!charge) throw new Error('Charge not found');
+      if (charge.status !== 'pending' && charge.status !== 'unresolved') {
+        throw new Error('Charge already resolved');
+      }
+
+      if (!charge.flw_transaction_id) throw new Error('No transaction ID to verify');
+
+      const flwSecret = Deno.env.get('FLUTTERWAVE_SECRET_KEY') || Deno.env.get('FLUTTERWAVE_TEST_SECRET_KEY');
+      if (!flwSecret) throw new Error('No Flutterwave key');
+
+      const verifyResp = await fetch(`${FLUTTERWAVE_BASE_URL}/transactions/${charge.flw_transaction_id}/verify`, {
+        headers: { 'Authorization': `Bearer ${flwSecret}` },
+      });
+      const verifyData = await verifyResp.json();
+
+      if (verifyData.status === 'success' && verifyData.data?.status === 'successful') {
+        await processConfirmedCharge(supabase, charge);
+        return new Response(JSON.stringify({ success: true, message: 'Charge confirmed' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      return new Response(JSON.stringify({
+        success: false,
+        error: `Transaction status: ${verifyData.data?.status || 'unknown'}`,
+        flw_status: verifyData.data?.status,
+      }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    throw new Error(`Unknown action: ${action}`);
     console.error('Contribution reconciliation error:', error);
     const message = error instanceof Error ? error.message : 'An error occurred';
     return new Response(JSON.stringify({ success: false, error: message }), {
