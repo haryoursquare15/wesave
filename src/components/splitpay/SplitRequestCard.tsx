@@ -9,13 +9,15 @@ import { useAuth } from "@/contexts/AuthContext";
 const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   active: { label: "Active", variant: "default" },
   completed: { label: "Completed", variant: "secondary" },
+  settling: { label: "Settling", variant: "default" },
   cancelled: { label: "Cancelled", variant: "destructive" },
   expired: { label: "Expired", variant: "outline" },
 };
 
 export function SplitRequestCard({ request }: { request: SplitRequest }) {
   const { user } = useAuth();
-  const config = statusConfig[request.status] || statusConfig.active;
+  const displayStatus = request.status === "completed" && request.settlement_status !== "completed" ? "settling" : request.status;
+  const config = statusConfig[displayStatus] || statusConfig.active;
   const isCreator = user?.id === request.creator_user_id;
 
   return (

@@ -29,7 +29,9 @@ export function SplitSummaryCard({ request, participants, creatorName }: Props) 
             request.status === "active" ? "default" : request.status === "completed" ? "secondary" : "destructive"
           }
         >
-          {request.status}
+          {request.status === "completed" && request.settlement_status !== "completed"
+            ? "Settling"
+            : request.status}
         </Badge>
       </div>
 
