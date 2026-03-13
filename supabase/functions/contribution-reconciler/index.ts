@@ -108,6 +108,104 @@ serve(async (req) => {
     }
 
     // ================================================================
+    // ACTION: RECONCILE_SPLITS — Auto-verify stuck split merchant settlements
+    // ================================================================
+    if (action === 'reconcile' || action === 'reconcile_splits') {
+      const flwSecret = Deno.env.get('FLUTTERWAVE_SECRET_KEY') || Deno.env.get('FLUTTERWAVE_TEST_SECRET_KEY');
+      if (!flwSecret && action === 'reconcile_splits') {
+        return new Response(JSON.stringify({ success: false, error: 'No Flutterwave key configured' }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (flwSecret) {
+        // Find split settlements stuck in "processing" for > 5 minutes
+        const { data: stuckSplits } = await supabase
+          .from('split_requests')
+          .select('id, settlement_flw_transfer_id, settlement_reference, creator_user_id, purpose, total_amount, merchant_account_name, updated_at')
+          .eq('settlement_status', 'processing')
+          .not('settlement_flw_transfer_id', 'is', null)
+          .limit(20);
+
+        const splitResults = [];
+        for (const split of (stuckSplits || [])) {
+          const ageMs = Date.now() - new Date(split.updated_at).getTime();
+          if (ageMs < 5 * 60 * 1000) {
+            splitResults.push({ id: split.id, status: 'too_recent' });
+            continue;
+          }
+
+          try {
+            // Verify transfer status via Flutterwave Transfers API
+            const verifyRes = await fetch(`${FLUTTERWAVE_BASE_URL}/transfers/${split.settlement_flw_transfer_id}`, {
+              headers: { 'Authorization': `Bearer ${flwSecret}` },
+            });
+            const verifyData = await verifyRes.json();
+            const transferStatus = verifyData?.data?.status;
+
+            console.log(`[SPLIT RECONCILE] ${split.id}: FLW status = ${transferStatus}`);
+
+            if (transferStatus === 'SUCCESSFUL') {
+              await supabase.from('split_requests').update({
+                settlement_status: 'completed',
+                settlement_completed_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              }).eq('id', split.id);
+
+              await supabase.from('user_notifications').insert({
+                user_id: split.creator_user_id,
+                title: 'Merchant Payment Sent!',
+                message: `₦${Number(split.total_amount).toLocaleString()} has been successfully transferred to ${split.merchant_account_name} for "${split.purpose}".`,
+                notification_type: 'split_settlement_completed',
+              });
+
+              splitResults.push({ id: split.id, status: 'confirmed' });
+
+            } else if (transferStatus === 'FAILED') {
+              const reason = verifyData?.data?.complete_message || 'Transfer failed';
+              await supabase.from('split_requests').update({
+                settlement_status: 'failed',
+                settlement_failure_reason: reason,
+                updated_at: new Date().toISOString(),
+              }).eq('id', split.id);
+
+              await supabase.from('user_notifications').insert({
+                user_id: split.creator_user_id,
+                title: 'Merchant Settlement Failed',
+                message: `Transfer to ${split.merchant_account_name} for "${split.purpose}" failed: ${reason}. Please contact support.`,
+                notification_type: 'split_settlement_failed',
+              });
+
+              splitResults.push({ id: split.id, status: 'failed', reason });
+
+            } else {
+              // Still pending/new — skip
+              splitResults.push({ id: split.id, status: 'still_pending', flw_status: transferStatus });
+            }
+          } catch (err) {
+            console.error(`[SPLIT RECONCILE] Error verifying ${split.id}:`, err);
+            splitResults.push({ id: split.id, status: 'verify_error' });
+          }
+        }
+
+        if (action === 'reconcile_splits') {
+          return new Response(JSON.stringify({ success: true, processed: splitResults.length, results: splitResults }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        // If action === 'reconcile', fall through — splits were reconciled alongside card charges
+        console.log('[RECONCILE] Split settlement results:', JSON.stringify(splitResults));
+      }
+
+      // If this was specifically reconcile_splits, we already returned above
+      if (action === 'reconcile_splits') {
+        return new Response(JSON.stringify({ success: true, processed: 0, message: 'No FLW key' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
+    // ================================================================
     // ACTION: MANUAL_VERIFY — Admin manually verifies a legacy pending charge
     // ================================================================
     if (action === 'manual_verify') {
