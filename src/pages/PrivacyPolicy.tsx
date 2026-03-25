@@ -80,7 +80,7 @@ export default function PrivacyPolicy() {
 
           <div className="pt-4 border-t border-border">
             <h3 className="text-base font-semibold text-foreground">Contact Information</h3>
-            <p className="text-muted-foreground">Email: llhpremium@gmail.com</p>
+            <p className="text-muted-foreground">Email: contact@wesave.ng</p>
             <p className="text-muted-foreground">Phone: 09039479554</p>
             <p className="text-muted-foreground">Address: Lagos, Nigeria</p>
           </div>
