@@ -1,0 +1,1 @@
+DELETE FROM vfd_sandbox_clients WHERE account_status = 'failed';
