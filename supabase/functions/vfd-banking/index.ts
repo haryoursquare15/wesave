@@ -82,8 +82,18 @@ async function vfdRequest(
   console.log(`[VFD ${VFD_MODE}] ${method} ${url.pathname}${url.search}`);
 
   const response = await fetch(url.toString(), options);
-  const data = await response.json();
+  const contentType = response.headers.get("content-type") || "";
 
+  if (!contentType.includes("application/json")) {
+    const text = await response.text();
+    console.error(`[VFD] Non-JSON response (${response.status}): ${text.slice(0, 300)}`);
+    return {
+      data: { error: `VFD API returned non-JSON (HTTP ${response.status}). Token may be invalid or expired.` },
+      status: response.status,
+    };
+  }
+
+  const data = await response.json();
   return { data, status: response.status };
 }
 
