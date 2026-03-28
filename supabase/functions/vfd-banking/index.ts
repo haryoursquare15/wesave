@@ -147,32 +147,36 @@ async function handleCreateNoConsent(
   const supabaseAdmin = getSupabaseAdmin();
   const vfdData = data as Record<string, unknown>;
 
-  // Store client info
-  await supabaseAdmin.from("vfd_sandbox_clients").upsert({
-    user_id: userId,
-    bvn,
-    date_of_birth: dateOfBirth,
-    vfd_client_id: vfdData?.data
-      ? (vfdData.data as Record<string, unknown>)?.clientId?.toString()
-      : null,
-    vfd_account_number: vfdData?.data
-      ? (vfdData.data as Record<string, unknown>)?.accountNo?.toString()
-      : null,
-    full_name: vfdData?.data
-      ? (vfdData.data as Record<string, unknown>)?.fullname?.toString()
-      : null,
-    phone: vfdData?.data
-      ? (vfdData.data as Record<string, unknown>)?.phone?.toString()
-      : null,
-    gender: vfdData?.data
-      ? (vfdData.data as Record<string, unknown>)?.gender?.toString()
-      : null,
-    kyc_method: "no_consent",
-    consent_status: "not_required",
-    account_status: status === 200 ? "active" : "failed",
-    metadata: vfdData,
-    source: "vfd_sandbox",
-  }, { onConflict: "user_id" });
+  // Only store client info if VFD returned success
+  const isSuccess = status === 200 && (!vfdData?.status || vfdData.status === 200 || vfdData.status === "00");
+
+  if (isSuccess) {
+    await supabaseAdmin.from("vfd_sandbox_clients").upsert({
+      user_id: userId,
+      bvn,
+      date_of_birth: dateOfBirth,
+      vfd_client_id: vfdData?.data
+        ? (vfdData.data as Record<string, unknown>)?.clientId?.toString()
+        : null,
+      vfd_account_number: vfdData?.data
+        ? (vfdData.data as Record<string, unknown>)?.accountNo?.toString()
+        : null,
+      full_name: vfdData?.data
+        ? (vfdData.data as Record<string, unknown>)?.fullname?.toString()
+        : null,
+      phone: vfdData?.data
+        ? (vfdData.data as Record<string, unknown>)?.phone?.toString()
+        : null,
+      gender: vfdData?.data
+        ? (vfdData.data as Record<string, unknown>)?.gender?.toString()
+        : null,
+      kyc_method: "no_consent",
+      consent_status: "not_required",
+      account_status: "active",
+      metadata: vfdData,
+      source: "vfd_sandbox",
+    }, { onConflict: "user_id" });
+  }
 
   return new Response(JSON.stringify({ data, vfd_status: status }), {
     status: 200,

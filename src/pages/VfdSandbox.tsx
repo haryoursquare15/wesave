@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useVfdBanking } from "@/hooks/useVfdBanking";
@@ -53,20 +53,22 @@ export default function VfdSandbox() {
     }
   }, [user, authLoading, navigate]);
 
+  const initRef = useRef(false);
   useEffect(() => {
-    if (authLoading || !user || !session?.access_token) return;
+    if (authLoading || !user || !session?.access_token || initRef.current) return;
+    initRef.current = true;
 
     void vfd.fetchClient().then((result) => {
       if (result?.data?.account_status === "active") {
         setKycStep("done");
       } else if (result?.data?.account_status === "failed" || result?.data?.account_status === "pending_consent") {
-        // Allow retry from BVN step if previous attempt failed
         setKycStep("bvn");
       }
     });
 
     void vfd.fetchTransactions();
-  }, [authLoading, user, session?.access_token, vfd.fetchClient, vfd.fetchTransactions]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, user, session?.access_token]);
 
   // BVN Lookup
   const handleBvnLookup = async () => {
@@ -75,8 +77,15 @@ export default function VfdSandbox() {
       return;
     }
     const result = await vfd.lookupBvn(bvn);
-    if (result?.data) {
-      setBvnData(result.data as Record<string, unknown>);
+    if (result) {
+      const vfdData = result.data as Record<string, unknown>;
+      // Check for VFD error responses (status != 200 or error message)
+      if (result.vfd_status !== 200 || (vfdData?.status && vfdData.status !== 200 && vfdData.status !== "00")) {
+        const errMsg = vfdData?.message?.toString() || vfdData?.error?.toString() || "BVN lookup failed";
+        toast({ title: "BVN Error", description: errMsg, variant: "destructive" });
+        return;
+      }
+      setBvnData(vfdData);
       setKycStep("confirm");
       toast({ title: "BVN found", description: "Please confirm your details" });
     }
@@ -90,6 +99,14 @@ export default function VfdSandbox() {
     }
     const result = await vfd.createNoConsent(bvn, dob);
     if (result) {
+      // Check if VFD returned an error status
+      const vfdStatus = result.vfd_status;
+      const vfdData = result.data as Record<string, unknown>;
+      if (vfdStatus !== 200 || (vfdData?.status && vfdData.status !== 200 && vfdData.status !== "00")) {
+        const errMsg = vfdData?.message?.toString() || vfdData?.error?.toString() || "Account creation failed";
+        toast({ title: "VFD Error", description: errMsg, variant: "destructive" });
+        return;
+      }
       await vfd.fetchClient();
       setKycStep("done");
       toast({ title: "Account created!", description: "Your VFD sandbox account is active" });
