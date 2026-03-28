@@ -30,11 +30,13 @@ async function getUserFromRequest(req: Request) {
   const authHeader = req.headers.get("authorization");
   if (!authHeader) throw new Error("Missing authorization header");
 
+  const token = authHeader.replace("Bearer ", "");
+  
+  // Use the admin client to verify the user token
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
-  const token = authHeader.replace("Bearer ", "");
   const { data: { user }, error } = await supabase.auth.getUser(token);
   if (error || !user) throw new Error("Invalid or expired token");
   return user;
