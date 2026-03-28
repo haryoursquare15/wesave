@@ -53,20 +53,22 @@ export default function VfdSandbox() {
     }
   }, [user, authLoading, navigate]);
 
+  const initRef = useRef(false);
   useEffect(() => {
-    if (authLoading || !user || !session?.access_token) return;
+    if (authLoading || !user || !session?.access_token || initRef.current) return;
+    initRef.current = true;
 
     void vfd.fetchClient().then((result) => {
       if (result?.data?.account_status === "active") {
         setKycStep("done");
       } else if (result?.data?.account_status === "failed" || result?.data?.account_status === "pending_consent") {
-        // Allow retry from BVN step if previous attempt failed
         setKycStep("bvn");
       }
     });
 
     void vfd.fetchTransactions();
-  }, [authLoading, user, session?.access_token, vfd.fetchClient, vfd.fetchTransactions]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, user, session?.access_token]);
 
   // BVN Lookup
   const handleBvnLookup = async () => {
