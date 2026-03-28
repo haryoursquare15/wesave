@@ -49,7 +49,8 @@ export function useVfdBanking() {
 
   const invokeVfd = useCallback(
     async (action: string, body: Record<string, unknown> = {}) => {
-      if (!session?.access_token) {
+      const accessToken = session?.access_token;
+      if (!accessToken) {
         toast({ title: "Not authenticated", variant: "destructive" });
         return null;
       }
@@ -58,6 +59,9 @@ export function useVfdBanking() {
       try {
         const { data, error } = await supabase.functions.invoke("vfd-banking", {
           body: { action, ...body },
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
         });
 
         if (error) {
@@ -74,7 +78,7 @@ export function useVfdBanking() {
         setLoading(false);
       }
     },
-    [session, toast]
+    [session?.access_token, toast]
   );
 
   const fetchClient = useCallback(async () => {
