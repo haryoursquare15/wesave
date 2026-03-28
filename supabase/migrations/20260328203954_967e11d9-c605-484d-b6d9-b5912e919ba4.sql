@@ -1,0 +1,1 @@
+DELETE FROM vfd_sandbox_clients WHERE user_id = '5415f719-3529-49ee-8d22-1229a5a1718e' AND account_status = 'failed';
