@@ -143,6 +143,7 @@ const App = () => {
                 <Route path="/terms" element={<TermsOfService />} />
                 <Route path="/privacy" element={<PrivacyPolicy />} />
                 <Route path="/delete-account" element={<DeleteAccount />} />
+                <Route path="/vfd-sandbox" element={<VfdSandbox />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </OnboardingRedirect>
