@@ -62,7 +62,6 @@ async function vfdRequest(
 ): Promise<{ data: unknown; status: number }> {
   const accessToken = getAccessToken();
   const url = new URL(`${VFD_BASE_URL}${endpoint}`);
-  url.searchParams.set("access-token", accessToken);
 
   if (queryParams) {
     for (const [key, value] of Object.entries(queryParams)) {
@@ -72,7 +71,10 @@ async function vfdRequest(
 
   const options: RequestInit = {
     method,
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "AccessToken": accessToken,
+    },
   };
 
   if (body && (method === "POST" || method === "PUT")) {
