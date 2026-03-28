@@ -59,6 +59,9 @@ export default function VfdSandbox() {
     void vfd.fetchClient().then((result) => {
       if (result?.data?.account_status === "active") {
         setKycStep("done");
+      } else if (result?.data?.account_status === "failed" || result?.data?.account_status === "pending_consent") {
+        // Allow retry from BVN step if previous attempt failed
+        setKycStep("bvn");
       }
     });
 
