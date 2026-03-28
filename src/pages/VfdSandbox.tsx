@@ -158,7 +158,8 @@ export default function VfdSandbox() {
     const result = await vfd.getBankList();
     if (result?.data) {
       const bankData = result.data as Record<string, unknown>;
-      const bankList = (bankData.data as Array<{ code: string; name: string }>) || [];
+      const raw = bankData?.data;
+      const bankList = Array.isArray(raw) ? raw : [];
       setBanks(bankList);
     }
   };
