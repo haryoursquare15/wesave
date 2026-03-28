@@ -92,6 +92,14 @@ export default function VfdSandbox() {
     }
     const result = await vfd.createNoConsent(bvn, dob);
     if (result) {
+      // Check if VFD returned an error status
+      const vfdStatus = result.vfd_status;
+      const vfdData = result.data as Record<string, unknown>;
+      if (vfdStatus !== 200 || (vfdData?.status && vfdData.status !== 200 && vfdData.status !== "00")) {
+        const errMsg = vfdData?.message?.toString() || vfdData?.error?.toString() || "Account creation failed";
+        toast({ title: "VFD Error", description: errMsg, variant: "destructive" });
+        return;
+      }
       await vfd.fetchClient();
       setKycStep("done");
       toast({ title: "Account created!", description: "Your VFD sandbox account is active" });
