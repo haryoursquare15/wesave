@@ -116,7 +116,14 @@ export default function VfdSandbox() {
 
   // Release client after consent
   const handleReleaseClient = async () => {
-    if (!vfd.client?.vfd_client_id) return;
+    if (!vfd.client?.vfd_client_id) {
+      toast({
+        title: "Cannot activate yet",
+        description: "No VFD client ID found. The initial account creation may have failed — please retry BVN lookup or consent first.",
+        variant: "destructive",
+      });
+      return;
+    }
     const result = await vfd.releaseClient(vfd.client.vfd_client_id);
     if (result) {
       await vfd.fetchClient();
