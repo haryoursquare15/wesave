@@ -38,6 +38,7 @@ import CreateSplitPay from "./pages/CreateSplitPay";
 import SplitPayDetail from "./pages/SplitPayDetail";
 import DeleteAccount from "./pages/DeleteAccount";
 import AppHome from "./pages/AppHome";
+import VfdSandbox from "./pages/VfdSandbox";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -142,6 +143,7 @@ const App = () => {
                 <Route path="/terms" element={<TermsOfService />} />
                 <Route path="/privacy" element={<PrivacyPolicy />} />
                 <Route path="/delete-account" element={<DeleteAccount />} />
+                <Route path="/vfd-sandbox" element={<VfdSandbox />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </OnboardingRedirect>
