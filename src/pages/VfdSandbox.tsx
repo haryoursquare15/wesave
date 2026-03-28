@@ -77,8 +77,15 @@ export default function VfdSandbox() {
       return;
     }
     const result = await vfd.lookupBvn(bvn);
-    if (result?.data) {
-      setBvnData(result.data as Record<string, unknown>);
+    if (result) {
+      const vfdData = result.data as Record<string, unknown>;
+      // Check for VFD error responses (status != 200 or error message)
+      if (result.vfd_status !== 200 || (vfdData?.status && vfdData.status !== 200 && vfdData.status !== "00")) {
+        const errMsg = vfdData?.message?.toString() || vfdData?.error?.toString() || "BVN lookup failed";
+        toast({ title: "BVN Error", description: errMsg, variant: "destructive" });
+        return;
+      }
+      setBvnData(vfdData);
       setKycStep("confirm");
       toast({ title: "BVN found", description: "Please confirm your details" });
     }
