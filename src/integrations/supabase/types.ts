@@ -3019,6 +3019,153 @@ export type Database = {
         }
         Relationships: []
       }
+      vfd_sandbox_clients: {
+        Row: {
+          account_status: string | null
+          balance: number | null
+          bvn: string | null
+          consent_status: string | null
+          created_at: string | null
+          date_of_birth: string | null
+          full_name: string | null
+          gender: string | null
+          id: string
+          kyc_method: string | null
+          metadata: Json | null
+          phone: string | null
+          source: string | null
+          tier: string | null
+          updated_at: string | null
+          user_id: string
+          vfd_account_number: string | null
+          vfd_client_id: string | null
+        }
+        Insert: {
+          account_status?: string | null
+          balance?: number | null
+          bvn?: string | null
+          consent_status?: string | null
+          created_at?: string | null
+          date_of_birth?: string | null
+          full_name?: string | null
+          gender?: string | null
+          id?: string
+          kyc_method?: string | null
+          metadata?: Json | null
+          phone?: string | null
+          source?: string | null
+          tier?: string | null
+          updated_at?: string | null
+          user_id: string
+          vfd_account_number?: string | null
+          vfd_client_id?: string | null
+        }
+        Update: {
+          account_status?: string | null
+          balance?: number | null
+          bvn?: string | null
+          consent_status?: string | null
+          created_at?: string | null
+          date_of_birth?: string | null
+          full_name?: string | null
+          gender?: string | null
+          id?: string
+          kyc_method?: string | null
+          metadata?: Json | null
+          phone?: string | null
+          source?: string | null
+          tier?: string | null
+          updated_at?: string | null
+          user_id?: string
+          vfd_account_number?: string | null
+          vfd_client_id?: string | null
+        }
+        Relationships: []
+      }
+      vfd_sandbox_transactions: {
+        Row: {
+          amount: number
+          beneficiary_account: string | null
+          beneficiary_bank: string | null
+          beneficiary_bank_code: string | null
+          beneficiary_name: string | null
+          created_at: string | null
+          description: string | null
+          id: string
+          metadata: Json | null
+          reference: string | null
+          source: string | null
+          status: string | null
+          transaction_type: string
+          user_id: string
+          vfd_account_number: string | null
+          vfd_reference: string | null
+        }
+        Insert: {
+          amount: number
+          beneficiary_account?: string | null
+          beneficiary_bank?: string | null
+          beneficiary_bank_code?: string | null
+          beneficiary_name?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          metadata?: Json | null
+          reference?: string | null
+          source?: string | null
+          status?: string | null
+          transaction_type: string
+          user_id: string
+          vfd_account_number?: string | null
+          vfd_reference?: string | null
+        }
+        Update: {
+          amount?: number
+          beneficiary_account?: string | null
+          beneficiary_bank?: string | null
+          beneficiary_bank_code?: string | null
+          beneficiary_name?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          metadata?: Json | null
+          reference?: string | null
+          source?: string | null
+          status?: string | null
+          transaction_type?: string
+          user_id?: string
+          vfd_account_number?: string | null
+          vfd_reference?: string | null
+        }
+        Relationships: []
+      }
+      vfd_sandbox_webhook_logs: {
+        Row: {
+          created_at: string | null
+          event_type: string
+          id: string
+          payload: Json
+          processed: boolean | null
+          processed_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          event_type: string
+          id?: string
+          payload: Json
+          processed?: boolean | null
+          processed_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          event_type?: string
+          id?: string
+          payload?: Json
+          processed?: boolean | null
+          processed_at?: string | null
+        }
+        Relationships: []
+      }
       wallets: {
         Row: {
           available_balance: number | null
