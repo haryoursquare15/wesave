@@ -349,10 +349,27 @@ export default function VfdSandbox() {
                     <Label>Date of Birth (DD-MM-YYYY)</Label>
                     <Input
                       value={dob}
-                      onChange={(e) => setDob(e.target.value)}
+                      onChange={(e) => {
+                        // Auto-format: allow digits and auto-insert dashes
+                        let v = e.target.value.replace(/[^\d-]/g, "");
+                        const digits = v.replace(/-/g, "");
+                        if (digits.length <= 8) {
+                          if (digits.length > 4) {
+                            v = `${digits.slice(0, 2)}-${digits.slice(2, 4)}-${digits.slice(4)}`;
+                          } else if (digits.length > 2) {
+                            v = `${digits.slice(0, 2)}-${digits.slice(2)}`;
+                          } else {
+                            v = digits;
+                          }
+                        }
+                        setDob(v.slice(0, 10));
+                      }}
                       placeholder="DD-MM-YYYY"
                       maxLength={10}
                     />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Example: 15-06-1990
+                    </p>
                   </div>
 
                   {kycMethod === "consent" && (
