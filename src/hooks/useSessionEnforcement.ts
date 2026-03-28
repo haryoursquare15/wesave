@@ -51,19 +51,9 @@ export function useSessionEnforcement({ enabled = true }: UseSessionEnforcementO
   useEffect(() => {
     if (!enabled) return;
 
-    // Check fresh browser session
-    const sessionMarker = sessionStorage.getItem(SESSION_MARKER_KEY);
-    if (!sessionMarker) {
-      const checkAndClearSession = async () => {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-          await supabase.auth.signOut();
-          toast.info("Session expired. Please sign in again.");
-          navigate("/auth");
-        }
-      };
-      checkAndClearSession();
-    }
+    // Set session marker on mount — the inactivity and background
+    // timeouts handle actual session expiry. The old "no marker → sign out"
+    // logic broke in preview/HMR because sessionStorage is cleared on reload.
     sessionStorage.setItem(SESSION_MARKER_KEY, "true");
 
     // Start foreground inactivity timer
