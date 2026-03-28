@@ -18,7 +18,7 @@ import {
 
 export default function VfdSandbox() {
   const navigate = useNavigate();
-  const { user, loading: authLoading } = useAuth();
+  const { user, session, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const vfd = useVfdBanking();
 
@@ -54,15 +54,16 @@ export default function VfdSandbox() {
   }, [user, authLoading, navigate]);
 
   useEffect(() => {
-    if (user) {
-      vfd.fetchClient().then((result) => {
-        if (result?.data?.account_status === "active") {
-          setKycStep("done");
-        }
-      });
-      vfd.fetchTransactions();
-    }
-  }, [user]);
+    if (authLoading || !user || !session?.access_token) return;
+
+    void vfd.fetchClient().then((result) => {
+      if (result?.data?.account_status === "active") {
+        setKycStep("done");
+      }
+    });
+
+    void vfd.fetchTransactions();
+  }, [authLoading, user, session?.access_token, vfd.fetchClient, vfd.fetchTransactions]);
 
   // BVN Lookup
   const handleBvnLookup = async () => {

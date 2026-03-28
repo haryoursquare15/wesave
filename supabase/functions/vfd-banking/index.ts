@@ -27,19 +27,30 @@ function getSupabaseAdmin() {
 }
 
 async function getUserFromRequest(req: Request) {
-  const authHeader = req.headers.get("authorization");
-  if (!authHeader) throw new Error("Missing authorization header");
+  const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    throw new Error("Missing authorization header");
+  }
 
-  const token = authHeader.replace("Bearer ", "");
-  
-  // Use the admin client to verify the user token
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-  );
-  const { data: { user }, error } = await supabase.auth.getUser(token);
-  if (error || !user) throw new Error("Invalid or expired token");
-  return user;
+  const token = authHeader.replace("Bearer ", "").trim();
+  const publishableKey =
+    Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("SUPABASE_PUBLISHABLE_KEY");
+
+  if (!publishableKey) {
+    throw new Error("SUPABASE_ANON_KEY not configured");
+  }
+
+  const supabase = createClient(Deno.env.get("SUPABASE_URL")!, publishableKey, {
+    global: {
+      headers: { Authorization: authHeader },
+    },
+  });
+
+  const { data, error } = await supabase.auth.getClaims(token);
+  const userId = data?.claims?.sub;
+
+  if (error || !userId) throw new Error("Invalid or expired token");
+  return { id: userId };
 }
 
 // VFD API helper
