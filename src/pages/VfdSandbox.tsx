@@ -227,12 +227,16 @@ export default function VfdSandbox() {
   const handleValidateBeneficiary = async () => {
     if (!transferForm.toAccount || !transferForm.bankCode) return;
     const result = await vfd.validateBeneficiary(transferForm.toAccount, transferForm.bankCode);
-    if (result?.data) {
-      const benData = result.data as Record<string, unknown>;
-      const name = (benData.data as Record<string, unknown>)?.accountName;
+    if (result) {
+      // Use normalized accountName from edge function
+      const name = result.accountName || 
+        ((result.data as Record<string, unknown>)?.data as Record<string, unknown>)?.accountName ||
+        ((result.data as Record<string, unknown>)?.data as Record<string, unknown>)?.account_name;
       if (name) {
         setTransferForm((prev) => ({ ...prev, beneficiaryName: name.toString() }));
         toast({ title: "Beneficiary verified", description: name.toString() });
+      } else {
+        toast({ title: "Verification failed", description: "Could not verify account", variant: "destructive" });
       }
     }
   };
