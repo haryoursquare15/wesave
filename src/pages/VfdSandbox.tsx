@@ -16,6 +16,15 @@ import {
   AlertTriangle, User, Building2, History,
 } from "lucide-react";
 
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+/** Convert YYYY-MM-DD (HTML date input) to DD-MMM-YYYY (VFD format) */
+function formatDobForVfd(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-");
+  if (!y || !m || !d) return dateStr;
+  return `${d}-${MONTHS[parseInt(m, 10) - 1]}-${y}`;
+}
+
 export default function VfdSandbox() {
   const navigate = useNavigate();
   const { user, session, loading: authLoading } = useAuth();
@@ -86,6 +95,17 @@ export default function VfdSandbox() {
         return;
       }
       setBvnData(vfdData);
+      // Auto-fill DOB from BVN lookup if available (convert VFD format DD-MMM-YYYY to YYYY-MM-DD for date input)
+      const bvnDob = (vfdData?.data as Record<string, unknown>)?.dateOfBirth?.toString();
+      if (bvnDob && !dob) {
+        const parts = bvnDob.match(/^(\d{2})-([A-Za-z]{3})-(\d{4})$/);
+        if (parts) {
+          const monthIdx = MONTHS.findIndex(m => m.toLowerCase() === parts[2].toLowerCase());
+          if (monthIdx >= 0) {
+            setDob(`${parts[3]}-${String(monthIdx + 1).padStart(2, "0")}-${parts[1]}`);
+          }
+        }
+      }
       setKycStep("confirm");
       toast({ title: "BVN found", description: "Please confirm your details" });
     }
@@ -97,7 +117,8 @@ export default function VfdSandbox() {
       toast({ title: "Date of birth required", variant: "destructive" });
       return;
     }
-    const result = await vfd.createNoConsent(bvn, dob);
+    const vfdDob = formatDobForVfd(dob);
+    const result = await vfd.createNoConsent(bvn, vfdDob);
     if (result) {
       // Check if VFD returned an error status
       const vfdStatus = result.vfd_status;
@@ -118,7 +139,7 @@ export default function VfdSandbox() {
     const result = await vfd.createConsent({
       ...consentForm,
       bvn,
-      dateOfBirth: consentForm.dateOfBirth || dob,
+      dateOfBirth: formatDobForVfd(consentForm.dateOfBirth || dob),
     });
     if (result?.data) {
       toast({ title: "Client created", description: "BVN consent OTP will be sent" });
@@ -314,6 +335,9 @@ export default function VfdSandbox() {
                     <p className="text-xs text-muted-foreground mt-1">
                       {bvn.length}/11 digits
                     </p>
+                    <p className="text-xs text-amber-600 mt-1">
+                      ⚠️ Sandbox test BVN: 22155258549 (DOB: 05-Apr-1994). Real BVNs may not work in sandbox mode.
+                    </p>
                   </div>
                   <Button
                     onClick={handleBvnLookup}
@@ -374,29 +398,15 @@ export default function VfdSandbox() {
                   </div>
 
                   <div>
-                    <Label>Date of Birth (DD-MM-YYYY)</Label>
+                    <Label>Date of Birth (DD-MMM-YYYY)</Label>
                     <Input
+                      type="date"
                       value={dob}
-                      onChange={(e) => {
-                        // Auto-format: allow digits and auto-insert dashes
-                        let v = e.target.value.replace(/[^\d-]/g, "");
-                        const digits = v.replace(/-/g, "");
-                        if (digits.length <= 8) {
-                          if (digits.length > 4) {
-                            v = `${digits.slice(0, 2)}-${digits.slice(2, 4)}-${digits.slice(4)}`;
-                          } else if (digits.length > 2) {
-                            v = `${digits.slice(0, 2)}-${digits.slice(2)}`;
-                          } else {
-                            v = digits;
-                          }
-                        }
-                        setDob(v.slice(0, 10));
-                      }}
-                      placeholder="DD-MM-YYYY"
-                      maxLength={10}
+                      onChange={(e) => setDob(e.target.value)}
+                      placeholder="Select date"
                     />
                     <p className="text-xs text-muted-foreground mt-1">
-                      Example: 15-06-1990
+                      {dob ? `Will be sent as: ${formatDobForVfd(dob)}` : "Select your date of birth"}
                     </p>
                   </div>
 

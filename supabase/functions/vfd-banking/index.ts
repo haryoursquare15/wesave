@@ -196,9 +196,10 @@ async function handleCreateNoConsent(
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-  if (!/^\d{2}-\d{2}-\d{4}$/.test(dateOfBirth)) {
+  // Accept DD-MM-YYYY or DD-MMM-YYYY (e.g. 08-Mar-1995) per VFD docs
+  if (!/^\d{2}-(\d{2}|[A-Za-z]{3})-\d{4}$/.test(dateOfBirth)) {
     return new Response(
-      JSON.stringify({ error: "Date of birth must be in DD-MM-YYYY format" }),
+      JSON.stringify({ error: "Date of birth must be in DD-MM-YYYY or DD-MMM-YYYY format (e.g. 08-Mar-1995)" }),
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
