@@ -204,11 +204,22 @@ export default function VfdSandbox() {
   // Load banks
   const handleLoadBanks = async () => {
     const result = await vfd.getBankList();
-    if (result?.data) {
-      const bankData = result.data as Record<string, unknown>;
-      const raw = bankData?.data;
-      const bankList = Array.isArray(raw) ? raw : [];
-      setBanks(bankList);
+    if (result) {
+      // Use normalized banks array from edge function
+      const bankList = Array.isArray(result.banks) ? result.banks : [];
+      if (bankList.length === 0) {
+        // Fallback: try parsing from raw data
+        const bankData = result.data as Record<string, unknown>;
+        const raw = bankData?.data;
+        if (Array.isArray(raw)) {
+          setBanks(raw.map((b: Record<string, unknown>) => ({
+            code: (b.bankCode || b.code || b.bank_code || "").toString(),
+            name: (b.bankName || b.name || b.bank_name || "").toString(),
+          })));
+        }
+      } else {
+        setBanks(bankList);
+      }
     }
   };
 
