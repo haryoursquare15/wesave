@@ -70,6 +70,13 @@ export default function VfdSandbox() {
     void vfd.fetchClient().then((result) => {
       if (result?.data?.account_status === "active") {
         setKycStep("done");
+        // Auto-load bank list when account is active
+        void vfd.getBankList().then((bankResult) => {
+          if (bankResult) {
+            const bankList = Array.isArray(bankResult.banks) ? bankResult.banks : [];
+            if (bankList.length > 0) setBanks(bankList);
+          }
+        });
       } else if (result?.data?.account_status === "failed" || result?.data?.account_status === "pending_consent") {
         setKycStep("bvn");
       }
