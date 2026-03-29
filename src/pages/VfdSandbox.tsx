@@ -67,10 +67,19 @@ export default function VfdSandbox() {
     if (authLoading || !user || !session?.access_token || initRef.current) return;
     initRef.current = true;
 
-    void vfd.fetchClient().then((result) => {
+    void vfd.fetchClient().then(async (result) => {
       if (result?.data?.account_status === "active") {
         setKycStep("done");
-        // Auto-load bank list when account is active
+        // Auto-load balance and bank list
+        if (result.data.vfd_account_number) {
+          void vfd.checkBalance(result.data.vfd_account_number).then((balResult) => {
+            if (balResult?.data) {
+              const balData = balResult.data as Record<string, unknown>;
+              const bal = (balData.data as Record<string, unknown>)?.availableBalance;
+              setLiveBalance(bal?.toString() || "0");
+            }
+          });
+        }
         void vfd.getBankList().then((bankResult) => {
           if (bankResult) {
             const bankList = Array.isArray(bankResult.banks) ? bankResult.banks : [];
@@ -203,8 +212,11 @@ export default function VfdSandbox() {
     if (result) {
       setFundAmount("");
       toast({ title: "Account funded!", description: `₦${amount.toLocaleString()} credited` });
-      handleCheckBalance();
-      vfd.fetchTransactions();
+      // Wait briefly for VFD to process, then refresh balance
+      setTimeout(async () => {
+        await handleCheckBalance();
+        await vfd.fetchTransactions();
+      }, 1500);
     }
   };
 
@@ -614,11 +626,13 @@ export default function VfdSandbox() {
                             <Button
                               size="sm"
                               className="mt-2"
-                              onClick={() =>
-                                vfd.client?.vfd_client_id &&
-                                vfd.client?.bvn &&
-                                vfd.upgradeTier(vfd.client.bvn, vfd.client.vfd_client_id)
-                              }
+                              onClick={async () => {
+                                const result = await vfd.upgradeTier();
+                                if (result) {
+                                  await vfd.fetchClient();
+                                  toast({ title: "Tier upgrade requested" });
+                                }
+                              }}
                               disabled={vfd.loading}
                             >
                               Upgrade Now

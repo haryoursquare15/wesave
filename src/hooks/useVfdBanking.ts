@@ -120,8 +120,7 @@ export function useVfdBanking() {
   );
 
   const upgradeTier = useCallback(
-    (bvn: string, clientId: string) =>
-      invokeVfd("tier_upgrade", { bvn, clientId }),
+    () => invokeVfd("tier_upgrade"),
     [invokeVfd]
   );
 
