@@ -203,8 +203,11 @@ export default function VfdSandbox() {
     if (result) {
       setFundAmount("");
       toast({ title: "Account funded!", description: `₦${amount.toLocaleString()} credited` });
-      handleCheckBalance();
-      vfd.fetchTransactions();
+      // Wait briefly for VFD to process, then refresh balance
+      setTimeout(async () => {
+        await handleCheckBalance();
+        await vfd.fetchTransactions();
+      }, 1500);
     }
   };
 

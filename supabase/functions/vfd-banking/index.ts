@@ -290,17 +290,42 @@ async function handleClientRelease(userId: string, accountNo: string) {
 
 // Tier Upgrade - uses accountNo per VFD docs
 async function handleTierUpgrade(userId: string, body: Record<string, unknown>) {
-  const { data, status } = await vfdRequest("/client/update", "POST", body);
+  // VFD /client/update requires accountNo and bvn
+  const supabaseAdmin = getSupabaseAdmin();
 
-  if (status === 200) {
-    const supabaseAdmin = getSupabaseAdmin();
-    const vfdData = data as Record<string, unknown>;
+  // Fetch client details to get accountNo if not provided
+  let accountNo = body.accountNo as string;
+  let bvn = body.bvn as string;
+
+  if (!accountNo || !bvn) {
+    const { data: clientData } = await supabaseAdmin
+      .from("vfd_sandbox_clients")
+      .select("vfd_account_number, bvn")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (clientData) {
+      accountNo = accountNo || clientData.vfd_account_number || "";
+      bvn = bvn || clientData.bvn || "";
+    }
+  }
+
+  if (!accountNo || !bvn) {
+    return jsonResponse({ error: "Account number and BVN are required for tier upgrade" }, 400);
+  }
+
+  console.log("[VFD tier_upgrade] accountNo:", accountNo, "bvn:", bvn);
+
+  const { data, status } = await vfdRequest("/client/update", "POST", { accountNo, bvn });
+  console.log("[VFD tier_upgrade] Response:", JSON.stringify(data));
+
+  const vfdData = data as Record<string, unknown>;
+  if (status === 200 && (vfdData?.status === "00" || vfdData?.status === 200)) {
     const innerData = (vfdData?.data || {}) as Record<string, unknown>;
     await supabaseAdmin
       .from("vfd_sandbox_clients")
       .update({
         tier: innerData?.currentTier?.toString() || "tier2",
-        bvn: body.bvn as string || undefined,
         updated_at: new Date().toISOString(),
       })
       .eq("user_id", userId);
