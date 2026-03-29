@@ -67,10 +67,19 @@ export default function VfdSandbox() {
     if (authLoading || !user || !session?.access_token || initRef.current) return;
     initRef.current = true;
 
-    void vfd.fetchClient().then((result) => {
+    void vfd.fetchClient().then(async (result) => {
       if (result?.data?.account_status === "active") {
         setKycStep("done");
-        // Auto-load bank list when account is active
+        // Auto-load balance and bank list
+        if (result.data.vfd_account_number) {
+          void vfd.checkBalance(result.data.vfd_account_number).then((balResult) => {
+            if (balResult?.data) {
+              const balData = balResult.data as Record<string, unknown>;
+              const bal = (balData.data as Record<string, unknown>)?.availableBalance;
+              setLiveBalance(bal?.toString() || "0");
+            }
+          });
+        }
         void vfd.getBankList().then((bankResult) => {
           if (bankResult) {
             const bankList = Array.isArray(bankResult.banks) ? bankResult.banks : [];
