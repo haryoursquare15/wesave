@@ -139,7 +139,7 @@ export default function VfdSandbox() {
     const result = await vfd.createConsent({
       ...consentForm,
       bvn,
-      dateOfBirth: consentForm.dateOfBirth || dob,
+      dateOfBirth: formatDobForVfd(consentForm.dateOfBirth || dob),
     });
     if (result?.data) {
       toast({ title: "Client created", description: "BVN consent OTP will be sent" });
