@@ -349,15 +349,16 @@ async function handleBankList() {
   const { data, status } = await vfdRequest("/bank", "GET");
   console.log("[VFD bank_list] Raw response:", JSON.stringify(data));
 
-  // Normalize bank list: VFD may return different shapes
+  // Normalize bank list: VFD returns { data: { bank: [...] } }
   const vfdData = data as Record<string, unknown>;
   let banks: Array<{ code: string; name: string }> = [];
 
-  const rawList = vfdData?.data;
+  const innerData = vfdData?.data as Record<string, unknown> | undefined;
+  const rawList = innerData?.bank || innerData?.banks || (Array.isArray(innerData) ? innerData : null);
   if (Array.isArray(rawList)) {
     banks = rawList.map((b: Record<string, unknown>) => ({
-      code: (b.bankCode || b.code || b.bank_code || "").toString(),
-      name: (b.bankName || b.name || b.bank_name || "").toString(),
+      code: (b.code || b.bankCode || b.bank_code || "").toString(),
+      name: (b.name || b.bankName || b.bank_name || "").toString(),
     }));
   }
 
