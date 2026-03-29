@@ -108,7 +108,7 @@ async function vfdRequest(
   body?: Record<string, unknown>,
   queryParams?: Record<string, string>
 ): Promise<{ data: unknown; status: number }> {
-  const accessToken = getAccessToken();
+  const accessToken = await getAccessToken();
   const url = new URL(`${VFD_BASE_URL}${endpoint}`);
 
   if (queryParams) {
@@ -144,6 +144,24 @@ async function vfdRequest(
   }
 
   const data = await response.json();
+
+  // If token expired, clear cache and retry once
+  if (response.status === 403 && (data as Record<string, unknown>)?.message?.toString()?.toLowerCase()?.includes("expired")) {
+    console.log("[VFD] Token expired, regenerating...");
+    cachedToken = null;
+    const newToken = await getAccessToken();
+    (options.headers as Record<string, string>)["AccessToken"] = newToken;
+
+    const retryResponse = await fetch(url.toString(), options);
+    const retryContentType = retryResponse.headers.get("content-type") || "";
+    if (!retryContentType.includes("application/json")) {
+      const text = await retryResponse.text();
+      return { data: { error: `VFD retry non-JSON (${retryResponse.status}): ${text.slice(0, 200)}` }, status: retryResponse.status };
+    }
+    const retryData = await retryResponse.json();
+    return { data: retryData, status: retryResponse.status };
+  }
+
   return { data, status: response.status };
 }
 
