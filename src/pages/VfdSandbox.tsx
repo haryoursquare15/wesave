@@ -374,29 +374,15 @@ export default function VfdSandbox() {
                   </div>
 
                   <div>
-                    <Label>Date of Birth (DD-MM-YYYY)</Label>
+                    <Label>Date of Birth (DD-MMM-YYYY)</Label>
                     <Input
+                      type="date"
                       value={dob}
-                      onChange={(e) => {
-                        // Auto-format: allow digits and auto-insert dashes
-                        let v = e.target.value.replace(/[^\d-]/g, "");
-                        const digits = v.replace(/-/g, "");
-                        if (digits.length <= 8) {
-                          if (digits.length > 4) {
-                            v = `${digits.slice(0, 2)}-${digits.slice(2, 4)}-${digits.slice(4)}`;
-                          } else if (digits.length > 2) {
-                            v = `${digits.slice(0, 2)}-${digits.slice(2)}`;
-                          } else {
-                            v = digits;
-                          }
-                        }
-                        setDob(v.slice(0, 10));
-                      }}
-                      placeholder="DD-MM-YYYY"
-                      maxLength={10}
+                      onChange={(e) => setDob(e.target.value)}
+                      placeholder="Select date"
                     />
                     <p className="text-xs text-muted-foreground mt-1">
-                      Example: 15-06-1990
+                      {dob ? `Will be sent as: ${formatDobForVfd(dob)}` : "Select your date of birth"}
                     </p>
                   </div>
 
