@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { createHash } from "https://deno.land/std@0.224.0/crypto/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -22,13 +23,9 @@ const VFD_AUTH_URL =
 let cachedToken: string | null = null;
 
 async function getAccessToken(): Promise<string> {
-  // Return cached token if available
   if (cachedToken) return cachedToken;
 
-  // Try static token first (backward compat)
   const staticToken = Deno.env.get("VFD_ACCESS_TOKEN");
-
-  // Auto-generate using consumer credentials
   const consumerKey = Deno.env.get("VFD_CONSUMER_KEY");
   const consumerSecret = Deno.env.get("VFD_CONSUMER_SECRET");
 
@@ -38,11 +35,7 @@ async function getAccessToken(): Promise<string> {
       const res = await fetch(VFD_AUTH_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          consumerKey,
-          consumerSecret,
-          validityTime: "-1", // non-expiring token
-        }),
+        body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "-1" }),
       });
 
       const data = await res.json();
@@ -58,7 +51,6 @@ async function getAccessToken(): Promise<string> {
     }
   }
 
-  // Fallback to static token
   if (staticToken) {
     cachedToken = staticToken;
     return staticToken;
@@ -89,9 +81,7 @@ async function getUserFromRequest(req: Request) {
   }
 
   const supabase = createClient(Deno.env.get("SUPABASE_URL")!, publishableKey, {
-    global: {
-      headers: { Authorization: authHeader },
-    },
+    global: { headers: { Authorization: authHeader } },
   });
 
   const { data, error } = await supabase.auth.getClaims(token);
@@ -165,78 +155,64 @@ async function vfdRequest(
   return { data, status: response.status };
 }
 
+// Generate SHA512 signature for transfers
+async function generateTransferSignature(fromAccount: string, toAccount: string): Promise<string> {
+  const input = `${fromAccount}${toAccount}`;
+  const encoder = new TextEncoder();
+  const data = encoder.encode(input);
+  const hashBuffer = await crypto.subtle.digest("SHA-512", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+function jsonResponse(data: unknown, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
 // ─── ACTION HANDLERS ────────────────────────────────────────────
 
 // BVN Lookup
 async function handleBvnLookup(bvn: string) {
   if (!/^\d{11}$/.test(bvn)) {
-    return new Response(
-      JSON.stringify({ error: "BVN must be exactly 11 digits" }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return jsonResponse({ error: "BVN must be exactly 11 digits" }, 400);
   }
 
   const { data, status } = await vfdRequest("/client", "GET", undefined, { bvn });
-
-  return new Response(JSON.stringify({ data, vfd_status: status }), {
-    status: 200,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+  return jsonResponse({ data, vfd_status: status });
 }
 
 // Create Account - No Consent Flow
-async function handleCreateNoConsent(
-  userId: string,
-  bvn: string,
-  dateOfBirth: string
-) {
+async function handleCreateNoConsent(userId: string, bvn: string, dateOfBirth: string) {
   if (!/^\d{11}$/.test(bvn)) {
-    return new Response(
-      JSON.stringify({ error: "BVN must be exactly 11 digits" }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return jsonResponse({ error: "BVN must be exactly 11 digits" }, 400);
   }
-  // Accept DD-MM-YYYY or DD-MMM-YYYY (e.g. 08-Mar-1995) per VFD docs
   if (!/^\d{2}-(\d{2}|[A-Za-z]{3})-\d{4}$/.test(dateOfBirth)) {
-    return new Response(
-      JSON.stringify({ error: "Date of birth must be in DD-MM-YYYY or DD-MMM-YYYY format (e.g. 08-Mar-1995)" }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return jsonResponse({ error: "Date of birth must be in DD-MM-YYYY or DD-MMM-YYYY format (e.g. 08-Mar-1995)" }, 400);
   }
 
-  const { data, status } = await vfdRequest(
-    "/client/create",
-    "POST",
-    undefined,
-    { bvn, dateOfBirth }
-  );
+  const { data, status } = await vfdRequest("/client/create", "POST", undefined, { bvn, dateOfBirth });
 
   const supabaseAdmin = getSupabaseAdmin();
   const vfdData = data as Record<string, unknown>;
 
-  // Only store client info if VFD returned success
+  // Store client info on success or "Client Account Exists" (status 929 with accountNo)
   const isSuccess = status === 200 && (!vfdData?.status || vfdData.status === 200 || vfdData.status === "00");
+  const isExisting = vfdData?.status === "929" || vfdData?.status === "01";
 
-  if (isSuccess) {
+  if (isSuccess || isExisting) {
+    const innerData = (vfdData?.data || {}) as Record<string, unknown>;
     await supabaseAdmin.from("vfd_sandbox_clients").upsert({
       user_id: userId,
       bvn,
       date_of_birth: dateOfBirth,
-      vfd_client_id: vfdData?.data
-        ? (vfdData.data as Record<string, unknown>)?.clientId?.toString()
-        : null,
-      vfd_account_number: vfdData?.data
-        ? (vfdData.data as Record<string, unknown>)?.accountNo?.toString()
-        : null,
-      full_name: vfdData?.data
-        ? (vfdData.data as Record<string, unknown>)?.fullname?.toString()
-        : null,
-      phone: vfdData?.data
-        ? (vfdData.data as Record<string, unknown>)?.phone?.toString()
-        : null,
-      gender: vfdData?.data
-        ? (vfdData.data as Record<string, unknown>)?.gender?.toString()
-        : null,
+      vfd_client_id: innerData?.clientId?.toString() || null,
+      vfd_account_number: innerData?.accountNo?.toString() || null,
+      full_name: innerData?.fullname?.toString() || innerData?.firstname ? `${innerData?.firstname || ""} ${innerData?.lastname || ""}`.trim() : null,
+      phone: innerData?.phone?.toString() || null,
+      gender: innerData?.gender?.toString() || null,
       kyc_method: "no_consent",
       consent_status: "not_required",
       account_status: "active",
@@ -245,44 +221,32 @@ async function handleCreateNoConsent(
     }, { onConflict: "user_id" });
   }
 
-  return new Response(JSON.stringify({ data, vfd_status: status }), {
-    status: 200,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+  return jsonResponse({ data, vfd_status: status });
 }
 
 // Create Account - Consent Flow (iGree)
-async function handleCreateConsent(
-  userId: string,
-  body: Record<string, unknown>
-) {
-  // Step 1: Create individual client
-  const { data: clientData, status: clientStatus } = await vfdRequest(
-    "/client/individual",
-    "POST",
-    body
-  );
+async function handleCreateConsent(userId: string, body: Record<string, unknown>) {
+  const { data: clientData, status: clientStatus } = await vfdRequest("/client/individual", "POST", body);
 
   if (clientStatus !== 200) {
-    return new Response(
-      JSON.stringify({ data: clientData, vfd_status: clientStatus }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return jsonResponse({ data: clientData, vfd_status: clientStatus });
   }
 
   const vfdData = clientData as Record<string, unknown>;
   const supabaseAdmin = getSupabaseAdmin();
 
-  // Store client with pending consent
   await supabaseAdmin.from("vfd_sandbox_clients").upsert({
     user_id: userId,
     bvn: body.bvn as string,
-    date_of_birth: body.dateOfBirth as string,
+    date_of_birth: body.dob as string || body.dateOfBirth as string,
     full_name: `${body.firstname} ${body.lastname}`,
     phone: body.phone as string,
     gender: body.gender as string,
     vfd_client_id: vfdData?.data
       ? (vfdData.data as Record<string, unknown>)?.clientId?.toString()
+      : null,
+    vfd_account_number: vfdData?.data
+      ? (vfdData.data as Record<string, unknown>)?.accountNo?.toString()
       : null,
     kyc_method: "consent",
     consent_status: "pending",
@@ -291,209 +255,250 @@ async function handleCreateConsent(
     source: "vfd_sandbox",
   }, { onConflict: "user_id" });
 
-  return new Response(JSON.stringify({ data: clientData, vfd_status: clientStatus }), {
-    status: 200,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+  return jsonResponse({ data: clientData, vfd_status: clientStatus });
 }
 
-// Trigger BVN Consent OTP
-async function handleBvnConsent(clientId: string) {
-  const { data, status } = await vfdRequest("/bvn-consent", "POST", { clientId });
+// Trigger BVN Consent - GET with query params per VFD docs
+async function handleBvnConsent(bvn: string, reference?: string) {
+  const params: Record<string, string> = { bvn, type: "02" };
+  if (reference) params.reference = reference;
 
-  return new Response(JSON.stringify({ data, vfd_status: status }), {
-    status: 200,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+  const { data, status } = await vfdRequest("/bvn-consent", "GET", undefined, params);
+  return jsonResponse({ data, vfd_status: status });
 }
 
-// Release Client (after consent confirmed)
-async function handleClientRelease(userId: string, clientId: string) {
-  const { data, status } = await vfdRequest("/client/release", "POST", { clientId });
+// Release Client (after consent confirmed) - uses accountNo per VFD docs
+async function handleClientRelease(userId: string, accountNo: string) {
+  const { data, status } = await vfdRequest("/client/release", "POST", { accountNo });
 
   const supabaseAdmin = getSupabaseAdmin();
   const vfdData = data as Record<string, unknown>;
 
-  if (status === 200) {
+  if (status === 200 && vfdData?.status === "00") {
     await supabaseAdmin
       .from("vfd_sandbox_clients")
       .update({
         consent_status: "confirmed",
         account_status: "active",
-        vfd_account_number: vfdData?.data
-          ? (vfdData.data as Record<string, unknown>)?.accountNo?.toString()
-          : null,
         metadata: vfdData,
         updated_at: new Date().toISOString(),
       })
       .eq("user_id", userId);
   }
 
-  return new Response(JSON.stringify({ data, vfd_status: status }), {
-    status: 200,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+  return jsonResponse({ data, vfd_status: status });
 }
 
-// Tier Upgrade
-async function handleTierUpgrade(userId: string, bvn: string, clientId: string) {
-  const { data, status } = await vfdRequest("/client/update", "POST", {
-    clientId,
-    bvn,
-  });
+// Tier Upgrade - uses accountNo per VFD docs
+async function handleTierUpgrade(userId: string, body: Record<string, unknown>) {
+  const { data, status } = await vfdRequest("/client/update", "POST", body);
 
   if (status === 200) {
     const supabaseAdmin = getSupabaseAdmin();
+    const vfdData = data as Record<string, unknown>;
+    const innerData = (vfdData?.data || {}) as Record<string, unknown>;
     await supabaseAdmin
       .from("vfd_sandbox_clients")
-      .update({ tier: "tier2", bvn, updated_at: new Date().toISOString() })
+      .update({
+        tier: innerData?.currentTier?.toString() || "tier2",
+        bvn: body.bvn as string || undefined,
+        updated_at: new Date().toISOString(),
+      })
       .eq("user_id", userId);
   }
 
-  return new Response(JSON.stringify({ data, vfd_status: status }), {
-    status: 200,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+  return jsonResponse({ data, vfd_status: status });
 }
 
-// Balance Enquiry
+// Balance Enquiry - VFD uses accountNumber (not accountNo)
 async function handleBalanceEnquiry(accountNo: string) {
   const { data, status } = await vfdRequest("/account/enquiry", "GET", undefined, {
-    accountNo,
+    accountNumber: accountNo,
   });
-
-  return new Response(JSON.stringify({ data, vfd_status: status }), {
-    status: 200,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+  return jsonResponse({ data, vfd_status: status });
 }
 
-// Transaction History
-async function handleTransactionHistory(accountNo: string, startDate?: string, endDate?: string) {
-  const params: Record<string, string> = { accountNo };
-  if (startDate) params.startDate = startDate;
-  if (endDate) params.endDate = endDate;
+// Transaction History - VFD requires transactionType, startDate, endDate
+async function handleTransactionHistory(
+  accountNo: string,
+  transactionType: string = "wallet",
+  startDate?: string,
+  endDate?: string,
+  page: string = "0",
+  size: string = "20"
+) {
+  // Default to last 90 days if not provided
+  const now = new Date();
+  const defaultEnd = now.toISOString().slice(0, 10) + " 23:59:59";
+  const defaultStart = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10) + " 00:00:00";
+
+  const params: Record<string, string> = {
+    accountNo,
+    transactionType,
+    startDate: startDate || defaultStart,
+    endDate: endDate || defaultEnd,
+    page,
+    size,
+  };
 
   const { data, status } = await vfdRequest("/account/transactions", "GET", undefined, params);
-
-  return new Response(JSON.stringify({ data, vfd_status: status }), {
-    status: 200,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+  return jsonResponse({ data, vfd_status: status });
 }
 
 // Get Bank List
 async function handleBankList() {
   const { data, status } = await vfdRequest("/bank", "GET");
-
-  return new Response(JSON.stringify({ data, vfd_status: status }), {
-    status: 200,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+  return jsonResponse({ data, vfd_status: status });
 }
 
-// Validate Beneficiary
-async function handleValidateBeneficiary(accountNo: string, bankCode: string) {
-  const { data, status } = await vfdRequest("/transfer/recipient", "POST", {
+// Validate Beneficiary - VFD uses GET with query params
+async function handleValidateBeneficiary(accountNo: string, bankCode: string, transferType: string = "inter") {
+  const { data, status } = await vfdRequest("/transfer/recipient", "GET", undefined, {
     accountNo,
-    bankCode,
+    bank: bankCode,
+    transfer_type: transferType,
   });
-
-  return new Response(JSON.stringify({ data, vfd_status: status }), {
-    status: 200,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+  return jsonResponse({ data, vfd_status: status });
 }
 
-// Initiate Transfer
+// Initiate Transfer - Full VFD transfer payload
 async function handleTransfer(
   userId: string,
-  fromAccount: string,
-  toAccount: string,
-  bankCode: string,
-  amount: number,
-  narration: string,
-  beneficiaryName: string
+  body: Record<string, unknown>
 ) {
-  const reference = `vfd-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+  const fromAccount = body.fromAccount as string;
+  const toAccount = body.toAccount as string;
 
-  const { data, status } = await vfdRequest("/transfer", "POST", {
-    fromAccount,
-    toAccount,
-    transactionAmount: amount,
-    bankCode,
-    narration,
-    reference,
+  if (!fromAccount || !toAccount) {
+    return jsonResponse({ error: "fromAccount and toAccount are required" }, 400);
+  }
+
+  // Step 1: Get sender account details via enquiry
+  const { data: senderEnquiry, status: senderStatus } = await vfdRequest("/account/enquiry", "GET", undefined, {
+    accountNumber: fromAccount,
   });
 
+  if (senderStatus !== 200 || (senderEnquiry as Record<string, unknown>)?.status !== "00") {
+    return jsonResponse({ error: "Could not retrieve sender account details", data: senderEnquiry }, 400);
+  }
+
+  const senderData = (senderEnquiry as Record<string, unknown>)?.data as Record<string, unknown>;
+
+  // Step 2: Generate signature
+  const signature = await generateTransferSignature(fromAccount, toAccount);
+
+  // Step 3: Build VFD transfer payload
+  const walletPrefix = Deno.env.get("VFD_WALLET_NAME") || "WeSave";
+  const reference = body.reference as string || `${walletPrefix}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+  const transferType = body.transferType as string || body.bankCode === "999999" ? "intra" : "inter";
+
+  const transferPayload: Record<string, unknown> = {
+    fromAccount,
+    fromClientId: senderData?.clientId?.toString() || "",
+    fromClient: senderData?.client?.toString() || "",
+    fromSavingsId: senderData?.accountId?.toString() || "",
+    fromBvn: senderData?.bvn?.toString() || "",
+    toAccount,
+    toBank: body.bankCode as string || "",
+    toClient: body.beneficiaryName as string || body.toClient as string || "",
+    toClientId: body.toClientId as string || "",
+    toSavingsId: body.toSavingsId as string || "",
+    toSession: body.toSession as string || "",
+    toBvn: body.toBvn as string || "",
+    signature,
+    amount: String(body.amount),
+    remark: body.narration as string || body.remark as string || "Transfer",
+    transferType,
+    reference,
+  };
+
+  // Add uniqueSenderAccountId if provided (for pool implementation)
+  if (body.uniqueSenderAccountId) {
+    transferPayload.uniqueSenderAccountId = body.uniqueSenderAccountId;
+  }
+
+  console.log("[VFD Transfer] Payload:", JSON.stringify(transferPayload));
+
+  const { data, status } = await vfdRequest("/transfer", "POST", transferPayload);
+
   const supabaseAdmin = getSupabaseAdmin();
+  const vfdData = data as Record<string, unknown>;
+  const isSuccess = vfdData?.status === "00";
+
   await supabaseAdmin.from("vfd_sandbox_transactions").insert({
     user_id: userId,
     vfd_account_number: fromAccount,
-    amount,
+    amount: Number(body.amount),
     transaction_type: "transfer",
-    status: status === 200 ? "completed" : "failed",
+    status: isSuccess ? "completed" : "failed",
     reference,
-    vfd_reference: (data as Record<string, unknown>)?.reference?.toString(),
+    vfd_reference: vfdData?.data ? (vfdData.data as Record<string, unknown>)?.txnId?.toString() : null,
     beneficiary_account: toAccount,
-    beneficiary_bank_code: bankCode,
-    beneficiary_name: beneficiaryName,
-    description: narration,
+    beneficiary_bank_code: body.bankCode as string,
+    beneficiary_name: body.beneficiaryName as string || body.toClient as string,
+    description: body.narration as string || body.remark as string || "Transfer",
     metadata: data as Record<string, unknown>,
     source: "vfd_sandbox",
   });
 
-  return new Response(JSON.stringify({ data, vfd_status: status, reference }), {
-    status: 200,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+  return jsonResponse({ data, vfd_status: status, reference });
 }
 
-// Sandbox Credit (fund test account)
-async function handleSandboxCredit(
-  userId: string,
-  accountNo: string,
-  amount: number
-) {
-  const reference = `credit-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+// Sandbox Credit - per VFD docs requires senderAccountNo and senderBank
+async function handleSandboxCredit(userId: string, accountNo: string, amount: number) {
+  const reference = `WeSave-credit-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
 
   const { data, status } = await vfdRequest("/credit", "POST", {
+    amount: String(amount),
     accountNo,
-    transactionAmount: amount,
-    narration: "Sandbox test credit",
-    reference,
+    senderAccountNo: "5050104070",
+    senderBank: "000002",
+    senderNarration: `Sandbox test credit - ${reference}`,
   });
 
   const supabaseAdmin = getSupabaseAdmin();
+  const vfdData = data as Record<string, unknown>;
+  const isSuccess = vfdData?.status === "00";
+
   await supabaseAdmin.from("vfd_sandbox_transactions").insert({
     user_id: userId,
     vfd_account_number: accountNo,
     amount,
     transaction_type: "credit",
-    status: status === 200 ? "completed" : "failed",
+    status: isSuccess ? "completed" : "failed",
     reference,
     description: "Sandbox test credit",
     metadata: data as Record<string, unknown>,
     source: "vfd_sandbox",
   });
 
-  return new Response(JSON.stringify({ data, vfd_status: status, reference }), {
-    status: 200,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+  return jsonResponse({ data, vfd_status: status, reference });
 }
 
 // Virtual Account Creation
-async function handleCreateVirtualAccount(
-  userId: string,
-  body: Record<string, unknown>
-) {
+async function handleCreateVirtualAccount(userId: string, body: Record<string, unknown>) {
   const { data, status } = await vfdRequest("/virtualaccount", "POST", body);
+  return jsonResponse({ data, vfd_status: status });
+}
 
-  return new Response(JSON.stringify({ data, vfd_status: status }), {
-    status: 200,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+// Transaction Status Query
+async function handleTransactionStatusQuery(reference?: string, sessionId?: string) {
+  const params: Record<string, string> = {};
+  if (reference) params.reference = reference;
+  if (sessionId) params.sessionId = sessionId;
+
+  if (!reference && !sessionId) {
+    return jsonResponse({ error: "reference or sessionId is required" }, 400);
+  }
+
+  const { data, status } = await vfdRequest("/transactions", "GET", undefined, params);
+  return jsonResponse({ data, vfd_status: status });
+}
+
+// Sub-accounts listing
+async function handleSubAccounts(entity: string = "individual", page: string = "0", size: string = "20") {
+  const { data, status } = await vfdRequest("/sub-accounts", "GET", undefined, { entity, page, size });
+  return jsonResponse({ data, vfd_status: status });
 }
 
 // Webhook handler (no auth required)
@@ -508,11 +513,7 @@ async function handleWebhook(req: Request) {
   });
 
   console.log("[VFD Webhook]", JSON.stringify(payload));
-
-  return new Response(JSON.stringify({ status: "received" }), {
-    status: 200,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+  return jsonResponse({ status: "received" });
 }
 
 // Get user's VFD client data from DB
@@ -525,16 +526,9 @@ async function handleGetClient(userId: string) {
     .maybeSingle();
 
   if (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return jsonResponse({ error: error.message }, 500);
   }
-
-  return new Response(JSON.stringify({ data }), {
-    status: 200,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+  return jsonResponse({ data });
 }
 
 // Get user's VFD transactions from DB
@@ -548,16 +542,9 @@ async function handleGetTransactions(userId: string) {
     .limit(50);
 
   if (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return jsonResponse({ error: error.message }, 500);
   }
-
-  return new Response(JSON.stringify({ data }), {
-    status: 200,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+  return jsonResponse({ data });
 }
 
 // ─── MAIN HANDLER ───────────────────────────────────────────────
@@ -570,7 +557,6 @@ Deno.serve(async (req) => {
   try {
     const url = new URL(req.url);
     const pathSegments = url.pathname.split("/").filter(Boolean);
-    // Path: /vfd-banking/{action}
     const actionFromPath = pathSegments[pathSegments.length - 1];
 
     // Support webhook without auth
@@ -601,13 +587,13 @@ Deno.serve(async (req) => {
         return await handleCreateConsent(userId, body);
 
       case "bvn_consent":
-        return await handleBvnConsent(body.clientId as string);
+        return await handleBvnConsent(body.bvn as string, body.reference as string | undefined);
 
       case "client_release":
-        return await handleClientRelease(userId, body.clientId as string);
+        return await handleClientRelease(userId, body.accountNo as string);
 
       case "tier_upgrade":
-        return await handleTierUpgrade(userId, body.bvn as string, body.clientId as string);
+        return await handleTierUpgrade(userId, body);
 
       case "balance_enquiry":
         return await handleBalanceEnquiry(body.accountNo as string);
@@ -615,8 +601,11 @@ Deno.serve(async (req) => {
       case "transaction_history":
         return await handleTransactionHistory(
           body.accountNo as string,
+          body.transactionType as string || "wallet",
           body.startDate as string | undefined,
-          body.endDate as string | undefined
+          body.endDate as string | undefined,
+          body.page as string || "0",
+          body.size as string || "20"
         );
 
       case "bank_list":
@@ -625,25 +614,24 @@ Deno.serve(async (req) => {
       case "validate_beneficiary":
         return await handleValidateBeneficiary(
           body.accountNo as string,
-          body.bankCode as string
+          body.bankCode as string,
+          body.transferType as string || "inter"
         );
 
       case "transfer":
-        return await handleTransfer(
-          userId,
-          body.fromAccount as string,
-          body.toAccount as string,
-          body.bankCode as string,
-          body.amount as number,
-          body.narration as string,
-          body.beneficiaryName as string
-        );
+        return await handleTransfer(userId, body);
 
       case "sandbox_credit":
         return await handleSandboxCredit(userId, body.accountNo as string, body.amount as number);
 
       case "create_virtual_account":
         return await handleCreateVirtualAccount(userId, body);
+
+      case "transaction_status":
+        return await handleTransactionStatusQuery(body.reference as string, body.sessionId as string);
+
+      case "sub_accounts":
+        return await handleSubAccounts(body.entity as string, body.page as string, body.size as string);
 
       case "get_client":
         return await handleGetClient(userId);
@@ -652,17 +640,11 @@ Deno.serve(async (req) => {
         return await handleGetTransactions(userId);
 
       default:
-        return new Response(
-          JSON.stringify({ error: `Unknown action: ${action}` }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return jsonResponse({ error: `Unknown action: ${action}` }, 400);
     }
   } catch (err) {
     console.error("[VFD Banking Error]", err);
     const message = err instanceof Error ? err.message : "Internal server error";
-    return new Response(JSON.stringify({ error: message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return jsonResponse({ error: message }, 500);
   }
 });
