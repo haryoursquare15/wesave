@@ -347,7 +347,21 @@ async function handleTransactionHistory(
 // Get Bank List
 async function handleBankList() {
   const { data, status } = await vfdRequest("/bank", "GET");
-  return jsonResponse({ data, vfd_status: status });
+  console.log("[VFD bank_list] Raw response:", JSON.stringify(data));
+
+  // Normalize bank list: VFD may return different shapes
+  const vfdData = data as Record<string, unknown>;
+  let banks: Array<{ code: string; name: string }> = [];
+
+  const rawList = vfdData?.data;
+  if (Array.isArray(rawList)) {
+    banks = rawList.map((b: Record<string, unknown>) => ({
+      code: (b.bankCode || b.code || b.bank_code || "").toString(),
+      name: (b.bankName || b.name || b.bank_name || "").toString(),
+    }));
+  }
+
+  return jsonResponse({ data, banks, vfd_status: status });
 }
 
 // Validate Beneficiary - VFD uses GET with query params
