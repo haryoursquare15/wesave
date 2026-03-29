@@ -117,7 +117,8 @@ export default function VfdSandbox() {
       toast({ title: "Date of birth required", variant: "destructive" });
       return;
     }
-    const result = await vfd.createNoConsent(bvn, dob);
+    const vfdDob = formatDobForVfd(dob);
+    const result = await vfd.createNoConsent(bvn, vfdDob);
     if (result) {
       // Check if VFD returned an error status
       const vfdStatus = result.vfd_status;
