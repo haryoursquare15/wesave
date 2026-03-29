@@ -335,6 +335,9 @@ export default function VfdSandbox() {
                     <p className="text-xs text-muted-foreground mt-1">
                       {bvn.length}/11 digits
                     </p>
+                    <p className="text-xs text-amber-600 mt-1">
+                      ⚠️ Sandbox test BVN: 22155258549 (DOB: 05-Apr-1994). Real BVNs may not work in sandbox mode.
+                    </p>
                   </div>
                   <Button
                     onClick={handleBvnLookup}
