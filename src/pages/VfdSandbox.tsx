@@ -95,6 +95,17 @@ export default function VfdSandbox() {
         return;
       }
       setBvnData(vfdData);
+      // Auto-fill DOB from BVN lookup if available (convert VFD format DD-MMM-YYYY to YYYY-MM-DD for date input)
+      const bvnDob = (vfdData?.data as Record<string, unknown>)?.dateOfBirth?.toString();
+      if (bvnDob && !dob) {
+        const parts = bvnDob.match(/^(\d{2})-([A-Za-z]{3})-(\d{4})$/);
+        if (parts) {
+          const monthIdx = MONTHS.findIndex(m => m.toLowerCase() === parts[2].toLowerCase());
+          if (monthIdx >= 0) {
+            setDob(`${parts[3]}-${String(monthIdx + 1).padStart(2, "0")}-${parts[1]}`);
+          }
+        }
+      }
       setKycStep("confirm");
       toast({ title: "BVN found", description: "Please confirm your details" });
     }
