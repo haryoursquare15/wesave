@@ -13,10 +13,58 @@ const VFD_BASE_URL =
     ? "https://api-devapps.vfdbank.systems/vtech-wallet/api/v2/wallet2"
     : "https://api-apps.vfdbank.systems/vtech-wallet/api/v2/wallet2";
 
-function getAccessToken(): string {
-  const token = Deno.env.get("VFD_ACCESS_TOKEN");
-  if (!token) throw new Error("VFD_ACCESS_TOKEN not configured");
-  return token;
+const VFD_AUTH_URL =
+  VFD_MODE === "sandbox"
+    ? "https://api-devapps.vfdbank.systems/vfd-tech/baas-portal/v1.1/baasauth/token"
+    : "https://api-apps.vfdbank.systems/vfd-tech/baas-portal/v1.1/baasauth/token";
+
+// In-memory token cache (per isolate)
+let cachedToken: string | null = null;
+
+async function getAccessToken(): Promise<string> {
+  // Return cached token if available
+  if (cachedToken) return cachedToken;
+
+  // Try static token first (backward compat)
+  const staticToken = Deno.env.get("VFD_ACCESS_TOKEN");
+
+  // Auto-generate using consumer credentials
+  const consumerKey = Deno.env.get("VFD_CONSUMER_KEY");
+  const consumerSecret = Deno.env.get("VFD_CONSUMER_SECRET");
+
+  if (consumerKey && consumerSecret) {
+    console.log("[VFD] Generating access token via auth API...");
+    try {
+      const res = await fetch(VFD_AUTH_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          consumerKey,
+          consumerSecret,
+          validityTime: "-1", // non-expiring token
+        }),
+      });
+
+      const data = await res.json();
+      if (data?.status === "00" && data?.data?.access_token) {
+        cachedToken = data.data.access_token;
+        console.log("[VFD] Access token generated successfully");
+        return cachedToken;
+      }
+
+      console.error("[VFD] Token generation failed:", JSON.stringify(data));
+    } catch (err) {
+      console.error("[VFD] Token generation error:", err);
+    }
+  }
+
+  // Fallback to static token
+  if (staticToken) {
+    cachedToken = staticToken;
+    return staticToken;
+  }
+
+  throw new Error("VFD credentials not configured. Set VFD_CONSUMER_KEY + VFD_CONSUMER_SECRET or VFD_ACCESS_TOKEN.");
 }
 
 function getSupabaseAdmin() {
@@ -60,7 +108,7 @@ async function vfdRequest(
   body?: Record<string, unknown>,
   queryParams?: Record<string, string>
 ): Promise<{ data: unknown; status: number }> {
-  const accessToken = getAccessToken();
+  const accessToken = await getAccessToken();
   const url = new URL(`${VFD_BASE_URL}${endpoint}`);
 
   if (queryParams) {
@@ -96,6 +144,24 @@ async function vfdRequest(
   }
 
   const data = await response.json();
+
+  // If token expired, clear cache and retry once
+  if (response.status === 403 && (data as Record<string, unknown>)?.message?.toString()?.toLowerCase()?.includes("expired")) {
+    console.log("[VFD] Token expired, regenerating...");
+    cachedToken = null;
+    const newToken = await getAccessToken();
+    (options.headers as Record<string, string>)["AccessToken"] = newToken;
+
+    const retryResponse = await fetch(url.toString(), options);
+    const retryContentType = retryResponse.headers.get("content-type") || "";
+    if (!retryContentType.includes("application/json")) {
+      const text = await retryResponse.text();
+      return { data: { error: `VFD retry non-JSON (${retryResponse.status}): ${text.slice(0, 200)}` }, status: retryResponse.status };
+    }
+    const retryData = await retryResponse.json();
+    return { data: retryData, status: retryResponse.status };
+  }
+
   return { data, status: response.status };
 }
 
