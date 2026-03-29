@@ -617,11 +617,13 @@ export default function VfdSandbox() {
                             <Button
                               size="sm"
                               className="mt-2"
-                              onClick={() =>
-                                vfd.client?.vfd_client_id &&
-                                vfd.client?.bvn &&
-                                vfd.upgradeTier(vfd.client.bvn, vfd.client.vfd_client_id)
-                              }
+                              onClick={async () => {
+                                const result = await vfd.upgradeTier();
+                                if (result) {
+                                  await vfd.fetchClient();
+                                  toast({ title: "Tier upgrade requested" });
+                                }
+                              }}
                               disabled={vfd.loading}
                             >
                               Upgrade Now
