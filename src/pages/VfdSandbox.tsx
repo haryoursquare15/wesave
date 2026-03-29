@@ -70,6 +70,13 @@ export default function VfdSandbox() {
     void vfd.fetchClient().then((result) => {
       if (result?.data?.account_status === "active") {
         setKycStep("done");
+        // Auto-load bank list when account is active
+        void vfd.getBankList().then((bankResult) => {
+          if (bankResult) {
+            const bankList = Array.isArray(bankResult.banks) ? bankResult.banks : [];
+            if (bankList.length > 0) setBanks(bankList);
+          }
+        });
       } else if (result?.data?.account_status === "failed" || result?.data?.account_status === "pending_consent") {
         setKycStep("bvn");
       }
@@ -204,11 +211,22 @@ export default function VfdSandbox() {
   // Load banks
   const handleLoadBanks = async () => {
     const result = await vfd.getBankList();
-    if (result?.data) {
-      const bankData = result.data as Record<string, unknown>;
-      const raw = bankData?.data;
-      const bankList = Array.isArray(raw) ? raw : [];
-      setBanks(bankList);
+    if (result) {
+      // Use normalized banks array from edge function
+      const bankList = Array.isArray(result.banks) ? result.banks : [];
+      if (bankList.length === 0) {
+        // Fallback: try parsing from raw data
+        const bankData = result.data as Record<string, unknown>;
+        const raw = bankData?.data;
+        if (Array.isArray(raw)) {
+          setBanks(raw.map((b: Record<string, unknown>) => ({
+            code: (b.bankCode || b.code || b.bank_code || "").toString(),
+            name: (b.bankName || b.name || b.bank_name || "").toString(),
+          })));
+        }
+      } else {
+        setBanks(bankList);
+      }
     }
   };
 
@@ -216,12 +234,16 @@ export default function VfdSandbox() {
   const handleValidateBeneficiary = async () => {
     if (!transferForm.toAccount || !transferForm.bankCode) return;
     const result = await vfd.validateBeneficiary(transferForm.toAccount, transferForm.bankCode);
-    if (result?.data) {
-      const benData = result.data as Record<string, unknown>;
-      const name = (benData.data as Record<string, unknown>)?.accountName;
+    if (result) {
+      // Use normalized accountName from edge function
+      const name = result.accountName || 
+        ((result.data as Record<string, unknown>)?.data as Record<string, unknown>)?.accountName ||
+        ((result.data as Record<string, unknown>)?.data as Record<string, unknown>)?.account_name;
       if (name) {
         setTransferForm((prev) => ({ ...prev, beneficiaryName: name.toString() }));
         toast({ title: "Beneficiary verified", description: name.toString() });
+      } else {
+        toast({ title: "Verification failed", description: "Could not verify account", variant: "destructive" });
       }
     }
   };
