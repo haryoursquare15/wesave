@@ -16,6 +16,15 @@ import {
   AlertTriangle, User, Building2, History,
 } from "lucide-react";
 
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+/** Convert YYYY-MM-DD (HTML date input) to DD-MMM-YYYY (VFD format) */
+function formatDobForVfd(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-");
+  if (!y || !m || !d) return dateStr;
+  return `${d}-${MONTHS[parseInt(m, 10) - 1]}-${y}`;
+}
+
 export default function VfdSandbox() {
   const navigate = useNavigate();
   const { user, session, loading: authLoading } = useAuth();
