@@ -371,7 +371,14 @@ async function handleValidateBeneficiary(accountNo: string, bankCode: string, tr
     bank: bankCode,
     transfer_type: transferType,
   });
-  return jsonResponse({ data, vfd_status: status });
+  console.log("[VFD validate_beneficiary] Raw response:", JSON.stringify(data));
+
+  // Normalize: extract account name from various possible response shapes
+  const vfdData = data as Record<string, unknown>;
+  const innerData = vfdData?.data as Record<string, unknown> | undefined;
+  const accountName = innerData?.accountName || innerData?.account_name || innerData?.beneficiaryName || innerData?.name || null;
+
+  return jsonResponse({ data, accountName, vfd_status: status });
 }
 
 // Initiate Transfer - Full VFD transfer payload
