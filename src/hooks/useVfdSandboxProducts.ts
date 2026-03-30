@@ -75,6 +75,14 @@ export function useVfdSandboxProducts() {
   const joinSplit = useCallback((split_id: string) => invoke("join_split", { split_id }), [invoke]);
   const paySplit = useCallback((split_id: string) => invoke("pay_split", { split_id }), [invoke]);
 
+  // Associations
+  const createAssociation = useCallback((body: Record<string, unknown>) => invoke("create_association", body), [invoke]);
+  const listAssociations = useCallback(() => invoke("list_associations"), [invoke]);
+  const joinAssociation = useCallback((association_id: string) => invoke("join_association", { association_id }), [invoke]);
+  const getAssociationDetail = useCallback((association_id: string) => invoke("get_association_detail", { association_id }), [invoke]);
+  const contributeAssociation = useCallback((association_id: string, amount: number, narration?: string) =>
+    invoke("contribute_association", { association_id, amount, narration }), [invoke]);
+
   return {
     loading,
     // Thrift Groups
@@ -86,5 +94,7 @@ export function useVfdSandboxProducts() {
     createCampaign, listCampaigns, contributeCampaign,
     // SplitPay
     createSplit, listSplits, joinSplit, paySplit,
+    // Associations
+    createAssociation, listAssociations, joinAssociation, getAssociationDetail, contributeAssociation,
   };
 }

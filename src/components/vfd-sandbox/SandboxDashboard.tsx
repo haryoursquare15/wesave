@@ -58,6 +58,7 @@ const products = [
   { key: "target", label: "Target Ajo", icon: Target, desc: "Goal-based savings", color: "bg-success/10 text-success" },
   { key: "goal", label: "Goal Funding", icon: Heart, desc: "Crowdfunding", color: "bg-coral/10 text-coral" },
   { key: "split", label: "SplitPay", icon: Receipt, desc: "Split bills", color: "bg-warning/10 text-warning" },
+  { key: "association", label: "Association", icon: Shield, desc: "Cooperative groups", color: "bg-gold/10 text-gold" },
 ];
 
 export function SandboxDashboard({ balance, onNavigate }: SandboxDashboardProps) {

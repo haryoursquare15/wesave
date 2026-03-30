@@ -3194,6 +3194,141 @@ export type Database = {
         }
         Relationships: []
       }
+      vfd_sandbox_association_contributions: {
+        Row: {
+          amount: number
+          association_id: string
+          created_at: string
+          id: string
+          narration: string | null
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          association_id: string
+          created_at?: string
+          id?: string
+          narration?: string | null
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          association_id?: string
+          created_at?: string
+          id?: string
+          narration?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vfd_sandbox_association_contributions_association_id_fkey"
+            columns: ["association_id"]
+            isOneToOne: false
+            referencedRelation: "vfd_sandbox_associations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vfd_sandbox_association_memberships: {
+        Row: {
+          association_id: string
+          id: string
+          joined_at: string
+          role: string
+          user_id: string
+        }
+        Insert: {
+          association_id: string
+          id?: string
+          joined_at?: string
+          role?: string
+          user_id: string
+        }
+        Update: {
+          association_id?: string
+          id?: string
+          joined_at?: string
+          role?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vfd_sandbox_association_memberships_association_id_fkey"
+            columns: ["association_id"]
+            isOneToOne: false
+            referencedRelation: "vfd_sandbox_associations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vfd_sandbox_association_wallets: {
+        Row: {
+          association_id: string
+          available_balance: number
+          created_at: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          association_id: string
+          available_balance?: number
+          created_at?: string
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          association_id?: string
+          available_balance?: number
+          created_at?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vfd_sandbox_association_wallets_association_id_fkey"
+            columns: ["association_id"]
+            isOneToOne: true
+            referencedRelation: "vfd_sandbox_associations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vfd_sandbox_associations: {
+        Row: {
+          admin_id: string
+          created_at: string
+          description: string | null
+          id: string
+          max_members: number
+          member_count: number
+          name: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          admin_id: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          max_members?: number
+          member_count?: number
+          name: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          admin_id?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          max_members?: number
+          member_count?: number
+          name?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       vfd_sandbox_campaign_contributions: {
         Row: {
           amount: number
