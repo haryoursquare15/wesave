@@ -605,7 +605,7 @@ export default function VfdSandbox() {
         {/* Wallet & Actions - Show after KYC done */}
         {kycStep === "done" && vfd.client && (
           <Tabs defaultValue="wallet" className="space-y-4">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="wallet">
                 <Wallet className="h-4 w-4 mr-1" />
                 Wallet
@@ -613,6 +613,10 @@ export default function VfdSandbox() {
               <TabsTrigger value="fund">
                 <CreditCard className="h-4 w-4 mr-1" />
                 Fund
+              </TabsTrigger>
+              <TabsTrigger value="lock" onClick={() => { if (lockConfigs.length === 0) loadLockData(); }}>
+                <Lock className="h-4 w-4 mr-1" />
+                Lock
               </TabsTrigger>
               <TabsTrigger value="transfer">
                 <Send className="h-4 w-4 mr-1" />
