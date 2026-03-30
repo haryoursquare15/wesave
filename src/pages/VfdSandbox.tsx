@@ -793,6 +793,185 @@ export default function VfdSandbox() {
               </Card>
             </TabsContent>
 
+            {/* Lock Funds Tab */}
+            <TabsContent value="lock">
+              <div className="space-y-4">
+                {/* Create Lock */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Lock className="h-5 w-5 text-primary" />
+                      Lock Funds
+                    </CardTitle>
+                    <CardDescription>
+                      Lock funds for a fixed period and earn interest
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {userBalance && (
+                      <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
+                        <p className="text-xs text-muted-foreground">Available to Lock</p>
+                        <p className="text-xl font-bold text-foreground">₦{Number(userBalance.available_balance).toLocaleString()}</p>
+                      </div>
+                    )}
+
+                    <div>
+                      <Label>Amount (₦)</Label>
+                      <Input
+                        type="number"
+                        value={lockAmount}
+                        onChange={(e) => setLockAmount(e.target.value)}
+                        placeholder="Enter amount to lock"
+                        min={100}
+                      />
+                      <div className="flex gap-2 mt-2">
+                        {[5000, 10000, 25000, 50000].map((amt) => (
+                          <Button key={amt} variant="outline" size="sm" onClick={() => setLockAmount(amt.toString())}>
+                            ₦{amt.toLocaleString()}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <Label>Duration</Label>
+                      <Select value={lockDuration} onValueChange={setLockDuration}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select lock duration" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {lockConfigs.map((cfg) => (
+                            <SelectItem key={cfg.duration_months} value={cfg.duration_months.toString()}>
+                              {cfg.duration_months} months — {cfg.interest_rate}% p.a.
+                              {cfg.early_withdrawal_penalty < 100 && ` (${cfg.early_withdrawal_penalty}% penalty)`}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Preview */}
+                    {lockPreview && (
+                      <div className="rounded-lg border bg-muted/30 p-4 space-y-2">
+                        <h4 className="text-sm font-medium flex items-center gap-2">
+                          <TrendingUp className="h-4 w-4 text-primary" />
+                          Lock Preview
+                        </h4>
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          <span className="text-muted-foreground">Principal:</span>
+                          <span className="font-medium">₦{parseFloat(lockAmount).toLocaleString()}</span>
+                          <span className="text-muted-foreground">Interest Rate:</span>
+                          <span className="font-medium">{selectedConfig?.interest_rate}% p.a.</span>
+                          <span className="text-muted-foreground">Expected Interest:</span>
+                          <span className="font-medium text-green-600">+₦{lockPreview.interest.toLocaleString()}</span>
+                          <span className="text-muted-foreground">Total at Maturity:</span>
+                          <span className="font-bold">₦{lockPreview.total.toLocaleString()}</span>
+                          <span className="text-muted-foreground">Maturity Date:</span>
+                          <span className="font-medium">{lockPreview.maturityDate.toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    <Button
+                      onClick={handleCreateLock}
+                      disabled={vfd.loading || !lockAmount || !lockDuration}
+                      className="w-full"
+                    >
+                      {vfd.loading ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : <Lock className="h-4 w-4 mr-2" />}
+                      Lock Funds
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                {/* Active Locks */}
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between">
+                    <div>
+                      <CardTitle className="text-base">My Locked Funds</CardTitle>
+                      <CardDescription>{lockedFunds.length} lock(s)</CardDescription>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={loadLockData}>
+                      <RefreshCw className="h-4 w-4" />
+                    </Button>
+                  </CardHeader>
+                  <CardContent>
+                    {lockedFunds.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-6">
+                        No locked funds yet. Create your first lock above.
+                      </p>
+                    ) : (
+                      <div className="space-y-3">
+                        {lockedFunds.map((lock) => {
+                          const isMatured = new Date() >= new Date(lock.maturity_date);
+                          const elapsed = Date.now() - new Date(lock.start_date).getTime();
+                          const total = new Date(lock.maturity_date).getTime() - new Date(lock.start_date).getTime();
+                          const progress = Math.min(100, Math.max(0, (elapsed / total) * 100));
+
+                          return (
+                            <div key={lock.id} className="border rounded-lg p-4 space-y-3">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <p className="font-semibold">₦{Number(lock.principal_amount).toLocaleString()}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {lock.duration_months}mo @ {lock.interest_rate}%
+                                  </p>
+                                </div>
+                                <Badge
+                                  variant="outline"
+                                  className={
+                                    lock.status === "active" ? (isMatured ? "border-green-500 text-green-600" : "border-amber-500 text-amber-600")
+                                    : lock.status === "matured" ? "border-green-500 text-green-600"
+                                    : "border-red-500 text-red-600"
+                                  }
+                                >
+                                  {lock.status === "active" && isMatured ? "Ready" : lock.status}
+                                </Badge>
+                              </div>
+
+                              {lock.status === "active" && (
+                                <div>
+                                  <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                                    <span>{new Date(lock.start_date).toLocaleDateString()}</span>
+                                    <span>{new Date(lock.maturity_date).toLocaleDateString()}</span>
+                                  </div>
+                                  <Progress value={progress} className="h-2" />
+                                </div>
+                              )}
+
+                              <div className="grid grid-cols-2 gap-1 text-xs">
+                                <span className="text-muted-foreground">Interest:</span>
+                                <span className="text-green-600">+₦{Number(lock.expected_interest).toLocaleString()}</span>
+                                <span className="text-muted-foreground">Total Payout:</span>
+                                <span className="font-medium">₦{Number(lock.total_payout).toLocaleString()}</span>
+                              </div>
+
+                              {lock.status === "active" && (
+                                <div className="flex gap-2">
+                                  {isMatured ? (
+                                    <Button size="sm" className="flex-1" onClick={() => handleUnlock(lock.id)}>
+                                      <Unlock className="h-3 w-3 mr-1" /> Unlock + Earn
+                                    </Button>
+                                  ) : (
+                                    <Button size="sm" variant="destructive" className="flex-1" onClick={() => handleBreakLock(lock.id)}>
+                                      Break Lock (Penalty)
+                                    </Button>
+                                  )}
+                                </div>
+                              )}
+
+                              {lock.status === "broken" && lock.penalty_amount > 0 && (
+                                <p className="text-xs text-destructive">Penalty: ₦{Number(lock.penalty_amount).toLocaleString()}</p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+
             {/* Transfer Tab */}
             <TabsContent value="transfer">
               <Card>
