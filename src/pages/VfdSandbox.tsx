@@ -660,10 +660,37 @@ export default function VfdSandbox() {
                     </div>
                   </div>
 
-                  <Button onClick={handleCheckBalance} disabled={vfd.loading} className="w-full">
-                    {vfd.loading ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : null}
-                    Refresh Balance
-                  </Button>
+                  {/* Balance Breakdown */}
+                  {userBalance && (
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="rounded-lg border p-3 text-center">
+                        <p className="text-xs text-muted-foreground">Available</p>
+                        <p className="text-lg font-bold text-foreground">₦{Number(userBalance.available_balance).toLocaleString()}</p>
+                      </div>
+                      <div className="rounded-lg border p-3 text-center">
+                        <p className="text-xs text-muted-foreground">Locked</p>
+                        <p className="text-lg font-bold text-amber-600">₦{Number(userBalance.locked_balance).toLocaleString()}</p>
+                      </div>
+                      <div className="rounded-lg border p-3 text-center">
+                        <p className="text-xs text-muted-foreground">Savings</p>
+                        <p className="text-lg font-bold text-foreground">₦{Number(userBalance.savings_balance).toLocaleString()}</p>
+                      </div>
+                      <div className="rounded-lg border p-3 text-center">
+                        <p className="text-xs text-muted-foreground">Total (VFD)</p>
+                        <p className="text-lg font-bold text-foreground">₦{Number(userBalance.total_balance).toLocaleString()}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex gap-2">
+                    <Button onClick={handleCheckBalance} disabled={vfd.loading} className="flex-1">
+                      {vfd.loading ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : null}
+                      Refresh Balance
+                    </Button>
+                    <Button variant="outline" onClick={loadLockData} disabled={vfd.loading}>
+                      Sync Ledger
+                    </Button>
+                  </div>
 
                   {/* Client details */}
                   <div className="text-sm space-y-2 border rounded-lg p-4">
