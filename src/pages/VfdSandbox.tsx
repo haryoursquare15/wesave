@@ -13,8 +13,9 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, Shield, Wallet, Send, CreditCard, RefreshCw, CheckCircle2,
-  AlertTriangle, User, Building2, History,
+  AlertTriangle, User, Building2, History, Lock, Unlock, TrendingUp,
 } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
