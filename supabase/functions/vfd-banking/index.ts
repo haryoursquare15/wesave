@@ -593,6 +593,371 @@ async function handleGetTransactions(userId: string) {
   return jsonResponse({ data });
 }
 
+// ─── LOCK FUNDS HANDLERS ─────────────────────────────────────────
+
+// Get lock configs
+async function handleGetLockConfigs() {
+  const supabaseAdmin = getSupabaseAdmin();
+  const { data, error } = await supabaseAdmin
+    .from("vfd_lock_configs")
+    .select("*")
+    .eq("is_active", true)
+    .order("duration_months", { ascending: true });
+
+  if (error) return jsonResponse({ error: error.message }, 500);
+  return jsonResponse({ data });
+}
+
+// Get user balance (internal ledger)
+async function handleGetUserBalance(userId: string) {
+  const supabaseAdmin = getSupabaseAdmin();
+  const { data, error } = await supabaseAdmin
+    .from("vfd_user_balances")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) return jsonResponse({ error: error.message }, 500);
+  return jsonResponse({ data });
+}
+
+// Sync VFD balance to internal ledger
+async function handleSyncBalance(userId: string) {
+  const supabaseAdmin = getSupabaseAdmin();
+
+  // Get VFD account
+  const { data: client } = await supabaseAdmin
+    .from("vfd_sandbox_clients")
+    .select("vfd_account_number")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (!client?.vfd_account_number) {
+    return jsonResponse({ error: "No VFD account found" }, 400);
+  }
+
+  // Get VFD balance
+  const { data: balData } = await vfdRequest("/account/enquiry", "GET", undefined, {
+    accountNumber: client.vfd_account_number,
+  });
+
+  const vfdBalance = Number(
+    ((balData as Record<string, unknown>)?.data as Record<string, unknown>)?.availableBalance || 0
+  );
+
+  // Upsert internal balance
+  const { data: existing } = await supabaseAdmin
+    .from("vfd_user_balances")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (existing) {
+    await supabaseAdmin
+      .from("vfd_user_balances")
+      .update({
+        total_balance: vfdBalance,
+        last_synced_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("user_id", userId);
+  } else {
+    await supabaseAdmin.from("vfd_user_balances").insert({
+      user_id: userId,
+      total_balance: vfdBalance,
+      locked_balance: 0,
+      savings_balance: 0,
+      last_synced_at: new Date().toISOString(),
+    });
+  }
+
+  // Re-fetch
+  const { data: updated } = await supabaseAdmin
+    .from("vfd_user_balances")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  return jsonResponse({ data: updated, vfd_balance: vfdBalance });
+}
+
+// Create a lock
+async function handleCreateLock(userId: string, body: Record<string, unknown>) {
+  const amount = Number(body.amount);
+  const durationMonths = Number(body.duration_months);
+
+  if (!amount || amount <= 0) return jsonResponse({ error: "Invalid amount" }, 400);
+  if (!durationMonths) return jsonResponse({ error: "Invalid duration" }, 400);
+
+  const supabaseAdmin = getSupabaseAdmin();
+
+  // Get config
+  const { data: config } = await supabaseAdmin
+    .from("vfd_lock_configs")
+    .select("*")
+    .eq("duration_months", durationMonths)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (!config) return jsonResponse({ error: "Invalid lock duration" }, 400);
+
+  // Get user balance
+  const { data: balance } = await supabaseAdmin
+    .from("vfd_user_balances")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (!balance) return jsonResponse({ error: "No balance record. Please sync your balance first." }, 400);
+
+  const availableBalance = Number(balance.total_balance) - Number(balance.locked_balance) - Number(balance.savings_balance);
+  if (amount > availableBalance) {
+    return jsonResponse({ error: `Insufficient available balance. Available: ${availableBalance}` }, 400);
+  }
+
+  // Calculate interest (simple interest)
+  const interestRate = Number(config.interest_rate);
+  const expectedInterest = amount * (interestRate / 100) * (durationMonths / 12);
+  const totalPayout = amount + expectedInterest;
+
+  const maturityDate = new Date();
+  maturityDate.setMonth(maturityDate.getMonth() + durationMonths);
+
+  // Create lock record
+  const { data: lock, error: lockErr } = await supabaseAdmin
+    .from("vfd_locked_funds")
+    .insert({
+      user_id: userId,
+      principal_amount: amount,
+      interest_rate: interestRate,
+      duration_months: durationMonths,
+      expected_interest: Math.round(expectedInterest * 100) / 100,
+      total_payout: Math.round(totalPayout * 100) / 100,
+      maturity_date: maturityDate.toISOString(),
+      status: "active",
+      source: "vfd_sandbox",
+    })
+    .select()
+    .single();
+
+  if (lockErr) return jsonResponse({ error: lockErr.message }, 500);
+
+  // Update balances
+  const newLocked = Number(balance.locked_balance) + amount;
+  await supabaseAdmin
+    .from("vfd_user_balances")
+    .update({
+      locked_balance: newLocked,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("user_id", userId);
+
+  // Ledger entry
+  await supabaseAdmin.from("vfd_lock_ledger").insert({
+    user_id: userId,
+    lock_id: lock.id,
+    entry_type: "lock_created",
+    amount,
+    balance_before: availableBalance,
+    balance_after: availableBalance - amount,
+    locked_before: Number(balance.locked_balance),
+    locked_after: newLocked,
+    description: `Locked ₦${amount.toLocaleString()} for ${durationMonths} months at ${interestRate}%`,
+  });
+
+  return jsonResponse({ data: lock });
+}
+
+// Get user's locked funds
+async function handleGetLockedFunds(userId: string) {
+  const supabaseAdmin = getSupabaseAdmin();
+  const { data, error } = await supabaseAdmin
+    .from("vfd_locked_funds")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+
+  if (error) return jsonResponse({ error: error.message }, 500);
+  return jsonResponse({ data });
+}
+
+// Unlock matured funds
+async function handleUnlockFunds(userId: string, lockId: string) {
+  const supabaseAdmin = getSupabaseAdmin();
+
+  const { data: lock } = await supabaseAdmin
+    .from("vfd_locked_funds")
+    .select("*")
+    .eq("id", lockId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (!lock) return jsonResponse({ error: "Lock not found" }, 404);
+  if (lock.status !== "active") return jsonResponse({ error: "Lock is not active" }, 400);
+
+  const now = new Date();
+  const maturity = new Date(lock.maturity_date);
+  const isMatured = now >= maturity;
+
+  if (!isMatured) {
+    return jsonResponse({ error: "Lock has not matured yet. Use break_lock for early withdrawal." }, 400);
+  }
+
+  // Credit principal + interest
+  const { data: balance } = await supabaseAdmin
+    .from("vfd_user_balances")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (!balance) return jsonResponse({ error: "No balance record" }, 500);
+
+  const creditAmount = Number(lock.total_payout);
+  const newLocked = Number(balance.locked_balance) - Number(lock.principal_amount);
+
+  await supabaseAdmin
+    .from("vfd_user_balances")
+    .update({
+      total_balance: Number(balance.total_balance) + Number(lock.expected_interest),
+      locked_balance: Math.max(0, newLocked),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("user_id", userId);
+
+  // Update lock status
+  await supabaseAdmin
+    .from("vfd_locked_funds")
+    .update({
+      status: "matured",
+      actual_unlock_date: now.toISOString(),
+      updated_at: now.toISOString(),
+    })
+    .eq("id", lockId);
+
+  // Ledger
+  const availBefore = Number(balance.total_balance) - Number(balance.locked_balance) - Number(balance.savings_balance);
+  await supabaseAdmin.from("vfd_lock_ledger").insert({
+    user_id: userId,
+    lock_id: lockId,
+    entry_type: "lock_matured",
+    amount: creditAmount,
+    balance_before: availBefore,
+    balance_after: availBefore + creditAmount,
+    locked_before: Number(balance.locked_balance),
+    locked_after: Math.max(0, newLocked),
+    description: `Matured: ₦${Number(lock.principal_amount).toLocaleString()} + ₦${Number(lock.expected_interest).toLocaleString()} interest`,
+  });
+
+  return jsonResponse({ data: { unlocked: creditAmount, interest_earned: Number(lock.expected_interest) } });
+}
+
+// Break lock (early withdrawal)
+async function handleBreakLock(userId: string, lockId: string) {
+  const supabaseAdmin = getSupabaseAdmin();
+
+  const { data: lock } = await supabaseAdmin
+    .from("vfd_locked_funds")
+    .select("*")
+    .eq("id", lockId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (!lock) return jsonResponse({ error: "Lock not found" }, 404);
+  if (lock.status !== "active") return jsonResponse({ error: "Lock is not active" }, 400);
+
+  // Get penalty config
+  const { data: config } = await supabaseAdmin
+    .from("vfd_lock_configs")
+    .select("early_withdrawal_penalty")
+    .eq("duration_months", lock.duration_months)
+    .maybeSingle();
+
+  const penaltyPercent = Number(config?.early_withdrawal_penalty || 100);
+  const penaltyAmount = Number(lock.expected_interest) * (penaltyPercent / 100);
+  const netInterest = Number(lock.expected_interest) - penaltyAmount;
+  const creditAmount = Number(lock.principal_amount) + Math.max(0, netInterest);
+
+  const { data: balance } = await supabaseAdmin
+    .from("vfd_user_balances")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (!balance) return jsonResponse({ error: "No balance record" }, 500);
+
+  const newLocked = Number(balance.locked_balance) - Number(lock.principal_amount);
+  const interestToAdd = Math.max(0, netInterest);
+
+  await supabaseAdmin
+    .from("vfd_user_balances")
+    .update({
+      total_balance: Number(balance.total_balance) + interestToAdd,
+      locked_balance: Math.max(0, newLocked),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("user_id", userId);
+
+  const now = new Date();
+  await supabaseAdmin
+    .from("vfd_locked_funds")
+    .update({
+      status: "broken",
+      actual_unlock_date: now.toISOString(),
+      penalty_amount: penaltyAmount,
+      updated_at: now.toISOString(),
+    })
+    .eq("id", lockId);
+
+  const availBefore = Number(balance.total_balance) - Number(balance.locked_balance) - Number(balance.savings_balance);
+  await supabaseAdmin.from("vfd_lock_ledger").insert({
+    user_id: userId,
+    lock_id: lockId,
+    entry_type: "lock_broken",
+    amount: creditAmount,
+    balance_before: availBefore,
+    balance_after: availBefore + creditAmount,
+    locked_before: Number(balance.locked_balance),
+    locked_after: Math.max(0, newLocked),
+    description: `Early withdrawal: ₦${Number(lock.principal_amount).toLocaleString()} principal, penalty: ₦${penaltyAmount.toLocaleString()}`,
+  });
+
+  return jsonResponse({
+    data: {
+      unlocked: creditAmount,
+      penalty: penaltyAmount,
+      net_interest: Math.max(0, netInterest),
+      penalty_percent: penaltyPercent,
+    },
+  });
+}
+
+// Get lock ledger
+async function handleGetLockLedger(userId: string) {
+  const supabaseAdmin = getSupabaseAdmin();
+  const { data, error } = await supabaseAdmin
+    .from("vfd_lock_ledger")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  if (error) return jsonResponse({ error: error.message }, 500);
+  return jsonResponse({ data });
+}
+  const supabaseAdmin = getSupabaseAdmin();
+  const { data, error } = await supabaseAdmin
+    .from("vfd_sandbox_transactions")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  if (error) {
+    return jsonResponse({ error: error.message }, 500);
+  }
+  return jsonResponse({ data });
+}
+
 // ─── MAIN HANDLER ───────────────────────────────────────────────
 
 Deno.serve(async (req) => {
