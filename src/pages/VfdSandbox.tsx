@@ -232,6 +232,63 @@ export default function VfdSandbox() {
     }
   };
 
+  // Lock Funds helpers
+  const loadLockData = async () => {
+    const [configRes, balanceRes, fundsRes] = await Promise.all([
+      vfd.getLockConfigs(),
+      vfd.syncBalance(),
+      vfd.getLockedFunds(),
+    ]);
+    if (configRes?.data) setLockConfigs(configRes.data as LockConfig[]);
+    if (balanceRes?.data) setUserBalance(balanceRes.data as UserBalance);
+    if (fundsRes?.data) setLockedFunds(fundsRes.data as LockedFund[]);
+  };
+
+  const handleCreateLock = async () => {
+    const amount = parseFloat(lockAmount);
+    const duration = parseInt(lockDuration);
+    if (isNaN(amount) || amount <= 0 || !duration) {
+      toast({ title: "Select amount and duration", variant: "destructive" });
+      return;
+    }
+    const result = await vfd.createLock(amount, duration);
+    if (result?.data) {
+      setLockAmount("");
+      setLockDuration("");
+      toast({ title: "Funds Locked!", description: `₦${amount.toLocaleString()} locked for ${duration} months` });
+      await loadLockData();
+    }
+  };
+
+  const handleUnlock = async (lockId: string) => {
+    const result = await vfd.unlockFunds(lockId);
+    if (result?.data) {
+      toast({ title: "Funds Unlocked!", description: `₦${(result.data as Record<string, unknown>).unlocked?.toLocaleString()} credited` });
+      await loadLockData();
+      handleCheckBalance();
+    }
+  };
+
+  const handleBreakLock = async (lockId: string) => {
+    const result = await vfd.breakLock(lockId);
+    if (result?.data) {
+      const d = result.data as Record<string, unknown>;
+      toast({ title: "Lock Broken", description: `Penalty: ₦${Number(d.penalty).toLocaleString()}. Credited: ₦${Number(d.unlocked).toLocaleString()}` });
+      await loadLockData();
+      handleCheckBalance();
+    }
+  };
+
+  const selectedConfig = lockConfigs.find(c => c.duration_months === parseInt(lockDuration));
+  const lockPreview = selectedConfig && lockAmount ? (() => {
+    const amt = parseFloat(lockAmount);
+    if (isNaN(amt) || amt <= 0) return null;
+    const interest = amt * (selectedConfig.interest_rate / 100) * (selectedConfig.duration_months / 12);
+    const maturity = new Date();
+    maturity.setMonth(maturity.getMonth() + selectedConfig.duration_months);
+    return { interest: Math.round(interest * 100) / 100, total: Math.round((amt + interest) * 100) / 100, maturityDate: maturity };
+  })() : null;
+
   // Load banks
   const handleLoadBanks = async () => {
     const result = await vfd.getBankList();
