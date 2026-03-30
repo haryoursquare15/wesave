@@ -38,48 +38,59 @@ function jsonResponse(data: unknown, status = 200) {
   });
 }
 
-// Helper: ensure vfd_user_balances row exists, auto-sync from VFD if missing
-async function ensureBalanceRow(userId: string): Promise<{ total_balance: number; locked_balance: number; savings_balance: number }> {
+// Helper: fetch live VFD balance for a user
+async function fetchVfdLiveBalance(userId: string): Promise<number> {
+  const db = getSupabaseAdmin();
+  const { data: client } = await db.from("vfd_sandbox_clients").select("vfd_account_number").eq("user_id", userId).maybeSingle();
+  if (!client?.vfd_account_number) return 0;
+
+  try {
+    const vfdBase = Deno.env.get("VFD_API_BASE") || "https://api-devapps.vfdbank.systems";
+    const consumerKey = Deno.env.get("VFD_CONSUMER_KEY");
+    const consumerSecret = Deno.env.get("VFD_CONSUMER_SECRET");
+    if (!consumerKey || !consumerSecret) return 0;
+
+    const authResp = await fetch(`${vfdBase}/vtech-auth/api/v1.1/oauth2/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: `grant_type=client_credentials&client_id=${consumerKey}&client_secret=${consumerSecret}`,
+    });
+    const authData = await authResp.json();
+    const accessToken = authData?.data?.accessToken || authData?.access_token;
+    if (!accessToken) return 0;
+
+    const balResp = await fetch(`${vfdBase}/vtech-wallet/api/v2/wallet2/account/enquiry?accountNumber=${client.vfd_account_number}`, {
+      headers: { AccessToken: accessToken },
+    });
+    const balData = await balResp.json();
+    return Number(balData?.data?.availableBalance) || 0;
+  } catch (e) {
+    console.error("[VFD balance sync error]", e);
+    return 0;
+  }
+}
+
+// Helper: ensure vfd_user_balances row exists and is synced with VFD
+async function ensureBalanceRow(userId: string, forceSync = false): Promise<{ total_balance: number; locked_balance: number; savings_balance: number }> {
   const db = getSupabaseAdmin();
   const { data } = await db.from("vfd_user_balances").select("*").eq("user_id", userId).maybeSingle();
-  if (data) return { total_balance: Number(data.total_balance), locked_balance: Number(data.locked_balance), savings_balance: Number(data.savings_balance) };
 
-  // No row — try to create one from VFD sandbox client balance
-  const { data: client } = await db.from("vfd_sandbox_clients").select("vfd_account_number").eq("user_id", userId).maybeSingle();
-  let totalBalance = 0;
-
-  if (client?.vfd_account_number) {
-    try {
-      const vfdBase = Deno.env.get("VFD_API_BASE") || "https://api-devapps.vfdbank.systems";
-      const consumerKey = Deno.env.get("VFD_CONSUMER_KEY");
-      const consumerSecret = Deno.env.get("VFD_CONSUMER_SECRET");
-      if (consumerKey && consumerSecret) {
-        const authResp = await fetch(`${vfdBase}/vtech-auth/api/v1.1/oauth2/token`, {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: `grant_type=client_credentials&client_id=${consumerKey}&client_secret=${consumerSecret}`,
-        });
-        const authData = await authResp.json();
-        const accessToken = authData?.data?.accessToken || authData?.access_token;
-        if (accessToken) {
-          const balResp = await fetch(`${vfdBase}/vtech-wallet/api/v2/wallet2/account/enquiry?accountNumber=${client.vfd_account_number}`, {
-            headers: { AccessToken: accessToken },
-          });
-          const balData = await balResp.json();
-          totalBalance = Number(balData?.data?.availableBalance) || 0;
-        }
-      }
-    } catch (e) {
-      console.error("[VFD balance sync fallback error]", e);
-    }
+  if (data && !forceSync) {
+    return { total_balance: Number(data.total_balance), locked_balance: Number(data.locked_balance), savings_balance: Number(data.savings_balance) };
   }
 
+  // Sync total_balance from VFD live balance
+  const liveBalance = await fetchVfdLiveBalance(userId);
+  const locked = data ? Number(data.locked_balance) : 0;
+  const savings = data ? Number(data.savings_balance) : 0;
+  const totalBalance = Math.max(liveBalance, locked + savings);
+
   await db.from("vfd_user_balances").upsert({
-    user_id: userId, total_balance: totalBalance, locked_balance: 0, savings_balance: 0,
+    user_id: userId, total_balance: totalBalance, locked_balance: locked, savings_balance: savings,
     last_synced_at: new Date().toISOString(),
   }, { onConflict: "user_id" });
 
-  return { total_balance: totalBalance, locked_balance: 0, savings_balance: 0 };
+  return { total_balance: totalBalance, locked_balance: locked, savings_balance: savings };
 }
 
 // Helper: check available balance
@@ -88,12 +99,19 @@ async function getAvailableBalance(userId: string): Promise<number> {
   return bal.total_balance - bal.locked_balance - bal.savings_balance;
 }
 
-// Helper: debit available balance (increase savings)
+// Helper: debit available balance (increase savings), auto-resyncs if insufficient
 async function debitForSavings(userId: string, amount: number): Promise<boolean> {
   const db = getSupabaseAdmin();
-  const bal = await ensureBalanceRow(userId);
-  const avail = bal.total_balance - bal.locked_balance - bal.savings_balance;
-  if (amount > avail) return false;
+  let bal = await ensureBalanceRow(userId);
+  let avail = bal.total_balance - bal.locked_balance - bal.savings_balance;
+
+  // Force re-sync from VFD if balance seems insufficient
+  if (amount > avail) {
+    bal = await ensureBalanceRow(userId, true);
+    avail = bal.total_balance - bal.locked_balance - bal.savings_balance;
+    if (amount > avail) return false;
+  }
+
   await db.from("vfd_user_balances").update({
     savings_balance: bal.savings_balance + amount,
     updated_at: new Date().toISOString(),
