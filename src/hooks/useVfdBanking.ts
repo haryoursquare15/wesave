@@ -155,6 +155,26 @@ export function useVfdBanking() {
     [invokeVfd]
   );
 
+  // Lock Funds methods
+  const getLockConfigs = useCallback(() => invokeVfd("get_lock_configs"), [invokeVfd]);
+  const getUserBalance = useCallback(() => invokeVfd("get_user_balance"), [invokeVfd]);
+  const syncBalance = useCallback(() => invokeVfd("sync_balance"), [invokeVfd]);
+  const createLock = useCallback(
+    (amount: number, duration_months: number) =>
+      invokeVfd("create_lock", { amount, duration_months }),
+    [invokeVfd]
+  );
+  const getLockedFunds = useCallback(() => invokeVfd("get_locked_funds"), [invokeVfd]);
+  const unlockFunds = useCallback(
+    (lock_id: string) => invokeVfd("unlock_funds", { lock_id }),
+    [invokeVfd]
+  );
+  const breakLock = useCallback(
+    (lock_id: string) => invokeVfd("break_lock", { lock_id }),
+    [invokeVfd]
+  );
+  const getLockLedger = useCallback(() => invokeVfd("get_lock_ledger"), [invokeVfd]);
+
   return {
     loading,
     client,
@@ -172,5 +192,13 @@ export function useVfdBanking() {
     validateBeneficiary,
     transfer,
     sandboxCredit,
+    getLockConfigs,
+    getUserBalance,
+    syncBalance,
+    createLock,
+    getLockedFunds,
+    unlockFunds,
+    breakLock,
+    getLockLedger,
   };
 }
