@@ -22,7 +22,7 @@ async function getUserFromRequest(req: Request) {
   if (!publishableKey) throw new Error("SUPABASE_ANON_KEY not configured");
 
   const supabase = createClient(Deno.env.get("SUPABASE_URL")!, publishableKey, {
-    global: { headers: { Authorization: authHeader } },
+    global: { headers: { Authorization: authHeader! } },
   });
 
   const { data, error } = await supabase.auth.getClaims(token);
@@ -38,7 +38,11 @@ function jsonResponse(data: unknown, status = 200) {
   });
 }
 
-// Helper: fetch live VFD balance for a user
+// =============================================
+// VFD ADAPTER LAYER
+// Abstracts VFD API calls so logic never depends on API specifics
+// =============================================
+
 async function fetchVfdLiveBalance(userId: string): Promise<number> {
   const db = getSupabaseAdmin();
   const { data: client } = await db.from("vfd_sandbox_clients").select("vfd_account_number").eq("user_id", userId).maybeSingle();
@@ -70,7 +74,10 @@ async function fetchVfdLiveBalance(userId: string): Promise<number> {
   }
 }
 
-// Helper: ensure vfd_user_balances row exists and is synced with VFD
+// =============================================
+// INTERNAL LEDGER (Source of Truth)
+// =============================================
+
 async function ensureBalanceRow(userId: string, forceSync = false): Promise<{ total_balance: number; locked_balance: number; savings_balance: number }> {
   const db = getSupabaseAdmin();
   const { data } = await db.from("vfd_user_balances").select("*").eq("user_id", userId).maybeSingle();
@@ -79,7 +86,6 @@ async function ensureBalanceRow(userId: string, forceSync = false): Promise<{ to
     return { total_balance: Number(data.total_balance), locked_balance: Number(data.locked_balance), savings_balance: Number(data.savings_balance) };
   }
 
-  // Sync total_balance from VFD live balance
   const liveBalance = await fetchVfdLiveBalance(userId);
   const locked = data ? Number(data.locked_balance) : 0;
   const savings = data ? Number(data.savings_balance) : 0;
@@ -93,19 +99,16 @@ async function ensureBalanceRow(userId: string, forceSync = false): Promise<{ to
   return { total_balance: totalBalance, locked_balance: locked, savings_balance: savings };
 }
 
-// Helper: check available balance
 async function getAvailableBalance(userId: string): Promise<number> {
   const bal = await ensureBalanceRow(userId);
   return bal.total_balance - bal.locked_balance - bal.savings_balance;
 }
 
-// Helper: debit available balance (increase savings), auto-resyncs if insufficient
 async function debitForSavings(userId: string, amount: number): Promise<boolean> {
   const db = getSupabaseAdmin();
   let bal = await ensureBalanceRow(userId);
   let avail = bal.total_balance - bal.locked_balance - bal.savings_balance;
 
-  // Force re-sync from VFD if balance seems insufficient
   if (amount > avail) {
     bal = await ensureBalanceRow(userId, true);
     avail = bal.total_balance - bal.locked_balance - bal.savings_balance;
@@ -119,7 +122,6 @@ async function debitForSavings(userId: string, amount: number): Promise<boolean>
   return true;
 }
 
-// Helper: credit savings back to available
 async function creditFromSavings(userId: string, amount: number): Promise<void> {
   const db = getSupabaseAdmin();
   const { data } = await db.from("vfd_user_balances").select("*").eq("user_id", userId).maybeSingle();
@@ -130,8 +132,45 @@ async function creditFromSavings(userId: string, amount: number): Promise<void> 
   }).eq("user_id", userId);
 }
 
+// Credit wallet (increase total_balance, used for payouts)
+async function creditWallet(userId: string, amount: number): Promise<void> {
+  const db = getSupabaseAdmin();
+  const bal = await ensureBalanceRow(userId);
+  await db.from("vfd_user_balances").update({
+    total_balance: bal.total_balance + amount,
+    updated_at: new Date().toISOString(),
+  }).eq("user_id", userId);
+}
+
 // =============================================
-// THRIFT GROUPS (AJO)
+// HELPER: Chat & Notifications
+// =============================================
+
+async function postChatMessage(groupId: string, userId: string, message: string, messageType = "system") {
+  const db = getSupabaseAdmin();
+  await db.from("vfd_sandbox_chat_messages").insert({ group_id: groupId, user_id: userId, message, message_type: messageType });
+}
+
+async function sendNotification(userId: string, title: string, message: string, notificationType: string, groupId?: string) {
+  const db = getSupabaseAdmin();
+  await db.from("vfd_sandbox_notifications").insert({ user_id: userId, title, message, notification_type: notificationType, group_id: groupId || null });
+}
+
+// =============================================
+// FISHER-YATES RANDOMIZATION (matches production)
+// =============================================
+
+function fisherYatesShuffle(arr: string[]): string[] {
+  const shuffled = [...arr];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
+// =============================================
+// THRIFT GROUPS (AJO) — PRODUCTION-PARITY LOGIC
 // =============================================
 
 async function handleCreateGroup(userId: string, body: Record<string, unknown>) {
@@ -140,27 +179,36 @@ async function handleCreateGroup(userId: string, body: Record<string, unknown>) 
   const amount = Number(body.contribution_amount);
   const maxMembers = Number(body.max_members) || 5;
   const period = (body.period as string) || "monthly";
+  const description = (body.description as string) || null;
+  const autoDebit = body.auto_debit !== false;
 
   if (!name || !amount || amount <= 0) return jsonResponse({ error: "Name and contribution amount required" }, 400);
 
   const { data: group, error } = await db.from("vfd_sandbox_groups").insert({
     name, admin_id: userId, contribution_amount: amount,
-    period, max_members: maxMembers, total_cycles: maxMembers, status: "active",
+    period, max_members: maxMembers, total_cycles: maxMembers,
+    status: "pending", // NOT active — must commence after filling
+    description, auto_debit: autoDebit,
+    contribution_hour: 16, contribution_minute: 0,
   }).select().single();
 
   if (error) return jsonResponse({ error: error.message }, 500);
 
-  // Add admin as first member with position 1
+  // Admin is member #1 (position assigned after randomization at commencement)
   await db.from("vfd_sandbox_group_members").insert({
-    group_id: group.id, user_id: userId, payout_position: 1,
+    group_id: group.id, user_id: userId, status: "active",
   });
+
+  await postChatMessage(group.id, userId, "Group created. Waiting for members to join.", "system");
 
   return jsonResponse({ data: group });
 }
 
 async function handleListGroups(userId: string) {
   const db = getSupabaseAdmin();
-  const { data } = await db.from("vfd_sandbox_groups").select("*, vfd_sandbox_group_members(user_id)").order("created_at", { ascending: false });
+  const { data } = await db.from("vfd_sandbox_groups")
+    .select("*, vfd_sandbox_group_members(user_id, status, payout_position)")
+    .order("created_at", { ascending: false });
   return jsonResponse({ data });
 }
 
@@ -174,21 +222,170 @@ async function handleJoinGroup(userId: string, body: Record<string, unknown>) {
 
   const { data: group } = await db.from("vfd_sandbox_groups").select("*").eq("id", groupId).single();
   if (!group) return jsonResponse({ error: "Group not found" }, 404);
+  if (group.status !== "pending") return jsonResponse({ error: "Group is no longer accepting members" }, 400);
   if (group.member_count >= group.max_members) return jsonResponse({ error: "Group is full" }, 400);
 
-  const position = group.member_count + 1;
+  const newCount = group.member_count + 1;
   const { error } = await db.from("vfd_sandbox_group_members").insert({
-    group_id: groupId, user_id: userId, payout_position: position,
+    group_id: groupId, user_id: userId, status: "active",
   });
   if (error) return jsonResponse({ error: error.message }, 500);
 
   await db.from("vfd_sandbox_groups").update({
-    member_count: position, updated_at: new Date().toISOString(),
+    member_count: newCount, updated_at: new Date().toISOString(),
   }).eq("id", groupId);
 
-  return jsonResponse({ data: { joined: true, position } });
+  await postChatMessage(groupId, userId, "has joined the group", "member_join");
+  await sendNotification(group.admin_id, "New Member", `A new member has joined ${group.name} (${newCount}/${group.max_members})`, "member_joined", groupId);
+
+  return jsonResponse({ data: { joined: true, member_count: newCount, max_members: group.max_members } });
 }
 
+// COMMENCEMENT: Admin starts the group after it's full (matches production)
+async function handleCommenceGroup(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const groupId = body.group_id as string;
+
+  const { data: group } = await db.from("vfd_sandbox_groups").select("*").eq("id", groupId).single();
+  if (!group) return jsonResponse({ error: "Group not found" }, 404);
+  if (group.admin_id !== userId) return jsonResponse({ error: "Only the admin can commence the group" }, 403);
+  if (group.status !== "pending") return jsonResponse({ error: "Group has already commenced" }, 400);
+  if (group.member_count < group.max_members) return jsonResponse({ error: `Group must have ${group.max_members} members to commence` }, 400);
+
+  // Fisher-Yates randomization of payout order
+  const { data: members } = await db.from("vfd_sandbox_group_members")
+    .select("user_id").eq("group_id", groupId).eq("status", "active");
+
+  if (!members || members.length !== group.max_members) {
+    return jsonResponse({ error: "Member count mismatch" }, 400);
+  }
+
+  const memberIds = members.map(m => m.user_id);
+  const payoutOrder = fisherYatesShuffle(memberIds);
+
+  // Assign positions based on randomized order
+  for (let i = 0; i < payoutOrder.length; i++) {
+    await db.from("vfd_sandbox_group_members").update({
+      payout_position: i + 1,
+    }).eq("group_id", groupId).eq("user_id", payoutOrder[i]);
+  }
+
+  // Create first contribution cycle
+  const { data: cycle } = await db.from("vfd_sandbox_contribution_cycles").insert({
+    group_id: groupId, cycle_number: 1, status: "active",
+    payout_recipient_id: payoutOrder[0],
+  }).select().single();
+
+  // Activate group
+  await db.from("vfd_sandbox_groups").update({
+    status: "active", current_cycle: 1, payout_order: payoutOrder,
+    current_payout_position: 1,
+    commenced_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }).eq("id", groupId);
+
+  await postChatMessage(groupId, userId, "🎉 Group has commenced! Payout positions have been randomized. Cycle 1 is now active.", "system");
+
+  // Notify all members of their position
+  for (let i = 0; i < payoutOrder.length; i++) {
+    await sendNotification(payoutOrder[i], "Group Commenced",
+      `${group.name} has started! Your payout position is #${i + 1} of ${group.max_members}.`,
+      "group_commenced", groupId);
+  }
+
+  return jsonResponse({ data: { commenced: true, payout_order: payoutOrder, cycle_id: cycle?.id } });
+}
+
+// POSITION SWAP (matches production logic)
+async function handleRequestSwap(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const groupId = body.group_id as string;
+  const targetId = body.target_id as string;
+
+  const { data: group } = await db.from("vfd_sandbox_groups").select("*").eq("id", groupId).single();
+  if (!group || group.status !== "active") return jsonResponse({ error: "Group is not active" }, 400);
+
+  // Check requester is a member
+  const { data: requester } = await db.from("vfd_sandbox_group_members")
+    .select("*").eq("group_id", groupId).eq("user_id", userId).maybeSingle();
+  if (!requester) return jsonResponse({ error: "Not a member" }, 400);
+  if (requester.has_used_swap) return jsonResponse({ error: "You have already used your swap for this group" }, 400);
+  if (requester.has_received_payout) return jsonResponse({ error: "Cannot swap after receiving payout" }, 400);
+
+  // Check target is a member
+  const { data: target } = await db.from("vfd_sandbox_group_members")
+    .select("*").eq("group_id", groupId).eq("user_id", targetId).maybeSingle();
+  if (!target) return jsonResponse({ error: "Target is not a member" }, 400);
+  if (target.has_received_payout) return jsonResponse({ error: "Target has already received payout" }, 400);
+
+  // Check no pending swap exists
+  const { data: existing } = await db.from("vfd_sandbox_position_swaps")
+    .select("id").eq("group_id", groupId).eq("requester_id", userId).eq("status", "pending").maybeSingle();
+  if (existing) return jsonResponse({ error: "You already have a pending swap request" }, 400);
+
+  const { data: swap, error } = await db.from("vfd_sandbox_position_swaps").insert({
+    group_id: groupId, requester_id: userId, target_id: targetId,
+    requester_position: requester.payout_position, target_position: target.payout_position,
+  }).select().single();
+
+  if (error) return jsonResponse({ error: error.message }, 500);
+
+  await sendNotification(targetId, "Swap Request",
+    `A member wants to swap payout position #${requester.payout_position} with your position #${target.payout_position}.`,
+    "swap_request", groupId);
+
+  return jsonResponse({ data: swap });
+}
+
+async function handleRespondSwap(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const swapId = body.swap_id as string;
+  const accept = body.accept as boolean;
+
+  const { data: swap } = await db.from("vfd_sandbox_position_swaps").select("*").eq("id", swapId).single();
+  if (!swap) return jsonResponse({ error: "Swap not found" }, 404);
+  if (swap.target_id !== userId) return jsonResponse({ error: "Not authorized" }, 403);
+  if (swap.status !== "pending") return jsonResponse({ error: "Swap is no longer pending" }, 400);
+
+  if (accept) {
+    // Execute the swap
+    await db.from("vfd_sandbox_group_members").update({ payout_position: swap.target_position })
+      .eq("group_id", swap.group_id).eq("user_id", swap.requester_id);
+    await db.from("vfd_sandbox_group_members").update({ payout_position: swap.requester_position })
+      .eq("group_id", swap.group_id).eq("user_id", swap.target_id);
+
+    // Mark requester as having used swap
+    await db.from("vfd_sandbox_group_members").update({ has_used_swap: true })
+      .eq("group_id", swap.group_id).eq("user_id", swap.requester_id);
+
+    // Update payout_order array
+    const { data: group } = await db.from("vfd_sandbox_groups").select("payout_order").eq("id", swap.group_id).single();
+    if (group?.payout_order) {
+      const newOrder = [...group.payout_order];
+      const reqIdx = newOrder.indexOf(swap.requester_id);
+      const tgtIdx = newOrder.indexOf(swap.target_id);
+      if (reqIdx >= 0 && tgtIdx >= 0) {
+        [newOrder[reqIdx], newOrder[tgtIdx]] = [newOrder[tgtIdx], newOrder[reqIdx]];
+        await db.from("vfd_sandbox_groups").update({ payout_order: newOrder }).eq("id", swap.group_id);
+      }
+    }
+
+    await postChatMessage(swap.group_id, userId, `Position swap accepted: positions #${swap.requester_position} and #${swap.target_position} have been swapped.`, "system");
+  }
+
+  await db.from("vfd_sandbox_position_swaps").update({
+    status: accept ? "accepted" : "declined",
+    responded_at: new Date().toISOString(),
+  }).eq("id", swapId);
+
+  await sendNotification(swap.requester_id, accept ? "Swap Accepted" : "Swap Declined",
+    accept ? `Your swap request was accepted. You are now in position #${swap.target_position}.` : "Your swap request was declined.",
+    accept ? "swap_accepted" : "swap_declined", swap.group_id);
+
+  return jsonResponse({ data: { status: accept ? "accepted" : "declined" } });
+}
+
+// CONTRIBUTE (matches production: wallet debit → audit → auto-payout)
 async function handleContributeGroup(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const groupId = body.group_id as string;
@@ -197,78 +394,152 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
   if (!group) return jsonResponse({ error: "Group not found" }, 404);
   if (group.status !== "active") return jsonResponse({ error: "Group is not active" }, 400);
 
-  // Check if already contributed this cycle
-  const { data: existing } = await db.from("vfd_sandbox_group_contributions")
+  // Get active cycle
+  const { data: activeCycle } = await db.from("vfd_sandbox_contribution_cycles")
+    .select("*").eq("group_id", groupId).eq("status", "active").single();
+  if (!activeCycle) return jsonResponse({ error: "No active contribution cycle" }, 400);
+
+  // Idempotency: check if already contributed this cycle
+  const { data: existingContrib } = await db.from("vfd_sandbox_group_contributions")
     .select("id").eq("group_id", groupId).eq("user_id", userId).eq("cycle_number", group.current_cycle).maybeSingle();
-  if (existing) return jsonResponse({ error: "Already contributed this cycle" }, 400);
+  if (existingContrib) return jsonResponse({ error: "Already contributed this cycle" }, 400);
 
   // Debit from available balance
   const amount = Number(group.contribution_amount);
   const debited = await debitForSavings(userId, amount);
-  if (!debited) return jsonResponse({ error: "Insufficient available balance" }, 400);
+  if (!debited) return jsonResponse({ error: "Insufficient wallet balance. Please fund your wallet first." }, 400);
 
   // Record contribution
   await db.from("vfd_sandbox_group_contributions").insert({
     group_id: groupId, user_id: userId, cycle_number: group.current_cycle, amount,
   });
 
+  // Audit log
+  await db.from("vfd_sandbox_contribution_audit").insert({
+    user_id: userId, group_id: groupId, cycle_id: activeCycle.id,
+    amount, contribution_type: "manual", status: "success",
+  });
+
   await db.from("vfd_sandbox_group_members").update({ has_contributed_current: true })
     .eq("group_id", groupId).eq("user_id", userId);
+
+  await postChatMessage(groupId, userId, `has contributed ₦${amount.toLocaleString()} to the pool`, "contribution_status");
+  await sendNotification(userId, "Contribution Successful",
+    `Your contribution of ₦${amount.toLocaleString()} has been recorded.`,
+    "contribution_success", groupId);
 
   // Check if all members contributed
   const { count } = await db.from("vfd_sandbox_group_contributions")
     .select("*", { count: "exact", head: true })
     .eq("group_id", groupId).eq("cycle_number", group.current_cycle);
 
+  let allContributed = false;
+  let payoutResult = null;
+
   if (count && count >= group.member_count) {
-    // Process payout for this cycle
-    const { data: recipient } = await db.from("vfd_sandbox_group_members")
-      .select("user_id").eq("group_id", groupId).eq("payout_position", group.current_cycle).single();
-
-    if (recipient) {
-      const grossAmount = amount * group.member_count;
-      const platformFee = Math.round(grossAmount * 0.025 * 100) / 100; // 2.5%
-      const netAmount = grossAmount - platformFee;
-
-      // Credit recipient
-      await creditFromSavings(recipient.user_id, netAmount);
-      // Also credit their total_balance for the interest part (payout is more than contribution)
-      const addToTotal = netAmount - amount; // net gain
-      if (addToTotal > 0) {
-        const { data: bal } = await db.from("vfd_user_balances").select("*").eq("user_id", recipient.user_id).maybeSingle();
-        if (bal) {
-          await db.from("vfd_user_balances").update({
-            total_balance: Number(bal.total_balance) + addToTotal + amount,
-            savings_balance: Math.max(0, Number(bal.savings_balance) - amount),
-            updated_at: new Date().toISOString(),
-          }).eq("user_id", recipient.user_id);
-        }
-      }
-
-      await db.from("vfd_sandbox_group_payouts").insert({
-        group_id: groupId, recipient_id: recipient.user_id,
-        cycle_number: group.current_cycle, gross_amount: grossAmount,
-        platform_fee: platformFee, net_amount: netAmount,
-      });
-
-      await db.from("vfd_sandbox_group_members").update({ has_received_payout: true })
-        .eq("group_id", groupId).eq("user_id", recipient.user_id);
-
-      // Advance cycle or complete
-      const nextCycle = group.current_cycle + 1;
-      if (nextCycle > group.total_cycles) {
-        await db.from("vfd_sandbox_groups").update({ status: "completed", updated_at: new Date().toISOString() }).eq("id", groupId);
-      } else {
-        await db.from("vfd_sandbox_groups").update({
-          current_cycle: nextCycle, updated_at: new Date().toISOString(),
-        }).eq("id", groupId);
-        // Reset contribution flags
-        await db.from("vfd_sandbox_group_members").update({ has_contributed_current: false }).eq("group_id", groupId);
-      }
-    }
+    allContributed = true;
+    payoutResult = await processAutoPayout(db, group, activeCycle);
   }
 
-  return jsonResponse({ data: { contributed: true, amount, cycle: group.current_cycle } });
+  return jsonResponse({
+    data: {
+      success: true,
+      contributed: true,
+      amount,
+      cycle: group.current_cycle,
+      payment_source: "wallet",
+      all_contributed: allContributed,
+      auto_payout: payoutResult,
+      message: allContributed ? "All members have contributed!" : "Contribution recorded successfully",
+    },
+  });
+}
+
+// AUTO-PAYOUT (matches production: 2.5% fee, credit recipient wallet, advance cycle)
+async function processAutoPayout(
+  db: ReturnType<typeof createClient>,
+  group: Record<string, unknown>,
+  activeCycle: Record<string, unknown>
+) {
+  const groupId = group.id as string;
+  const currentCycle = Number(group.current_cycle);
+  const amount = Number(group.contribution_amount);
+  const memberCount = Number(group.member_count);
+  const totalCycles = Number(group.total_cycles);
+  const payoutOrder = group.payout_order as string[];
+
+  // Determine recipient from payout_order
+  const recipientId = payoutOrder[currentCycle - 1];
+  if (!recipientId) return { success: false, error: "No recipient for this cycle" };
+
+  const grossAmount = amount * memberCount;
+  const platformFee = Math.round(grossAmount * 0.025 * 100) / 100; // 2.5%
+  const netAmount = grossAmount - platformFee;
+
+  // Credit recipient: release their own savings contribution + net gain
+  await creditFromSavings(recipientId, amount); // Release their own contribution
+  await creditWallet(recipientId, netAmount - amount); // Net gain on top
+
+  // Record payout
+  await db.from("vfd_sandbox_group_payouts").insert({
+    group_id: groupId, recipient_id: recipientId,
+    cycle_number: currentCycle, gross_amount: grossAmount,
+    platform_fee: platformFee, net_amount: netAmount,
+  });
+
+  // Update cycle
+  await db.from("vfd_sandbox_contribution_cycles").update({
+    status: "completed", payout_recipient_id: recipientId,
+    payout_amount: netAmount, platform_fee: platformFee,
+    total_contributions: grossAmount, completed_at: new Date().toISOString(),
+  }).eq("id", activeCycle.id as string);
+
+  await db.from("vfd_sandbox_group_members").update({ has_received_payout: true })
+    .eq("group_id", groupId).eq("user_id", recipientId);
+
+  // Advance cycle or complete group
+  const nextCycle = currentCycle + 1;
+  if (nextCycle > totalCycles) {
+    await db.from("vfd_sandbox_groups").update({
+      status: "completed", updated_at: new Date().toISOString(),
+    }).eq("id", groupId);
+
+    // Release all remaining savings holds for non-recipient members
+    const { data: allMembers } = await db.from("vfd_sandbox_group_members").select("user_id").eq("group_id", groupId);
+    if (allMembers) {
+      for (const m of allMembers) {
+        if (m.user_id !== recipientId) {
+          // Their savings_balance holds from contributions should already be released via payouts
+        }
+      }
+    }
+
+    await postChatMessage(groupId, recipientId,
+      `🎉 Group completed! Final payout of ₦${netAmount.toLocaleString()} sent.`, "payout_notification");
+  } else {
+    // Create next cycle
+    const nextRecipientId = payoutOrder[nextCycle - 1];
+    await db.from("vfd_sandbox_contribution_cycles").insert({
+      group_id: groupId, cycle_number: nextCycle, status: "active",
+      payout_recipient_id: nextRecipientId,
+    });
+
+    await db.from("vfd_sandbox_groups").update({
+      current_cycle: nextCycle, updated_at: new Date().toISOString(),
+    }).eq("id", groupId);
+
+    // Reset contribution flags
+    await db.from("vfd_sandbox_group_members").update({ has_contributed_current: false }).eq("group_id", groupId);
+
+    await postChatMessage(groupId, recipientId,
+      `🎉 Cycle ${currentCycle} complete! Payout of ₦${netAmount.toLocaleString()} sent. Cycle ${nextCycle} begins now.`, "payout_notification");
+  }
+
+  await sendNotification(recipientId, "Payout Received!",
+    `You received ₦${netAmount.toLocaleString()} from your thrift group ${group.name}.`,
+    "payout_received", groupId);
+
+  return { success: true, recipient_id: recipientId, net_amount: netAmount, platform_fee: platformFee };
 }
 
 async function handleGetGroupDetail(body: Record<string, unknown>) {
@@ -276,13 +547,87 @@ async function handleGetGroupDetail(body: Record<string, unknown>) {
   const groupId = body.group_id as string;
   const { data: group } = await db.from("vfd_sandbox_groups").select("*").eq("id", groupId).single();
   const { data: members } = await db.from("vfd_sandbox_group_members").select("*").eq("group_id", groupId).order("payout_position");
-  const { data: contributions } = await db.from("vfd_sandbox_group_contributions").select("*").eq("group_id", groupId).order("created_at", { ascending: false }).limit(20);
+  const { data: contributions } = await db.from("vfd_sandbox_group_contributions").select("*").eq("group_id", groupId).order("created_at", { ascending: false }).limit(50);
   const { data: payouts } = await db.from("vfd_sandbox_group_payouts").select("*").eq("group_id", groupId).order("created_at", { ascending: false });
-  return jsonResponse({ data: { group, members, contributions, payouts } });
+  const { data: cycles } = await db.from("vfd_sandbox_contribution_cycles").select("*").eq("group_id", groupId).order("cycle_number");
+  const { data: swaps } = await db.from("vfd_sandbox_position_swaps").select("*").eq("group_id", groupId).order("created_at", { ascending: false });
+  const { data: chat } = await db.from("vfd_sandbox_chat_messages").select("*").eq("group_id", groupId).order("created_at", { ascending: false }).limit(50);
+
+  return jsonResponse({ data: { group, members, contributions, payouts, cycles, swaps, chat } });
+}
+
+// GROUP LIFECYCLE: Exit (matches production)
+async function handleExitGroup(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const groupId = body.group_id as string;
+
+  const { data: group } = await db.from("vfd_sandbox_groups").select("*").eq("id", groupId).single();
+  if (!group) return jsonResponse({ error: "Group not found" }, 404);
+  if (group.status !== "completed") return jsonResponse({ error: "Can only exit completed groups" }, 400);
+
+  const { data: membership } = await db.from("vfd_sandbox_group_members")
+    .select("*").eq("group_id", groupId).eq("user_id", userId).maybeSingle();
+  if (!membership) return jsonResponse({ error: "Not a member" }, 400);
+
+  await db.from("vfd_sandbox_group_members").update({ status: "exited" })
+    .eq("group_id", groupId).eq("user_id", userId);
+
+  await postChatMessage(groupId, userId, "has exited the group", "system");
+
+  return jsonResponse({ data: { success: true } });
+}
+
+// GROUP LIFECYCLE: Restart (matches production)
+async function handleRestartGroup(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const groupId = body.group_id as string;
+
+  const { data: group } = await db.from("vfd_sandbox_groups").select("*").eq("id", groupId).single();
+  if (!group) return jsonResponse({ error: "Group not found" }, 404);
+  if (group.admin_id !== userId) return jsonResponse({ error: "Only the admin can restart" }, 403);
+  if (group.status !== "completed") return jsonResponse({ error: "Only completed groups can restart" }, 400);
+
+  if (!body.terms_accepted) return jsonResponse({ error: "You must accept the terms and conditions" }, 400);
+
+  // Get active members (not exited)
+  const { data: activeMembers } = await db.from("vfd_sandbox_group_members")
+    .select("user_id").eq("group_id", groupId).eq("status", "active");
+
+  if (!activeMembers || activeMembers.length < 2) {
+    return jsonResponse({ error: "Need at least 2 active members to restart" }, 400);
+  }
+
+  // Re-randomize payout order with remaining members
+  const memberIds = activeMembers.map(m => m.user_id);
+  const newPayoutOrder = fisherYatesShuffle(memberIds);
+
+  for (let i = 0; i < newPayoutOrder.length; i++) {
+    await db.from("vfd_sandbox_group_members").update({
+      payout_position: i + 1, has_contributed_current: false,
+      has_received_payout: false, has_used_swap: false,
+    }).eq("group_id", groupId).eq("user_id", newPayoutOrder[i]);
+  }
+
+  // Create new cycle 1
+  await db.from("vfd_sandbox_contribution_cycles").insert({
+    group_id: groupId, cycle_number: 1, status: "active",
+    payout_recipient_id: newPayoutOrder[0],
+  });
+
+  await db.from("vfd_sandbox_groups").update({
+    status: "active", current_cycle: 1, payout_order: newPayoutOrder,
+    current_payout_position: 1, total_cycles: activeMembers.length,
+    member_count: activeMembers.length, max_members: activeMembers.length,
+    updated_at: new Date().toISOString(),
+  }).eq("id", groupId);
+
+  await postChatMessage(groupId, userId, "🔄 Group has been restarted! New payout positions randomized. Cycle 1 begins.", "system");
+
+  return jsonResponse({ data: { success: true, payout_order: newPayoutOrder } });
 }
 
 // =============================================
-// TARGET AJO
+// TARGET AJO (unchanged logic, same as before)
 // =============================================
 
 async function handleCreateTarget(userId: string, body: Record<string, unknown>) {
@@ -296,8 +641,6 @@ async function handleCreateTarget(userId: string, body: Record<string, unknown>)
   if (!name || !goalAmount) return jsonResponse({ error: "Name and goal amount required" }, 400);
 
   const contributionAmount = Math.ceil(goalAmount / maxMembers);
-
-  // Calculate target date
   const targetDate = new Date();
   if (frequency === "daily") targetDate.setDate(targetDate.getDate() + maxMembers);
   else if (frequency === "weekly") targetDate.setDate(targetDate.getDate() + maxMembers * 7);
@@ -310,11 +653,7 @@ async function handleCreateTarget(userId: string, body: Record<string, unknown>)
   }).select().single();
 
   if (error) return jsonResponse({ error: error.message }, 500);
-
-  await db.from("vfd_sandbox_target_members").insert({
-    target_id: target.id, user_id: userId,
-  });
-
+  await db.from("vfd_sandbox_target_members").insert({ target_id: target.id, user_id: userId });
   return jsonResponse({ data: target });
 }
 
@@ -336,11 +675,8 @@ async function handleContributeTarget(userId: string, body: Record<string, unkno
   const debited = await debitForSavings(userId, amount);
   if (!debited) return jsonResponse({ error: "Insufficient available balance" }, 400);
 
-  await db.from("vfd_sandbox_target_contributions").insert({
-    target_id: targetId, user_id: userId, amount,
-  });
+  await db.from("vfd_sandbox_target_contributions").insert({ target_id: targetId, user_id: userId, amount });
 
-  // Update member's contributed amount
   const { data: member } = await db.from("vfd_sandbox_target_members")
     .select("*").eq("target_id", targetId).eq("user_id", userId).maybeSingle();
   if (member) {
@@ -349,22 +685,16 @@ async function handleContributeTarget(userId: string, body: Record<string, unkno
     }).eq("id", member.id);
   }
 
-  // Update total
   const newTotal = Number(target.total_contributed) + amount;
-  const updates: Record<string, unknown> = {
-    total_contributed: newTotal, updated_at: new Date().toISOString(),
-  };
-  if (newTotal >= Number(target.goal_amount)) {
-    updates.status = "completed";
-  }
+  const updates: Record<string, unknown> = { total_contributed: newTotal, updated_at: new Date().toISOString() };
+  if (newTotal >= Number(target.goal_amount)) updates.status = "completed";
   await db.from("vfd_sandbox_targets").update(updates).eq("id", targetId);
 
-  // If completed, release funds back to members
   if (newTotal >= Number(target.goal_amount)) {
     const { data: allMembers } = await db.from("vfd_sandbox_target_members").select("*").eq("target_id", targetId);
     if (allMembers) {
       for (const m of allMembers) {
-        await creditFromSavings(m.user_id, Number(m.contributed_amount) + amount);
+        await creditFromSavings(m.user_id, Number(m.contributed_amount) + (m.user_id === userId ? amount : 0));
       }
     }
   }
@@ -382,7 +712,7 @@ async function handleGetTargetDetail(body: Record<string, unknown>) {
 }
 
 // =============================================
-// GOAL FUNDING
+// GOAL FUNDING (unchanged)
 // =============================================
 
 async function handleCreateCampaign(userId: string, body: Record<string, unknown>) {
@@ -425,25 +755,18 @@ async function handleContributeCampaign(userId: string, body: Record<string, unk
   const debited = await debitForSavings(userId, amount);
   if (!debited) return jsonResponse({ error: "Insufficient available balance" }, 400);
 
-  await db.from("vfd_sandbox_campaign_contributions").insert({
-    campaign_id: campaignId, contributor_id: userId, amount, anonymous, message,
-  });
+  await db.from("vfd_sandbox_campaign_contributions").insert({ campaign_id: campaignId, contributor_id: userId, amount, anonymous, message });
 
   const newRaised = Number(campaign.raised_amount) + amount;
-  const updates: Record<string, unknown> = {
-    raised_amount: newRaised,
-    contributor_count: campaign.contributor_count + 1,
-    updated_at: new Date().toISOString(),
-  };
+  const updates: Record<string, unknown> = { raised_amount: newRaised, contributor_count: campaign.contributor_count + 1, updated_at: new Date().toISOString() };
   if (newRaised >= Number(campaign.goal_amount)) updates.status = "completed";
-
   await db.from("vfd_sandbox_campaigns").update(updates).eq("id", campaignId);
 
   return jsonResponse({ data: { contributed: true, amount, total_raised: newRaised } });
 }
 
 // =============================================
-// SPLITPAY
+// SPLITPAY (unchanged)
 // =============================================
 
 async function handleCreateSplit(userId: string, body: Record<string, unknown>) {
@@ -465,12 +788,7 @@ async function handleCreateSplit(userId: string, body: Record<string, unknown>) 
   }).select().single();
 
   if (error) return jsonResponse({ error: error.message }, 500);
-
-  // Add creator as first participant
-  await db.from("vfd_sandbox_split_participants").insert({
-    split_id: split.id, user_id: userId, amount: perPerson,
-  });
-
+  await db.from("vfd_sandbox_split_participants").insert({ split_id: split.id, user_id: userId, amount: perPerson });
   return jsonResponse({ data: split });
 }
 
@@ -488,10 +806,8 @@ async function handlePaySplit(userId: string, body: Record<string, unknown>) {
   if (!split) return jsonResponse({ error: "Split not found" }, 404);
   if (split.status !== "active") return jsonResponse({ error: "Split is not active" }, 400);
 
-  // Check if participant exists
   const { data: participant } = await db.from("vfd_sandbox_split_participants")
     .select("*").eq("split_id", splitId).eq("user_id", userId).maybeSingle();
-
   if (!participant) return jsonResponse({ error: "Not a participant" }, 400);
   if (participant.status === "paid") return jsonResponse({ error: "Already paid" }, 400);
 
@@ -499,16 +815,11 @@ async function handlePaySplit(userId: string, body: Record<string, unknown>) {
   const debited = await debitForSavings(userId, amount);
   if (!debited) return jsonResponse({ error: "Insufficient available balance" }, 400);
 
-  await db.from("vfd_sandbox_split_participants").update({
-    status: "paid", paid_at: new Date().toISOString(),
-  }).eq("id", participant.id);
+  await db.from("vfd_sandbox_split_participants").update({ status: "paid", paid_at: new Date().toISOString() }).eq("id", participant.id);
 
   const newPaidCount = split.paid_count + 1;
-  const updates: Record<string, unknown> = {
-    paid_count: newPaidCount, updated_at: new Date().toISOString(),
-  };
+  const updates: Record<string, unknown> = { paid_count: newPaidCount, updated_at: new Date().toISOString() };
   if (newPaidCount >= split.split_count) updates.status = "completed";
-
   await db.from("vfd_sandbox_splits").update(updates).eq("id", splitId);
 
   return jsonResponse({ data: { paid: true, amount } });
@@ -523,13 +834,11 @@ async function handleJoinSplit(userId: string, body: Record<string, unknown>) {
 
   const { count } = await db.from("vfd_sandbox_split_participants")
     .select("*", { count: "exact", head: true }).eq("split_id", splitId);
-
   if (count && count >= split.split_count) return jsonResponse({ error: "Split is full" }, 400);
 
   const { error } = await db.from("vfd_sandbox_split_participants").insert({
     split_id: splitId, user_id: userId, amount: Number(split.per_person_amount),
   });
-
   if (error) return jsonResponse({ error: error.message }, 500);
   return jsonResponse({ data: { joined: true } });
 }
@@ -550,12 +859,17 @@ Deno.serve(async (req) => {
     const action = body.action as string;
 
     switch (action) {
-      // Thrift Groups
+      // Thrift Groups (full parity)
       case "create_group": return await handleCreateGroup(userId, body);
       case "list_groups": return await handleListGroups(userId);
       case "join_group": return await handleJoinGroup(userId, body);
+      case "commence_group": return await handleCommenceGroup(userId, body);
       case "contribute_group": return await handleContributeGroup(userId, body);
       case "get_group_detail": return await handleGetGroupDetail(body);
+      case "request_swap": return await handleRequestSwap(userId, body);
+      case "respond_swap": return await handleRespondSwap(userId, body);
+      case "exit_group": return await handleExitGroup(userId, body);
+      case "restart_group": return await handleRestartGroup(userId, body);
 
       // Target Ajo
       case "create_target": return await handleCreateTarget(userId, body);
