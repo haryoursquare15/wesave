@@ -57,6 +57,17 @@ export default function VfdSandbox() {
   // Balance state
   const [liveBalance, setLiveBalance] = useState<string | null>(null);
 
+  // Lock Funds state
+  interface LockConfig { id: string; duration_months: number; interest_rate: number; early_withdrawal_penalty: number; }
+  interface UserBalance { total_balance: number; locked_balance: number; savings_balance: number; available_balance: number; last_synced_at: string | null; }
+  interface LockedFund { id: string; principal_amount: number; interest_rate: number; duration_months: number; expected_interest: number; total_payout: number; start_date: string; maturity_date: string; actual_unlock_date: string | null; penalty_amount: number; status: string; }
+
+  const [lockConfigs, setLockConfigs] = useState<LockConfig[]>([]);
+  const [userBalance, setUserBalance] = useState<UserBalance | null>(null);
+  const [lockedFunds, setLockedFunds] = useState<LockedFund[]>([]);
+  const [lockAmount, setLockAmount] = useState("");
+  const [lockDuration, setLockDuration] = useState<string>("");
+
   useEffect(() => {
     if (!authLoading && !user) {
       navigate("/auth");
