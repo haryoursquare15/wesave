@@ -168,6 +168,10 @@ async function handleJoinGroup(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const groupId = body.group_id as string;
 
+  const { data: existing } = await db.from("vfd_sandbox_group_members")
+    .select("id").eq("group_id", groupId).eq("user_id", userId).maybeSingle();
+  if (existing) return jsonResponse({ data: { joined: true, message: "Already a member" } });
+
   const { data: group } = await db.from("vfd_sandbox_groups").select("*").eq("id", groupId).single();
   if (!group) return jsonResponse({ error: "Group not found" }, 404);
   if (group.member_count >= group.max_members) return jsonResponse({ error: "Group is full" }, 400);
