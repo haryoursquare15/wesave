@@ -3194,6 +3194,89 @@ export type Database = {
         }
         Relationships: []
       }
+      vfd_sandbox_campaign_contributions: {
+        Row: {
+          amount: number
+          anonymous: boolean
+          campaign_id: string
+          contributor_id: string
+          created_at: string
+          id: string
+          message: string | null
+          status: string
+        }
+        Insert: {
+          amount: number
+          anonymous?: boolean
+          campaign_id: string
+          contributor_id: string
+          created_at?: string
+          id?: string
+          message?: string | null
+          status?: string
+        }
+        Update: {
+          amount?: number
+          anonymous?: boolean
+          campaign_id?: string
+          contributor_id?: string
+          created_at?: string
+          id?: string
+          message?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vfd_sandbox_campaign_contributions_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "vfd_sandbox_campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vfd_sandbox_campaigns: {
+        Row: {
+          contributor_count: number
+          created_at: string
+          creator_id: string
+          deadline: string | null
+          description: string | null
+          goal_amount: number
+          id: string
+          raised_amount: number
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          contributor_count?: number
+          created_at?: string
+          creator_id: string
+          deadline?: string | null
+          description?: string | null
+          goal_amount: number
+          id?: string
+          raised_amount?: number
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          contributor_count?: number
+          created_at?: string
+          creator_id?: string
+          deadline?: string | null
+          description?: string | null
+          goal_amount?: number
+          id?: string
+          raised_amount?: number
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       vfd_sandbox_clients: {
         Row: {
           account_status: string | null
@@ -3254,6 +3337,375 @@ export type Database = {
           user_id?: string
           vfd_account_number?: string | null
           vfd_client_id?: string | null
+        }
+        Relationships: []
+      }
+      vfd_sandbox_group_contributions: {
+        Row: {
+          amount: number
+          created_at: string
+          cycle_number: number
+          group_id: string
+          id: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          cycle_number: number
+          group_id: string
+          id?: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          cycle_number?: number
+          group_id?: string
+          id?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vfd_sandbox_group_contributions_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "vfd_sandbox_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vfd_sandbox_group_members: {
+        Row: {
+          group_id: string
+          has_contributed_current: boolean
+          has_received_payout: boolean
+          id: string
+          joined_at: string
+          payout_position: number | null
+          user_id: string
+        }
+        Insert: {
+          group_id: string
+          has_contributed_current?: boolean
+          has_received_payout?: boolean
+          id?: string
+          joined_at?: string
+          payout_position?: number | null
+          user_id: string
+        }
+        Update: {
+          group_id?: string
+          has_contributed_current?: boolean
+          has_received_payout?: boolean
+          id?: string
+          joined_at?: string
+          payout_position?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vfd_sandbox_group_members_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "vfd_sandbox_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vfd_sandbox_group_payouts: {
+        Row: {
+          created_at: string
+          cycle_number: number
+          gross_amount: number
+          group_id: string
+          id: string
+          net_amount: number
+          platform_fee: number
+          recipient_id: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          cycle_number: number
+          gross_amount: number
+          group_id: string
+          id?: string
+          net_amount: number
+          platform_fee?: number
+          recipient_id: string
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          cycle_number?: number
+          gross_amount?: number
+          group_id?: string
+          id?: string
+          net_amount?: number
+          platform_fee?: number
+          recipient_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vfd_sandbox_group_payouts_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "vfd_sandbox_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vfd_sandbox_groups: {
+        Row: {
+          admin_id: string
+          contribution_amount: number
+          created_at: string
+          current_cycle: number
+          id: string
+          max_members: number
+          member_count: number
+          name: string
+          period: string
+          status: string
+          total_cycles: number
+          updated_at: string
+        }
+        Insert: {
+          admin_id: string
+          contribution_amount: number
+          created_at?: string
+          current_cycle?: number
+          id?: string
+          max_members?: number
+          member_count?: number
+          name: string
+          period?: string
+          status?: string
+          total_cycles?: number
+          updated_at?: string
+        }
+        Update: {
+          admin_id?: string
+          contribution_amount?: number
+          created_at?: string
+          current_cycle?: number
+          id?: string
+          max_members?: number
+          member_count?: number
+          name?: string
+          period?: string
+          status?: string
+          total_cycles?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      vfd_sandbox_split_participants: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          paid_at: string | null
+          split_id: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          paid_at?: string | null
+          split_id: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          paid_at?: string | null
+          split_id?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vfd_sandbox_split_participants_split_id_fkey"
+            columns: ["split_id"]
+            isOneToOne: false
+            referencedRelation: "vfd_sandbox_splits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vfd_sandbox_splits: {
+        Row: {
+          created_at: string
+          creator_id: string
+          id: string
+          merchant_account: string | null
+          merchant_bank: string | null
+          merchant_name: string | null
+          paid_count: number
+          per_person_amount: number
+          split_count: number
+          status: string
+          title: string
+          total_amount: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          creator_id: string
+          id?: string
+          merchant_account?: string | null
+          merchant_bank?: string | null
+          merchant_name?: string | null
+          paid_count?: number
+          per_person_amount: number
+          split_count?: number
+          status?: string
+          title: string
+          total_amount: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          creator_id?: string
+          id?: string
+          merchant_account?: string | null
+          merchant_bank?: string | null
+          merchant_name?: string | null
+          paid_count?: number
+          per_person_amount?: number
+          split_count?: number
+          status?: string
+          title?: string
+          total_amount?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      vfd_sandbox_target_contributions: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          status: string
+          target_id: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          status?: string
+          target_id: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          status?: string
+          target_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vfd_sandbox_target_contributions_target_id_fkey"
+            columns: ["target_id"]
+            isOneToOne: false
+            referencedRelation: "vfd_sandbox_targets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vfd_sandbox_target_members: {
+        Row: {
+          contributed_amount: number
+          id: string
+          joined_at: string
+          target_id: string
+          user_id: string
+        }
+        Insert: {
+          contributed_amount?: number
+          id?: string
+          joined_at?: string
+          target_id: string
+          user_id: string
+        }
+        Update: {
+          contributed_amount?: number
+          id?: string
+          joined_at?: string
+          target_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vfd_sandbox_target_members_target_id_fkey"
+            columns: ["target_id"]
+            isOneToOne: false
+            referencedRelation: "vfd_sandbox_targets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vfd_sandbox_targets: {
+        Row: {
+          admin_id: string
+          contribution_amount: number
+          created_at: string
+          frequency: string
+          goal_amount: number
+          id: string
+          max_members: number
+          member_count: number
+          name: string
+          savings_type: string
+          status: string
+          target_date: string | null
+          total_contributed: number
+          updated_at: string
+        }
+        Insert: {
+          admin_id: string
+          contribution_amount: number
+          created_at?: string
+          frequency?: string
+          goal_amount: number
+          id?: string
+          max_members?: number
+          member_count?: number
+          name: string
+          savings_type?: string
+          status?: string
+          target_date?: string | null
+          total_contributed?: number
+          updated_at?: string
+        }
+        Update: {
+          admin_id?: string
+          contribution_amount?: number
+          created_at?: string
+          frequency?: string
+          goal_amount?: number
+          id?: string
+          max_members?: number
+          member_count?: number
+          name?: string
+          savings_type?: string
+          status?: string
+          target_date?: string | null
+          total_contributed?: number
+          updated_at?: string
         }
         Relationships: []
       }
