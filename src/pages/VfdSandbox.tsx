@@ -14,8 +14,13 @@ import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, Shield, Wallet, Send, CreditCard, RefreshCw, CheckCircle2,
   AlertTriangle, User, Building2, History, Lock, Unlock, TrendingUp,
+  Users, Target, Heart, Receipt,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
+import { SandboxAjoTab } from "@/components/vfd-sandbox/SandboxAjoTab";
+import { SandboxTargetTab } from "@/components/vfd-sandbox/SandboxTargetTab";
+import { SandboxGoalTab } from "@/components/vfd-sandbox/SandboxGoalTab";
+import { SandboxSplitTab } from "@/components/vfd-sandbox/SandboxSplitTab";
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
