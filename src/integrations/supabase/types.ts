@@ -3019,6 +3019,181 @@ export type Database = {
         }
         Relationships: []
       }
+      vfd_interest_accruals: {
+        Row: {
+          accrual_date: string
+          created_at: string
+          cumulative_interest: number
+          daily_interest: number
+          id: string
+          lock_id: string
+          user_id: string
+        }
+        Insert: {
+          accrual_date: string
+          created_at?: string
+          cumulative_interest: number
+          daily_interest: number
+          id?: string
+          lock_id: string
+          user_id: string
+        }
+        Update: {
+          accrual_date?: string
+          created_at?: string
+          cumulative_interest?: number
+          daily_interest?: number
+          id?: string
+          lock_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vfd_interest_accruals_lock_id_fkey"
+            columns: ["lock_id"]
+            isOneToOne: false
+            referencedRelation: "vfd_locked_funds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vfd_lock_configs: {
+        Row: {
+          created_at: string
+          duration_months: number
+          early_withdrawal_penalty: number
+          id: string
+          interest_rate: number
+          is_active: boolean
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          duration_months: number
+          early_withdrawal_penalty?: number
+          id?: string
+          interest_rate: number
+          is_active?: boolean
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          duration_months?: number
+          early_withdrawal_penalty?: number
+          id?: string
+          interest_rate?: number
+          is_active?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      vfd_lock_ledger: {
+        Row: {
+          amount: number
+          balance_after: number
+          balance_before: number
+          created_at: string
+          description: string | null
+          entry_type: string
+          id: string
+          lock_id: string | null
+          locked_after: number
+          locked_before: number
+          metadata: Json | null
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          balance_after?: number
+          balance_before?: number
+          created_at?: string
+          description?: string | null
+          entry_type: string
+          id?: string
+          lock_id?: string | null
+          locked_after?: number
+          locked_before?: number
+          metadata?: Json | null
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          balance_after?: number
+          balance_before?: number
+          created_at?: string
+          description?: string | null
+          entry_type?: string
+          id?: string
+          lock_id?: string | null
+          locked_after?: number
+          locked_before?: number
+          metadata?: Json | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vfd_lock_ledger_lock_id_fkey"
+            columns: ["lock_id"]
+            isOneToOne: false
+            referencedRelation: "vfd_locked_funds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vfd_locked_funds: {
+        Row: {
+          actual_unlock_date: string | null
+          created_at: string
+          duration_months: number
+          expected_interest: number
+          id: string
+          interest_rate: number
+          maturity_date: string
+          penalty_amount: number | null
+          principal_amount: number
+          source: string
+          start_date: string
+          status: string
+          total_payout: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          actual_unlock_date?: string | null
+          created_at?: string
+          duration_months: number
+          expected_interest: number
+          id?: string
+          interest_rate: number
+          maturity_date: string
+          penalty_amount?: number | null
+          principal_amount: number
+          source?: string
+          start_date?: string
+          status?: string
+          total_payout: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          actual_unlock_date?: string | null
+          created_at?: string
+          duration_months?: number
+          expected_interest?: number
+          id?: string
+          interest_rate?: number
+          maturity_date?: string
+          penalty_amount?: number | null
+          principal_amount?: number
+          source?: string
+          start_date?: string
+          status?: string
+          total_payout?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       vfd_sandbox_clients: {
         Row: {
           account_status: string | null
@@ -3163,6 +3338,42 @@ export type Database = {
           payload?: Json
           processed?: boolean | null
           processed_at?: string | null
+        }
+        Relationships: []
+      }
+      vfd_user_balances: {
+        Row: {
+          available_balance: number | null
+          created_at: string
+          id: string
+          last_synced_at: string | null
+          locked_balance: number
+          savings_balance: number
+          total_balance: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          available_balance?: number | null
+          created_at?: string
+          id?: string
+          last_synced_at?: string | null
+          locked_balance?: number
+          savings_balance?: number
+          total_balance?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          available_balance?: number | null
+          created_at?: string
+          id?: string
+          last_synced_at?: string | null
+          locked_balance?: number
+          savings_balance?: number
+          total_balance?: number
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
