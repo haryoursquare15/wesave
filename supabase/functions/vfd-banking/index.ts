@@ -944,19 +944,7 @@ async function handleGetLockLedger(userId: string) {
   if (error) return jsonResponse({ error: error.message }, 500);
   return jsonResponse({ data });
 }
-  const supabaseAdmin = getSupabaseAdmin();
-  const { data, error } = await supabaseAdmin
-    .from("vfd_sandbox_transactions")
-    .select("*")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(50);
 
-  if (error) {
-    return jsonResponse({ error: error.message }, 500);
-  }
-  return jsonResponse({ data });
-}
 
 // ─── MAIN HANDLER ───────────────────────────────────────────────
 
