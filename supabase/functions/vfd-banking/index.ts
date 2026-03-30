@@ -1050,6 +1050,31 @@ Deno.serve(async (req) => {
       case "get_transactions":
         return await handleGetTransactions(userId);
 
+      // Lock Funds actions
+      case "get_lock_configs":
+        return await handleGetLockConfigs();
+
+      case "get_user_balance":
+        return await handleGetUserBalance(userId);
+
+      case "sync_balance":
+        return await handleSyncBalance(userId);
+
+      case "create_lock":
+        return await handleCreateLock(userId, body);
+
+      case "get_locked_funds":
+        return await handleGetLockedFunds(userId);
+
+      case "unlock_funds":
+        return await handleUnlockFunds(userId, body.lock_id as string);
+
+      case "break_lock":
+        return await handleBreakLock(userId, body.lock_id as string);
+
+      case "get_lock_ledger":
+        return await handleGetLockLedger(userId);
+
       default:
         return jsonResponse({ error: `Unknown action: ${action}` }, 400);
     }
