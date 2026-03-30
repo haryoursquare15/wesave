@@ -844,6 +844,160 @@ async function handleJoinSplit(userId: string, body: Record<string, unknown>) {
 }
 
 // =============================================
+// ASSOCIATION HANDLERS (mirrors production associations)
+// =============================================
+
+async function handleCreateAssociation(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const name = body.name as string;
+  const description = (body.description as string) || null;
+  const maxMembers = Math.min(Math.max(Number(body.max_members) || 50, 5), 50);
+
+  if (!name?.trim()) return jsonResponse({ error: "Association name is required" }, 400);
+
+  // Create association
+  const { data: assoc, error } = await db.from("vfd_sandbox_associations").insert({
+    name: name.trim(),
+    description,
+    admin_id: userId,
+    max_members: maxMembers,
+    member_count: 1,
+  }).select().single();
+  if (error) return jsonResponse({ error: error.message }, 500);
+
+  // Add creator as admin member
+  await db.from("vfd_sandbox_association_memberships").insert({
+    association_id: assoc.id,
+    user_id: userId,
+    role: "admin",
+  });
+
+  // Create association wallet
+  await db.from("vfd_sandbox_association_wallets").insert({
+    association_id: assoc.id,
+    available_balance: 0,
+  });
+
+  return jsonResponse({ data: assoc });
+}
+
+async function handleListAssociations(userId: string) {
+  const db = getSupabaseAdmin();
+
+  const { data: all } = await db.from("vfd_sandbox_associations")
+    .select("*").eq("status", "active").order("created_at", { ascending: false });
+
+  // Get user's memberships
+  const { data: memberships } = await db.from("vfd_sandbox_association_memberships")
+    .select("association_id").eq("user_id", userId);
+  const myIds = new Set((memberships || []).map((m: { association_id: string }) => m.association_id));
+
+  const mine = (all || []).filter((a: { id: string }) => myIds.has(a.id));
+
+  return jsonResponse({ all: all || [], mine });
+}
+
+async function handleJoinAssociation(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const associationId = body.association_id as string;
+  if (!associationId) return jsonResponse({ error: "association_id required" }, 400);
+
+  const { data: assoc } = await db.from("vfd_sandbox_associations").select("*").eq("id", associationId).single();
+  if (!assoc) return jsonResponse({ error: "Association not found" }, 404);
+  if (assoc.member_count >= assoc.max_members) return jsonResponse({ error: "Association is full" }, 400);
+
+  // Graceful success pattern: check existing membership
+  const { data: existing } = await db.from("vfd_sandbox_association_memberships")
+    .select("id").eq("association_id", associationId).eq("user_id", userId).maybeSingle();
+  if (existing) return jsonResponse({ data: { joined: true, already_member: true } });
+
+  const { error } = await db.from("vfd_sandbox_association_memberships").insert({
+    association_id: associationId,
+    user_id: userId,
+    role: "member",
+  });
+  if (error) return jsonResponse({ error: error.message }, 500);
+
+  await db.from("vfd_sandbox_associations").update({
+    member_count: assoc.member_count + 1,
+    updated_at: new Date().toISOString(),
+  }).eq("id", associationId);
+
+  return jsonResponse({ data: { joined: true } });
+}
+
+async function handleGetAssociationDetail(body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const associationId = body.association_id as string;
+  if (!associationId) return jsonResponse({ error: "association_id required" }, 400);
+
+  const { data: assoc } = await db.from("vfd_sandbox_associations").select("*").eq("id", associationId).single();
+  if (!assoc) return jsonResponse({ error: "Association not found" }, 404);
+
+  const { data: wallet } = await db.from("vfd_sandbox_association_wallets")
+    .select("available_balance").eq("association_id", associationId).maybeSingle();
+
+  const { data: members } = await db.from("vfd_sandbox_association_memberships")
+    .select("user_id, role, joined_at").eq("association_id", associationId).order("joined_at");
+
+  const { data: contributions } = await db.from("vfd_sandbox_association_contributions")
+    .select("*").eq("association_id", associationId).order("created_at", { ascending: false }).limit(20);
+
+  return jsonResponse({
+    data: {
+      ...assoc,
+      wallet_balance: wallet?.available_balance || 0,
+      members: members || [],
+      contributions: contributions || [],
+    },
+  });
+}
+
+async function handleContributeAssociation(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const associationId = body.association_id as string;
+  const amount = Number(body.amount);
+  const narration = (body.narration as string) || null;
+
+  if (!associationId) return jsonResponse({ error: "association_id required" }, 400);
+  if (!amount || amount <= 0) return jsonResponse({ error: "Valid amount required" }, 400);
+
+  // Verify membership
+  const { data: membership } = await db.from("vfd_sandbox_association_memberships")
+    .select("id").eq("association_id", associationId).eq("user_id", userId).maybeSingle();
+  if (!membership) return jsonResponse({ error: "You must be a member to contribute" }, 403);
+
+  // Debit user's available balance (internal ledger is source of truth)
+  const { data: bal } = await db.from("vfd_user_balances").select("*").eq("user_id", userId).maybeSingle();
+  const available = bal ? Number(bal.total_balance) - Number(bal.locked_balance) - Number(bal.savings_balance) : 0;
+  if (available < amount) return jsonResponse({ error: `Insufficient balance. Available: ₦${available.toLocaleString()}` }, 400);
+
+  // Debit user
+  await db.from("vfd_user_balances").update({
+    total_balance: Number(bal!.total_balance) - amount,
+    last_synced_at: new Date().toISOString(),
+  }).eq("user_id", userId);
+
+  // Credit association wallet
+  const { data: wallet } = await db.from("vfd_sandbox_association_wallets")
+    .select("*").eq("association_id", associationId).single();
+  await db.from("vfd_sandbox_association_wallets").update({
+    available_balance: Number(wallet!.available_balance) + amount,
+    updated_at: new Date().toISOString(),
+  }).eq("association_id", associationId);
+
+  // Record contribution
+  await db.from("vfd_sandbox_association_contributions").insert({
+    association_id: associationId,
+    user_id: userId,
+    amount,
+    narration,
+  });
+
+  return jsonResponse({ data: { contributed: true, amount } });
+}
+
+// =============================================
 // MAIN HANDLER
 // =============================================
 
@@ -887,6 +1041,13 @@ Deno.serve(async (req) => {
       case "list_splits": return await handleListSplits(userId);
       case "join_split": return await handleJoinSplit(userId, body);
       case "pay_split": return await handlePaySplit(userId, body);
+
+      // Associations
+      case "create_association": return await handleCreateAssociation(userId, body);
+      case "list_associations": return await handleListAssociations(userId);
+      case "join_association": return await handleJoinAssociation(userId, body);
+      case "get_association_detail": return await handleGetAssociationDetail(body);
+      case "contribute_association": return await handleContributeAssociation(userId, body);
 
       default:
         return jsonResponse({ error: `Unknown action: ${action}` }, 400);
