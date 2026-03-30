@@ -14,8 +14,13 @@ import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, Shield, Wallet, Send, CreditCard, RefreshCw, CheckCircle2,
   AlertTriangle, User, Building2, History, Lock, Unlock, TrendingUp,
+  Users, Target, Heart, Receipt,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
+import { SandboxAjoTab } from "@/components/vfd-sandbox/SandboxAjoTab";
+import { SandboxTargetTab } from "@/components/vfd-sandbox/SandboxTargetTab";
+import { SandboxGoalTab } from "@/components/vfd-sandbox/SandboxGoalTab";
+import { SandboxSplitTab } from "@/components/vfd-sandbox/SandboxSplitTab";
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -605,27 +610,16 @@ export default function VfdSandbox() {
         {/* Wallet & Actions - Show after KYC done */}
         {kycStep === "done" && vfd.client && (
           <Tabs defaultValue="wallet" className="space-y-4">
-            <TabsList className="grid w-full grid-cols-5">
-              <TabsTrigger value="wallet">
-                <Wallet className="h-4 w-4 mr-1" />
-                Wallet
-              </TabsTrigger>
-              <TabsTrigger value="fund">
-                <CreditCard className="h-4 w-4 mr-1" />
-                Fund
-              </TabsTrigger>
-              <TabsTrigger value="lock" onClick={() => { if (lockConfigs.length === 0) loadLockData(); }}>
-                <Lock className="h-4 w-4 mr-1" />
-                Lock
-              </TabsTrigger>
-              <TabsTrigger value="transfer">
-                <Send className="h-4 w-4 mr-1" />
-                Transfer
-              </TabsTrigger>
-              <TabsTrigger value="history">
-                <History className="h-4 w-4 mr-1" />
-                History
-              </TabsTrigger>
+            <TabsList className="grid w-full grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-1">
+              <TabsTrigger value="wallet"><Wallet className="h-4 w-4 mr-1" />Wallet</TabsTrigger>
+              <TabsTrigger value="fund"><CreditCard className="h-4 w-4 mr-1" />Fund</TabsTrigger>
+              <TabsTrigger value="lock" onClick={() => { if (lockConfigs.length === 0) loadLockData(); }}><Lock className="h-4 w-4 mr-1" />Lock</TabsTrigger>
+              <TabsTrigger value="transfer"><Send className="h-4 w-4 mr-1" />Transfer</TabsTrigger>
+              <TabsTrigger value="ajo"><Users className="h-4 w-4 mr-1" />Ajo</TabsTrigger>
+              <TabsTrigger value="target"><Target className="h-4 w-4 mr-1" />Target</TabsTrigger>
+              <TabsTrigger value="goal"><Heart className="h-4 w-4 mr-1" />Goal</TabsTrigger>
+              <TabsTrigger value="split"><Receipt className="h-4 w-4 mr-1" />Split</TabsTrigger>
+              <TabsTrigger value="history"><History className="h-4 w-4 mr-1" />History</TabsTrigger>
             </TabsList>
 
             {/* Wallet Tab */}
@@ -1071,6 +1065,12 @@ export default function VfdSandbox() {
                 </CardContent>
               </Card>
             </TabsContent>
+
+            {/* Product Tabs */}
+            <TabsContent value="ajo"><SandboxAjoTab /></TabsContent>
+            <TabsContent value="target"><SandboxTargetTab /></TabsContent>
+            <TabsContent value="goal"><SandboxGoalTab /></TabsContent>
+            <TabsContent value="split"><SandboxSplitTab /></TabsContent>
 
             {/* History Tab */}
             <TabsContent value="history">
