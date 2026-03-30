@@ -1066,6 +1066,12 @@ export default function VfdSandbox() {
               </Card>
             </TabsContent>
 
+            {/* Product Tabs */}
+            <TabsContent value="ajo"><SandboxAjoTab /></TabsContent>
+            <TabsContent value="target"><SandboxTargetTab /></TabsContent>
+            <TabsContent value="goal"><SandboxGoalTab /></TabsContent>
+            <TabsContent value="split"><SandboxSplitTab /></TabsContent>
+
             {/* History Tab */}
             <TabsContent value="history">
               <Card>
