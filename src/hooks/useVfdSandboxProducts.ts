@@ -45,12 +45,17 @@ export function useVfdSandboxProducts() {
     [session?.access_token, toast]
   );
 
-  // Thrift Groups
+  // Thrift Groups (full parity)
   const createGroup = useCallback((body: Record<string, unknown>) => invoke("create_group", body), [invoke]);
   const listGroups = useCallback(() => invoke("list_groups"), [invoke]);
   const joinGroup = useCallback((group_id: string) => invoke("join_group", { group_id }), [invoke]);
+  const commenceGroup = useCallback((group_id: string) => invoke("commence_group", { group_id }), [invoke]);
   const contributeGroup = useCallback((group_id: string) => invoke("contribute_group", { group_id }), [invoke]);
   const getGroupDetail = useCallback((group_id: string) => invoke("get_group_detail", { group_id }), [invoke]);
+  const requestSwap = useCallback((group_id: string, target_id: string) => invoke("request_swap", { group_id, target_id }), [invoke]);
+  const respondSwap = useCallback((swap_id: string, accept: boolean) => invoke("respond_swap", { swap_id, accept }), [invoke]);
+  const exitGroup = useCallback((group_id: string) => invoke("exit_group", { group_id }), [invoke]);
+  const restartGroup = useCallback((group_id: string, terms_accepted: boolean) => invoke("restart_group", { group_id, terms_accepted }), [invoke]);
 
   // Target Ajo
   const createTarget = useCallback((body: Record<string, unknown>) => invoke("create_target", body), [invoke]);
@@ -72,9 +77,14 @@ export function useVfdSandboxProducts() {
 
   return {
     loading,
-    createGroup, listGroups, joinGroup, contributeGroup, getGroupDetail,
+    // Thrift Groups
+    createGroup, listGroups, joinGroup, commenceGroup, contributeGroup, getGroupDetail,
+    requestSwap, respondSwap, exitGroup, restartGroup,
+    // Target Ajo
     createTarget, listTargets, contributeTarget, getTargetDetail,
+    // Goal Funding
     createCampaign, listCampaigns, contributeCampaign,
+    // SplitPay
     createSplit, listSplits, joinSplit, paySplit,
   };
 }
