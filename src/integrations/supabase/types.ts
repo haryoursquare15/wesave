@@ -3277,6 +3277,33 @@ export type Database = {
         }
         Relationships: []
       }
+      vfd_sandbox_chat_messages: {
+        Row: {
+          created_at: string
+          group_id: string
+          id: string
+          message: string
+          message_type: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          group_id: string
+          id?: string
+          message: string
+          message_type?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          group_id?: string
+          id?: string
+          message?: string
+          message_type?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       vfd_sandbox_clients: {
         Row: {
           account_status: string | null
@@ -3340,6 +3367,104 @@ export type Database = {
         }
         Relationships: []
       }
+      vfd_sandbox_contribution_audit: {
+        Row: {
+          amount: number
+          contribution_type: string
+          created_at: string
+          cycle_id: string
+          group_id: string
+          id: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          contribution_type?: string
+          created_at?: string
+          cycle_id: string
+          group_id: string
+          id?: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          contribution_type?: string
+          created_at?: string
+          cycle_id?: string
+          group_id?: string
+          id?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vfd_sandbox_contribution_audit_cycle_id_fkey"
+            columns: ["cycle_id"]
+            isOneToOne: false
+            referencedRelation: "vfd_sandbox_contribution_cycles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vfd_sandbox_contribution_audit_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "vfd_sandbox_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vfd_sandbox_contribution_cycles: {
+        Row: {
+          completed_at: string | null
+          contribution_deadline: string | null
+          created_at: string
+          cycle_number: number
+          group_id: string
+          id: string
+          payout_amount: number | null
+          payout_recipient_id: string | null
+          platform_fee: number | null
+          status: string
+          total_contributions: number | null
+        }
+        Insert: {
+          completed_at?: string | null
+          contribution_deadline?: string | null
+          created_at?: string
+          cycle_number: number
+          group_id: string
+          id?: string
+          payout_amount?: number | null
+          payout_recipient_id?: string | null
+          platform_fee?: number | null
+          status?: string
+          total_contributions?: number | null
+        }
+        Update: {
+          completed_at?: string | null
+          contribution_deadline?: string | null
+          created_at?: string
+          cycle_number?: number
+          group_id?: string
+          id?: string
+          payout_amount?: number | null
+          payout_recipient_id?: string | null
+          platform_fee?: number | null
+          status?: string
+          total_contributions?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vfd_sandbox_contribution_cycles_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "vfd_sandbox_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vfd_sandbox_group_contributions: {
         Row: {
           amount: number
@@ -3383,27 +3508,36 @@ export type Database = {
           group_id: string
           has_contributed_current: boolean
           has_received_payout: boolean
+          has_used_swap: boolean | null
           id: string
           joined_at: string
           payout_position: number | null
+          status: string | null
+          terms_accepted_at: string | null
           user_id: string
         }
         Insert: {
           group_id: string
           has_contributed_current?: boolean
           has_received_payout?: boolean
+          has_used_swap?: boolean | null
           id?: string
           joined_at?: string
           payout_position?: number | null
+          status?: string | null
+          terms_accepted_at?: string | null
           user_id: string
         }
         Update: {
           group_id?: string
           has_contributed_current?: boolean
           has_received_payout?: boolean
+          has_used_swap?: boolean | null
           id?: string
           joined_at?: string
           payout_position?: number | null
+          status?: string | null
+          terms_accepted_at?: string | null
           user_id?: string
         }
         Relationships: [
@@ -3463,13 +3597,25 @@ export type Database = {
       vfd_sandbox_groups: {
         Row: {
           admin_id: string
+          auto_debit: boolean
+          commenced_at: string | null
           contribution_amount: number
+          contribution_day_of_month: number | null
+          contribution_day_of_week: number | null
+          contribution_hour: number | null
+          contribution_minute: number | null
           created_at: string
           current_cycle: number
+          current_payout_position: number | null
+          description: string | null
           id: string
+          invite_code: string | null
           max_members: number
           member_count: number
           name: string
+          next_contribution_date: string | null
+          next_payout_date: string | null
+          payout_order: string[] | null
           period: string
           status: string
           total_cycles: number
@@ -3477,13 +3623,25 @@ export type Database = {
         }
         Insert: {
           admin_id: string
+          auto_debit?: boolean
+          commenced_at?: string | null
           contribution_amount: number
+          contribution_day_of_month?: number | null
+          contribution_day_of_week?: number | null
+          contribution_hour?: number | null
+          contribution_minute?: number | null
           created_at?: string
           current_cycle?: number
+          current_payout_position?: number | null
+          description?: string | null
           id?: string
+          invite_code?: string | null
           max_members?: number
           member_count?: number
           name: string
+          next_contribution_date?: string | null
+          next_payout_date?: string | null
+          payout_order?: string[] | null
           period?: string
           status?: string
           total_cycles?: number
@@ -3491,19 +3649,108 @@ export type Database = {
         }
         Update: {
           admin_id?: string
+          auto_debit?: boolean
+          commenced_at?: string | null
           contribution_amount?: number
+          contribution_day_of_month?: number | null
+          contribution_day_of_week?: number | null
+          contribution_hour?: number | null
+          contribution_minute?: number | null
           created_at?: string
           current_cycle?: number
+          current_payout_position?: number | null
+          description?: string | null
           id?: string
+          invite_code?: string | null
           max_members?: number
           member_count?: number
           name?: string
+          next_contribution_date?: string | null
+          next_payout_date?: string | null
+          payout_order?: string[] | null
           period?: string
           status?: string
           total_cycles?: number
           updated_at?: string
         }
         Relationships: []
+      }
+      vfd_sandbox_notifications: {
+        Row: {
+          created_at: string
+          group_id: string | null
+          id: string
+          is_read: boolean | null
+          message: string
+          notification_type: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          group_id?: string | null
+          id?: string
+          is_read?: boolean | null
+          message: string
+          notification_type: string
+          title: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          group_id?: string | null
+          id?: string
+          is_read?: boolean | null
+          message?: string
+          notification_type?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      vfd_sandbox_position_swaps: {
+        Row: {
+          created_at: string
+          group_id: string
+          id: string
+          requester_id: string
+          requester_position: number
+          responded_at: string | null
+          status: string
+          target_id: string
+          target_position: number
+        }
+        Insert: {
+          created_at?: string
+          group_id: string
+          id?: string
+          requester_id: string
+          requester_position: number
+          responded_at?: string | null
+          status?: string
+          target_id: string
+          target_position: number
+        }
+        Update: {
+          created_at?: string
+          group_id?: string
+          id?: string
+          requester_id?: string
+          requester_position?: number
+          responded_at?: string | null
+          status?: string
+          target_id?: string
+          target_position?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vfd_sandbox_position_swaps_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "vfd_sandbox_groups"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vfd_sandbox_split_participants: {
         Row: {
