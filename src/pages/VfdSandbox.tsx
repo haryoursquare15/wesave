@@ -274,6 +274,7 @@ export default function VfdSandbox() {
             {currentView === "target" && <ProductWrapper><SandboxTargetTab /></ProductWrapper>}
             {currentView === "goal" && <ProductWrapper><SandboxGoalTab /></ProductWrapper>}
             {currentView === "split" && <ProductWrapper><SandboxSplitTab /></ProductWrapper>}
+            {currentView === "association" && <ProductWrapper><SandboxAssociationTab /></ProductWrapper>}
           </>
         )}
       </div>
