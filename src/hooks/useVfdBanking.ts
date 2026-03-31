@@ -9,6 +9,8 @@ interface VfdClient {
   vfd_client_id: string | null;
   vfd_account_number: string | null;
   bvn: string | null;
+  nin: string | null;
+  address: string | null;
   full_name: string | null;
   phone: string | null;
   gender: string | null;
