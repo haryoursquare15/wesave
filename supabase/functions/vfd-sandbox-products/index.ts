@@ -1955,6 +1955,15 @@ Deno.serve(async (req) => {
       case "bills_pay": return await handleBillsPay(userId, body);
       case "bills_status": return await handleBillsStatus(body);
 
+      // Virtual Cards (VFD BaaS)
+      case "create_virtual_card": return await handleCreateVirtualCard(userId, body);
+      case "activate_card": return await handleActivateCard(userId, body);
+      case "card_pin_change": return await handleCardPinChange(userId, body);
+      case "block_card": return await handleBlockCard(userId, body);
+      case "unblock_card": return await handleUnblockCard(userId, body);
+      case "get_cards": return await handleGetCards(userId);
+      case "get_card_details": return await handleGetCardDetails(userId, body);
+
       default:
         return jsonResponse({ error: `Unknown action: ${action}` }, 400);
     }

@@ -282,6 +282,7 @@ export default function VfdSandbox() {
             {currentView === "split" && <ProductWrapper><SandboxSplitTab /></ProductWrapper>}
             {currentView === "association" && <ProductWrapper><SandboxAssociationTab /></ProductWrapper>}
             {currentView === "bills" && <ProductWrapper><SandboxBillsTab /></ProductWrapper>}
+            {currentView === "card" && <ProductWrapper><SandboxCardTab /></ProductWrapper>}
           </>
         )}
       </div>
