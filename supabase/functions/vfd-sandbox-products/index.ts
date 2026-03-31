@@ -1517,19 +1517,25 @@ const VFD_BILLS_BASE_LIVE = "https://api-apps.vfdbank.systems/vtech-bills/api/v2
 
 async function getVfdAccessToken(): Promise<string | null> {
   const vfdBase = Deno.env.get("VFD_API_BASE") || "https://api-devapps.vfdbank.systems";
-  const ck = Deno.env.get("VFD_CONSUMER_KEY");
-  const cs = Deno.env.get("VFD_CONSUMER_SECRET");
-  if (!ck || !cs) return null;
+  const consumerKey = Deno.env.get("VFD_CONSUMER_KEY");
+  const consumerSecret = Deno.env.get("VFD_CONSUMER_SECRET");
+  if (!consumerKey || !consumerSecret) {
+    console.error("[Bills] VFD_CONSUMER_KEY or VFD_CONSUMER_SECRET not set");
+    return null;
+  }
   try {
-    const r = await fetch(`${vfdBase}/vtech-auth/api/v1.1/oauth2/token`, {
+    const authResp = await fetch(`${vfdBase}/vtech-auth/api/v1.1/oauth2/token`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: `grant_type=client_credentials&client_id=${ck}&client_secret=${cs}`,
+      body: `grant_type=client_credentials&client_id=${consumerKey}&client_secret=${consumerSecret}`,
     });
-    const raw = await r.text();
-    if (!raw) { console.error("[Bills auth] Empty response"); return null; }
+    const raw = await authResp.text();
+    console.log("[Bills auth] status:", authResp.status, "body length:", raw.length);
+    if (!raw) return null;
     const d = JSON.parse(raw);
-    return d?.data?.accessToken || d?.access_token || null;
+    const token = d?.data?.accessToken || d?.access_token;
+    if (!token) console.error("[Bills auth] No token in response:", raw.substring(0, 200));
+    return token || null;
   } catch (e) {
     console.error("[Bills auth error]", e);
     return null;
