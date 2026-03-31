@@ -171,6 +171,139 @@ function jsonResponse(data: unknown, status = 200) {
   });
 }
 
+function toNumber(value: unknown): number {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  if (typeof value === "string") {
+    const parsed = Number(value.replace(/,/g, "").trim());
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
+
+function extractVfdBalance(payload: unknown): number {
+  const root = payload as Record<string, unknown> | null;
+  const inner = (root?.data as Record<string, unknown> | undefined) ?? {};
+  const candidates = [
+    inner.availableBalance,
+    inner.available_balance,
+    inner.ledgerBalance,
+    inner.ledger_balance,
+    inner.accountBalance,
+    inner.account_balance,
+    root?.availableBalance,
+    root?.ledgerBalance,
+    root?.accountBalance,
+  ];
+
+  for (const candidate of candidates) {
+    const amount = toNumber(candidate);
+    if (amount > 0) return amount;
+  }
+
+  return toNumber(candidates[0]);
+}
+
+async function getRecordedSandboxBalance(
+  supabaseAdmin: ReturnType<typeof getSupabaseAdmin>,
+  userId: string
+) {
+  const { data } = await supabaseAdmin
+    .from("vfd_sandbox_transactions")
+    .select("amount, transaction_type, status")
+    .eq("user_id", userId)
+    .eq("status", "completed");
+
+  return (data ?? []).reduce((total, tx) => {
+    const amount = toNumber(tx.amount);
+
+    switch (tx.transaction_type) {
+      case "credit":
+        return total + amount;
+      case "transfer":
+      case "debit":
+        return total - amount;
+      default:
+        return total;
+    }
+  }, 0);
+}
+
+async function ensureBalanceRow(
+  supabaseAdmin: ReturnType<typeof getSupabaseAdmin>,
+  userId: string,
+  options: { accountNo?: string | null; preserveExisting?: boolean } = {}
+) {
+  const { preserveExisting = true } = options;
+
+  const { data: existing } = await supabaseAdmin
+    .from("vfd_user_balances")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  let accountNo = options.accountNo ?? null;
+  if (!accountNo) {
+    const { data: client } = await supabaseAdmin
+      .from("vfd_sandbox_clients")
+      .select("vfd_account_number")
+      .eq("user_id", userId)
+      .maybeSingle();
+    accountNo = client?.vfd_account_number ?? null;
+  }
+
+  let liveBalance = 0;
+  if (accountNo) {
+    const { data: balData } = await vfdRequest("/account/enquiry", "GET", undefined, {
+      accountNumber: accountNo,
+    });
+    liveBalance = extractVfdBalance(balData);
+  }
+
+  const recordedBalance = await getRecordedSandboxBalance(supabaseAdmin, userId);
+  const lockedBalance = toNumber(existing?.locked_balance);
+  const savingsBalance = toNumber(existing?.savings_balance);
+  const existingTotal = toNumber(existing?.total_balance);
+  const totalBalance = Math.max(
+    liveBalance,
+    recordedBalance,
+    lockedBalance + savingsBalance,
+    preserveExisting ? existingTotal : 0
+  );
+  const availableBalance = Math.max(totalBalance - lockedBalance - savingsBalance, 0);
+  const timestamp = new Date().toISOString();
+
+  if (existing) {
+    await supabaseAdmin
+      .from("vfd_user_balances")
+      .update({
+        total_balance: totalBalance,
+        locked_balance: lockedBalance,
+        savings_balance: savingsBalance,
+        available_balance: availableBalance,
+        last_synced_at: timestamp,
+        updated_at: timestamp,
+      })
+      .eq("user_id", userId);
+  } else {
+    await supabaseAdmin.from("vfd_user_balances").insert({
+      user_id: userId,
+      total_balance: totalBalance,
+      locked_balance: lockedBalance,
+      savings_balance: savingsBalance,
+      available_balance: availableBalance,
+      last_synced_at: timestamp,
+    });
+  }
+
+  const { data: updated } = await supabaseAdmin
+    .from("vfd_user_balances")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  return { balance: updated, liveBalance, recordedBalance };
+}
+
 // ─── ACTION HANDLERS ────────────────────────────────────────────
 
 // BVN Lookup
@@ -515,6 +648,13 @@ async function handleTransfer(
     source: "vfd_sandbox",
   });
 
+  if (isSuccess) {
+    await ensureBalanceRow(supabaseAdmin, userId, {
+      accountNo: fromAccount,
+      preserveExisting: false,
+    });
+  }
+
   return jsonResponse({ data, vfd_status: status, reference });
 }
 
@@ -548,39 +688,10 @@ async function handleSandboxCredit(userId: string, accountNo: string, amount: nu
 
   // Auto-sync internal ledger after successful credit
   if (isSuccess) {
-    const { data: existing } = await supabaseAdmin
-      .from("vfd_user_balances")
-      .select("*")
-      .eq("user_id", userId)
-      .maybeSingle();
-
-    // Fetch live VFD balance
-    const { data: balData } = await vfdRequest("/account/enquiry", "GET", undefined, {
-      accountNumber: accountNo,
+    await ensureBalanceRow(supabaseAdmin, userId, {
+      accountNo,
+      preserveExisting: true,
     });
-    const liveBalance = Number(
-      ((balData as Record<string, unknown>)?.data as Record<string, unknown>)?.availableBalance || 0
-    );
-    const finalBalance = Math.max(liveBalance, (existing ? Number(existing.total_balance) : 0) + amount);
-
-    if (existing) {
-      await supabaseAdmin
-        .from("vfd_user_balances")
-        .update({
-          total_balance: finalBalance,
-          last_synced_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq("user_id", userId);
-    } else {
-      await supabaseAdmin.from("vfd_user_balances").insert({
-        user_id: userId,
-        total_balance: finalBalance,
-        locked_balance: 0,
-        savings_balance: 0,
-        last_synced_at: new Date().toISOString(),
-      });
-    }
   }
 
   return jsonResponse({ data, vfd_status: status, reference });
@@ -701,49 +812,12 @@ async function handleSyncBalance(userId: string) {
     return jsonResponse({ error: "No VFD account found" }, 400);
   }
 
-  // Get VFD balance
-  const { data: balData } = await vfdRequest("/account/enquiry", "GET", undefined, {
-    accountNumber: client.vfd_account_number,
+  const { balance, liveBalance, recordedBalance } = await ensureBalanceRow(supabaseAdmin, userId, {
+    accountNo: client.vfd_account_number,
+    preserveExisting: true,
   });
 
-  const vfdBalance = Number(
-    ((balData as Record<string, unknown>)?.data as Record<string, unknown>)?.availableBalance || 0
-  );
-
-  // Upsert internal balance
-  const { data: existing } = await supabaseAdmin
-    .from("vfd_user_balances")
-    .select("*")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (existing) {
-    await supabaseAdmin
-      .from("vfd_user_balances")
-      .update({
-        total_balance: vfdBalance,
-        last_synced_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("user_id", userId);
-  } else {
-    await supabaseAdmin.from("vfd_user_balances").insert({
-      user_id: userId,
-      total_balance: vfdBalance,
-      locked_balance: 0,
-      savings_balance: 0,
-      last_synced_at: new Date().toISOString(),
-    });
-  }
-
-  // Re-fetch
-  const { data: updated } = await supabaseAdmin
-    .from("vfd_user_balances")
-    .select("*")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  return jsonResponse({ data: updated, vfd_balance: vfdBalance });
+  return jsonResponse({ data: balance, vfd_balance: liveBalance, recorded_balance: recordedBalance });
 }
 
 // Create a lock
@@ -766,16 +840,15 @@ async function handleCreateLock(userId: string, body: Record<string, unknown>) {
 
   if (!config) return jsonResponse({ error: "Invalid lock duration" }, 400);
 
-  // Get user balance
-  const { data: balance } = await supabaseAdmin
-    .from("vfd_user_balances")
-    .select("*")
-    .eq("user_id", userId)
-    .maybeSingle();
+  const { balance } = await ensureBalanceRow(supabaseAdmin, userId, { preserveExisting: true });
 
   if (!balance) return jsonResponse({ error: "No balance record. Please sync your balance first." }, 400);
 
-  const availableBalance = Number(balance.total_balance) - Number(balance.locked_balance) - Number(balance.savings_balance);
+  const availableBalance = Math.max(
+    toNumber(balance.available_balance) ||
+      (toNumber(balance.total_balance) - toNumber(balance.locked_balance) - toNumber(balance.savings_balance)),
+    0
+  );
   if (amount > availableBalance) {
     return jsonResponse({ error: `Insufficient available balance. Available: ${availableBalance}` }, 400);
   }
@@ -813,6 +886,7 @@ async function handleCreateLock(userId: string, body: Record<string, unknown>) {
     .from("vfd_user_balances")
     .update({
       locked_balance: newLocked,
+      available_balance: Math.max(toNumber(balance.total_balance) - newLocked - toNumber(balance.savings_balance), 0),
       updated_at: new Date().toISOString(),
     })
     .eq("user_id", userId);
