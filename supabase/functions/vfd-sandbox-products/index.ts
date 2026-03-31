@@ -1572,6 +1572,14 @@ Deno.serve(async (req) => {
       case "get_association_detail": return await handleGetAssociationDetail(body);
       case "contribute_association": return await handleContributeAssociation(userId, body);
 
+      // Bills Payment (VFD BaaS)
+      case "bills_categories": return await handleBillsCategories();
+      case "bills_billers": return await handleBillsBillers(body);
+      case "bills_items": return await handleBillsItems(body);
+      case "bills_validate": return await handleBillsValidate(body);
+      case "bills_pay": return await handleBillsPay(userId, body);
+      case "bills_status": return await handleBillsStatus(body);
+
       default:
         return jsonResponse({ error: `Unknown action: ${action}` }, 400);
     }
