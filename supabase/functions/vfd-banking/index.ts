@@ -979,6 +979,9 @@ Deno.serve(async (req) => {
       case "bvn_lookup":
         return await handleBvnLookup(body.bvn as string);
 
+      case "create_tiered":
+        return await handleCreateTiered(userId, body);
+
       case "create_no_consent":
         return await handleCreateNoConsent(userId, body.bvn as string, body.dateOfBirth as string);
 
