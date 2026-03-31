@@ -201,7 +201,7 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [] 
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1, duration: 0.5 }}
-        className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[hsl(152,69%,30%)] via-[hsl(152,69%,36%)] to-[hsl(168,65%,32%)] p-5 text-white shadow-xl"
+        className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary via-primary/90 to-primary/80 p-5 text-primary-foreground shadow-xl"
       >
         {/* Decorative circles */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
