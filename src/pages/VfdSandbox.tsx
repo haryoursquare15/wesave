@@ -25,7 +25,7 @@ interface LockConfig { id: string; duration_months: number; interest_rate: numbe
 interface UserBalance { total_balance: number; locked_balance: number; savings_balance: number; available_balance: number; last_synced_at: string | null; }
 interface LockedFund { id: string; principal_amount: number; interest_rate: number; duration_months: number; expected_interest: number; total_payout: number; start_date: string; maturity_date: string; actual_unlock_date: string | null; penalty_amount: number; status: string; }
 
-type View = "dashboard" | "fund" | "transfer" | "lock" | "history" | "ajo" | "target" | "goal" | "split" | "association";
+type View = "dashboard" | "fund" | "transfer" | "lock" | "history" | "ajo" | "target" | "goal" | "split" | "association" | "bills";
 
 export default function VfdSandbox() {
   const navigate = useNavigate();
