@@ -181,6 +181,7 @@ export function SandboxCardTab() {
   const [revealed, setRevealed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [defaultPin, setDefaultPin] = useState<string | null>(null);
+  const [needsKyc, setNeedsKyc] = useState(false);
 
   // Pin change state
   const [oldPin, setOldPin] = useState("");
@@ -206,7 +207,14 @@ export function SandboxCardTab() {
 
   const handleCreateCard = async () => {
     setLoading(true);
+    setNeedsKyc(false);
     const result = await sandbox.invoke("create_virtual_card");
+    if (result === null) {
+      // Check if error was KYC-related (toast already shown by hook)
+      setNeedsKyc(true);
+      setLoading(false);
+      return;
+    }
     if (result?.data) {
       toast({ title: "Card Created!", description: `₦${ISSUANCE_FEE.toLocaleString()} issuance fee charged` });
       await loadCards();
@@ -371,6 +379,24 @@ export function SandboxCardTab() {
             </div>
           </div>
         </motion.div>
+
+        {needsKyc && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="bg-destructive/5 border border-destructive/20 rounded-xl p-4"
+          >
+            <div className="flex items-start gap-2.5">
+              <AlertTriangle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
+              <div>
+                <p className="text-xs font-semibold text-destructive">KYC Required</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Please complete your KYC onboarding first. Go to the <strong className="text-foreground">KYC / Account</strong> tab to create your banking profile before requesting a virtual card.
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
 
         <Button
           className="w-full h-12 text-base font-bold"
