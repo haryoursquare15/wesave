@@ -228,7 +228,11 @@ export default function VfdSandbox() {
         ) : (
           <>
             {currentView === "dashboard" && (
-              <SandboxDashboard balance={balanceData} onNavigate={(v) => setCurrentView(v as View)} />
+              <SandboxDashboard
+                balance={balanceData}
+                onNavigate={(v) => setCurrentView(v as View)}
+                recentTransactions={vfd.transactions}
+              />
             )}
             {currentView === "fund" && (
               <SandboxFund
