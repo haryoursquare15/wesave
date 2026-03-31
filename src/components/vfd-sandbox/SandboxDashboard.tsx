@@ -116,6 +116,15 @@ const productBanners = [
     icon: CreditCard,
     accent: "bg-cyan-300/20",
   },
+  {
+    key: "card",
+    title: "Virtual Debit Card",
+    subtitle: "Get a Verve card for online payments — powered by VFD",
+    cta: "Get a Card",
+    gradient: "from-slate-700 to-zinc-900",
+    icon: CreditCard,
+    accent: "bg-slate-400/20",
+  },
 ];
 
 /* ─── Product Grid Items ─── */
