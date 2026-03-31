@@ -240,6 +240,8 @@ export default function VfdSandbox() {
               <SandboxFund
                 loading={vfd.loading}
                 accountNumber={balanceData.accountNumber}
+                bankName="VFD Microfinance Bank"
+                fullName={balanceData.fullName}
                 onFund={handleFund}
                 onBack={goBack}
               />
