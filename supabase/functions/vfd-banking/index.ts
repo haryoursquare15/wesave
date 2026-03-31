@@ -279,7 +279,6 @@ async function ensureBalanceRow(
         total_balance: totalBalance,
         locked_balance: lockedBalance,
         savings_balance: savingsBalance,
-        available_balance: availableBalance,
         last_synced_at: timestamp,
         updated_at: timestamp,
       })
@@ -290,7 +289,6 @@ async function ensureBalanceRow(
       total_balance: totalBalance,
       locked_balance: lockedBalance,
       savings_balance: savingsBalance,
-      available_balance: availableBalance,
       last_synced_at: timestamp,
     });
   }
@@ -886,7 +884,6 @@ async function handleCreateLock(userId: string, body: Record<string, unknown>) {
     .from("vfd_user_balances")
     .update({
       locked_balance: newLocked,
-      available_balance: Math.max(toNumber(balance.total_balance) - newLocked - toNumber(balance.savings_balance), 0),
       updated_at: new Date().toISOString(),
     })
     .eq("user_id", userId);
