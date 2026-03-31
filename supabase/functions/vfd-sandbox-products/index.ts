@@ -1526,8 +1526,8 @@ async function getVfdAccessToken(): Promise<string | null> {
   try {
     const authResp = await fetch(`${vfdBase}/vtech-auth/api/v1.1/oauth2/token`, {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: `grant_type=client_credentials&client_id=${consumerKey}&client_secret=${consumerSecret}`,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "-1" }),
     });
     const raw = await authResp.text();
     console.log("[Bills auth] status:", authResp.status, "body length:", raw.length);
