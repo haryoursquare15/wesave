@@ -192,6 +192,7 @@ export function useVfdBanking() {
     fetchTransactions,
     lookupBvn,
     createNoConsent,
+    createTiered,
     createConsent,
     triggerBvnConsent,
     releaseClient,
