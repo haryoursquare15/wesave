@@ -3498,6 +3498,7 @@ export type Database = {
       vfd_sandbox_clients: {
         Row: {
           account_status: string | null
+          address: string | null
           balance: number | null
           bvn: string | null
           consent_status: string | null
@@ -3508,6 +3509,7 @@ export type Database = {
           id: string
           kyc_method: string | null
           metadata: Json | null
+          nin: string | null
           phone: string | null
           source: string | null
           tier: string | null
@@ -3518,6 +3520,7 @@ export type Database = {
         }
         Insert: {
           account_status?: string | null
+          address?: string | null
           balance?: number | null
           bvn?: string | null
           consent_status?: string | null
@@ -3528,6 +3531,7 @@ export type Database = {
           id?: string
           kyc_method?: string | null
           metadata?: Json | null
+          nin?: string | null
           phone?: string | null
           source?: string | null
           tier?: string | null
@@ -3538,6 +3542,7 @@ export type Database = {
         }
         Update: {
           account_status?: string | null
+          address?: string | null
           balance?: number | null
           bvn?: string | null
           consent_status?: string | null
@@ -3548,6 +3553,7 @@ export type Database = {
           id?: string
           kyc_method?: string | null
           metadata?: Json | null
+          nin?: string | null
           phone?: string | null
           source?: string | null
           tier?: string | null
