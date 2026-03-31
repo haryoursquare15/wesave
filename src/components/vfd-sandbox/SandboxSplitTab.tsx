@@ -4,24 +4,44 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useVfdSandboxProducts } from "@/hooks/useVfdSandboxProducts";
-import { Receipt, Plus, RefreshCw, CreditCard } from "lucide-react";
+import {
+  Receipt, Plus, RefreshCw, CreditCard, ArrowLeft, CheckCircle,
+  XCircle, Ban, Info, AlertTriangle,
+} from "lucide-react";
+import { format } from "date-fns";
 
 interface Split {
   id: string; title: string; total_amount: number; split_count: number;
   per_person_amount: number; paid_count: number; status: string;
   merchant_name: string | null; creator_id: string;
-  vfd_sandbox_split_participants?: { user_id: string; status: string }[];
+  fee_per_person?: number; purpose?: string;
+  vfd_sandbox_split_participants?: { user_id: string; status: string; amount_due?: number; paid_at?: string }[];
 }
+
+const PLATFORM_FEE = 100;
+const fmt = (n: number) => new Intl.NumberFormat("en-NG").format(n);
 
 export function SandboxSplitTab() {
   const { toast } = useToast();
   const products = useVfdSandboxProducts();
   const [splits, setSplits] = useState<Split[]>([]);
   const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState({ title: "", total_amount: "", split_count: "2", merchant_name: "" });
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [detailData, setDetailData] = useState<any>(null);
+
+  const [form, setForm] = useState({
+    purpose: "", total_amount: "", split_count: "2",
+    merchant_name: "", merchant_bank_name: "", merchant_account_number: "",
+    expiry_date: "",
+  });
+
+  const totalAmount = parseFloat(form.total_amount) || 0;
+  const splitCount = parseInt(form.split_count) || 0;
+  const amountPerPerson = splitCount > 0 ? Math.ceil((totalAmount / splitCount) * 100) / 100 : 0;
+  const feePerPerson = splitCount > 0 ? Math.ceil((PLATFORM_FEE / splitCount) * 100) / 100 : 0;
+  const totalPerPerson = amountPerPerson + feePerPerson;
 
   const loadSplits = async () => {
     const result = await products.listSplits();
@@ -31,19 +51,168 @@ export function SandboxSplitTab() {
   useEffect(() => { loadSplits(); }, []); // eslint-disable-line
 
   const handleCreate = async () => {
+    if (!form.purpose.trim()) { toast({ title: "Purpose is required", variant: "destructive" }); return; }
+    if (totalAmount < 1000) { toast({ title: "Minimum ₦1,000", description: "The total bill must be at least ₦1,000.", variant: "destructive" }); return; }
+    if (splitCount < 2) { toast({ title: "Need at least 2 participants", variant: "destructive" }); return; }
+
     const result = await products.createSplit({
-      title: form.title,
-      total_amount: Number(form.total_amount),
-      split_count: Number(form.split_count),
+      title: form.purpose,
+      total_amount: totalAmount,
+      split_count: splitCount,
       merchant_name: form.merchant_name || null,
     });
     if (result?.data) {
       toast({ title: "Split Created!" });
-      setForm({ title: "", total_amount: "", split_count: "2", merchant_name: "" });
+      setForm({ purpose: "", total_amount: "", split_count: "2", merchant_name: "", merchant_bank_name: "", merchant_account_number: "", expiry_date: "" });
       setShowCreate(false);
       await loadSplits();
     }
   };
+
+  const loadDetail = async (id: string) => {
+    const result = await products.getSplitDetail(id);
+    if (result?.data) { setDetailData(result.data); setDetailId(id); }
+  };
+
+  // Detail view
+  if (detailId && detailData) {
+    const s = detailData.split || detailData;
+    const participants = detailData.participants || s.vfd_sandbox_split_participants || [];
+    const paidCount = participants.filter((p: any) => p.status === "paid").length;
+    const activeCount = participants.filter((p: any) => p.status !== "declined").length;
+    const slotsRemaining = Math.max(Number(s.split_count) - activeCount, 0);
+    const perPerson = Number(s.per_person_amount);
+    const fee = Number(s.fee_per_person || 0);
+    const totalDue = perPerson + fee;
+    const isCreator = true; // sandbox
+
+    return (
+      <div className="space-y-4">
+        <button onClick={() => { setDetailId(null); setDetailData(null); }} className="text-sm text-primary flex items-center gap-1">
+          <ArrowLeft className="h-3 w-3" /> Back to Splits
+        </button>
+
+        {/* Summary */}
+        <Card>
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-lg">{s.title || s.purpose}</h3>
+              <Badge variant="outline" className={
+                s.status === "active" ? "text-amber-600 border-amber-500" :
+                s.status === "completed" ? "text-green-600 border-green-500" :
+                s.status === "settling" ? "text-blue-600 border-blue-500" : "text-muted-foreground"
+              }>{s.status}</Badge>
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-center">
+              <div className="p-3 rounded-xl bg-primary/5">
+                <p className="text-xs text-muted-foreground">Total Bill</p>
+                <p className="text-lg font-bold">₦{fmt(Number(s.total_amount))}</p>
+              </div>
+              <div className="p-3 rounded-xl bg-primary/5">
+                <p className="text-xs text-muted-foreground">Your Share + Fee</p>
+                <p className="text-lg font-bold">₦{fmt(totalDue)}</p>
+              </div>
+            </div>
+            <div className="flex justify-between text-xs text-muted-foreground border-t border-border pt-2">
+              <span>Bill share: ₦{fmt(perPerson)}</span>
+              <span>Platform fee: ₦{fmt(fee)}</span>
+            </div>
+            {s.merchant_name && <p className="text-xs text-muted-foreground">Merchant: {s.merchant_name}</p>}
+          </CardContent>
+        </Card>
+
+        {/* Group progress */}
+        {s.status === "active" && slotsRemaining > 0 && (
+          <div className="bg-primary/5 border border-primary/20 rounded-xl p-3 flex items-start gap-2">
+            <Info className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold">{activeCount} of {s.split_count} participants joined</p>
+              <p className="text-xs text-muted-foreground">{paidCount} paid so far. Settlement happens when all {s.split_count} have paid.</p>
+            </div>
+          </div>
+        )}
+
+        {/* Action buttons */}
+        {s.status === "active" && (
+          <div className="flex gap-2">
+            <Button className="flex-1" onClick={async () => {
+              const r = await products.paySplit(s.id);
+              if (r?.data) { toast({ title: "Paid!", description: `₦${fmt(totalDue)}` }); loadDetail(s.id); }
+            }} disabled={products.loading}>
+              <CreditCard className="h-4 w-4 mr-1" /> Accept & Pay ₦{fmt(totalDue)}
+            </Button>
+            <Button variant="outline" className="flex-1" onClick={async () => {
+              await products.declineSplit(s.id);
+              toast({ title: "Declined" });
+              loadDetail(s.id);
+            }} disabled={products.loading}>
+              Decline
+            </Button>
+          </div>
+        )}
+
+        {/* Participants */}
+        <div>
+          <h4 className="text-sm font-semibold mb-2">Participants ({participants.length}/{s.split_count})</h4>
+          <div className="space-y-2">
+            {participants.map((p: any, i: number) => (
+              <div key={i} className="flex items-center justify-between text-xs p-2 rounded-lg bg-muted/50">
+                <span className="font-mono">{p.user_id?.slice(0, 8)}...</span>
+                <div className="flex items-center gap-2">
+                  {p.status === "paid" && (
+                    <>
+                      <CheckCircle className="h-3 w-3 text-green-600" />
+                      <span className="text-green-600">Paid</span>
+                      {p.paid_at && <span className="text-muted-foreground">{format(new Date(p.paid_at), "MMM d")}</span>}
+                    </>
+                  )}
+                  {p.status === "pending" && <Badge variant="outline" className="text-[10px]">Pending</Badge>}
+                  {p.status === "declined" && (
+                    <>
+                      <XCircle className="h-3 w-3 text-destructive" />
+                      <span className="text-destructive">Declined</span>
+                    </>
+                  )}
+                  {/* Creator can remove pending participants */}
+                  {isCreator && p.status === "pending" && s.status === "active" && (
+                    <Button size="sm" variant="ghost" className="h-6 px-2 text-destructive text-[10px]" onClick={async () => {
+                      await products.removeSplitParticipant(s.id, p.user_id);
+                      toast({ title: "Removed" });
+                      loadDetail(s.id);
+                    }} disabled={products.loading}>
+                      Remove
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
+            {Array.from({ length: Math.max(0, Number(s.split_count) - participants.length) }).map((_, i) => (
+              <div key={`empty-${i}`} className="flex items-center justify-center text-xs p-2 rounded-lg border border-dashed border-border text-muted-foreground">
+                Waiting for participant...
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Cancel */}
+        {isCreator && s.status === "active" && (
+          <div className="space-y-2">
+            {paidCount > 0 && (
+              <p className="text-xs text-muted-foreground text-center">
+                ⚠️ Cancelling will refund {paidCount} participant{paidCount > 1 ? "s" : ""} who already paid.
+              </p>
+            )}
+            <Button variant="destructive" className="w-full" onClick={async () => {
+              const r = await products.cancelSplit(s.id);
+              if (r?.data) { toast({ title: "Split cancelled" }); setDetailId(null); setDetailData(null); loadSplits(); }
+            }} disabled={products.loading}>
+              <Ban className="h-4 w-4 mr-1" /> Cancel Split Request
+            </Button>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -62,35 +231,45 @@ export function SandboxSplitTab() {
           <CardHeader><CardTitle className="text-sm">Create Bill Split</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             <div>
-              <Label>Title</Label>
-              <Input value={form.title} onChange={(e) => setForm(p => ({ ...p, title: e.target.value }))} placeholder="e.g., Dinner at Iya Basira" />
+              <Label>Purpose of Payment *</Label>
+              <Input value={form.purpose} onChange={(e) => setForm(p => ({ ...p, purpose: e.target.value }))} placeholder="e.g., Dinner at Nkoyo" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>Total (₦)</Label>
-                <Input type="number" value={form.total_amount} onChange={(e) => setForm(p => ({ ...p, total_amount: e.target.value }))} placeholder="10000" />
+                <Label>Total Bill (₦) *</Label>
+                <Input type="number" min={1000} value={form.total_amount} onChange={(e) => setForm(p => ({ ...p, total_amount: e.target.value }))} placeholder="50,000" />
               </div>
               <div>
-                <Label>Split Between</Label>
-                <Select value={form.split_count} onValueChange={(v) => setForm(p => ({ ...p, split_count: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {[2, 3, 4, 5, 6].map(n => <SelectItem key={n} value={n.toString()}>{n} people</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <Label>Total People (incl. you)</Label>
+                <Input type="number" min={2} max={50} value={form.split_count} onChange={(e) => setForm(p => ({ ...p, split_count: e.target.value }))} placeholder="5" />
               </div>
             </div>
-            {form.total_amount && form.split_count && (
-              <p className="text-xs text-muted-foreground">
-                Each person pays: ₦{Math.ceil(Number(form.total_amount) / Number(form.split_count)).toLocaleString()}
-              </p>
+
+            {/* Fee breakdown */}
+            {amountPerPerson > 0 && (
+              <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 space-y-2">
+                <div className="text-center">
+                  <p className="text-sm text-muted-foreground">Amount per person</p>
+                  <p className="text-2xl font-bold text-primary">₦{fmt(totalPerPerson)}</p>
+                </div>
+                <div className="flex justify-between text-xs text-muted-foreground border-t border-primary/10 pt-2">
+                  <span>Bill share: ₦{fmt(amountPerPerson)}</span>
+                  <span>Platform fee: ₦{fmt(feePerPerson)}</span>
+                </div>
+                <p className="text-xs text-muted-foreground text-center">
+                  Includes you + {Math.max(0, splitCount - 1)} {splitCount - 1 === 1 ? "other person" : "others"}
+                </p>
+              </div>
             )}
+
             <div>
-              <Label>Merchant (optional)</Label>
+              <Label>Merchant Name (optional)</Label>
               <Input value={form.merchant_name} onChange={(e) => setForm(p => ({ ...p, merchant_name: e.target.value }))} placeholder="Restaurant name" />
             </div>
-            <Button onClick={handleCreate} disabled={products.loading || !form.title || !form.total_amount} className="w-full">
-              Create Split
+
+            <Button onClick={handleCreate} disabled={products.loading || !form.purpose || !form.total_amount} className="w-full">
+              {products.loading ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : null}
+              Create Split Request
             </Button>
           </CardContent>
         </Card>
@@ -101,47 +280,28 @@ export function SandboxSplitTab() {
       ) : (
         <div className="space-y-3">
           {splits.map((s) => (
-            <Card key={s.id}>
+            <Card key={s.id} className="cursor-pointer hover:border-primary/30 transition-colors" onClick={() => loadDetail(s.id)}>
               <CardContent className="p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="font-semibold">{s.title}</p>
+                    <p className="font-semibold">{s.title || s.purpose}</p>
                     <p className="text-xs text-muted-foreground">
-                      ₦{Number(s.total_amount).toLocaleString()} • {s.paid_count}/{s.split_count} paid
+                      ₦{fmt(Number(s.total_amount))} • {s.paid_count}/{s.split_count} paid
                       {s.merchant_name && ` • ${s.merchant_name}`}
                     </p>
                   </div>
                   <Badge variant="outline" className={
                     s.status === "active" ? "text-amber-600 border-amber-500" :
-                    s.status === "completed" ? "text-green-600 border-green-500" : "text-muted-foreground"
+                    s.status === "completed" ? "text-green-600 border-green-500" :
+                    s.status === "settling" ? "text-blue-600 border-blue-500" : "text-muted-foreground"
                   }>
                     {s.status}
                   </Badge>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
                   <span className="text-muted-foreground">Your share:</span>
-                  <span className="font-semibold">₦{Number(s.per_person_amount).toLocaleString()}</span>
+                  <span className="font-semibold">₦{fmt(Number(s.per_person_amount) + Number(s.fee_per_person || 0))}</span>
                 </div>
-                {s.status === "active" && (
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="outline" onClick={async () => {
-                      await products.joinSplit(s.id);
-                      toast({ title: "Joined split!" });
-                      loadSplits();
-                    }} disabled={products.loading}>
-                      Join
-                    </Button>
-                    <Button size="sm" onClick={async () => {
-                      const result = await products.paySplit(s.id);
-                      if (result?.data) {
-                        toast({ title: "Paid!", description: `₦${Number(s.per_person_amount).toLocaleString()}` });
-                        loadSplits();
-                      }
-                    }} disabled={products.loading}>
-                      <CreditCard className="h-3 w-3 mr-1" /> Pay ₦{Number(s.per_person_amount).toLocaleString()}
-                    </Button>
-                  </div>
-                )}
               </CardContent>
             </Card>
           ))}
