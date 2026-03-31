@@ -1524,18 +1524,20 @@ async function getVfdAccessToken(): Promise<string | null> {
     return null;
   }
   try {
-    const authResp = await fetch(`${vfdBase}/vtech-auth/api/v1.1/oauth2/token`, {
+    const authUrl = `${vfdBase}/vfd-tech/baas-portal/v1.1/baasauth/token`;
+    const authResp = await fetch(authUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "-1" }),
     });
     const raw = await authResp.text();
-    console.log("[Bills auth] status:", authResp.status, "body length:", raw.length);
-    if (!raw) return null;
+    if (!raw) { console.error("[Bills auth] Empty response, status:", authResp.status); return null; }
     const d = JSON.parse(raw);
-    const token = d?.data?.accessToken || d?.access_token;
-    if (!token) console.error("[Bills auth] No token in response:", raw.substring(0, 200));
-    return token || null;
+    if (d?.status === "00" && d?.data?.access_token) {
+      return d.data.access_token;
+    }
+    console.error("[Bills auth] Unexpected response:", raw.substring(0, 200));
+    return null;
   } catch (e) {
     console.error("[Bills auth error]", e);
     return null;
