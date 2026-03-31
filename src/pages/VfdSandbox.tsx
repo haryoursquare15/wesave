@@ -18,6 +18,7 @@ import { SandboxGoalTab } from "@/components/vfd-sandbox/SandboxGoalTab";
 import { SandboxSplitTab } from "@/components/vfd-sandbox/SandboxSplitTab";
 import { SandboxAssociationTab } from "@/components/vfd-sandbox/SandboxAssociationTab";
 import { SandboxBillsTab } from "@/components/vfd-sandbox/SandboxBillsTab";
+import { SandboxCardTab } from "@/components/vfd-sandbox/SandboxCardTab";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 
