@@ -40,7 +40,6 @@ function jsonResponse(data: unknown, status = 200) {
 
 // =============================================
 // VFD ADAPTER LAYER
-// Abstracts VFD API calls so logic never depends on API specifics
 // =============================================
 
 async function fetchVfdLiveBalance(userId: string): Promise<number> {
@@ -132,7 +131,25 @@ async function creditFromSavings(userId: string, amount: number): Promise<void> 
   }).eq("user_id", userId);
 }
 
-// Credit wallet (increase total_balance, used for payouts)
+// Debit directly from total_balance (for association contributions, split payments)
+async function debitWallet(userId: string, amount: number): Promise<boolean> {
+  const db = getSupabaseAdmin();
+  let bal = await ensureBalanceRow(userId);
+  let avail = bal.total_balance - bal.locked_balance - bal.savings_balance;
+
+  if (amount > avail) {
+    bal = await ensureBalanceRow(userId, true);
+    avail = bal.total_balance - bal.locked_balance - bal.savings_balance;
+    if (amount > avail) return false;
+  }
+
+  await db.from("vfd_user_balances").update({
+    total_balance: bal.total_balance - amount,
+    updated_at: new Date().toISOString(),
+  }).eq("user_id", userId);
+  return true;
+}
+
 async function creditWallet(userId: string, amount: number): Promise<void> {
   const db = getSupabaseAdmin();
   const bal = await ensureBalanceRow(userId);
@@ -181,20 +198,25 @@ async function handleCreateGroup(userId: string, body: Record<string, unknown>) 
   const period = (body.period as string) || "monthly";
   const description = (body.description as string) || null;
   const autoDebit = body.auto_debit !== false;
+  const contributionHour = Number(body.contribution_hour) || 16;
+  const contributionMinute = Number(body.contribution_minute) || 0;
+  const contributionDayOfWeek = Number(body.contribution_day_of_week) || 1;
+  const contributionDayOfMonth = Number(body.contribution_day_of_month) || 1;
 
   if (!name || !amount || amount <= 0) return jsonResponse({ error: "Name and contribution amount required" }, 400);
 
   const { data: group, error } = await db.from("vfd_sandbox_groups").insert({
     name, admin_id: userId, contribution_amount: amount,
     period, max_members: maxMembers, total_cycles: maxMembers,
-    status: "pending", // NOT active — must commence after filling
+    status: "pending",
     description, auto_debit: autoDebit,
-    contribution_hour: 16, contribution_minute: 0,
+    contribution_hour: contributionHour, contribution_minute: contributionMinute,
+    contribution_day_of_week: contributionDayOfWeek,
+    contribution_day_of_month: contributionDayOfMonth,
   }).select().single();
 
   if (error) return jsonResponse({ error: error.message }, 500);
 
-  // Admin is member #1 (position assigned after randomization at commencement)
   await db.from("vfd_sandbox_group_members").insert({
     group_id: group.id, user_id: userId, status: "active",
   });
@@ -241,7 +263,6 @@ async function handleJoinGroup(userId: string, body: Record<string, unknown>) {
   return jsonResponse({ data: { joined: true, member_count: newCount, max_members: group.max_members } });
 }
 
-// COMMENCEMENT: Admin starts the group after it's full (matches production)
 async function handleCommenceGroup(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const groupId = body.group_id as string;
@@ -252,7 +273,6 @@ async function handleCommenceGroup(userId: string, body: Record<string, unknown>
   if (group.status !== "pending") return jsonResponse({ error: "Group has already commenced" }, 400);
   if (group.member_count < group.max_members) return jsonResponse({ error: `Group must have ${group.max_members} members to commence` }, 400);
 
-  // Fisher-Yates randomization of payout order
   const { data: members } = await db.from("vfd_sandbox_group_members")
     .select("user_id").eq("group_id", groupId).eq("status", "active");
 
@@ -263,20 +283,17 @@ async function handleCommenceGroup(userId: string, body: Record<string, unknown>
   const memberIds = members.map(m => m.user_id);
   const payoutOrder = fisherYatesShuffle(memberIds);
 
-  // Assign positions based on randomized order
   for (let i = 0; i < payoutOrder.length; i++) {
     await db.from("vfd_sandbox_group_members").update({
       payout_position: i + 1,
     }).eq("group_id", groupId).eq("user_id", payoutOrder[i]);
   }
 
-  // Create first contribution cycle
   const { data: cycle } = await db.from("vfd_sandbox_contribution_cycles").insert({
     group_id: groupId, cycle_number: 1, status: "active",
     payout_recipient_id: payoutOrder[0],
   }).select().single();
 
-  // Activate group
   await db.from("vfd_sandbox_groups").update({
     status: "active", current_cycle: 1, payout_order: payoutOrder,
     current_payout_position: 1,
@@ -286,7 +303,6 @@ async function handleCommenceGroup(userId: string, body: Record<string, unknown>
 
   await postChatMessage(groupId, userId, "🎉 Group has commenced! Payout positions have been randomized. Cycle 1 is now active.", "system");
 
-  // Notify all members of their position
   for (let i = 0; i < payoutOrder.length; i++) {
     await sendNotification(payoutOrder[i], "Group Commenced",
       `${group.name} has started! Your payout position is #${i + 1} of ${group.max_members}.`,
@@ -296,7 +312,7 @@ async function handleCommenceGroup(userId: string, body: Record<string, unknown>
   return jsonResponse({ data: { commenced: true, payout_order: payoutOrder, cycle_id: cycle?.id } });
 }
 
-// POSITION SWAP (matches production logic)
+// POSITION SWAP (matches production: one swap per member, no swap after payout, no swap after contribution in current cycle)
 async function handleRequestSwap(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const groupId = body.group_id as string;
@@ -305,20 +321,23 @@ async function handleRequestSwap(userId: string, body: Record<string, unknown>) 
   const { data: group } = await db.from("vfd_sandbox_groups").select("*").eq("id", groupId).single();
   if (!group || group.status !== "active") return jsonResponse({ error: "Group is not active" }, 400);
 
-  // Check requester is a member
   const { data: requester } = await db.from("vfd_sandbox_group_members")
     .select("*").eq("group_id", groupId).eq("user_id", userId).maybeSingle();
   if (!requester) return jsonResponse({ error: "Not a member" }, 400);
   if (requester.has_used_swap) return jsonResponse({ error: "You have already used your swap for this group" }, 400);
   if (requester.has_received_payout) return jsonResponse({ error: "Cannot swap after receiving payout" }, 400);
 
-  // Check target is a member
+  // Production parity: No swap if any member has contributed this cycle
+  const { count: contribCount } = await db.from("vfd_sandbox_group_contributions")
+    .select("*", { count: "exact", head: true })
+    .eq("group_id", groupId).eq("cycle_number", group.current_cycle);
+  if (contribCount && contribCount > 0) return jsonResponse({ error: "Cannot swap after contributions have started for this cycle" }, 400);
+
   const { data: target } = await db.from("vfd_sandbox_group_members")
     .select("*").eq("group_id", groupId).eq("user_id", targetId).maybeSingle();
   if (!target) return jsonResponse({ error: "Target is not a member" }, 400);
   if (target.has_received_payout) return jsonResponse({ error: "Target has already received payout" }, 400);
 
-  // Check no pending swap exists
   const { data: existing } = await db.from("vfd_sandbox_position_swaps")
     .select("id").eq("group_id", groupId).eq("requester_id", userId).eq("status", "pending").maybeSingle();
   if (existing) return jsonResponse({ error: "You already have a pending swap request" }, 400);
@@ -348,17 +367,14 @@ async function handleRespondSwap(userId: string, body: Record<string, unknown>) 
   if (swap.status !== "pending") return jsonResponse({ error: "Swap is no longer pending" }, 400);
 
   if (accept) {
-    // Execute the swap
     await db.from("vfd_sandbox_group_members").update({ payout_position: swap.target_position })
       .eq("group_id", swap.group_id).eq("user_id", swap.requester_id);
     await db.from("vfd_sandbox_group_members").update({ payout_position: swap.requester_position })
       .eq("group_id", swap.group_id).eq("user_id", swap.target_id);
 
-    // Mark requester as having used swap
     await db.from("vfd_sandbox_group_members").update({ has_used_swap: true })
       .eq("group_id", swap.group_id).eq("user_id", swap.requester_id);
 
-    // Update payout_order array
     const { data: group } = await db.from("vfd_sandbox_groups").select("payout_order").eq("id", swap.group_id).single();
     if (group?.payout_order) {
       const newOrder = [...group.payout_order];
@@ -385,7 +401,7 @@ async function handleRespondSwap(userId: string, body: Record<string, unknown>) 
   return jsonResponse({ data: { status: accept ? "accepted" : "declined" } });
 }
 
-// CONTRIBUTE (matches production: wallet debit → audit → auto-payout)
+// CONTRIBUTE (matches production: wallet debit → audit → chat → notification → auto-payout)
 async function handleContributeGroup(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const groupId = body.group_id as string;
@@ -394,27 +410,23 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
   if (!group) return jsonResponse({ error: "Group not found" }, 404);
   if (group.status !== "active") return jsonResponse({ error: "Group is not active" }, 400);
 
-  // Get active cycle
   const { data: activeCycle } = await db.from("vfd_sandbox_contribution_cycles")
     .select("*").eq("group_id", groupId).eq("status", "active").single();
   if (!activeCycle) return jsonResponse({ error: "No active contribution cycle" }, 400);
 
-  // Idempotency: check if already contributed this cycle
+  // Idempotency
   const { data: existingContrib } = await db.from("vfd_sandbox_group_contributions")
     .select("id").eq("group_id", groupId).eq("user_id", userId).eq("cycle_number", group.current_cycle).maybeSingle();
   if (existingContrib) return jsonResponse({ error: "Already contributed this cycle" }, 400);
 
-  // Debit from available balance
   const amount = Number(group.contribution_amount);
   const debited = await debitForSavings(userId, amount);
   if (!debited) return jsonResponse({ error: "Insufficient wallet balance. Please fund your wallet first." }, 400);
 
-  // Record contribution
   await db.from("vfd_sandbox_group_contributions").insert({
     group_id: groupId, user_id: userId, cycle_number: group.current_cycle, amount,
   });
 
-  // Audit log
   await db.from("vfd_sandbox_contribution_audit").insert({
     user_id: userId, group_id: groupId, cycle_id: activeCycle.id,
     amount, contribution_type: "manual", status: "success",
@@ -428,7 +440,6 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
     `Your contribution of ₦${amount.toLocaleString()} has been recorded.`,
     "contribution_success", groupId);
 
-  // Check if all members contributed
   const { count } = await db.from("vfd_sandbox_group_contributions")
     .select("*", { count: "exact", head: true })
     .eq("group_id", groupId).eq("cycle_number", group.current_cycle);
@@ -443,13 +454,9 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
 
   return jsonResponse({
     data: {
-      success: true,
-      contributed: true,
-      amount,
-      cycle: group.current_cycle,
-      payment_source: "wallet",
-      all_contributed: allContributed,
-      auto_payout: payoutResult,
+      success: true, contributed: true, amount,
+      cycle: group.current_cycle, payment_source: "wallet",
+      all_contributed: allContributed, auto_payout: payoutResult,
       message: allContributed ? "All members have contributed!" : "Contribution recorded successfully",
     },
   });
@@ -468,7 +475,6 @@ async function processAutoPayout(
   const totalCycles = Number(group.total_cycles);
   const payoutOrder = group.payout_order as string[];
 
-  // Determine recipient from payout_order
   const recipientId = payoutOrder[currentCycle - 1];
   if (!recipientId) return { success: false, error: "No recipient for this cycle" };
 
@@ -476,18 +482,16 @@ async function processAutoPayout(
   const platformFee = Math.round(grossAmount * 0.025 * 100) / 100; // 2.5%
   const netAmount = grossAmount - platformFee;
 
-  // Credit recipient: release their own savings contribution + net gain
-  await creditFromSavings(recipientId, amount); // Release their own contribution
-  await creditWallet(recipientId, netAmount - amount); // Net gain on top
+  // Release recipient's own savings contribution, then credit net gain
+  await creditFromSavings(recipientId, amount);
+  await creditWallet(recipientId, netAmount - amount);
 
-  // Record payout
   await db.from("vfd_sandbox_group_payouts").insert({
     group_id: groupId, recipient_id: recipientId,
     cycle_number: currentCycle, gross_amount: grossAmount,
     platform_fee: platformFee, net_amount: netAmount,
   });
 
-  // Update cycle
   await db.from("vfd_sandbox_contribution_cycles").update({
     status: "completed", payout_recipient_id: recipientId,
     payout_amount: netAmount, platform_fee: platformFee,
@@ -497,27 +501,15 @@ async function processAutoPayout(
   await db.from("vfd_sandbox_group_members").update({ has_received_payout: true })
     .eq("group_id", groupId).eq("user_id", recipientId);
 
-  // Advance cycle or complete group
   const nextCycle = currentCycle + 1;
   if (nextCycle > totalCycles) {
     await db.from("vfd_sandbox_groups").update({
       status: "completed", updated_at: new Date().toISOString(),
     }).eq("id", groupId);
 
-    // Release all remaining savings holds for non-recipient members
-    const { data: allMembers } = await db.from("vfd_sandbox_group_members").select("user_id").eq("group_id", groupId);
-    if (allMembers) {
-      for (const m of allMembers) {
-        if (m.user_id !== recipientId) {
-          // Their savings_balance holds from contributions should already be released via payouts
-        }
-      }
-    }
-
     await postChatMessage(groupId, recipientId,
       `🎉 Group completed! Final payout of ₦${netAmount.toLocaleString()} sent.`, "payout_notification");
   } else {
-    // Create next cycle
     const nextRecipientId = payoutOrder[nextCycle - 1];
     await db.from("vfd_sandbox_contribution_cycles").insert({
       group_id: groupId, cycle_number: nextCycle, status: "active",
@@ -556,7 +548,7 @@ async function handleGetGroupDetail(body: Record<string, unknown>) {
   return jsonResponse({ data: { group, members, contributions, payouts, cycles, swaps, chat } });
 }
 
-// GROUP LIFECYCLE: Exit (matches production)
+// GROUP LIFECYCLE: Exit (matches production: only completed groups, chat system message)
 async function handleExitGroup(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const groupId = body.group_id as string;
@@ -572,12 +564,33 @@ async function handleExitGroup(userId: string, body: Record<string, unknown>) {
   await db.from("vfd_sandbox_group_members").update({ status: "exited" })
     .eq("group_id", groupId).eq("user_id", userId);
 
+  await db.from("vfd_sandbox_groups").update({
+    member_count: Math.max(0, group.member_count - 1),
+    updated_at: new Date().toISOString(),
+  }).eq("id", groupId);
+
   await postChatMessage(groupId, userId, "has exited the group", "system");
 
   return jsonResponse({ data: { success: true } });
 }
 
-// GROUP LIFECYCLE: Restart (matches production)
+// GROUP LIFECYCLE: Confirm continue (matches production)
+async function handleConfirmContinue(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const groupId = body.group_id as string;
+
+  const { data: group } = await db.from("vfd_sandbox_groups").select("*").eq("id", groupId).single();
+  if (!group) return jsonResponse({ error: "Group not found" }, 404);
+  if (group.status !== "completed") return jsonResponse({ error: "Group is not completed" }, 400);
+
+  const { data: membership } = await db.from("vfd_sandbox_group_members")
+    .select("*").eq("group_id", groupId).eq("user_id", userId).eq("status", "active").maybeSingle();
+  if (!membership) return jsonResponse({ error: "Not an active member" }, 400);
+
+  return jsonResponse({ data: { success: true, confirmed: true } });
+}
+
+// GROUP LIFECYCLE: Restart (matches production: re-randomize, T&C required, need max_members to restart)
 async function handleRestartGroup(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const groupId = body.group_id as string;
@@ -589,15 +602,14 @@ async function handleRestartGroup(userId: string, body: Record<string, unknown>)
 
   if (!body.terms_accepted) return jsonResponse({ error: "You must accept the terms and conditions" }, 400);
 
-  // Get active members (not exited)
   const { data: activeMembers } = await db.from("vfd_sandbox_group_members")
     .select("user_id").eq("group_id", groupId).eq("status", "active");
 
-  if (!activeMembers || activeMembers.length < 2) {
-    return jsonResponse({ error: "Need at least 2 active members to restart" }, 400);
+  // Production parity: group cannot restart until it reaches max member limit
+  if (!activeMembers || activeMembers.length < group.max_members) {
+    return jsonResponse({ error: `Need ${group.max_members} active members to restart (currently ${activeMembers?.length || 0})` }, 400);
   }
 
-  // Re-randomize payout order with remaining members
   const memberIds = activeMembers.map(m => m.user_id);
   const newPayoutOrder = fisherYatesShuffle(memberIds);
 
@@ -608,7 +620,6 @@ async function handleRestartGroup(userId: string, body: Record<string, unknown>)
     }).eq("group_id", groupId).eq("user_id", newPayoutOrder[i]);
   }
 
-  // Create new cycle 1
   await db.from("vfd_sandbox_contribution_cycles").insert({
     group_id: groupId, cycle_number: 1, status: "active",
     payout_recipient_id: newPayoutOrder[0],
@@ -617,17 +628,24 @@ async function handleRestartGroup(userId: string, body: Record<string, unknown>)
   await db.from("vfd_sandbox_groups").update({
     status: "active", current_cycle: 1, payout_order: newPayoutOrder,
     current_payout_position: 1, total_cycles: activeMembers.length,
-    member_count: activeMembers.length, max_members: activeMembers.length,
     updated_at: new Date().toISOString(),
   }).eq("id", groupId);
 
   await postChatMessage(groupId, userId, "🔄 Group has been restarted! New payout positions randomized. Cycle 1 begins.", "system");
 
+  // Notify all members
+  for (const memberId of memberIds) {
+    const pos = newPayoutOrder.indexOf(memberId) + 1;
+    await sendNotification(memberId, "Group Restarted",
+      `${group.name} has been restarted. Your new payout position is #${pos}.`,
+      "group_restarted", groupId);
+  }
+
   return jsonResponse({ data: { success: true, payout_order: newPayoutOrder } });
 }
 
 // =============================================
-// TARGET AJO (unchanged logic, same as before)
+// TARGET AJO — FULL PRODUCTION PARITY
 // =============================================
 
 async function handleCreateTarget(userId: string, body: Record<string, unknown>) {
@@ -637,6 +655,8 @@ async function handleCreateTarget(userId: string, body: Record<string, unknown>)
   const maxMembers = Number(body.max_members) || 5;
   const frequency = (body.frequency as string) || "daily";
   const savingsType = (body.savings_type as string) || "group";
+  const description = (body.description as string) || null;
+  const reason = (body.reason as string) || null;
 
   if (!name || !goalAmount) return jsonResponse({ error: "Name and goal amount required" }, 400);
 
@@ -646,10 +666,13 @@ async function handleCreateTarget(userId: string, body: Record<string, unknown>)
   else if (frequency === "weekly") targetDate.setDate(targetDate.getDate() + maxMembers * 7);
   else targetDate.setMonth(targetDate.getMonth() + maxMembers);
 
+  const inviteLimit = maxMembers - 1; // Admin is member #1
+
   const { data: target, error } = await db.from("vfd_sandbox_targets").insert({
     name, admin_id: userId, goal_amount: goalAmount,
     contribution_amount: contributionAmount, frequency, max_members: maxMembers,
     savings_type: savingsType, target_date: targetDate.toISOString(), status: "active",
+    description, reason, invite_limit: inviteLimit,
   }).select().single();
 
   if (error) return jsonResponse({ error: error.message }, 500);
@@ -659,8 +682,20 @@ async function handleCreateTarget(userId: string, body: Record<string, unknown>)
 
 async function handleListTargets(userId: string) {
   const db = getSupabaseAdmin();
-  const { data } = await db.from("vfd_sandbox_targets").select("*, vfd_sandbox_target_members(user_id)").order("created_at", { ascending: false });
-  return jsonResponse({ data });
+  const { data } = await db.from("vfd_sandbox_targets")
+    .select("*, vfd_sandbox_target_members(user_id)")
+    .in("status", ["active", "completed"])
+    .order("created_at", { ascending: false });
+
+  // Separate my groups vs all
+  const { data: memberships } = await db.from("vfd_sandbox_target_members")
+    .select("target_id").eq("user_id", userId);
+  const myIds = new Set((memberships || []).map((m: { target_id: string }) => m.target_id));
+
+  const all = data || [];
+  const mine = all.filter((t: { id: string; admin_id: string }) => myIds.has(t.id) || t.admin_id === userId);
+
+  return jsonResponse({ data: all, mine });
 }
 
 async function handleContributeTarget(userId: string, body: Record<string, unknown>) {
@@ -671,35 +706,54 @@ async function handleContributeTarget(userId: string, body: Record<string, unkno
   if (!target) return jsonResponse({ error: "Target not found" }, 404);
   if (target.status !== "active") return jsonResponse({ error: "Target is not active" }, 400);
 
+  // Verify membership
+  const { data: membership } = await db.from("vfd_sandbox_target_members")
+    .select("*").eq("target_id", targetId).eq("user_id", userId).maybeSingle();
+  if (!membership) return jsonResponse({ error: "You must be a member to contribute" }, 400);
+
   const amount = Number(target.contribution_amount);
   const debited = await debitForSavings(userId, amount);
   if (!debited) return jsonResponse({ error: "Insufficient available balance" }, 400);
 
-  await db.from("vfd_sandbox_target_contributions").insert({ target_id: targetId, user_id: userId, amount });
+  const txRef = `target-${targetId}-${userId}-${Date.now()}`;
+  await db.from("vfd_sandbox_target_contributions").insert({
+    target_id: targetId, user_id: userId, amount, reference: txRef,
+  });
 
-  const { data: member } = await db.from("vfd_sandbox_target_members")
-    .select("*").eq("target_id", targetId).eq("user_id", userId).maybeSingle();
-  if (member) {
+  // Update member's contributed amount
+  if (membership) {
     await db.from("vfd_sandbox_target_members").update({
-      contributed_amount: Number(member.contributed_amount) + amount,
-    }).eq("id", member.id);
+      contributed_amount: Number(membership.contributed_amount) + amount,
+    }).eq("id", membership.id);
   }
 
   const newTotal = Number(target.total_contributed) + amount;
   const updates: Record<string, unknown> = { total_contributed: newTotal, updated_at: new Date().toISOString() };
-  if (newTotal >= Number(target.goal_amount)) updates.status = "completed";
+
+  let targetReached = false;
+  if (newTotal >= Number(target.goal_amount)) {
+    updates.status = "completed";
+    targetReached = true;
+  }
   await db.from("vfd_sandbox_targets").update(updates).eq("id", targetId);
 
-  if (newTotal >= Number(target.goal_amount)) {
+  // Production parity: On target reached, release funds back to individual wallets
+  if (targetReached) {
     const { data: allMembers } = await db.from("vfd_sandbox_target_members").select("*").eq("target_id", targetId);
     if (allMembers) {
       for (const m of allMembers) {
-        await creditFromSavings(m.user_id, Number(m.contributed_amount) + (m.user_id === userId ? amount : 0));
+        const memberContributed = Number(m.contributed_amount) + (m.user_id === userId ? amount : 0);
+        if (memberContributed > 0) {
+          await creditFromSavings(m.user_id, memberContributed);
+          await sendNotification(m.user_id, "🎯 Target Achieved!",
+            `"${target.name}" has reached its savings target! ₦${memberContributed.toLocaleString()} has been released to your wallet.`,
+            "target_achieved");
+        }
       }
     }
   }
 
-  return jsonResponse({ data: { contributed: true, amount, total: newTotal } });
+  return jsonResponse({ data: { contributed: true, amount, total: newTotal, target_reached: targetReached, tx_ref: txRef } });
 }
 
 async function handleGetTargetDetail(body: Record<string, unknown>) {
@@ -707,12 +761,216 @@ async function handleGetTargetDetail(body: Record<string, unknown>) {
   const targetId = body.target_id as string;
   const { data: target } = await db.from("vfd_sandbox_targets").select("*").eq("id", targetId).single();
   const { data: members } = await db.from("vfd_sandbox_target_members").select("*").eq("target_id", targetId);
-  const { data: contributions } = await db.from("vfd_sandbox_target_contributions").select("*").eq("target_id", targetId).order("created_at", { ascending: false }).limit(20);
-  return jsonResponse({ data: { target, members, contributions } });
+  const { data: contributions } = await db.from("vfd_sandbox_target_contributions").select("*").eq("target_id", targetId).order("created_at", { ascending: false }).limit(50);
+  const { data: invites } = await db.from("vfd_sandbox_target_invites").select("*").eq("target_id", targetId);
+  const { data: withdrawalRequests } = await db.from("vfd_sandbox_target_withdrawal_requests").select("*").eq("target_id", targetId).order("created_at", { ascending: false });
+
+  // Get votes for withdrawal requests
+  let votes: unknown[] = [];
+  if (withdrawalRequests && withdrawalRequests.length > 0) {
+    const wrIds = withdrawalRequests.map((w: { id: string }) => w.id);
+    const { data: v } = await db.from("vfd_sandbox_target_withdrawal_votes").select("*").in("withdrawal_request_id", wrIds);
+    votes = v || [];
+  }
+
+  return jsonResponse({ data: { target, members, contributions, invites, withdrawal_requests: withdrawalRequests, votes } });
+}
+
+// Target Ajo: Invite member
+async function handleInviteTargetMember(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const targetId = body.target_id as string;
+  const inviteeId = body.invitee_id as string;
+
+  const { data: target } = await db.from("vfd_sandbox_targets").select("*").eq("id", targetId).single();
+  if (!target) return jsonResponse({ error: "Target not found" }, 404);
+  if (target.admin_id !== userId) return jsonResponse({ error: "Only admin can invite" }, 403);
+
+  // Check invite limit (max_members - 1)
+  const { count: inviteCount } = await db.from("vfd_sandbox_target_invites")
+    .select("*", { count: "exact", head: true })
+    .eq("target_id", targetId).in("status", ["pending", "accepted"]);
+  if (inviteCount && inviteCount >= (target.max_members - 1)) {
+    return jsonResponse({ error: `Invite limit reached (max ${target.max_members - 1})` }, 400);
+  }
+
+  // Graceful: check existing
+  const { data: existing } = await db.from("vfd_sandbox_target_invites")
+    .select("id").eq("target_id", targetId).eq("invitee_id", inviteeId).maybeSingle();
+  if (existing) return jsonResponse({ data: { invited: true, already_invited: true } });
+
+  await db.from("vfd_sandbox_target_invites").insert({
+    target_id: targetId, inviter_id: userId, invitee_id: inviteeId,
+  });
+
+  await sendNotification(inviteeId, "Target Ajo Invite",
+    `You've been invited to join "${target.name}" savings group.`,
+    "target_invite");
+
+  return jsonResponse({ data: { invited: true } });
+}
+
+// Target Ajo: Respond to invite
+async function handleRespondTargetInvite(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const inviteId = body.invite_id as string;
+  const accept = body.accept as boolean;
+
+  const { data: invite } = await db.from("vfd_sandbox_target_invites").select("*").eq("id", inviteId).single();
+  if (!invite) return jsonResponse({ error: "Invite not found" }, 404);
+  if (invite.invitee_id !== userId) return jsonResponse({ error: "Not authorized" }, 403);
+  if (invite.status !== "pending") return jsonResponse({ error: "Invite already responded" }, 400);
+
+  await db.from("vfd_sandbox_target_invites").update({
+    status: accept ? "accepted" : "declined",
+    responded_at: new Date().toISOString(),
+  }).eq("id", inviteId);
+
+  if (accept) {
+    // Add as member
+    const { data: existing } = await db.from("vfd_sandbox_target_members")
+      .select("id").eq("target_id", invite.target_id).eq("user_id", userId).maybeSingle();
+    if (!existing) {
+      await db.from("vfd_sandbox_target_members").insert({
+        target_id: invite.target_id, user_id: userId,
+      });
+      // Update member count
+      const { data: target } = await db.from("vfd_sandbox_targets").select("member_count").eq("id", invite.target_id).single();
+      if (target) {
+        await db.from("vfd_sandbox_targets").update({
+          member_count: (target.member_count || 1) + 1,
+          updated_at: new Date().toISOString(),
+        }).eq("id", invite.target_id);
+      }
+    }
+  }
+
+  return jsonResponse({ data: { status: accept ? "accepted" : "declined" } });
+}
+
+// Target Ajo: Withdrawal request (group mode — requires votes)
+async function handleRequestTargetWithdrawal(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const targetId = body.target_id as string;
+  const amount = Number(body.amount);
+  const reason = (body.reason as string) || null;
+
+  const { data: target } = await db.from("vfd_sandbox_targets").select("*").eq("id", targetId).single();
+  if (!target) return jsonResponse({ error: "Target not found" }, 404);
+  if (target.savings_type !== "group") return jsonResponse({ error: "Withdrawal requests are only for group mode" }, 400);
+
+  const { data: membership } = await db.from("vfd_sandbox_target_members")
+    .select("*").eq("target_id", targetId).eq("user_id", userId).maybeSingle();
+  if (!membership) return jsonResponse({ error: "Not a member" }, 400);
+
+  // Required votes = majority of members
+  const { count: memberCount } = await db.from("vfd_sandbox_target_members")
+    .select("*", { count: "exact", head: true }).eq("target_id", targetId);
+  const requiredVotes = Math.ceil((memberCount || 1) / 2);
+
+  const { data: wr, error } = await db.from("vfd_sandbox_target_withdrawal_requests").insert({
+    target_id: targetId, requested_by: userId, amount,
+    reason, required_votes: requiredVotes,
+  }).select().single();
+
+  if (error) return jsonResponse({ error: error.message }, 500);
+  return jsonResponse({ data: wr });
+}
+
+// Target Ajo: Vote on withdrawal
+async function handleVoteTargetWithdrawal(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const requestId = body.request_id as string;
+  const vote = body.vote as string; // "approve" or "reject"
+
+  const { data: wr } = await db.from("vfd_sandbox_target_withdrawal_requests").select("*").eq("id", requestId).single();
+  if (!wr) return jsonResponse({ error: "Request not found" }, 404);
+  if (wr.status !== "pending") return jsonResponse({ error: "Request already resolved" }, 400);
+
+  // Check membership
+  const { data: membership } = await db.from("vfd_sandbox_target_members")
+    .select("id").eq("target_id", wr.target_id).eq("user_id", userId).maybeSingle();
+  if (!membership) return jsonResponse({ error: "Not a member" }, 400);
+
+  // Check duplicate vote
+  const { data: existingVote } = await db.from("vfd_sandbox_target_withdrawal_votes")
+    .select("id").eq("withdrawal_request_id", requestId).eq("user_id", userId).maybeSingle();
+  if (existingVote) return jsonResponse({ error: "Already voted" }, 400);
+
+  await db.from("vfd_sandbox_target_withdrawal_votes").insert({
+    withdrawal_request_id: requestId, user_id: userId, vote,
+  });
+
+  const newApproval = wr.approval_count + (vote === "approve" ? 1 : 0);
+  const newRejection = wr.rejection_count + (vote === "reject" ? 1 : 0);
+
+  await db.from("vfd_sandbox_target_withdrawal_requests").update({
+    approval_count: newApproval, rejection_count: newRejection,
+  }).eq("id", requestId);
+
+  // Check if approved
+  if (newApproval >= wr.required_votes) {
+    // Process withdrawal: credit requester wallet from savings
+    await creditFromSavings(wr.requested_by, Number(wr.amount));
+    await db.from("vfd_sandbox_target_withdrawal_requests").update({
+      status: "approved", resolved_at: new Date().toISOString(),
+    }).eq("id", requestId);
+
+    await sendNotification(wr.requested_by, "Withdrawal Approved",
+      `Your withdrawal of ₦${Number(wr.amount).toLocaleString()} has been approved and credited.`,
+      "withdrawal_approved");
+  }
+
+  // Check if rejected (more rejections than possible approvals)
+  const { count: totalMembers } = await db.from("vfd_sandbox_target_members")
+    .select("*", { count: "exact", head: true }).eq("target_id", wr.target_id);
+  const remainingVotes = (totalMembers || 0) - newApproval - newRejection;
+  if (newApproval + remainingVotes < wr.required_votes) {
+    await db.from("vfd_sandbox_target_withdrawal_requests").update({
+      status: "rejected", resolved_at: new Date().toISOString(),
+    }).eq("id", requestId);
+
+    await sendNotification(wr.requested_by, "Withdrawal Rejected",
+      `Your withdrawal request was rejected by the group.`,
+      "withdrawal_rejected");
+  }
+
+  return jsonResponse({ data: { voted: true, vote } });
+}
+
+// Target Ajo: Independent mode instant withdrawal
+async function handleIndependentWithdrawal(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const targetId = body.target_id as string;
+
+  const { data: target } = await db.from("vfd_sandbox_targets").select("*").eq("id", targetId).single();
+  if (!target) return jsonResponse({ error: "Target not found" }, 404);
+  if (target.savings_type !== "independent") return jsonResponse({ error: "Instant withdrawal is only for independent mode" }, 400);
+
+  const { data: membership } = await db.from("vfd_sandbox_target_members")
+    .select("*").eq("target_id", targetId).eq("user_id", userId).maybeSingle();
+  if (!membership) return jsonResponse({ error: "Not a member" }, 400);
+
+  const contributed = Number(membership.contributed_amount);
+  if (contributed <= 0) return jsonResponse({ error: "No contributions to withdraw" }, 400);
+
+  // Release from savings to wallet
+  await creditFromSavings(userId, contributed);
+
+  // Reset member contribution
+  await db.from("vfd_sandbox_target_members").update({ contributed_amount: 0 }).eq("id", membership.id);
+
+  // Update target total
+  await db.from("vfd_sandbox_targets").update({
+    total_contributed: Math.max(0, Number(target.total_contributed) - contributed),
+    updated_at: new Date().toISOString(),
+  }).eq("id", targetId);
+
+  return jsonResponse({ data: { withdrawn: true, amount: contributed } });
 }
 
 // =============================================
-// GOAL FUNDING (unchanged)
+// GOAL FUNDING — FULL PRODUCTION PARITY
 // =============================================
 
 async function handleCreateCampaign(userId: string, body: Record<string, unknown>) {
@@ -721,22 +979,42 @@ async function handleCreateCampaign(userId: string, body: Record<string, unknown
   const goalAmount = Number(body.goal_amount);
   const description = body.description as string || null;
   const deadline = body.deadline as string || null;
+  const contributionVisibility = (body.contribution_visibility as string) || "public";
+  const beneficiaryAccountName = body.beneficiary_account_name as string || null;
+  const beneficiaryBankName = body.beneficiary_bank_name as string || null;
+  const beneficiaryAccountNumber = body.beneficiary_account_number as string || null;
+  const campaignImage = body.campaign_image as string || null;
 
   if (!title || !goalAmount) return jsonResponse({ error: "Title and goal amount required" }, 400);
+
+  // Generate slug
+  const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') + '-' + Date.now().toString(36);
 
   const { data, error } = await db.from("vfd_sandbox_campaigns").insert({
     title, creator_id: userId, goal_amount: goalAmount, description,
     deadline: deadline ? new Date(deadline).toISOString() : null,
+    contribution_visibility: contributionVisibility,
+    beneficiary_account_name: beneficiaryAccountName,
+    beneficiary_bank_name: beneficiaryBankName,
+    beneficiary_account_number: beneficiaryAccountNumber,
+    campaign_image: campaignImage,
+    campaign_slug: slug,
   }).select().single();
 
   if (error) return jsonResponse({ error: error.message }, 500);
   return jsonResponse({ data });
 }
 
-async function handleListCampaigns() {
+async function handleListCampaigns(userId: string) {
   const db = getSupabaseAdmin();
-  const { data } = await db.from("vfd_sandbox_campaigns").select("*").order("created_at", { ascending: false });
-  return jsonResponse({ data });
+  const { data: all } = await db.from("vfd_sandbox_campaigns")
+    .select("*")
+    .in("status", ["active", "completed"])
+    .order("created_at", { ascending: false });
+
+  const mine = (all || []).filter((c: { creator_id: string }) => c.creator_id === userId);
+
+  return jsonResponse({ data: all || [], mine });
 }
 
 async function handleContributeCampaign(userId: string, body: Record<string, unknown>) {
@@ -745,6 +1023,7 @@ async function handleContributeCampaign(userId: string, body: Record<string, unk
   const amount = Number(body.amount);
   const anonymous = body.anonymous as boolean || false;
   const message = body.message as string || null;
+  const contributorName = body.contributor_name as string || null;
 
   if (!amount || amount <= 0) return jsonResponse({ error: "Invalid amount" }, 400);
 
@@ -752,21 +1031,70 @@ async function handleContributeCampaign(userId: string, body: Record<string, unk
   if (!campaign) return jsonResponse({ error: "Campaign not found" }, 404);
   if (campaign.status !== "active") return jsonResponse({ error: "Campaign is not active" }, 400);
 
-  const debited = await debitForSavings(userId, amount);
+  // Production parity: Goal funding sends directly to beneficiary bank, not pool.
+  // In sandbox, debit wallet (simulate direct payment)
+  const debited = await debitWallet(userId, amount);
   if (!debited) return jsonResponse({ error: "Insufficient available balance" }, 400);
 
-  await db.from("vfd_sandbox_campaign_contributions").insert({ campaign_id: campaignId, contributor_id: userId, amount, anonymous, message });
+  const contributionRef = `goal-${campaignId}-${userId}-${Date.now()}`;
+
+  await db.from("vfd_sandbox_campaign_contributions").insert({
+    campaign_id: campaignId, contributor_id: userId, amount, anonymous, message,
+    contributor_name: contributorName,
+    contribution_reference: contributionRef,
+  });
 
   const newRaised = Number(campaign.raised_amount) + amount;
-  const updates: Record<string, unknown> = { raised_amount: newRaised, contributor_count: campaign.contributor_count + 1, updated_at: new Date().toISOString() };
+  const updates: Record<string, unknown> = {
+    raised_amount: newRaised,
+    contributor_count: campaign.contributor_count + 1,
+    updated_at: new Date().toISOString(),
+  };
   if (newRaised >= Number(campaign.goal_amount)) updates.status = "completed";
   await db.from("vfd_sandbox_campaigns").update(updates).eq("id", campaignId);
 
   return jsonResponse({ data: { contributed: true, amount, total_raised: newRaised } });
 }
 
+// Goal: Campaign detail
+async function handleGetCampaignDetail(body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const campaignId = body.campaign_id as string;
+
+  const { data: campaign } = await db.from("vfd_sandbox_campaigns").select("*").eq("id", campaignId).single();
+  if (!campaign) return jsonResponse({ error: "Campaign not found" }, 404);
+
+  const { data: contributions } = await db.from("vfd_sandbox_campaign_contributions")
+    .select("*").eq("campaign_id", campaignId).order("created_at", { ascending: false });
+
+  const { data: updates } = await db.from("vfd_sandbox_campaign_updates")
+    .select("*").eq("campaign_id", campaignId).order("created_at", { ascending: false });
+
+  return jsonResponse({ data: { campaign, contributions: contributions || [], updates: updates || [] } });
+}
+
+// Goal: Post campaign update
+async function handlePostCampaignUpdate(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const campaignId = body.campaign_id as string;
+  const updateMessage = body.update_message as string;
+
+  if (!updateMessage?.trim()) return jsonResponse({ error: "Update message required" }, 400);
+
+  const { data: campaign } = await db.from("vfd_sandbox_campaigns").select("creator_id").eq("id", campaignId).single();
+  if (!campaign) return jsonResponse({ error: "Campaign not found" }, 404);
+  if (campaign.creator_id !== userId) return jsonResponse({ error: "Only campaign owner can post updates" }, 403);
+
+  const { data, error } = await db.from("vfd_sandbox_campaign_updates").insert({
+    campaign_id: campaignId, created_by: userId, update_message: updateMessage.trim(),
+  }).select().single();
+
+  if (error) return jsonResponse({ error: error.message }, 500);
+  return jsonResponse({ data });
+}
+
 // =============================================
-// SPLITPAY (unchanged)
+// SPLITPAY — FULL PRODUCTION PARITY
 // =============================================
 
 async function handleCreateSplit(userId: string, body: Record<string, unknown>) {
@@ -774,28 +1102,90 @@ async function handleCreateSplit(userId: string, body: Record<string, unknown>) 
   const title = body.title as string;
   const totalAmount = Number(body.total_amount);
   const splitCount = Number(body.split_count) || 2;
+  const merchantAccountName = body.merchant_account_name as string || null;
+  const merchantBankName = body.merchant_bank_name as string || null;
+  const merchantAccountNumber = body.merchant_account_number as string || null;
+  const expiryDays = Number(body.expiry_days) || 7;
 
   if (!title || !totalAmount || totalAmount < 100) return jsonResponse({ error: "Title and total amount (min ₦100) required" }, 400);
 
   const perPerson = Math.ceil(totalAmount / splitCount);
+  const platformFee = Math.round(totalAmount * 0.015 * 100) / 100; // 1.5% platform fee (production parity)
+  const expiryDate = new Date();
+  expiryDate.setDate(expiryDate.getDate() + expiryDays);
 
   const { data: split, error } = await db.from("vfd_sandbox_splits").insert({
     title, creator_id: userId, total_amount: totalAmount,
     split_count: splitCount, per_person_amount: perPerson,
-    merchant_name: body.merchant_name as string || null,
-    merchant_account: body.merchant_account as string || null,
-    merchant_bank: body.merchant_bank as string || null,
+    merchant_account_name: merchantAccountName,
+    merchant_bank_name: merchantBankName,
+    merchant_account_number: merchantAccountNumber,
+    platform_fee: platformFee,
+    expiry_date: expiryDate.toISOString(),
   }).select().single();
 
   if (error) return jsonResponse({ error: error.message }, 500);
-  await db.from("vfd_sandbox_split_participants").insert({ split_id: split.id, user_id: userId, amount: perPerson });
+
+  // Creator is first participant
+  await db.from("vfd_sandbox_split_participants").insert({
+    split_id: split.id, user_id: userId, amount: perPerson,
+  });
+
   return jsonResponse({ data: split });
 }
 
 async function handleListSplits(userId: string) {
   const db = getSupabaseAdmin();
-  const { data } = await db.from("vfd_sandbox_splits").select("*, vfd_sandbox_split_participants(user_id, status)").order("created_at", { ascending: false });
-  return jsonResponse({ data });
+
+  // Get all splits where user is creator or participant
+  const { data: participations } = await db.from("vfd_sandbox_split_participants")
+    .select("split_id").eq("user_id", userId);
+  const participatedIds = (participations || []).map((p: { split_id: string }) => p.split_id);
+
+  const { data: asCreator } = await db.from("vfd_sandbox_splits")
+    .select("*").eq("creator_id", userId).order("created_at", { ascending: false });
+
+  const { data: asParticipant } = participatedIds.length > 0
+    ? await db.from("vfd_sandbox_splits").select("*").in("id", participatedIds).order("created_at", { ascending: false })
+    : { data: [] };
+
+  // Merge and deduplicate
+  const allMap = new Map<string, unknown>();
+  for (const s of [...(asCreator || []), ...(asParticipant || [])]) {
+    allMap.set((s as { id: string }).id, s);
+  }
+
+  return jsonResponse({ data: Array.from(allMap.values()) });
+}
+
+async function handleJoinSplit(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const splitId = body.split_id as string;
+
+  const { data: split } = await db.from("vfd_sandbox_splits").select("*").eq("id", splitId).single();
+  if (!split) return jsonResponse({ error: "Split not found" }, 404);
+  if (split.status !== "active") return jsonResponse({ error: "Split is not active" }, 400);
+
+  // Check expiry
+  if (split.expiry_date && new Date(split.expiry_date) < new Date()) {
+    return jsonResponse({ error: "Split has expired" }, 400);
+  }
+
+  // Graceful: check existing
+  const { data: existing } = await db.from("vfd_sandbox_split_participants")
+    .select("id").eq("split_id", splitId).eq("user_id", userId).maybeSingle();
+  if (existing) return jsonResponse({ data: { joined: true, already_member: true } });
+
+  const { count } = await db.from("vfd_sandbox_split_participants")
+    .select("*", { count: "exact", head: true }).eq("split_id", splitId);
+  if (count && count >= split.split_count) return jsonResponse({ error: "Split is full" }, 400);
+
+  const { error } = await db.from("vfd_sandbox_split_participants").insert({
+    split_id: splitId, user_id: userId, amount: Number(split.per_person_amount),
+  });
+  if (error) return jsonResponse({ error: error.message }, 500);
+
+  return jsonResponse({ data: { joined: true } });
 }
 
 async function handlePaySplit(userId: string, body: Record<string, unknown>) {
@@ -810,41 +1200,145 @@ async function handlePaySplit(userId: string, body: Record<string, unknown>) {
     .select("*").eq("split_id", splitId).eq("user_id", userId).maybeSingle();
   if (!participant) return jsonResponse({ error: "Not a participant" }, 400);
   if (participant.status === "paid") return jsonResponse({ error: "Already paid" }, 400);
+  if (participant.status === "declined") return jsonResponse({ error: "You have declined this split" }, 400);
 
   const amount = Number(split.per_person_amount);
-  const debited = await debitForSavings(userId, amount);
+
+  // Production parity: use wallet debit (not savings hold)
+  const debited = await debitWallet(userId, amount);
   if (!debited) return jsonResponse({ error: "Insufficient available balance" }, 400);
 
-  await db.from("vfd_sandbox_split_participants").update({ status: "paid", paid_at: new Date().toISOString() }).eq("id", participant.id);
+  await db.from("vfd_sandbox_split_participants").update({
+    status: "paid", paid_at: new Date().toISOString(),
+  }).eq("id", participant.id);
+
+  // Record transaction
+  await db.from("vfd_sandbox_split_transactions").insert({
+    split_id: splitId, user_id: userId, amount,
+  });
 
   const newPaidCount = split.paid_count + 1;
   const updates: Record<string, unknown> = { paid_count: newPaidCount, updated_at: new Date().toISOString() };
-  if (newPaidCount >= split.split_count) updates.status = "completed";
+
+  let allPaid = false;
+  if (newPaidCount >= split.split_count) {
+    updates.status = "completed";
+    allPaid = true;
+  }
   await db.from("vfd_sandbox_splits").update(updates).eq("id", splitId);
 
-  return jsonResponse({ data: { paid: true, amount } });
+  // If all paid, simulate merchant settlement
+  if (allPaid && split.merchant_account_name) {
+    await db.from("vfd_sandbox_splits").update({
+      settlement_status: "completed",
+      settlement_reference: `split-merchant-${splitId}`,
+      settlement_completed_at: new Date().toISOString(),
+    }).eq("id", splitId);
+
+    await sendNotification(split.creator_id, "SplitPay Complete!",
+      `All participants have paid for "${split.title}". Settlement sent to ${split.merchant_account_name}.`,
+      "split_completed");
+  }
+
+  return jsonResponse({ data: { paid: true, amount, all_paid: allPaid } });
 }
 
-async function handleJoinSplit(userId: string, body: Record<string, unknown>) {
+// SplitPay: Decline participation
+async function handleDeclineSplit(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const splitId = body.split_id as string;
+
+  const { data: participant } = await db.from("vfd_sandbox_split_participants")
+    .select("*").eq("split_id", splitId).eq("user_id", userId).maybeSingle();
+  if (!participant) return jsonResponse({ error: "Not a participant" }, 400);
+  if (participant.status === "paid") return jsonResponse({ error: "Cannot decline after payment" }, 400);
+
+  await db.from("vfd_sandbox_split_participants").update({ status: "declined" }).eq("id", participant.id);
+
+  return jsonResponse({ data: { declined: true } });
+}
+
+// SplitPay: Cancel (creator only, refunds paid participants)
+async function handleCancelSplit(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const splitId = body.split_id as string;
+
+  const { data: split } = await db.from("vfd_sandbox_splits").select("*").eq("id", splitId).single();
+  if (!split) return jsonResponse({ error: "Split not found" }, 404);
+  if (split.creator_id !== userId) return jsonResponse({ error: "Only the creator can cancel" }, 400);
+  if (split.status === "completed") return jsonResponse({ error: "Cannot cancel completed split" }, 400);
+
+  // Refund paid participants
+  const { data: paidParticipants } = await db.from("vfd_sandbox_split_participants")
+    .select("*").eq("split_id", splitId).eq("status", "paid");
+
+  let refundedCount = 0;
+  for (const p of paidParticipants || []) {
+    await creditWallet(p.user_id, Number(p.amount));
+    refundedCount++;
+    await sendNotification(p.user_id, "SplitPay Refund",
+      `"${split.title}" has been cancelled. ₦${Number(p.amount).toLocaleString()} has been refunded.`,
+      "split_refund");
+  }
+
+  await db.from("vfd_sandbox_splits").update({
+    status: "cancelled", updated_at: new Date().toISOString(),
+  }).eq("id", splitId);
+
+  return jsonResponse({ data: { cancelled: true, refunded_count: refundedCount } });
+}
+
+// SplitPay: Remove participant (creator only)
+async function handleRemoveSplitParticipant(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const splitId = body.split_id as string;
+  const participantUserId = body.participant_user_id as string;
+
+  const { data: split } = await db.from("vfd_sandbox_splits").select("*").eq("id", splitId).single();
+  if (!split) return jsonResponse({ error: "Split not found" }, 404);
+  if (split.creator_id !== userId) return jsonResponse({ error: "Only the creator can remove participants" }, 400);
+
+  const { data: participant } = await db.from("vfd_sandbox_split_participants")
+    .select("*").eq("split_id", splitId).eq("user_id", participantUserId).maybeSingle();
+  if (!participant) return jsonResponse({ error: "Participant not found" }, 400);
+
+  // Refund if already paid
+  if (participant.status === "paid") {
+    await creditWallet(participantUserId, Number(participant.amount));
+    await db.from("vfd_sandbox_splits").update({
+      paid_count: Math.max(0, split.paid_count - 1),
+      updated_at: new Date().toISOString(),
+    }).eq("id", splitId);
+  }
+
+  await db.from("vfd_sandbox_split_participants").delete().eq("id", participant.id);
+
+  await sendNotification(participantUserId, "Removed from SplitPay",
+    `You have been removed from "${split.title}".`,
+    "split_removed");
+
+  return jsonResponse({ data: { removed: true } });
+}
+
+// SplitPay: Get detail
+async function handleGetSplitDetail(body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const splitId = body.split_id as string;
 
   const { data: split } = await db.from("vfd_sandbox_splits").select("*").eq("id", splitId).single();
   if (!split) return jsonResponse({ error: "Split not found" }, 404);
 
-  const { count } = await db.from("vfd_sandbox_split_participants")
-    .select("*", { count: "exact", head: true }).eq("split_id", splitId);
-  if (count && count >= split.split_count) return jsonResponse({ error: "Split is full" }, 400);
+  const { data: participants } = await db.from("vfd_sandbox_split_participants")
+    .select("*").eq("split_id", splitId);
 
-  const { error } = await db.from("vfd_sandbox_split_participants").insert({
-    split_id: splitId, user_id: userId, amount: Number(split.per_person_amount),
-  });
-  if (error) return jsonResponse({ error: error.message }, 500);
-  return jsonResponse({ data: { joined: true } });
+  const { data: transactions } = await db.from("vfd_sandbox_split_transactions")
+    .select("*").eq("split_id", splitId).order("created_at", { ascending: false });
+
+  return jsonResponse({ data: { split, participants: participants || [], transactions: transactions || [] } });
 }
 
 // =============================================
-// ASSOCIATION HANDLERS (mirrors production associations)
+// ASSOCIATION HANDLERS (mirrors production)
 // =============================================
 
 async function handleCreateAssociation(userId: string, body: Record<string, unknown>) {
@@ -855,27 +1349,18 @@ async function handleCreateAssociation(userId: string, body: Record<string, unkn
 
   if (!name?.trim()) return jsonResponse({ error: "Association name is required" }, 400);
 
-  // Create association
   const { data: assoc, error } = await db.from("vfd_sandbox_associations").insert({
-    name: name.trim(),
-    description,
-    admin_id: userId,
-    max_members: maxMembers,
-    member_count: 1,
+    name: name.trim(), description, admin_id: userId,
+    max_members: maxMembers, member_count: 1,
   }).select().single();
   if (error) return jsonResponse({ error: error.message }, 500);
 
-  // Add creator as admin member
   await db.from("vfd_sandbox_association_memberships").insert({
-    association_id: assoc.id,
-    user_id: userId,
-    role: "admin",
+    association_id: assoc.id, user_id: userId, role: "admin",
   });
 
-  // Create association wallet
   await db.from("vfd_sandbox_association_wallets").insert({
-    association_id: assoc.id,
-    available_balance: 0,
+    association_id: assoc.id, available_balance: 0,
   });
 
   return jsonResponse({ data: assoc });
@@ -887,7 +1372,6 @@ async function handleListAssociations(userId: string) {
   const { data: all } = await db.from("vfd_sandbox_associations")
     .select("*").eq("status", "active").order("created_at", { ascending: false });
 
-  // Get user's memberships
   const { data: memberships } = await db.from("vfd_sandbox_association_memberships")
     .select("association_id").eq("user_id", userId);
   const myIds = new Set((memberships || []).map((m: { association_id: string }) => m.association_id));
@@ -906,15 +1390,12 @@ async function handleJoinAssociation(userId: string, body: Record<string, unknow
   if (!assoc) return jsonResponse({ error: "Association not found" }, 404);
   if (assoc.member_count >= assoc.max_members) return jsonResponse({ error: "Association is full" }, 400);
 
-  // Graceful success pattern: check existing membership
   const { data: existing } = await db.from("vfd_sandbox_association_memberships")
     .select("id").eq("association_id", associationId).eq("user_id", userId).maybeSingle();
   if (existing) return jsonResponse({ data: { joined: true, already_member: true } });
 
   const { error } = await db.from("vfd_sandbox_association_memberships").insert({
-    association_id: associationId,
-    user_id: userId,
-    role: "member",
+    association_id: associationId, user_id: userId, role: "member",
   });
   if (error) return jsonResponse({ error: error.message }, 500);
 
@@ -941,7 +1422,7 @@ async function handleGetAssociationDetail(body: Record<string, unknown>) {
     .select("user_id, role, joined_at").eq("association_id", associationId).order("joined_at");
 
   const { data: contributions } = await db.from("vfd_sandbox_association_contributions")
-    .select("*").eq("association_id", associationId).order("created_at", { ascending: false }).limit(20);
+    .select("*").eq("association_id", associationId).order("created_at", { ascending: false }).limit(50);
 
   return jsonResponse({
     data: {
@@ -962,21 +1443,15 @@ async function handleContributeAssociation(userId: string, body: Record<string, 
   if (!associationId) return jsonResponse({ error: "association_id required" }, 400);
   if (!amount || amount <= 0) return jsonResponse({ error: "Valid amount required" }, 400);
 
-  // Verify membership
   const { data: membership } = await db.from("vfd_sandbox_association_memberships")
     .select("id").eq("association_id", associationId).eq("user_id", userId).maybeSingle();
   if (!membership) return jsonResponse({ error: "You must be a member to contribute" }, 403);
 
-  // Debit user's available balance (internal ledger is source of truth)
-  const { data: bal } = await db.from("vfd_user_balances").select("*").eq("user_id", userId).maybeSingle();
-  const available = bal ? Number(bal.total_balance) - Number(bal.locked_balance) - Number(bal.savings_balance) : 0;
-  if (available < amount) return jsonResponse({ error: `Insufficient balance. Available: ₦${available.toLocaleString()}` }, 400);
-
-  // Debit user
-  await db.from("vfd_user_balances").update({
-    total_balance: Number(bal!.total_balance) - amount,
-    last_synced_at: new Date().toISOString(),
-  }).eq("user_id", userId);
+  const debited = await debitWallet(userId, amount);
+  if (!debited) {
+    const avail = await getAvailableBalance(userId);
+    return jsonResponse({ error: `Insufficient balance. Available: ₦${avail.toLocaleString()}` }, 400);
+  }
 
   // Credit association wallet
   const { data: wallet } = await db.from("vfd_sandbox_association_wallets")
@@ -986,12 +1461,8 @@ async function handleContributeAssociation(userId: string, body: Record<string, 
     updated_at: new Date().toISOString(),
   }).eq("association_id", associationId);
 
-  // Record contribution
   await db.from("vfd_sandbox_association_contributions").insert({
-    association_id: associationId,
-    user_id: userId,
-    amount,
-    narration,
+    association_id: associationId, user_id: userId, amount, narration,
   });
 
   return jsonResponse({ data: { contributed: true, amount } });
@@ -1023,26 +1494,38 @@ Deno.serve(async (req) => {
       case "request_swap": return await handleRequestSwap(userId, body);
       case "respond_swap": return await handleRespondSwap(userId, body);
       case "exit_group": return await handleExitGroup(userId, body);
+      case "confirm_continue": return await handleConfirmContinue(userId, body);
       case "restart_group": return await handleRestartGroup(userId, body);
 
-      // Target Ajo
+      // Target Ajo (full parity)
       case "create_target": return await handleCreateTarget(userId, body);
       case "list_targets": return await handleListTargets(userId);
       case "contribute_target": return await handleContributeTarget(userId, body);
       case "get_target_detail": return await handleGetTargetDetail(body);
+      case "invite_target_member": return await handleInviteTargetMember(userId, body);
+      case "respond_target_invite": return await handleRespondTargetInvite(userId, body);
+      case "request_target_withdrawal": return await handleRequestTargetWithdrawal(userId, body);
+      case "vote_target_withdrawal": return await handleVoteTargetWithdrawal(userId, body);
+      case "independent_withdrawal": return await handleIndependentWithdrawal(userId, body);
 
-      // Goal Funding
+      // Goal Funding (full parity)
       case "create_campaign": return await handleCreateCampaign(userId, body);
-      case "list_campaigns": return await handleListCampaigns();
+      case "list_campaigns": return await handleListCampaigns(userId);
       case "contribute_campaign": return await handleContributeCampaign(userId, body);
+      case "get_campaign_detail": return await handleGetCampaignDetail(body);
+      case "post_campaign_update": return await handlePostCampaignUpdate(userId, body);
 
-      // SplitPay
+      // SplitPay (full parity)
       case "create_split": return await handleCreateSplit(userId, body);
       case "list_splits": return await handleListSplits(userId);
       case "join_split": return await handleJoinSplit(userId, body);
       case "pay_split": return await handlePaySplit(userId, body);
+      case "decline_split": return await handleDeclineSplit(userId, body);
+      case "cancel_split": return await handleCancelSplit(userId, body);
+      case "remove_split_participant": return await handleRemoveSplitParticipant(userId, body);
+      case "get_split_detail": return await handleGetSplitDetail(body);
 
-      // Associations
+      // Associations (full parity)
       case "create_association": return await handleCreateAssociation(userId, body);
       case "list_associations": return await handleListAssociations(userId);
       case "join_association": return await handleJoinAssociation(userId, body);

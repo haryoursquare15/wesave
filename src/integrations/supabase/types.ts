@@ -3334,7 +3334,9 @@ export type Database = {
           amount: number
           anonymous: boolean
           campaign_id: string
+          contribution_reference: string | null
           contributor_id: string
+          contributor_name: string | null
           created_at: string
           id: string
           message: string | null
@@ -3344,7 +3346,9 @@ export type Database = {
           amount: number
           anonymous?: boolean
           campaign_id: string
+          contribution_reference?: string | null
           contributor_id: string
+          contributor_name?: string | null
           created_at?: string
           id?: string
           message?: string | null
@@ -3354,7 +3358,9 @@ export type Database = {
           amount?: number
           anonymous?: boolean
           campaign_id?: string
+          contribution_reference?: string | null
           contributor_id?: string
+          contributor_name?: string | null
           created_at?: string
           id?: string
           message?: string | null
@@ -3370,8 +3376,46 @@ export type Database = {
           },
         ]
       }
+      vfd_sandbox_campaign_updates: {
+        Row: {
+          campaign_id: string
+          created_at: string
+          created_by: string
+          id: string
+          update_message: string
+        }
+        Insert: {
+          campaign_id: string
+          created_at?: string
+          created_by: string
+          id?: string
+          update_message: string
+        }
+        Update: {
+          campaign_id?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          update_message?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vfd_sandbox_campaign_updates_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "vfd_sandbox_campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vfd_sandbox_campaigns: {
         Row: {
+          beneficiary_account_name: string | null
+          beneficiary_account_number: string | null
+          beneficiary_bank_name: string | null
+          campaign_image: string | null
+          campaign_slug: string | null
+          contribution_visibility: string
           contributor_count: number
           created_at: string
           creator_id: string
@@ -3385,6 +3429,12 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          beneficiary_account_name?: string | null
+          beneficiary_account_number?: string | null
+          beneficiary_bank_name?: string | null
+          campaign_image?: string | null
+          campaign_slug?: string | null
+          contribution_visibility?: string
           contributor_count?: number
           created_at?: string
           creator_id: string
@@ -3398,6 +3448,12 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          beneficiary_account_name?: string | null
+          beneficiary_account_number?: string | null
+          beneficiary_bank_name?: string | null
+          campaign_image?: string | null
+          campaign_slug?: string | null
+          contribution_visibility?: string
           contributor_count?: number
           created_at?: string
           creator_id?: string
@@ -3925,16 +3981,60 @@ export type Database = {
           },
         ]
       }
+      vfd_sandbox_split_transactions: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          split_id: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          split_id: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          split_id?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vfd_sandbox_split_transactions_split_id_fkey"
+            columns: ["split_id"]
+            isOneToOne: false
+            referencedRelation: "vfd_sandbox_splits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vfd_sandbox_splits: {
         Row: {
           created_at: string
           creator_id: string
+          expiry_date: string | null
           id: string
           merchant_account: string | null
+          merchant_account_name: string | null
+          merchant_account_number: string | null
           merchant_bank: string | null
+          merchant_bank_name: string | null
           merchant_name: string | null
           paid_count: number
           per_person_amount: number
+          platform_fee: number
+          settlement_completed_at: string | null
+          settlement_failure_reason: string | null
+          settlement_reference: string | null
+          settlement_status: string | null
           split_count: number
           status: string
           title: string
@@ -3944,12 +4044,21 @@ export type Database = {
         Insert: {
           created_at?: string
           creator_id: string
+          expiry_date?: string | null
           id?: string
           merchant_account?: string | null
+          merchant_account_name?: string | null
+          merchant_account_number?: string | null
           merchant_bank?: string | null
+          merchant_bank_name?: string | null
           merchant_name?: string | null
           paid_count?: number
           per_person_amount: number
+          platform_fee?: number
+          settlement_completed_at?: string | null
+          settlement_failure_reason?: string | null
+          settlement_reference?: string | null
+          settlement_status?: string | null
           split_count?: number
           status?: string
           title: string
@@ -3959,12 +4068,21 @@ export type Database = {
         Update: {
           created_at?: string
           creator_id?: string
+          expiry_date?: string | null
           id?: string
           merchant_account?: string | null
+          merchant_account_name?: string | null
+          merchant_account_number?: string | null
           merchant_bank?: string | null
+          merchant_bank_name?: string | null
           merchant_name?: string | null
           paid_count?: number
           per_person_amount?: number
+          platform_fee?: number
+          settlement_completed_at?: string | null
+          settlement_failure_reason?: string | null
+          settlement_reference?: string | null
+          settlement_status?: string | null
           split_count?: number
           status?: string
           title?: string
@@ -4008,6 +4126,44 @@ export type Database = {
           },
         ]
       }
+      vfd_sandbox_target_invites: {
+        Row: {
+          created_at: string
+          id: string
+          invitee_id: string
+          inviter_id: string
+          responded_at: string | null
+          status: string
+          target_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          invitee_id: string
+          inviter_id: string
+          responded_at?: string | null
+          status?: string
+          target_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          invitee_id?: string
+          inviter_id?: string
+          responded_at?: string | null
+          status?: string
+          target_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vfd_sandbox_target_invites_target_id_fkey"
+            columns: ["target_id"]
+            isOneToOne: false
+            referencedRelation: "vfd_sandbox_targets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vfd_sandbox_target_members: {
         Row: {
           contributed_amount: number
@@ -4040,17 +4196,102 @@ export type Database = {
           },
         ]
       }
+      vfd_sandbox_target_withdrawal_requests: {
+        Row: {
+          amount: number
+          approval_count: number
+          created_at: string
+          id: string
+          reason: string | null
+          rejection_count: number
+          requested_by: string
+          required_votes: number
+          resolved_at: string | null
+          status: string
+          target_id: string
+        }
+        Insert: {
+          amount: number
+          approval_count?: number
+          created_at?: string
+          id?: string
+          reason?: string | null
+          rejection_count?: number
+          requested_by: string
+          required_votes?: number
+          resolved_at?: string | null
+          status?: string
+          target_id: string
+        }
+        Update: {
+          amount?: number
+          approval_count?: number
+          created_at?: string
+          id?: string
+          reason?: string | null
+          rejection_count?: number
+          requested_by?: string
+          required_votes?: number
+          resolved_at?: string | null
+          status?: string
+          target_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vfd_sandbox_target_withdrawal_requests_target_id_fkey"
+            columns: ["target_id"]
+            isOneToOne: false
+            referencedRelation: "vfd_sandbox_targets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vfd_sandbox_target_withdrawal_votes: {
+        Row: {
+          created_at: string
+          id: string
+          user_id: string
+          vote: string
+          withdrawal_request_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          user_id: string
+          vote: string
+          withdrawal_request_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          user_id?: string
+          vote?: string
+          withdrawal_request_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vfd_sandbox_target_withdrawal_votes_withdrawal_request_id_fkey"
+            columns: ["withdrawal_request_id"]
+            isOneToOne: false
+            referencedRelation: "vfd_sandbox_target_withdrawal_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vfd_sandbox_targets: {
         Row: {
           admin_id: string
           contribution_amount: number
           created_at: string
+          description: string | null
           frequency: string
           goal_amount: number
           id: string
+          invite_limit: number | null
           max_members: number
           member_count: number
           name: string
+          reason: string | null
           savings_type: string
           status: string
           target_date: string | null
@@ -4061,12 +4302,15 @@ export type Database = {
           admin_id: string
           contribution_amount: number
           created_at?: string
+          description?: string | null
           frequency?: string
           goal_amount: number
           id?: string
+          invite_limit?: number | null
           max_members?: number
           member_count?: number
           name: string
+          reason?: string | null
           savings_type?: string
           status?: string
           target_date?: string | null
@@ -4077,12 +4321,15 @@ export type Database = {
           admin_id?: string
           contribution_amount?: number
           created_at?: string
+          description?: string | null
           frequency?: string
           goal_amount?: number
           id?: string
+          invite_limit?: number | null
           max_members?: number
           member_count?: number
           name?: string
+          reason?: string | null
           savings_type?: string
           status?: string
           target_date?: string | null

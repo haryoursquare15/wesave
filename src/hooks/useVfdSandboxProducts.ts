@@ -55,27 +55,43 @@ export function useVfdSandboxProducts() {
   const requestSwap = useCallback((group_id: string, target_id: string) => invoke("request_swap", { group_id, target_id }), [invoke]);
   const respondSwap = useCallback((swap_id: string, accept: boolean) => invoke("respond_swap", { swap_id, accept }), [invoke]);
   const exitGroup = useCallback((group_id: string) => invoke("exit_group", { group_id }), [invoke]);
+  const confirmContinue = useCallback((group_id: string) => invoke("confirm_continue", { group_id }), [invoke]);
   const restartGroup = useCallback((group_id: string, terms_accepted: boolean) => invoke("restart_group", { group_id, terms_accepted }), [invoke]);
 
-  // Target Ajo
+  // Target Ajo (full parity)
   const createTarget = useCallback((body: Record<string, unknown>) => invoke("create_target", body), [invoke]);
   const listTargets = useCallback(() => invoke("list_targets"), [invoke]);
   const contributeTarget = useCallback((target_id: string) => invoke("contribute_target", { target_id }), [invoke]);
   const getTargetDetail = useCallback((target_id: string) => invoke("get_target_detail", { target_id }), [invoke]);
+  const inviteTargetMember = useCallback((target_id: string, invitee_id: string) => invoke("invite_target_member", { target_id, invitee_id }), [invoke]);
+  const respondTargetInvite = useCallback((invite_id: string, accept: boolean) => invoke("respond_target_invite", { invite_id, accept }), [invoke]);
+  const requestTargetWithdrawal = useCallback((target_id: string, amount: number, reason?: string) =>
+    invoke("request_target_withdrawal", { target_id, amount, reason }), [invoke]);
+  const voteTargetWithdrawal = useCallback((request_id: string, vote: string) =>
+    invoke("vote_target_withdrawal", { request_id, vote }), [invoke]);
+  const independentWithdrawal = useCallback((target_id: string) => invoke("independent_withdrawal", { target_id }), [invoke]);
 
-  // Goal Funding
+  // Goal Funding (full parity)
   const createCampaign = useCallback((body: Record<string, unknown>) => invoke("create_campaign", body), [invoke]);
   const listCampaigns = useCallback(() => invoke("list_campaigns"), [invoke]);
-  const contributeCampaign = useCallback((campaign_id: string, amount: number, anonymous?: boolean, message?: string) =>
-    invoke("contribute_campaign", { campaign_id, amount, anonymous, message }), [invoke]);
+  const contributeCampaign = useCallback((campaign_id: string, amount: number, anonymous?: boolean, message?: string, contributor_name?: string) =>
+    invoke("contribute_campaign", { campaign_id, amount, anonymous, message, contributor_name }), [invoke]);
+  const getCampaignDetail = useCallback((campaign_id: string) => invoke("get_campaign_detail", { campaign_id }), [invoke]);
+  const postCampaignUpdate = useCallback((campaign_id: string, update_message: string) =>
+    invoke("post_campaign_update", { campaign_id, update_message }), [invoke]);
 
-  // SplitPay
+  // SplitPay (full parity)
   const createSplit = useCallback((body: Record<string, unknown>) => invoke("create_split", body), [invoke]);
   const listSplits = useCallback(() => invoke("list_splits"), [invoke]);
   const joinSplit = useCallback((split_id: string) => invoke("join_split", { split_id }), [invoke]);
   const paySplit = useCallback((split_id: string) => invoke("pay_split", { split_id }), [invoke]);
+  const declineSplit = useCallback((split_id: string) => invoke("decline_split", { split_id }), [invoke]);
+  const cancelSplit = useCallback((split_id: string) => invoke("cancel_split", { split_id }), [invoke]);
+  const removeSplitParticipant = useCallback((split_id: string, participant_user_id: string) =>
+    invoke("remove_split_participant", { split_id, participant_user_id }), [invoke]);
+  const getSplitDetail = useCallback((split_id: string) => invoke("get_split_detail", { split_id }), [invoke]);
 
-  // Associations
+  // Associations (full parity)
   const createAssociation = useCallback((body: Record<string, unknown>) => invoke("create_association", body), [invoke]);
   const listAssociations = useCallback(() => invoke("list_associations"), [invoke]);
   const joinAssociation = useCallback((association_id: string) => invoke("join_association", { association_id }), [invoke]);
@@ -87,13 +103,16 @@ export function useVfdSandboxProducts() {
     loading,
     // Thrift Groups
     createGroup, listGroups, joinGroup, commenceGroup, contributeGroup, getGroupDetail,
-    requestSwap, respondSwap, exitGroup, restartGroup,
+    requestSwap, respondSwap, exitGroup, confirmContinue, restartGroup,
     // Target Ajo
     createTarget, listTargets, contributeTarget, getTargetDetail,
+    inviteTargetMember, respondTargetInvite,
+    requestTargetWithdrawal, voteTargetWithdrawal, independentWithdrawal,
     // Goal Funding
-    createCampaign, listCampaigns, contributeCampaign,
+    createCampaign, listCampaigns, contributeCampaign, getCampaignDetail, postCampaignUpdate,
     // SplitPay
     createSplit, listSplits, joinSplit, paySplit,
+    declineSplit, cancelSplit, removeSplitParticipant, getSplitDetail,
     // Associations
     createAssociation, listAssociations, joinAssociation, getAssociationDetail, contributeAssociation,
   };
