@@ -53,13 +53,14 @@ async function fetchVfdLiveBalance(userId: string): Promise<number> {
     const consumerSecret = Deno.env.get("VFD_CONSUMER_SECRET");
     if (!consumerKey || !consumerSecret) return 0;
 
-    const authResp = await fetch(`${vfdBase}/vtech-auth/api/v1.1/oauth2/token`, {
+    const authResp = await fetch(`${vfdBase}/vfd-tech/baas-portal/v1.1/baasauth/token`, {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: `grant_type=client_credentials&client_id=${consumerKey}&client_secret=${consumerSecret}`,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "-1" }),
     });
-    const authData = await authResp.json();
-    const accessToken = authData?.data?.accessToken || authData?.access_token;
+    const authRaw = await authResp.text();
+    const authData = authRaw ? JSON.parse(authRaw) : {};
+    const accessToken = authData?.data?.access_token;
     if (!accessToken) return 0;
 
     const balResp = await fetch(`${vfdBase}/vtech-wallet/api/v2/wallet2/account/enquiry?accountNumber=${client.vfd_account_number}`, {
@@ -1517,27 +1518,49 @@ const VFD_BILLS_BASE_LIVE = "https://api-apps.vfdbank.systems/vtech-bills/api/v2
 
 async function getVfdAccessToken(): Promise<string | null> {
   const vfdBase = Deno.env.get("VFD_API_BASE") || "https://api-devapps.vfdbank.systems";
-  const ck = Deno.env.get("VFD_CONSUMER_KEY");
-  const cs = Deno.env.get("VFD_CONSUMER_SECRET");
-  if (!ck || !cs) return null;
-  const r = await fetch(`${vfdBase}/vtech-auth/api/v1.1/oauth2/token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: `grant_type=client_credentials&client_id=${ck}&client_secret=${cs}`,
-  });
-  const d = await r.json();
-  return d?.data?.accessToken || d?.access_token || null;
+  const consumerKey = Deno.env.get("VFD_CONSUMER_KEY");
+  const consumerSecret = Deno.env.get("VFD_CONSUMER_SECRET");
+  if (!consumerKey || !consumerSecret) {
+    console.error("[Bills] VFD_CONSUMER_KEY or VFD_CONSUMER_SECRET not set");
+    return null;
+  }
+  try {
+    const authUrl = `${vfdBase}/vfd-tech/baas-portal/v1.1/baasauth/token`;
+    const authResp = await fetch(authUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "-1" }),
+    });
+    const raw = await authResp.text();
+    if (!raw) { console.error("[Bills auth] Empty response, status:", authResp.status); return null; }
+    const d = JSON.parse(raw);
+    if (d?.status === "00" && d?.data?.access_token) {
+      return d.data.access_token;
+    }
+    console.error("[Bills auth] Unexpected response:", raw.substring(0, 200));
+    return null;
+  } catch (e) {
+    console.error("[Bills auth error]", e);
+    return null;
+  }
 }
 
 function getBillsBase(): string {
   return (Deno.env.get("VFD_ENVIRONMENT") || "test") === "live" ? VFD_BILLS_BASE_LIVE : VFD_BILLS_BASE_TEST;
 }
 
+async function safeJson(resp: Response): Promise<Record<string, unknown>> {
+  try {
+    const raw = await resp.text();
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+
 async function handleBillsCategories() {
   const token = await getVfdAccessToken();
   if (!token) return jsonResponse({ error: "VFD auth failed" }, 500);
   const resp = await fetch(`${getBillsBase()}/billercategory`, { headers: { AccessToken: token } });
-  return jsonResponse({ data: await resp.json() });
+  return jsonResponse({ data: await safeJson(resp) });
 }
 
 async function handleBillsBillers(body: Record<string, unknown>) {
@@ -1546,7 +1569,7 @@ async function handleBillsBillers(body: Record<string, unknown>) {
   if (!token) return jsonResponse({ error: "VFD auth failed" }, 500);
   const url = cat ? `${getBillsBase()}/billerlist?categoryName=${encodeURIComponent(cat)}` : `${getBillsBase()}/billerlist`;
   const resp = await fetch(url, { headers: { AccessToken: token } });
-  return jsonResponse({ data: await resp.json() });
+  return jsonResponse({ data: await safeJson(resp) });
 }
 
 async function handleBillsItems(body: Record<string, unknown>) {
@@ -1558,7 +1581,7 @@ async function handleBillsItems(body: Record<string, unknown>) {
     `${getBillsBase()}/billerItems?billerId=${encodeURIComponent(billerId)}&divisionId=${encodeURIComponent(divisionId)}&productId=${encodeURIComponent(productId)}`,
     { headers: { AccessToken: token } }
   );
-  return jsonResponse({ data: await resp.json() });
+  return jsonResponse({ data: await safeJson(resp) });
 }
 
 async function handleBillsValidate(body: Record<string, unknown>) {
@@ -1572,7 +1595,7 @@ async function handleBillsValidate(body: Record<string, unknown>) {
     `${getBillsBase()}/customervalidate?customerId=${encodeURIComponent(customerId)}&divisionId=${encodeURIComponent(divisionId)}&paymentItem=${encodeURIComponent(paymentItem)}&billerId=${encodeURIComponent(billerId)}`,
     { headers: { AccessToken: token } }
   );
-  return jsonResponse({ data: await resp.json() });
+  return jsonResponse({ data: await safeJson(resp) });
 }
 
 async function handleBillsPay(userId: string, body: Record<string, unknown>) {
@@ -1602,7 +1625,7 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
     headers: { AccessToken: token, "Content-Type": "application/json" },
     body: JSON.stringify(payBody),
   });
-  const data = await resp.json();
+  const data = await safeJson(resp);
 
   if (data?.status === "00") {
     const db = getSupabaseAdmin();
@@ -1623,7 +1646,7 @@ async function handleBillsStatus(body: Record<string, unknown>) {
   const token = await getVfdAccessToken();
   if (!token) return jsonResponse({ error: "VFD auth failed" }, 500);
   const resp = await fetch(`${getBillsBase()}/transactionStatus?transactionId=${encodeURIComponent(transactionId)}`, { headers: { AccessToken: token } });
-  return jsonResponse({ data: await resp.json() });
+  return jsonResponse({ data: await safeJson(resp) });
 }
 
 // =============================================
