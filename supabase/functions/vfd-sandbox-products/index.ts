@@ -1520,13 +1520,20 @@ async function getVfdAccessToken(): Promise<string | null> {
   const ck = Deno.env.get("VFD_CONSUMER_KEY");
   const cs = Deno.env.get("VFD_CONSUMER_SECRET");
   if (!ck || !cs) return null;
-  const r = await fetch(`${vfdBase}/vtech-auth/api/v1.1/oauth2/token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: `grant_type=client_credentials&client_id=${ck}&client_secret=${cs}`,
-  });
-  const d = await r.json();
-  return d?.data?.accessToken || d?.access_token || null;
+  try {
+    const r = await fetch(`${vfdBase}/vtech-auth/api/v1.1/oauth2/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: `grant_type=client_credentials&client_id=${ck}&client_secret=${cs}`,
+    });
+    const raw = await r.text();
+    if (!raw) { console.error("[Bills auth] Empty response"); return null; }
+    const d = JSON.parse(raw);
+    return d?.data?.accessToken || d?.access_token || null;
+  } catch (e) {
+    console.error("[Bills auth error]", e);
+    return null;
+  }
 }
 
 function getBillsBase(): string {
