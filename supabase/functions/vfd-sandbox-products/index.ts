@@ -1540,11 +1540,18 @@ function getBillsBase(): string {
   return (Deno.env.get("VFD_ENVIRONMENT") || "test") === "live" ? VFD_BILLS_BASE_LIVE : VFD_BILLS_BASE_TEST;
 }
 
+async function safeJson(resp: Response): Promise<Record<string, unknown>> {
+  try {
+    const raw = await resp.text();
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+
 async function handleBillsCategories() {
   const token = await getVfdAccessToken();
   if (!token) return jsonResponse({ error: "VFD auth failed" }, 500);
   const resp = await fetch(`${getBillsBase()}/billercategory`, { headers: { AccessToken: token } });
-  return jsonResponse({ data: await resp.json() });
+  return jsonResponse({ data: await safeJson(resp) });
 }
 
 async function handleBillsBillers(body: Record<string, unknown>) {
@@ -1553,7 +1560,7 @@ async function handleBillsBillers(body: Record<string, unknown>) {
   if (!token) return jsonResponse({ error: "VFD auth failed" }, 500);
   const url = cat ? `${getBillsBase()}/billerlist?categoryName=${encodeURIComponent(cat)}` : `${getBillsBase()}/billerlist`;
   const resp = await fetch(url, { headers: { AccessToken: token } });
-  return jsonResponse({ data: await resp.json() });
+  return jsonResponse({ data: await safeJson(resp) });
 }
 
 async function handleBillsItems(body: Record<string, unknown>) {
@@ -1565,7 +1572,7 @@ async function handleBillsItems(body: Record<string, unknown>) {
     `${getBillsBase()}/billerItems?billerId=${encodeURIComponent(billerId)}&divisionId=${encodeURIComponent(divisionId)}&productId=${encodeURIComponent(productId)}`,
     { headers: { AccessToken: token } }
   );
-  return jsonResponse({ data: await resp.json() });
+  return jsonResponse({ data: await safeJson(resp) });
 }
 
 async function handleBillsValidate(body: Record<string, unknown>) {
@@ -1579,7 +1586,7 @@ async function handleBillsValidate(body: Record<string, unknown>) {
     `${getBillsBase()}/customervalidate?customerId=${encodeURIComponent(customerId)}&divisionId=${encodeURIComponent(divisionId)}&paymentItem=${encodeURIComponent(paymentItem)}&billerId=${encodeURIComponent(billerId)}`,
     { headers: { AccessToken: token } }
   );
-  return jsonResponse({ data: await resp.json() });
+  return jsonResponse({ data: await safeJson(resp) });
 }
 
 async function handleBillsPay(userId: string, body: Record<string, unknown>) {
@@ -1609,7 +1616,7 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
     headers: { AccessToken: token, "Content-Type": "application/json" },
     body: JSON.stringify(payBody),
   });
-  const data = await resp.json();
+  const data = await safeJson(resp);
 
   if (data?.status === "00") {
     const db = getSupabaseAdmin();
@@ -1630,7 +1637,7 @@ async function handleBillsStatus(body: Record<string, unknown>) {
   const token = await getVfdAccessToken();
   if (!token) return jsonResponse({ error: "VFD auth failed" }, 500);
   const resp = await fetch(`${getBillsBase()}/transactionStatus?transactionId=${encodeURIComponent(transactionId)}`, { headers: { AccessToken: token } });
-  return jsonResponse({ data: await resp.json() });
+  return jsonResponse({ data: await safeJson(resp) });
 }
 
 // =============================================
