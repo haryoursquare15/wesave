@@ -133,6 +133,7 @@ const productGrid = [
   { key: "target", label: "Target Save", icon: Target, color: "bg-blue-500/10 text-blue-600", desc: "Goal savings" },
   { key: "ajo", label: "Ajo Groups", icon: Users, color: "bg-orange-500/10 text-orange-600", desc: "Group savings" },
   { key: "bills", label: "Pay Bills", icon: CreditCard, color: "bg-cyan-500/10 text-cyan-600", desc: "Airtime & more" },
+  { key: "card", label: "Virtual Card", icon: CreditCard, color: "bg-slate-500/10 text-slate-600", desc: "Verve debit" },
   { key: "transfer", label: "Transfer", icon: Send, color: "bg-purple-500/10 text-purple-600", desc: "Send money" },
   { key: "fund", label: "Add Money", icon: Plus, color: "bg-green-500/10 text-green-600", desc: "Fund account" },
 ];
