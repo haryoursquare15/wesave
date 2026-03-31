@@ -1650,6 +1650,240 @@ async function handleBillsStatus(body: Record<string, unknown>) {
 }
 
 // =============================================
+// VIRTUAL CARDS (VFD BaaS)
+// =============================================
+
+const CARD_ISSUANCE_FEE = 1000; // ₦1,000
+
+function getCardsBase(): string {
+  const vfdBase = Deno.env.get("VFD_API_BASE") || "https://api-devapps.vfdbank.systems";
+  return `${vfdBase}/vtech-cards/api/v2/baascards`;
+}
+
+async function handleCreateVirtualCard(userId: string, _body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+
+  // Check if user already has an active/pending card
+  const { data: existing } = await db.from("vfd_sandbox_virtual_cards")
+    .select("id, status").eq("user_id", userId)
+    .in("status", ["pending", "active"]).maybeSingle();
+  if (existing) return jsonResponse({ error: "You already have an active virtual card" }, 400);
+
+  // Get user account details
+  const { data: client } = await db.from("vfd_sandbox_clients")
+    .select("vfd_account_number, phone, email").eq("user_id", userId).maybeSingle();
+  if (!client?.vfd_account_number) return jsonResponse({ error: "Complete KYC first" }, 400);
+
+  // Check balance for issuance fee
+  const bal = await ensureBalanceRow(userId);
+  const available = bal.total_balance - bal.locked_balance - bal.savings_balance;
+  if (available < CARD_ISSUANCE_FEE) return jsonResponse({ error: `Insufficient balance. Card issuance costs ₦${CARD_ISSUANCE_FEE.toLocaleString()}` }, 400);
+
+  const token = await getVfdAccessToken();
+  if (!token) return jsonResponse({ error: "VFD auth failed" }, 500);
+
+  const resp = await fetch(`${getCardsBase()}/cardrequest?action=virtual`, {
+    method: "POST",
+    headers: { AccessToken: token, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      accountNo: client.vfd_account_number,
+      primaryPhoneNo: client.phone || "09000000000",
+      emailAddress: client.email || "user@wesave.app",
+    }),
+  });
+  const data = await safeJson(resp);
+
+  if (data?.status === "00" && data?.data) {
+    const cardData = data.data;
+    // Debit issuance fee
+    await db.from("vfd_user_balances").update({
+      total_balance: bal.total_balance - CARD_ISSUANCE_FEE,
+    }).eq("user_id", userId);
+
+    await db.from("vfd_sandbox_transactions").insert({
+      user_id: userId, transaction_type: "debit", amount: CARD_ISSUANCE_FEE,
+      description: "Virtual Card Issuance Fee",
+      reference: `card-issue-${Date.now()}`, status: "completed",
+    });
+
+    // Store card
+    const cardRecord = {
+      user_id: userId,
+      card_id: cardData.cardId?.toString() || "",
+      masked_pan: cardData.maskedPan || "",
+      full_pan_encrypted: cardData.pan || "",
+      cvv_encrypted: cardData.cvv || "",
+      expiry_date: cardData.expiryDate || "",
+      pin_offset: cardData.pinOffset || "",
+      status: "pending",
+      issuance_fee: CARD_ISSUANCE_FEE,
+    };
+    await db.from("vfd_sandbox_virtual_cards").insert(cardRecord);
+
+    return jsonResponse({
+      data: {
+        card_id: cardData.cardId,
+        masked_pan: cardData.maskedPan,
+        expiry_date: cardData.expiryDate,
+        status: "pending",
+        issuance_fee: CARD_ISSUANCE_FEE,
+        message: "Card created! Activate it to start using.",
+      },
+    });
+  }
+
+  return jsonResponse({ error: data?.message || "Card creation failed", details: data }, 400);
+}
+
+async function handleActivateCard(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const { card_id } = body as { card_id: string };
+  if (!card_id) return jsonResponse({ error: "card_id required" }, 400);
+
+  const { data: card } = await db.from("vfd_sandbox_virtual_cards")
+    .select("*").eq("user_id", userId).eq("card_id", card_id).maybeSingle();
+  if (!card) return jsonResponse({ error: "Card not found" }, 404);
+  if (card.status === "active") return jsonResponse({ error: "Card already active" }, 400);
+
+  const { data: client } = await db.from("vfd_sandbox_clients")
+    .select("vfd_account_number").eq("user_id", userId).maybeSingle();
+  if (!client?.vfd_account_number) return jsonResponse({ error: "Account not found" }, 400);
+
+  const token = await getVfdAccessToken();
+  if (!token) return jsonResponse({ error: "VFD auth failed" }, 500);
+
+  const resp = await fetch(`${getCardsBase()}/cardaction/request`, {
+    method: "POST",
+    headers: { AccessToken: token, "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "ACTIVATE", accountNo: client.vfd_account_number, cardId: card_id }),
+  });
+  const data = await safeJson(resp);
+
+  if (data?.status === "00") {
+    await db.from("vfd_sandbox_virtual_cards").update({
+      status: "active", activated_at: new Date().toISOString(),
+    }).eq("user_id", userId).eq("card_id", card_id);
+
+    return jsonResponse({ data: { status: "active", default_pin: data.data?.pin || "1234", message: "Card activated! Change your PIN." } });
+  }
+
+  return jsonResponse({ error: data?.message || "Activation failed" }, 400);
+}
+
+async function handleCardPinChange(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const { card_id, old_pin, new_pin } = body as { card_id: string; old_pin: string; new_pin: string };
+  if (!card_id || !old_pin || !new_pin) return jsonResponse({ error: "card_id, old_pin, new_pin required" }, 400);
+  if (new_pin.length !== 4 || !/^\d{4}$/.test(new_pin)) return jsonResponse({ error: "PIN must be 4 digits" }, 400);
+
+  const { data: client } = await db.from("vfd_sandbox_clients")
+    .select("vfd_account_number").eq("user_id", userId).maybeSingle();
+  if (!client?.vfd_account_number) return jsonResponse({ error: "Account not found" }, 400);
+
+  const token = await getVfdAccessToken();
+  if (!token) return jsonResponse({ error: "VFD auth failed" }, 500);
+
+  const resp = await fetch(`${getCardsBase()}/cardaction/request`, {
+    method: "POST",
+    headers: { AccessToken: token, "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "PIN-CHANGE", cardId: card_id, accountNo: client.vfd_account_number, newCardPin: new_pin, cardPin: old_pin }),
+  });
+  const data = await safeJson(resp);
+
+  if (data?.status === "00") {
+    return jsonResponse({ data: { message: "PIN changed successfully" } });
+  }
+  return jsonResponse({ error: data?.message || "PIN change failed" }, 400);
+}
+
+async function handleBlockCard(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const { card_id } = body as { card_id: string };
+  if (!card_id) return jsonResponse({ error: "card_id required" }, 400);
+
+  const { data: client } = await db.from("vfd_sandbox_clients")
+    .select("vfd_account_number").eq("user_id", userId).maybeSingle();
+  if (!client?.vfd_account_number) return jsonResponse({ error: "Account not found" }, 400);
+
+  const token = await getVfdAccessToken();
+  if (!token) return jsonResponse({ error: "VFD auth failed" }, 500);
+
+  const resp = await fetch(`${getCardsBase()}/cardaction/request`, {
+    method: "POST",
+    headers: { AccessToken: token, "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "BLOCK", cardId: card_id, accountNo: client.vfd_account_number }),
+  });
+  const data = await safeJson(resp);
+
+  if (data?.status === "00") {
+    await db.from("vfd_sandbox_virtual_cards").update({
+      status: "blocked", blocked_at: new Date().toISOString(),
+    }).eq("user_id", userId).eq("card_id", card_id);
+    return jsonResponse({ data: { message: "Card blocked successfully" } });
+  }
+  return jsonResponse({ error: data?.message || "Block failed" }, 400);
+}
+
+async function handleUnblockCard(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const { card_id } = body as { card_id: string };
+  if (!card_id) return jsonResponse({ error: "card_id required" }, 400);
+
+  const { data: client } = await db.from("vfd_sandbox_clients")
+    .select("vfd_account_number").eq("user_id", userId).maybeSingle();
+  if (!client?.vfd_account_number) return jsonResponse({ error: "Account not found" }, 400);
+
+  const token = await getVfdAccessToken();
+  if (!token) return jsonResponse({ error: "VFD auth failed" }, 500);
+
+  const resp = await fetch(`${getCardsBase()}/cardaction/request`, {
+    method: "POST",
+    headers: { AccessToken: token, "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "UNBLOCK", cardId: card_id, accountNo: client.vfd_account_number }),
+  });
+  const data = await safeJson(resp);
+
+  if (data?.status === "00") {
+    await db.from("vfd_sandbox_virtual_cards").update({
+      status: "active", blocked_at: null,
+    }).eq("user_id", userId).eq("card_id", card_id);
+    return jsonResponse({ data: { message: "Card unblocked successfully" } });
+  }
+  return jsonResponse({ error: data?.message || "Unblock failed" }, 400);
+}
+
+async function handleGetCards(userId: string) {
+  const db = getSupabaseAdmin();
+  const { data: cards } = await db.from("vfd_sandbox_virtual_cards")
+    .select("card_id, masked_pan, expiry_date, status, issuance_fee, created_at, activated_at, blocked_at")
+    .eq("user_id", userId).order("created_at", { ascending: false });
+  return jsonResponse({ data: cards || [] });
+}
+
+async function handleGetCardDetails(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const { card_id } = body as { card_id: string };
+  if (!card_id) return jsonResponse({ error: "card_id required" }, 400);
+
+  const { data: card } = await db.from("vfd_sandbox_virtual_cards")
+    .select("*").eq("user_id", userId).eq("card_id", card_id).maybeSingle();
+  if (!card) return jsonResponse({ error: "Card not found" }, 404);
+
+  return jsonResponse({
+    data: {
+      card_id: card.card_id,
+      masked_pan: card.masked_pan,
+      full_pan: card.full_pan_encrypted,
+      cvv: card.cvv_encrypted,
+      expiry_date: card.expiry_date,
+      status: card.status,
+      created_at: card.created_at,
+      activated_at: card.activated_at,
+    },
+  });
+}
+
+// =============================================
 // MAIN HANDLER
 // =============================================
 
@@ -1720,6 +1954,15 @@ Deno.serve(async (req) => {
       case "bills_validate": return await handleBillsValidate(body);
       case "bills_pay": return await handleBillsPay(userId, body);
       case "bills_status": return await handleBillsStatus(body);
+
+      // Virtual Cards (VFD BaaS)
+      case "create_virtual_card": return await handleCreateVirtualCard(userId, body);
+      case "activate_card": return await handleActivateCard(userId, body);
+      case "card_pin_change": return await handleCardPinChange(userId, body);
+      case "block_card": return await handleBlockCard(userId, body);
+      case "unblock_card": return await handleUnblockCard(userId, body);
+      case "get_cards": return await handleGetCards(userId);
+      case "get_card_details": return await handleGetCardDetails(userId, body);
 
       default:
         return jsonResponse({ error: `Unknown action: ${action}` }, 400);

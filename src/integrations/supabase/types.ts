@@ -4401,6 +4401,57 @@ export type Database = {
         }
         Relationships: []
       }
+      vfd_sandbox_virtual_cards: {
+        Row: {
+          activated_at: string | null
+          blocked_at: string | null
+          card_id: string
+          created_at: string
+          cvv_encrypted: string | null
+          expiry_date: string
+          full_pan_encrypted: string | null
+          id: string
+          issuance_fee: number
+          masked_pan: string
+          pin_offset: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          activated_at?: string | null
+          blocked_at?: string | null
+          card_id: string
+          created_at?: string
+          cvv_encrypted?: string | null
+          expiry_date: string
+          full_pan_encrypted?: string | null
+          id?: string
+          issuance_fee?: number
+          masked_pan: string
+          pin_offset?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          activated_at?: string | null
+          blocked_at?: string | null
+          card_id?: string
+          created_at?: string
+          cvv_encrypted?: string | null
+          expiry_date?: string
+          full_pan_encrypted?: string | null
+          id?: string
+          issuance_fee?: number
+          masked_pan?: string
+          pin_offset?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       vfd_sandbox_webhook_logs: {
         Row: {
           created_at: string | null

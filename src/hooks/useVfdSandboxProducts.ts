@@ -99,8 +99,19 @@ export function useVfdSandboxProducts() {
   const contributeAssociation = useCallback((association_id: string, amount: number, narration?: string) =>
     invoke("contribute_association", { association_id, amount, narration }), [invoke]);
 
+  // Virtual Cards
+  const createVirtualCard = useCallback(() => invoke("create_virtual_card"), [invoke]);
+  const activateCard = useCallback((card_id: string) => invoke("activate_card", { card_id }), [invoke]);
+  const cardPinChange = useCallback((card_id: string, old_pin: string, new_pin: string) =>
+    invoke("card_pin_change", { card_id, old_pin, new_pin }), [invoke]);
+  const blockCard = useCallback((card_id: string) => invoke("block_card", { card_id }), [invoke]);
+  const unblockCard = useCallback((card_id: string) => invoke("unblock_card", { card_id }), [invoke]);
+  const getCards = useCallback(() => invoke("get_cards"), [invoke]);
+  const getCardDetails = useCallback((card_id: string) => invoke("get_card_details", { card_id }), [invoke]);
+
   return {
     loading,
+    invoke,
     // Thrift Groups
     createGroup, listGroups, joinGroup, commenceGroup, contributeGroup, getGroupDetail,
     requestSwap, respondSwap, exitGroup, confirmContinue, restartGroup,
@@ -115,5 +126,7 @@ export function useVfdSandboxProducts() {
     declineSplit, cancelSplit, removeSplitParticipant, getSplitDetail,
     // Associations
     createAssociation, listAssociations, joinAssociation, getAssociationDetail, contributeAssociation,
+    // Virtual Cards
+    createVirtualCard, activateCard, cardPinChange, blockCard, unblockCard, getCards, getCardDetails,
   };
 }
