@@ -9,6 +9,8 @@ interface VfdClient {
   vfd_client_id: string | null;
   vfd_account_number: string | null;
   bvn: string | null;
+  nin: string | null;
+  address: string | null;
   full_name: string | null;
   phone: string | null;
   gender: string | null;
@@ -104,6 +106,12 @@ export function useVfdBanking() {
     [invokeVfd]
   );
 
+  const createTiered = useCallback(
+    (body: { bvn?: string; nin?: string; dateOfBirth: string; address?: string }) =>
+      invokeVfd("create_tiered", body),
+    [invokeVfd]
+  );
+
   const createConsent = useCallback(
     (body: Record<string, unknown>) => invokeVfd("create_consent", body),
     [invokeVfd]
@@ -120,7 +128,8 @@ export function useVfdBanking() {
   );
 
   const upgradeTier = useCallback(
-    () => invokeVfd("tier_upgrade"),
+    (body: { bvn?: string; nin?: string; address?: string }) =>
+      invokeVfd("tier_upgrade", body),
     [invokeVfd]
   );
 
@@ -183,6 +192,7 @@ export function useVfdBanking() {
     fetchTransactions,
     lookupBvn,
     createNoConsent,
+    createTiered,
     createConsent,
     triggerBvnConsent,
     releaseClient,

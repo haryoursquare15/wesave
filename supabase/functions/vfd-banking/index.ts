@@ -183,36 +183,58 @@ async function handleBvnLookup(bvn: string) {
   return jsonResponse({ data, vfd_status: status });
 }
 
-// Create Account - No Consent Flow
-async function handleCreateNoConsent(userId: string, bvn: string, dateOfBirth: string) {
-  if (!/^\d{11}$/.test(bvn)) {
-    return jsonResponse({ error: "BVN must be exactly 11 digits" }, 400);
+// Create Tiered Account - /client/tiers/individual
+// Tier 1: BVN+DOB or NIN+DOB (₦30k daily limit)
+// Tier 2: BVN+NIN+DOB (₦100k daily limit)
+// Tier 3: BVN+NIN+Address+DOB (₦1M per txn, ₦10M daily)
+async function handleCreateTiered(userId: string, body: Record<string, unknown>) {
+  const bvn = body.bvn as string | undefined;
+  const nin = body.nin as string | undefined;
+  const dateOfBirth = body.dateOfBirth as string;
+  const address = body.address as string | undefined;
+
+  if (!dateOfBirth) {
+    return jsonResponse({ error: "Date of birth is required" }, 400);
   }
-  if (!/^\d{2}-(\d{2}|[A-Za-z]{3})-\d{4}$/.test(dateOfBirth)) {
-    return jsonResponse({ error: "Date of birth must be in DD-MM-YYYY or DD-MMM-YYYY format (e.g. 08-Mar-1995)" }, 400);
+  if (!bvn && !nin) {
+    return jsonResponse({ error: "At least BVN or NIN is required" }, 400);
   }
 
-  const { data, status } = await vfdRequest("/client/create", "POST", undefined, { bvn, dateOfBirth });
+  const queryParams: Record<string, string> = { dateOfBirth };
+  if (bvn) queryParams.bvn = bvn;
+  if (nin) queryParams.nin = nin;
+  if (address) queryParams.address = address;
+
+  let expectedTier = "1";
+  if (bvn && nin && address) expectedTier = "3";
+  else if (bvn && nin) expectedTier = "2";
+
+  console.log(`[VFD create_tiered] Creating tier ${expectedTier} account`, queryParams);
+
+  const { data, status } = await vfdRequest("/client/tiers/individual", "POST", undefined, queryParams);
 
   const supabaseAdmin = getSupabaseAdmin();
   const vfdData = data as Record<string, unknown>;
-
-  // Store client info on success or "Client Account Exists" (status 929 with accountNo)
-  const isSuccess = status === 200 && (!vfdData?.status || vfdData.status === 200 || vfdData.status === "00");
-  const isExisting = vfdData?.status === "929" || vfdData?.status === "01";
+  const isSuccess = vfdData?.status === "00";
+  const isExisting = vfdData?.status === "01";
 
   if (isSuccess || isExisting) {
     const innerData = (vfdData?.data || {}) as Record<string, unknown>;
+    const actualTier = innerData?.currentTier?.toString() || expectedTier;
+
     await supabaseAdmin.from("vfd_sandbox_clients").upsert({
       user_id: userId,
-      bvn,
+      bvn: bvn || null,
+      nin: nin || null,
+      address: address || null,
       date_of_birth: dateOfBirth,
       vfd_client_id: innerData?.clientId?.toString() || null,
       vfd_account_number: innerData?.accountNo?.toString() || null,
-      full_name: innerData?.fullname?.toString() || innerData?.firstname ? `${innerData?.firstname || ""} ${innerData?.lastname || ""}`.trim() : null,
+      full_name: innerData?.firstname ? `${innerData?.firstname || ""} ${innerData?.middlename ? innerData.middlename + " " : ""}${innerData?.lastname || ""}`.trim() : null,
       phone: innerData?.phone?.toString() || null,
       gender: innerData?.gender?.toString() || null,
-      kyc_method: "no_consent",
+      tier: `tier${actualTier}`,
+      kyc_method: "tiered",
       consent_status: "not_required",
       account_status: "active",
       metadata: vfdData,
@@ -221,6 +243,11 @@ async function handleCreateNoConsent(userId: string, bvn: string, dateOfBirth: s
   }
 
   return jsonResponse({ data, vfd_status: status });
+}
+
+// Legacy backward compat → Tier 1
+async function handleCreateNoConsent(userId: string, bvn: string, dateOfBirth: string) {
+  return handleCreateTiered(userId, { bvn, dateOfBirth });
 }
 
 // Create Account - Consent Flow (iGree)
@@ -257,7 +284,7 @@ async function handleCreateConsent(userId: string, body: Record<string, unknown>
   return jsonResponse({ data: clientData, vfd_status: clientStatus });
 }
 
-// Trigger BVN Consent - GET with query params per VFD docs
+// Trigger BVN Consent
 async function handleBvnConsent(bvn: string, reference?: string) {
   const params: Record<string, string> = { bvn, type: "02" };
   if (reference) params.reference = reference;
@@ -266,7 +293,7 @@ async function handleBvnConsent(bvn: string, reference?: string) {
   return jsonResponse({ data, vfd_status: status });
 }
 
-// Release Client (after consent confirmed) - uses accountNo per VFD docs
+// Release Client
 async function handleClientRelease(userId: string, accountNo: string) {
   const { data, status } = await vfdRequest("/client/release", "POST", { accountNo });
 
@@ -288,46 +315,47 @@ async function handleClientRelease(userId: string, accountNo: string) {
   return jsonResponse({ data, vfd_status: status });
 }
 
-// Tier Upgrade - uses accountNo per VFD docs
+// Tier Upgrade - /client/update
 async function handleTierUpgrade(userId: string, body: Record<string, unknown>) {
-  // VFD /client/update requires accountNo and bvn
   const supabaseAdmin = getSupabaseAdmin();
 
-  // Fetch client details to get accountNo if not provided
-  let accountNo = body.accountNo as string;
-  let bvn = body.bvn as string;
+  const { data: clientData } = await supabaseAdmin
+    .from("vfd_sandbox_clients")
+    .select("vfd_account_number, bvn, nin, address")
+    .eq("user_id", userId)
+    .maybeSingle();
 
-  if (!accountNo || !bvn) {
-    const { data: clientData } = await supabaseAdmin
-      .from("vfd_sandbox_clients")
-      .select("vfd_account_number, bvn")
-      .eq("user_id", userId)
-      .maybeSingle();
-
-    if (clientData) {
-      accountNo = accountNo || clientData.vfd_account_number || "";
-      bvn = bvn || clientData.bvn || "";
-    }
+  const accountNo = (body.accountNo as string) || clientData?.vfd_account_number;
+  if (!accountNo) {
+    return jsonResponse({ error: "Account number is required for tier upgrade" }, 400);
   }
 
-  if (!accountNo || !bvn) {
-    return jsonResponse({ error: "Account number and BVN are required for tier upgrade" }, 400);
-  }
+  const upgradePayload: Record<string, unknown> = { accountNo };
+  if (body.bvn) upgradePayload.bvn = body.bvn;
+  if (body.nin) upgradePayload.nin = body.nin;
+  if (body.address) upgradePayload.address = body.address;
 
-  console.log("[VFD tier_upgrade] accountNo:", accountNo, "bvn:", bvn);
+  console.log("[VFD tier_upgrade] Payload:", JSON.stringify(upgradePayload));
 
-  const { data, status } = await vfdRequest("/client/update", "POST", { accountNo, bvn });
+  const { data, status } = await vfdRequest("/client/update", "POST", upgradePayload);
   console.log("[VFD tier_upgrade] Response:", JSON.stringify(data));
 
   const vfdData = data as Record<string, unknown>;
-  if (status === 200 && (vfdData?.status === "00" || vfdData?.status === 200)) {
+  if (status === 200 && vfdData?.status === "00") {
     const innerData = (vfdData?.data || {}) as Record<string, unknown>;
+    const newTier = innerData?.currentTier?.toString() || "2";
+
+    const updatePayload: Record<string, unknown> = {
+      tier: `tier${newTier}`,
+      updated_at: new Date().toISOString(),
+    };
+    if (body.nin) updatePayload.nin = body.nin;
+    if (body.bvn) updatePayload.bvn = body.bvn;
+    if (body.address) updatePayload.address = body.address;
+
     await supabaseAdmin
       .from("vfd_sandbox_clients")
-      .update({
-        tier: innerData?.currentTier?.toString() || "tier2",
-        updated_at: new Date().toISOString(),
-      })
+      .update(updatePayload)
       .eq("user_id", userId);
   }
 
@@ -978,6 +1006,9 @@ Deno.serve(async (req) => {
     switch (action) {
       case "bvn_lookup":
         return await handleBvnLookup(body.bvn as string);
+
+      case "create_tiered":
+        return await handleCreateTiered(userId, body);
 
       case "create_no_consent":
         return await handleCreateNoConsent(userId, body.bvn as string, body.dateOfBirth as string);
