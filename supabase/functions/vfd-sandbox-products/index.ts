@@ -1509,6 +1509,124 @@ async function handleContributeAssociation(userId: string, body: Record<string, 
 }
 
 // =============================================
+// BILLS PAYMENT (VFD BaaS)
+// =============================================
+
+const VFD_BILLS_BASE_TEST = "https://api-devapps.vfdbank.systems/vtech-bills/api/v2/billspaymentstore";
+const VFD_BILLS_BASE_LIVE = "https://api-apps.vfdbank.systems/vtech-bills/api/v2/billspaymentstore";
+
+async function getVfdAccessToken(): Promise<string | null> {
+  const vfdBase = Deno.env.get("VFD_API_BASE") || "https://api-devapps.vfdbank.systems";
+  const ck = Deno.env.get("VFD_CONSUMER_KEY");
+  const cs = Deno.env.get("VFD_CONSUMER_SECRET");
+  if (!ck || !cs) return null;
+  const r = await fetch(`${vfdBase}/vtech-auth/api/v1.1/oauth2/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: `grant_type=client_credentials&client_id=${ck}&client_secret=${cs}`,
+  });
+  const d = await r.json();
+  return d?.data?.accessToken || d?.access_token || null;
+}
+
+function getBillsBase(): string {
+  return (Deno.env.get("VFD_ENVIRONMENT") || "test") === "live" ? VFD_BILLS_BASE_LIVE : VFD_BILLS_BASE_TEST;
+}
+
+async function handleBillsCategories() {
+  const token = await getVfdAccessToken();
+  if (!token) return jsonResponse({ error: "VFD auth failed" }, 500);
+  const resp = await fetch(`${getBillsBase()}/billercategory`, { headers: { AccessToken: token } });
+  return jsonResponse({ data: await resp.json() });
+}
+
+async function handleBillsBillers(body: Record<string, unknown>) {
+  const cat = body.categoryName as string || "";
+  const token = await getVfdAccessToken();
+  if (!token) return jsonResponse({ error: "VFD auth failed" }, 500);
+  const url = cat ? `${getBillsBase()}/billerlist?categoryName=${encodeURIComponent(cat)}` : `${getBillsBase()}/billerlist`;
+  const resp = await fetch(url, { headers: { AccessToken: token } });
+  return jsonResponse({ data: await resp.json() });
+}
+
+async function handleBillsItems(body: Record<string, unknown>) {
+  const { billerId, divisionId, productId } = body as { billerId: string; divisionId: string; productId: string };
+  if (!billerId || !divisionId || !productId) return jsonResponse({ error: "billerId, divisionId, productId required" }, 400);
+  const token = await getVfdAccessToken();
+  if (!token) return jsonResponse({ error: "VFD auth failed" }, 500);
+  const resp = await fetch(
+    `${getBillsBase()}/billerItems?billerId=${encodeURIComponent(billerId)}&divisionId=${encodeURIComponent(divisionId)}&productId=${encodeURIComponent(productId)}`,
+    { headers: { AccessToken: token } }
+  );
+  return jsonResponse({ data: await resp.json() });
+}
+
+async function handleBillsValidate(body: Record<string, unknown>) {
+  const { customerId, divisionId, paymentItem, billerId } = body as {
+    customerId: string; divisionId: string; paymentItem: string; billerId: string;
+  };
+  if (!customerId || !divisionId || !paymentItem || !billerId) return jsonResponse({ error: "Missing validate fields" }, 400);
+  const token = await getVfdAccessToken();
+  if (!token) return jsonResponse({ error: "VFD auth failed" }, 500);
+  const resp = await fetch(
+    `${getBillsBase()}/customervalidate?customerId=${encodeURIComponent(customerId)}&divisionId=${encodeURIComponent(divisionId)}&paymentItem=${encodeURIComponent(paymentItem)}&billerId=${encodeURIComponent(billerId)}`,
+    { headers: { AccessToken: token } }
+  );
+  return jsonResponse({ data: await resp.json() });
+}
+
+async function handleBillsPay(userId: string, body: Record<string, unknown>) {
+  const { customerId, amount, division, paymentItem, productId, billerId, phoneNumber } = body as {
+    customerId: string; amount: string; division: string; paymentItem: string;
+    productId: string; billerId: string; phoneNumber?: string;
+  };
+  if (!customerId || !amount || !division || !paymentItem || !productId || !billerId) {
+    return jsonResponse({ error: "Missing required payment fields" }, 400);
+  }
+  const numAmount = Number(amount);
+  if (isNaN(numAmount) || numAmount <= 0) return jsonResponse({ error: "Invalid amount" }, 400);
+
+  const bal = await ensureBalanceRow(userId);
+  const available = bal.total_balance - bal.locked_balance - bal.savings_balance;
+  if (numAmount > available) return jsonResponse({ error: "Insufficient balance" }, 400);
+
+  const token = await getVfdAccessToken();
+  if (!token) return jsonResponse({ error: "VFD auth failed" }, 500);
+
+  const reference = `wesave-bill-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const payBody: Record<string, string> = { customerId, amount: amount.toString(), division, paymentItem, productId, billerId, reference };
+  if (phoneNumber) payBody.phoneNumber = phoneNumber;
+
+  const resp = await fetch(`${getBillsBase()}/pay`, {
+    method: "POST",
+    headers: { AccessToken: token, "Content-Type": "application/json" },
+    body: JSON.stringify(payBody),
+  });
+  const data = await resp.json();
+
+  if (data?.status === "00") {
+    const db = getSupabaseAdmin();
+    await db.from("vfd_sandbox_balances").update({ total_balance: bal.total_balance - numAmount }).eq("user_id", userId);
+    await db.from("vfd_sandbox_transactions").insert({
+      user_id: userId, transaction_type: "debit", amount: numAmount,
+      description: `Bill Payment: ${billerId.toUpperCase()} - ${customerId}`,
+      reference, status: "completed",
+    });
+  }
+
+  return jsonResponse({ data: { ...data, reference } });
+}
+
+async function handleBillsStatus(body: Record<string, unknown>) {
+  const { transactionId } = body as { transactionId: string };
+  if (!transactionId) return jsonResponse({ error: "transactionId required" }, 400);
+  const token = await getVfdAccessToken();
+  if (!token) return jsonResponse({ error: "VFD auth failed" }, 500);
+  const resp = await fetch(`${getBillsBase()}/transactionStatus?transactionId=${encodeURIComponent(transactionId)}`, { headers: { AccessToken: token } });
+  return jsonResponse({ data: await resp.json() });
+}
+
+// =============================================
 // MAIN HANDLER
 // =============================================
 
@@ -1571,6 +1689,14 @@ Deno.serve(async (req) => {
       case "join_association": return await handleJoinAssociation(userId, body);
       case "get_association_detail": return await handleGetAssociationDetail(body);
       case "contribute_association": return await handleContributeAssociation(userId, body);
+
+      // Bills Payment (VFD BaaS)
+      case "bills_categories": return await handleBillsCategories();
+      case "bills_billers": return await handleBillsBillers(body);
+      case "bills_items": return await handleBillsItems(body);
+      case "bills_validate": return await handleBillsValidate(body);
+      case "bills_pay": return await handleBillsPay(userId, body);
+      case "bills_status": return await handleBillsStatus(body);
 
       default:
         return jsonResponse({ error: `Unknown action: ${action}` }, 400);
