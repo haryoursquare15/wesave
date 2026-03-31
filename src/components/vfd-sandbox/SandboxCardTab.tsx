@@ -181,6 +181,7 @@ export function SandboxCardTab() {
   const [revealed, setRevealed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [defaultPin, setDefaultPin] = useState<string | null>(null);
+  const [needsKyc, setNeedsKyc] = useState(false);
 
   // Pin change state
   const [oldPin, setOldPin] = useState("");
@@ -206,7 +207,14 @@ export function SandboxCardTab() {
 
   const handleCreateCard = async () => {
     setLoading(true);
+    setNeedsKyc(false);
     const result = await sandbox.invoke("create_virtual_card");
+    if (result === null) {
+      // Check if error was KYC-related (toast already shown by hook)
+      setNeedsKyc(true);
+      setLoading(false);
+      return;
+    }
     if (result?.data) {
       toast({ title: "Card Created!", description: `₦${ISSUANCE_FEE.toLocaleString()} issuance fee charged` });
       await loadCards();
