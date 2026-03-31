@@ -4021,6 +4021,7 @@ export type Database = {
           created_at: string
           creator_id: string
           expiry_date: string | null
+          fee_per_person: number | null
           id: string
           merchant_account: string | null
           merchant_account_name: string | null
@@ -4031,6 +4032,7 @@ export type Database = {
           paid_count: number
           per_person_amount: number
           platform_fee: number
+          purpose: string | null
           settlement_completed_at: string | null
           settlement_failure_reason: string | null
           settlement_reference: string | null
@@ -4045,6 +4047,7 @@ export type Database = {
           created_at?: string
           creator_id: string
           expiry_date?: string | null
+          fee_per_person?: number | null
           id?: string
           merchant_account?: string | null
           merchant_account_name?: string | null
@@ -4055,6 +4058,7 @@ export type Database = {
           paid_count?: number
           per_person_amount: number
           platform_fee?: number
+          purpose?: string | null
           settlement_completed_at?: string | null
           settlement_failure_reason?: string | null
           settlement_reference?: string | null
@@ -4069,6 +4073,7 @@ export type Database = {
           created_at?: string
           creator_id?: string
           expiry_date?: string | null
+          fee_per_person?: number | null
           id?: string
           merchant_account?: string | null
           merchant_account_name?: string | null
@@ -4079,6 +4084,7 @@ export type Database = {
           paid_count?: number
           per_person_amount?: number
           platform_fee?: number
+          purpose?: string | null
           settlement_completed_at?: string | null
           settlement_failure_reason?: string | null
           settlement_reference?: string | null

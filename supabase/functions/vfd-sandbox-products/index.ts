@@ -131,7 +131,6 @@ async function creditFromSavings(userId: string, amount: number): Promise<void> 
   }).eq("user_id", userId);
 }
 
-// Debit directly from total_balance (for association contributions, split payments)
 async function debitWallet(userId: string, amount: number): Promise<boolean> {
   const db = getSupabaseAdmin();
   let bal = await ensureBalanceRow(userId);
@@ -174,6 +173,16 @@ async function sendNotification(userId: string, title: string, message: string, 
 }
 
 // =============================================
+// PLATFORM FEE (Production Parity)
+// Tiered: ₦100 flat for <₦20k, 1% (max ₦500) for ₦20k+
+// =============================================
+
+function calculatePlatformFee(grossAmount: number): number {
+  if (grossAmount < 20000) return 100;
+  return Math.min(Math.round(grossAmount * 0.01 * 100) / 100, 500);
+}
+
+// =============================================
 // FISHER-YATES RANDOMIZATION (matches production)
 // =============================================
 
@@ -192,6 +201,16 @@ function fisherYatesShuffle(arr: string[]): string[] {
 
 async function handleCreateGroup(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
+
+  // Production parity: max 2 active groups per user
+  const { count: activeCount } = await db.from("vfd_sandbox_group_members")
+    .select("*, vfd_sandbox_groups!inner(status)", { count: "exact", head: true })
+    .eq("user_id", userId).eq("status", "active")
+    .in("vfd_sandbox_groups.status", ["pending", "active"]);
+  if (activeCount && activeCount >= 2) {
+    return jsonResponse({ error: "You can only be a member of up to 2 active groups at a time" }, 400);
+  }
+
   const name = body.name as string;
   const amount = Number(body.contribution_amount);
   const maxMembers = Number(body.max_members) || 5;
@@ -204,6 +223,8 @@ async function handleCreateGroup(userId: string, body: Record<string, unknown>) 
   const contributionDayOfMonth = Number(body.contribution_day_of_month) || 1;
 
   if (!name || !amount || amount <= 0) return jsonResponse({ error: "Name and contribution amount required" }, 400);
+  if (maxMembers < 3 || maxMembers > 20) return jsonResponse({ error: "Members must be between 3 and 20" }, 400);
+  if (amount < 5000 || amount > 500000) return jsonResponse({ error: "Contribution must be between ₦5,000 and ₦500,000" }, 400);
 
   const { data: group, error } = await db.from("vfd_sandbox_groups").insert({
     name, admin_id: userId, contribution_amount: amount,
@@ -241,6 +262,15 @@ async function handleJoinGroup(userId: string, body: Record<string, unknown>) {
   const { data: existing } = await db.from("vfd_sandbox_group_members")
     .select("id").eq("group_id", groupId).eq("user_id", userId).maybeSingle();
   if (existing) return jsonResponse({ data: { joined: true, message: "Already a member" } });
+
+  // Production parity: max 2 active groups per user
+  const { count: activeCount } = await db.from("vfd_sandbox_group_members")
+    .select("*, vfd_sandbox_groups!inner(status)", { count: "exact", head: true })
+    .eq("user_id", userId).eq("status", "active")
+    .in("vfd_sandbox_groups.status", ["pending", "active"]);
+  if (activeCount && activeCount >= 2) {
+    return jsonResponse({ error: "You can only be a member of up to 2 active groups at a time" }, 400);
+  }
 
   const { data: group } = await db.from("vfd_sandbox_groups").select("*").eq("id", groupId).single();
   if (!group) return jsonResponse({ error: "Group not found" }, 404);
@@ -327,7 +357,6 @@ async function handleRequestSwap(userId: string, body: Record<string, unknown>) 
   if (requester.has_used_swap) return jsonResponse({ error: "You have already used your swap for this group" }, 400);
   if (requester.has_received_payout) return jsonResponse({ error: "Cannot swap after receiving payout" }, 400);
 
-  // Production parity: No swap if any member has contributed this cycle
   const { count: contribCount } = await db.from("vfd_sandbox_group_contributions")
     .select("*", { count: "exact", head: true })
     .eq("group_id", groupId).eq("cycle_number", group.current_cycle);
@@ -462,7 +491,7 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
   });
 }
 
-// AUTO-PAYOUT (matches production: 2.5% fee, credit recipient wallet, advance cycle)
+// AUTO-PAYOUT (Production parity: tiered fee, credit recipient wallet, advance cycle)
 async function processAutoPayout(
   db: ReturnType<typeof createClient>,
   group: Record<string, unknown>,
@@ -479,7 +508,8 @@ async function processAutoPayout(
   if (!recipientId) return { success: false, error: "No recipient for this cycle" };
 
   const grossAmount = amount * memberCount;
-  const platformFee = Math.round(grossAmount * 0.025 * 100) / 100; // 2.5%
+  // PRODUCTION PARITY: Tiered fee structure
+  const platformFee = calculatePlatformFee(grossAmount);
   const netAmount = grossAmount - platformFee;
 
   // Release recipient's own savings contribution, then credit net gain
@@ -508,7 +538,7 @@ async function processAutoPayout(
     }).eq("id", groupId);
 
     await postChatMessage(groupId, recipientId,
-      `🎉 Group completed! Final payout of ₦${netAmount.toLocaleString()} sent.`, "payout_notification");
+      `🎉 Group completed! Final payout of ₦${netAmount.toLocaleString()} sent (fee: ₦${platformFee.toLocaleString()}).`, "payout_notification");
   } else {
     const nextRecipientId = payoutOrder[nextCycle - 1];
     await db.from("vfd_sandbox_contribution_cycles").insert({
@@ -524,11 +554,11 @@ async function processAutoPayout(
     await db.from("vfd_sandbox_group_members").update({ has_contributed_current: false }).eq("group_id", groupId);
 
     await postChatMessage(groupId, recipientId,
-      `🎉 Cycle ${currentCycle} complete! Payout of ₦${netAmount.toLocaleString()} sent. Cycle ${nextCycle} begins now.`, "payout_notification");
+      `🎉 Cycle ${currentCycle} complete! Payout of ₦${netAmount.toLocaleString()} sent (fee: ₦${platformFee.toLocaleString()}). Cycle ${nextCycle} begins now.`, "payout_notification");
   }
 
   await sendNotification(recipientId, "Payout Received!",
-    `You received ₦${netAmount.toLocaleString()} from your thrift group ${group.name}.`,
+    `You received ₦${netAmount.toLocaleString()} from your thrift group ${group.name}. Platform fee: ₦${platformFee.toLocaleString()}.`,
     "payout_received", groupId);
 
   return { success: true, recipient_id: recipientId, net_amount: netAmount, platform_fee: platformFee };
@@ -548,7 +578,7 @@ async function handleGetGroupDetail(body: Record<string, unknown>) {
   return jsonResponse({ data: { group, members, contributions, payouts, cycles, swaps, chat } });
 }
 
-// GROUP LIFECYCLE: Exit (matches production: only completed groups, chat system message)
+// GROUP LIFECYCLE: Exit
 async function handleExitGroup(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const groupId = body.group_id as string;
@@ -574,7 +604,7 @@ async function handleExitGroup(userId: string, body: Record<string, unknown>) {
   return jsonResponse({ data: { success: true } });
 }
 
-// GROUP LIFECYCLE: Confirm continue (matches production)
+// GROUP LIFECYCLE: Confirm continue
 async function handleConfirmContinue(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const groupId = body.group_id as string;
@@ -590,7 +620,7 @@ async function handleConfirmContinue(userId: string, body: Record<string, unknow
   return jsonResponse({ data: { success: true, confirmed: true } });
 }
 
-// GROUP LIFECYCLE: Restart (matches production: re-randomize, T&C required, need max_members to restart)
+// GROUP LIFECYCLE: Restart
 async function handleRestartGroup(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const groupId = body.group_id as string;
@@ -605,7 +635,6 @@ async function handleRestartGroup(userId: string, body: Record<string, unknown>)
   const { data: activeMembers } = await db.from("vfd_sandbox_group_members")
     .select("user_id").eq("group_id", groupId).eq("status", "active");
 
-  // Production parity: group cannot restart until it reaches max member limit
   if (!activeMembers || activeMembers.length < group.max_members) {
     return jsonResponse({ error: `Need ${group.max_members} active members to restart (currently ${activeMembers?.length || 0})` }, 400);
   }
@@ -633,7 +662,6 @@ async function handleRestartGroup(userId: string, body: Record<string, unknown>)
 
   await postChatMessage(groupId, userId, "🔄 Group has been restarted! New payout positions randomized. Cycle 1 begins.", "system");
 
-  // Notify all members
   for (const memberId of memberIds) {
     const pos = newPayoutOrder.indexOf(memberId) + 1;
     await sendNotification(memberId, "Group Restarted",
@@ -659,14 +687,17 @@ async function handleCreateTarget(userId: string, body: Record<string, unknown>)
   const reason = (body.reason as string) || null;
 
   if (!name || !goalAmount) return jsonResponse({ error: "Name and goal amount required" }, 400);
+  if (goalAmount < 1000) return jsonResponse({ error: "Target must be at least ₦1,000" }, 400);
 
   const contributionAmount = Math.ceil(goalAmount / maxMembers);
+  if (contributionAmount < 100) return jsonResponse({ error: "Contribution per member is too low. Increase target or reduce members." }, 400);
+
   const targetDate = new Date();
   if (frequency === "daily") targetDate.setDate(targetDate.getDate() + maxMembers);
   else if (frequency === "weekly") targetDate.setDate(targetDate.getDate() + maxMembers * 7);
   else targetDate.setMonth(targetDate.getMonth() + maxMembers);
 
-  const inviteLimit = maxMembers - 1; // Admin is member #1
+  const inviteLimit = maxMembers - 1;
 
   const { data: target, error } = await db.from("vfd_sandbox_targets").insert({
     name, admin_id: userId, goal_amount: goalAmount,
@@ -677,6 +708,20 @@ async function handleCreateTarget(userId: string, body: Record<string, unknown>)
 
   if (error) return jsonResponse({ error: error.message }, 500);
   await db.from("vfd_sandbox_target_members").insert({ target_id: target.id, user_id: userId });
+
+  // Send invites if provided
+  const inviteeIds = body.invitee_ids as string[] | undefined;
+  if (inviteeIds && inviteeIds.length > 0) {
+    const invites = inviteeIds.slice(0, inviteLimit).map(inviteeId => ({
+      target_id: target.id, inviter_id: userId, invitee_id: inviteeId,
+    }));
+    await db.from("vfd_sandbox_target_invites").insert(invites);
+    for (const inv of invites) {
+      await sendNotification(inv.invitee_id, "Target Ajo Invite",
+        `You've been invited to join "${name}" savings group.`, "target_invite");
+    }
+  }
+
   return jsonResponse({ data: target });
 }
 
@@ -687,7 +732,6 @@ async function handleListTargets(userId: string) {
     .in("status", ["active", "completed"])
     .order("created_at", { ascending: false });
 
-  // Separate my groups vs all
   const { data: memberships } = await db.from("vfd_sandbox_target_members")
     .select("target_id").eq("user_id", userId);
   const myIds = new Set((memberships || []).map((m: { target_id: string }) => m.target_id));
@@ -706,14 +750,13 @@ async function handleContributeTarget(userId: string, body: Record<string, unkno
   if (!target) return jsonResponse({ error: "Target not found" }, 404);
   if (target.status !== "active") return jsonResponse({ error: "Target is not active" }, 400);
 
-  // Verify membership
   const { data: membership } = await db.from("vfd_sandbox_target_members")
     .select("*").eq("target_id", targetId).eq("user_id", userId).maybeSingle();
   if (!membership) return jsonResponse({ error: "You must be a member to contribute" }, 400);
 
   const amount = Number(target.contribution_amount);
   const debited = await debitForSavings(userId, amount);
-  if (!debited) return jsonResponse({ error: "Insufficient available balance" }, 400);
+  if (!debited) return jsonResponse({ error: "Insufficient available balance. Please fund your wallet first." }, 400);
 
   const txRef = `target-${targetId}-${userId}-${Date.now()}`;
   await db.from("vfd_sandbox_target_contributions").insert({
@@ -721,11 +764,10 @@ async function handleContributeTarget(userId: string, body: Record<string, unkno
   });
 
   // Update member's contributed amount
-  if (membership) {
-    await db.from("vfd_sandbox_target_members").update({
-      contributed_amount: Number(membership.contributed_amount) + amount,
-    }).eq("id", membership.id);
-  }
+  const newMemberContributed = Number(membership.contributed_amount) + amount;
+  await db.from("vfd_sandbox_target_members").update({
+    contributed_amount: newMemberContributed,
+  }).eq("id", membership.id);
 
   const newTotal = Number(target.total_contributed) + amount;
   const updates: Record<string, unknown> = { total_contributed: newTotal, updated_at: new Date().toISOString() };
@@ -742,7 +784,8 @@ async function handleContributeTarget(userId: string, body: Record<string, unkno
     const { data: allMembers } = await db.from("vfd_sandbox_target_members").select("*").eq("target_id", targetId);
     if (allMembers) {
       for (const m of allMembers) {
-        const memberContributed = Number(m.contributed_amount) + (m.user_id === userId ? amount : 0);
+        // Use the stored contributed_amount (already updated for current user)
+        const memberContributed = m.user_id === userId ? newMemberContributed : Number(m.contributed_amount);
         if (memberContributed > 0) {
           await creditFromSavings(m.user_id, memberContributed);
           await sendNotification(m.user_id, "🎯 Target Achieved!",
@@ -765,7 +808,6 @@ async function handleGetTargetDetail(body: Record<string, unknown>) {
   const { data: invites } = await db.from("vfd_sandbox_target_invites").select("*").eq("target_id", targetId);
   const { data: withdrawalRequests } = await db.from("vfd_sandbox_target_withdrawal_requests").select("*").eq("target_id", targetId).order("created_at", { ascending: false });
 
-  // Get votes for withdrawal requests
   let votes: unknown[] = [];
   if (withdrawalRequests && withdrawalRequests.length > 0) {
     const wrIds = withdrawalRequests.map((w: { id: string }) => w.id);
@@ -773,7 +815,7 @@ async function handleGetTargetDetail(body: Record<string, unknown>) {
     votes = v || [];
   }
 
-  return jsonResponse({ data: { target, members, contributions, invites, withdrawal_requests: withdrawalRequests, votes } });
+  return jsonResponse({ data: { target, members: members || [], contributions: contributions || [], invites: invites || [], withdrawal_requests: withdrawalRequests || [], votes } });
 }
 
 // Target Ajo: Invite member
@@ -784,19 +826,17 @@ async function handleInviteTargetMember(userId: string, body: Record<string, unk
 
   const { data: target } = await db.from("vfd_sandbox_targets").select("*").eq("id", targetId).single();
   if (!target) return jsonResponse({ error: "Target not found" }, 404);
-  if (target.admin_id !== userId) return jsonResponse({ error: "Only admin can invite" }, 403);
+  if (target.admin_id !== userId) return jsonResponse({ error: "Only the admin can invite" }, 403);
 
-  // Check invite limit (max_members - 1)
+  // Check invite limit
   const { count: inviteCount } = await db.from("vfd_sandbox_target_invites")
-    .select("*", { count: "exact", head: true })
-    .eq("target_id", targetId).in("status", ["pending", "accepted"]);
-  if (inviteCount && inviteCount >= (target.max_members - 1)) {
-    return jsonResponse({ error: `Invite limit reached (max ${target.max_members - 1})` }, 400);
+    .select("*", { count: "exact", head: true }).eq("target_id", targetId).in("status", ["pending", "accepted"]);
+  if (inviteCount && inviteCount >= (target.invite_limit || target.max_members - 1)) {
+    return jsonResponse({ error: "Invite limit reached" }, 400);
   }
 
-  // Graceful: check existing
   const { data: existing } = await db.from("vfd_sandbox_target_invites")
-    .select("id").eq("target_id", targetId).eq("invitee_id", inviteeId).maybeSingle();
+    .select("id").eq("target_id", targetId).eq("invitee_id", inviteeId).in("status", ["pending", "accepted"]).maybeSingle();
   if (existing) return jsonResponse({ data: { invited: true, already_invited: true } });
 
   await db.from("vfd_sandbox_target_invites").insert({
@@ -827,14 +867,12 @@ async function handleRespondTargetInvite(userId: string, body: Record<string, un
   }).eq("id", inviteId);
 
   if (accept) {
-    // Add as member
     const { data: existing } = await db.from("vfd_sandbox_target_members")
       .select("id").eq("target_id", invite.target_id).eq("user_id", userId).maybeSingle();
     if (!existing) {
       await db.from("vfd_sandbox_target_members").insert({
         target_id: invite.target_id, user_id: userId,
       });
-      // Update member count
       const { data: target } = await db.from("vfd_sandbox_targets").select("member_count").eq("id", invite.target_id).single();
       if (target) {
         await db.from("vfd_sandbox_targets").update({
@@ -863,10 +901,10 @@ async function handleRequestTargetWithdrawal(userId: string, body: Record<string
     .select("*").eq("target_id", targetId).eq("user_id", userId).maybeSingle();
   if (!membership) return jsonResponse({ error: "Not a member" }, 400);
 
-  // Required votes = majority of members
+  // Production parity: Required votes = 2/3 of members (matching live which says "2/3 member approval")
   const { count: memberCount } = await db.from("vfd_sandbox_target_members")
     .select("*", { count: "exact", head: true }).eq("target_id", targetId);
-  const requiredVotes = Math.ceil((memberCount || 1) / 2);
+  const requiredVotes = Math.ceil(((memberCount || 1) * 2) / 3);
 
   const { data: wr, error } = await db.from("vfd_sandbox_target_withdrawal_requests").insert({
     target_id: targetId, requested_by: userId, amount,
@@ -881,18 +919,16 @@ async function handleRequestTargetWithdrawal(userId: string, body: Record<string
 async function handleVoteTargetWithdrawal(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const requestId = body.request_id as string;
-  const vote = body.vote as string; // "approve" or "reject"
+  const vote = body.vote as string;
 
   const { data: wr } = await db.from("vfd_sandbox_target_withdrawal_requests").select("*").eq("id", requestId).single();
   if (!wr) return jsonResponse({ error: "Request not found" }, 404);
   if (wr.status !== "pending") return jsonResponse({ error: "Request already resolved" }, 400);
 
-  // Check membership
   const { data: membership } = await db.from("vfd_sandbox_target_members")
     .select("id").eq("target_id", wr.target_id).eq("user_id", userId).maybeSingle();
   if (!membership) return jsonResponse({ error: "Not a member" }, 400);
 
-  // Check duplicate vote
   const { data: existingVote } = await db.from("vfd_sandbox_target_withdrawal_votes")
     .select("id").eq("withdrawal_request_id", requestId).eq("user_id", userId).maybeSingle();
   if (existingVote) return jsonResponse({ error: "Already voted" }, 400);
@@ -908,9 +944,7 @@ async function handleVoteTargetWithdrawal(userId: string, body: Record<string, u
     approval_count: newApproval, rejection_count: newRejection,
   }).eq("id", requestId);
 
-  // Check if approved
   if (newApproval >= wr.required_votes) {
-    // Process withdrawal: credit requester wallet from savings
     await creditFromSavings(wr.requested_by, Number(wr.amount));
     await db.from("vfd_sandbox_target_withdrawal_requests").update({
       status: "approved", resolved_at: new Date().toISOString(),
@@ -921,7 +955,6 @@ async function handleVoteTargetWithdrawal(userId: string, body: Record<string, u
       "withdrawal_approved");
   }
 
-  // Check if rejected (more rejections than possible approvals)
   const { count: totalMembers } = await db.from("vfd_sandbox_target_members")
     .select("*", { count: "exact", head: true }).eq("target_id", wr.target_id);
   const remainingVotes = (totalMembers || 0) - newApproval - newRejection;
@@ -954,13 +987,9 @@ async function handleIndependentWithdrawal(userId: string, body: Record<string, 
   const contributed = Number(membership.contributed_amount);
   if (contributed <= 0) return jsonResponse({ error: "No contributions to withdraw" }, 400);
 
-  // Release from savings to wallet
   await creditFromSavings(userId, contributed);
-
-  // Reset member contribution
   await db.from("vfd_sandbox_target_members").update({ contributed_amount: 0 }).eq("id", membership.id);
 
-  // Update target total
   await db.from("vfd_sandbox_targets").update({
     total_contributed: Math.max(0, Number(target.total_contributed) - contributed),
     updated_at: new Date().toISOString(),
@@ -987,7 +1016,6 @@ async function handleCreateCampaign(userId: string, body: Record<string, unknown
 
   if (!title || !goalAmount) return jsonResponse({ error: "Title and goal amount required" }, 400);
 
-  // Generate slug
   const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') + '-' + Date.now().toString(36);
 
   const { data, error } = await db.from("vfd_sandbox_campaigns").insert({
@@ -1031,8 +1059,6 @@ async function handleContributeCampaign(userId: string, body: Record<string, unk
   if (!campaign) return jsonResponse({ error: "Campaign not found" }, 404);
   if (campaign.status !== "active") return jsonResponse({ error: "Campaign is not active" }, 400);
 
-  // Production parity: Goal funding sends directly to beneficiary bank, not pool.
-  // In sandbox, debit wallet (simulate direct payment)
   const debited = await debitWallet(userId, amount);
   if (!debited) return jsonResponse({ error: "Insufficient available balance" }, 400);
 
@@ -1056,7 +1082,6 @@ async function handleContributeCampaign(userId: string, body: Record<string, unk
   return jsonResponse({ data: { contributed: true, amount, total_raised: newRaised } });
 }
 
-// Goal: Campaign detail
 async function handleGetCampaignDetail(body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const campaignId = body.campaign_id as string;
@@ -1073,7 +1098,6 @@ async function handleGetCampaignDetail(body: Record<string, unknown>) {
   return jsonResponse({ data: { campaign, contributions: contributions || [], updates: updates || [] } });
 }
 
-// Goal: Post campaign update
 async function handlePostCampaignUpdate(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const campaignId = body.campaign_id as string;
@@ -1106,11 +1130,16 @@ async function handleCreateSplit(userId: string, body: Record<string, unknown>) 
   const merchantBankName = body.merchant_bank_name as string || null;
   const merchantAccountNumber = body.merchant_account_number as string || null;
   const expiryDays = Number(body.expiry_days) || 7;
+  const purpose = (body.purpose as string) || title;
 
-  if (!title || !totalAmount || totalAmount < 100) return jsonResponse({ error: "Title and total amount (min ₦100) required" }, 400);
+  // PRODUCTION PARITY: minimum ₦1,000 (not ₦100)
+  if (!title || !totalAmount || totalAmount < 1000) return jsonResponse({ error: "Title and total amount (min ₦1,000) required" }, 400);
+  if (splitCount < 2) return jsonResponse({ error: "Need at least 2 participants" }, 400);
 
-  const perPerson = Math.ceil(totalAmount / splitCount);
-  const platformFee = Math.round(totalAmount * 0.015 * 100) / 100; // 1.5% platform fee (production parity)
+  const perPerson = Math.ceil((totalAmount / splitCount) * 100) / 100;
+  // PRODUCTION PARITY: ₦100 flat fee (not 1.5%)
+  const platformFee = 100;
+  const feePerPerson = Math.ceil((platformFee / splitCount) * 100) / 100;
   const expiryDate = new Date();
   expiryDate.setDate(expiryDate.getDate() + expiryDays);
 
@@ -1121,6 +1150,8 @@ async function handleCreateSplit(userId: string, body: Record<string, unknown>) 
     merchant_bank_name: merchantBankName,
     merchant_account_number: merchantAccountNumber,
     platform_fee: platformFee,
+    fee_per_person: feePerPerson,
+    purpose: purpose,
     expiry_date: expiryDate.toISOString(),
   }).select().single();
 
@@ -1137,7 +1168,6 @@ async function handleCreateSplit(userId: string, body: Record<string, unknown>) 
 async function handleListSplits(userId: string) {
   const db = getSupabaseAdmin();
 
-  // Get all splits where user is creator or participant
   const { data: participations } = await db.from("vfd_sandbox_split_participants")
     .select("split_id").eq("user_id", userId);
   const participatedIds = (participations || []).map((p: { split_id: string }) => p.split_id);
@@ -1149,7 +1179,6 @@ async function handleListSplits(userId: string) {
     ? await db.from("vfd_sandbox_splits").select("*").in("id", participatedIds).order("created_at", { ascending: false })
     : { data: [] };
 
-  // Merge and deduplicate
   const allMap = new Map<string, unknown>();
   for (const s of [...(asCreator || []), ...(asParticipant || [])]) {
     allMap.set((s as { id: string }).id, s);
@@ -1166,18 +1195,17 @@ async function handleJoinSplit(userId: string, body: Record<string, unknown>) {
   if (!split) return jsonResponse({ error: "Split not found" }, 404);
   if (split.status !== "active") return jsonResponse({ error: "Split is not active" }, 400);
 
-  // Check expiry
   if (split.expiry_date && new Date(split.expiry_date) < new Date()) {
     return jsonResponse({ error: "Split has expired" }, 400);
   }
 
-  // Graceful: check existing
   const { data: existing } = await db.from("vfd_sandbox_split_participants")
     .select("id").eq("split_id", splitId).eq("user_id", userId).maybeSingle();
   if (existing) return jsonResponse({ data: { joined: true, already_member: true } });
 
+  // Production parity: count active/pending only (exclude declined)
   const { count } = await db.from("vfd_sandbox_split_participants")
-    .select("*", { count: "exact", head: true }).eq("split_id", splitId);
+    .select("*", { count: "exact", head: true }).eq("split_id", splitId).in("status", ["pending", "paid"]);
   if (count && count >= split.split_count) return jsonResponse({ error: "Split is full" }, 400);
 
   const { error } = await db.from("vfd_sandbox_split_participants").insert({
@@ -1203,25 +1231,33 @@ async function handlePaySplit(userId: string, body: Record<string, unknown>) {
   if (participant.status === "declined") return jsonResponse({ error: "You have declined this split" }, 400);
 
   const amount = Number(split.per_person_amount);
+  const feeShare = Number(split.fee_per_person || Math.ceil(100 / split.split_count));
+  const totalDebit = amount + feeShare;
 
-  // Production parity: use wallet debit (not savings hold)
-  const debited = await debitWallet(userId, amount);
-  if (!debited) return jsonResponse({ error: "Insufficient available balance" }, 400);
+  // Production parity: debit bill share + fee share
+  const debited = await debitWallet(userId, totalDebit);
+  if (!debited) return jsonResponse({ error: `Insufficient available balance. Need ₦${totalDebit.toLocaleString()} (₦${amount.toLocaleString()} share + ₦${feeShare.toLocaleString()} fee)` }, 400);
 
   await db.from("vfd_sandbox_split_participants").update({
     status: "paid", paid_at: new Date().toISOString(),
   }).eq("id", participant.id);
 
-  // Record transaction
   await db.from("vfd_sandbox_split_transactions").insert({
-    split_id: splitId, user_id: userId, amount,
+    split_id: splitId, user_id: userId, amount: totalDebit,
   });
 
-  const newPaidCount = split.paid_count + 1;
-  const updates: Record<string, unknown> = { paid_count: newPaidCount, updated_at: new Date().toISOString() };
+  // Production parity: count active/pending participants (exclude declined) for completion check
+  const { data: activeParticipants } = await db.from("vfd_sandbox_split_participants")
+    .select("status").eq("split_id", splitId).in("status", ["pending", "paid"]);
+  
+  const paidCount = (activeParticipants || []).filter(p => p.status === "paid").length;
+  const activeCount = (activeParticipants || []).length;
+  
+  const updates: Record<string, unknown> = { paid_count: paidCount, updated_at: new Date().toISOString() };
 
   let allPaid = false;
-  if (newPaidCount >= split.split_count) {
+  // Production parity: complete when paid count >= required count (active participants, not split_count)
+  if (paidCount >= Math.min(split.split_count, activeCount)) {
     updates.status = "completed";
     allPaid = true;
   }
@@ -1240,10 +1276,10 @@ async function handlePaySplit(userId: string, body: Record<string, unknown>) {
       "split_completed");
   }
 
-  return jsonResponse({ data: { paid: true, amount, all_paid: allPaid } });
+  return jsonResponse({ data: { paid: true, amount: totalDebit, bill_share: amount, fee_share: feeShare, all_paid: allPaid } });
 }
 
-// SplitPay: Decline participation
+// SplitPay: Decline
 async function handleDeclineSplit(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const splitId = body.split_id as string;
@@ -1268,16 +1304,18 @@ async function handleCancelSplit(userId: string, body: Record<string, unknown>) 
   if (split.creator_id !== userId) return jsonResponse({ error: "Only the creator can cancel" }, 400);
   if (split.status === "completed") return jsonResponse({ error: "Cannot cancel completed split" }, 400);
 
-  // Refund paid participants
+  // Refund paid participants (amount + fee share)
   const { data: paidParticipants } = await db.from("vfd_sandbox_split_participants")
     .select("*").eq("split_id", splitId).eq("status", "paid");
 
   let refundedCount = 0;
+  const feeShare = Math.ceil(100 / split.split_count);
   for (const p of paidParticipants || []) {
-    await creditWallet(p.user_id, Number(p.amount));
+    const refundAmount = Number(p.amount) + feeShare;
+    await creditWallet(p.user_id, refundAmount);
     refundedCount++;
     await sendNotification(p.user_id, "SplitPay Refund",
-      `"${split.title}" has been cancelled. ₦${Number(p.amount).toLocaleString()} has been refunded.`,
+      `"${split.title}" has been cancelled. ₦${refundAmount.toLocaleString()} has been refunded.`,
       "split_refund");
   }
 
@@ -1297,6 +1335,7 @@ async function handleRemoveSplitParticipant(userId: string, body: Record<string,
   const { data: split } = await db.from("vfd_sandbox_splits").select("*").eq("id", splitId).single();
   if (!split) return jsonResponse({ error: "Split not found" }, 404);
   if (split.creator_id !== userId) return jsonResponse({ error: "Only the creator can remove participants" }, 400);
+  if (split.status !== "active") return jsonResponse({ error: "Can only manage active splits" }, 400);
 
   const { data: participant } = await db.from("vfd_sandbox_split_participants")
     .select("*").eq("split_id", splitId).eq("user_id", participantUserId).maybeSingle();
@@ -1304,7 +1343,9 @@ async function handleRemoveSplitParticipant(userId: string, body: Record<string,
 
   // Refund if already paid
   if (participant.status === "paid") {
-    await creditWallet(participantUserId, Number(participant.amount));
+    const feeShare = Math.ceil(100 / split.split_count);
+    const refundAmount = Number(participant.amount) + feeShare;
+    await creditWallet(participantUserId, refundAmount);
     await db.from("vfd_sandbox_splits").update({
       paid_count: Math.max(0, split.paid_count - 1),
       updated_at: new Date().toISOString(),
@@ -1338,7 +1379,7 @@ async function handleGetSplitDetail(body: Record<string, unknown>) {
 }
 
 // =============================================
-// ASSOCIATION HANDLERS (mirrors production)
+// ASSOCIATION HANDLERS
 // =============================================
 
 async function handleCreateAssociation(userId: string, body: Record<string, unknown>) {
@@ -1453,7 +1494,6 @@ async function handleContributeAssociation(userId: string, body: Record<string, 
     return jsonResponse({ error: `Insufficient balance. Available: ₦${avail.toLocaleString()}` }, 400);
   }
 
-  // Credit association wallet
   const { data: wallet } = await db.from("vfd_sandbox_association_wallets")
     .select("*").eq("association_id", associationId).single();
   await db.from("vfd_sandbox_association_wallets").update({
