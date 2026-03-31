@@ -107,6 +107,15 @@ const productBanners = [
     icon: Receipt,
     accent: "bg-violet-300/20",
   },
+  {
+    key: "bills",
+    title: "Pay Bills Instantly",
+    subtitle: "Buy airtime, data, pay electricity & cable TV",
+    cta: "Pay a Bill",
+    gradient: "from-cyan-500 to-blue-700",
+    icon: CreditCard,
+    accent: "bg-cyan-300/20",
+  },
 ];
 
 /* ─── Product Grid Items ─── */
