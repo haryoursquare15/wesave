@@ -546,6 +546,43 @@ async function handleSandboxCredit(userId: string, accountNo: string, amount: nu
     source: "vfd_sandbox",
   });
 
+  // Auto-sync internal ledger after successful credit
+  if (isSuccess) {
+    const { data: existing } = await supabaseAdmin
+      .from("vfd_user_balances")
+      .select("*")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    // Fetch live VFD balance
+    const { data: balData } = await vfdRequest("/account/enquiry", "GET", undefined, {
+      accountNumber: accountNo,
+    });
+    const liveBalance = Number(
+      ((balData as Record<string, unknown>)?.data as Record<string, unknown>)?.availableBalance || 0
+    );
+    const finalBalance = Math.max(liveBalance, (existing ? Number(existing.total_balance) : 0) + amount);
+
+    if (existing) {
+      await supabaseAdmin
+        .from("vfd_user_balances")
+        .update({
+          total_balance: finalBalance,
+          last_synced_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("user_id", userId);
+    } else {
+      await supabaseAdmin.from("vfd_user_balances").insert({
+        user_id: userId,
+        total_balance: finalBalance,
+        locked_balance: 0,
+        savings_balance: 0,
+        last_synced_at: new Date().toISOString(),
+      });
+    }
+  }
+
   return jsonResponse({ data, vfd_status: status, reference });
 }
 
