@@ -380,6 +380,24 @@ export function SandboxCardTab() {
           </div>
         </motion.div>
 
+        {needsKyc && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="bg-destructive/5 border border-destructive/20 rounded-xl p-4"
+          >
+            <div className="flex items-start gap-2.5">
+              <AlertTriangle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
+              <div>
+                <p className="text-xs font-semibold text-destructive">KYC Required</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Please complete your KYC onboarding first. Go to the <strong className="text-foreground">KYC / Account</strong> tab to create your banking profile before requesting a virtual card.
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
         <Button
           className="w-full h-12 text-base font-bold"
           onClick={handleCreateCard}
