@@ -1629,7 +1629,10 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
 
   if (data?.status === "00") {
     const db = getSupabaseAdmin();
-    await db.from("vfd_sandbox_balances").update({ total_balance: bal.total_balance - numAmount }).eq("user_id", userId);
+    await db.from("vfd_user_balances").update({
+      total_balance: bal.total_balance - numAmount,
+      updated_at: new Date().toISOString(),
+    }).eq("user_id", userId);
     await db.from("vfd_sandbox_transactions").insert({
       user_id: userId, transaction_type: "debit", amount: numAmount,
       description: `Bill Payment: ${billerId.toUpperCase()} - ${customerId}`,
