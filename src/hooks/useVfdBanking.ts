@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -96,14 +96,12 @@ export function useVfdBanking() {
   }, [invokeVfd]);
 
   // Auto-refresh transactions via realtime subscription
-  const realtimeSetup = useRef(false);
   useEffect(() => {
     const userId = session?.user?.id;
-    if (!userId || realtimeSetup.current) return;
-    realtimeSetup.current = true;
+    if (!userId) return;
 
     const channel = supabase
-      .channel('vfd-tx-realtime')
+      .channel(`vfd-tx-${userId}`)
       .on(
         'postgres_changes',
         {
@@ -113,7 +111,6 @@ export function useVfdBanking() {
           filter: `user_id=eq.${userId}`,
         },
         () => {
-          // Auto-fetch latest transactions when a new one is inserted
           invokeVfd("get_transactions").then((result) => {
             if (result?.data) setTransactions(result.data);
           });
@@ -123,7 +120,6 @@ export function useVfdBanking() {
 
     return () => {
       supabase.removeChannel(channel);
-      realtimeSetup.current = false;
     };
   }, [session?.user?.id, invokeVfd]);
 
