@@ -131,8 +131,8 @@ export function SandboxBillsTab() {
       });
       const paymentItems = result?.data?.data?.paymentitems || [];
 
-      // For Airtime/Data: if VFD returns no items, create a synthetic custom-amount item
-      if (paymentItems.length === 0 && (selectedCategory === "Airtime" || selectedCategory === "Data")) {
+      // If VFD returns no items, create a synthetic custom-amount item so the user can still pay
+      if (paymentItems.length === 0) {
         const syntheticItem: BillerItem = {
           id: `syn-${biller.id}`,
           billerid: biller.id,
