@@ -96,7 +96,7 @@ export function SandboxBillsTab() {
       setCategories(cats.length > 0 ? cats : ["Airtime", "Cable TV", "Data", "Utility", "Internet Subscription", "Education", "Betting"]);
     } catch {
       // Fallback categories
-      setCategories(["Airtime", "Cable TV", "Data", "Utility", "Internet Subscription"]);
+      setCategories(["Airtime", "Cable TV", "Data", "Utility", "Internet Subscription", "Education", "Betting"]);
     } finally {
       setLoading(false);
     }
