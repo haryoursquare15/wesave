@@ -93,7 +93,7 @@ export function SandboxBillsTab() {
     try {
       const result = await callProducts("bills_categories");
       const cats = result?.data?.data?.map((c: { category: string }) => c.category) || [];
-      setCategories(cats.length > 0 ? cats : ["Airtime", "Cable TV", "Data", "Utility", "Internet Subscription"]);
+      setCategories(cats.length > 0 ? cats : ["Airtime", "Cable TV", "Data", "Utility", "Internet Subscription", "Education", "Betting"]);
     } catch {
       // Fallback categories
       setCategories(["Airtime", "Cable TV", "Data", "Utility", "Internet Subscription"]);
