@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Smartphone, Tv, Wifi, Zap, Globe, ArrowLeft, ChevronRight,
   Search, Loader2, CheckCircle2, AlertCircle, Receipt,
+  GraduationCap, Dices,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
