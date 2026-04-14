@@ -44,6 +44,8 @@ const categoryConfig: Record<string, { icon: typeof Smartphone; color: string; b
   Data: { icon: Wifi, color: "text-emerald-600", bg: "bg-emerald-500/10" },
   Utility: { icon: Zap, color: "text-amber-600", bg: "bg-amber-500/10" },
   "Internet Subscription": { icon: Globe, color: "text-rose-600", bg: "bg-rose-500/10" },
+  Education: { icon: GraduationCap, color: "text-cyan-600", bg: "bg-cyan-500/10" },
+  Betting: { icon: Dices, color: "text-orange-600", bg: "bg-orange-500/10" },
 };
 
 type Step = "categories" | "billers" | "items" | "payment" | "success";
