@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Smartphone, Tv, Wifi, Zap, Globe, ArrowLeft, ChevronRight,
   Search, Loader2, CheckCircle2, AlertCircle, Receipt,
+  GraduationCap, Dices,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,6 +44,8 @@ const categoryConfig: Record<string, { icon: typeof Smartphone; color: string; b
   Data: { icon: Wifi, color: "text-emerald-600", bg: "bg-emerald-500/10" },
   Utility: { icon: Zap, color: "text-amber-600", bg: "bg-amber-500/10" },
   "Internet Subscription": { icon: Globe, color: "text-rose-600", bg: "bg-rose-500/10" },
+  Education: { icon: GraduationCap, color: "text-cyan-600", bg: "bg-cyan-500/10" },
+  Betting: { icon: Dices, color: "text-orange-600", bg: "bg-orange-500/10" },
 };
 
 type Step = "categories" | "billers" | "items" | "payment" | "success";
@@ -90,10 +93,10 @@ export function SandboxBillsTab() {
     try {
       const result = await callProducts("bills_categories");
       const cats = result?.data?.data?.map((c: { category: string }) => c.category) || [];
-      setCategories(cats.length > 0 ? cats : ["Airtime", "Cable TV", "Data", "Utility", "Internet Subscription"]);
+      setCategories(cats.length > 0 ? cats : ["Airtime", "Cable TV", "Data", "Utility", "Internet Subscription", "Education", "Betting"]);
     } catch {
       // Fallback categories
-      setCategories(["Airtime", "Cable TV", "Data", "Utility", "Internet Subscription"]);
+      setCategories(["Airtime", "Cable TV", "Data", "Utility", "Internet Subscription", "Education", "Betting"]);
     } finally {
       setLoading(false);
     }
@@ -128,8 +131,8 @@ export function SandboxBillsTab() {
       });
       const paymentItems = result?.data?.data?.paymentitems || [];
 
-      // For Airtime/Data: if VFD returns no items, create a synthetic custom-amount item
-      if (paymentItems.length === 0 && (selectedCategory === "Airtime" || selectedCategory === "Data")) {
+      // If VFD returns no items, create a synthetic custom-amount item so the user can still pay
+      if (paymentItems.length === 0) {
         const syntheticItem: BillerItem = {
           id: `syn-${biller.id}`,
           billerid: biller.id,
