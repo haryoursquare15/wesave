@@ -127,14 +127,41 @@ export function SandboxBillsTab() {
         productId: biller.product,
       });
       const paymentItems = result?.data?.data?.paymentitems || [];
-      setItems(paymentItems);
+
+      // For Airtime/Data: if VFD returns no items, create a synthetic custom-amount item
+      if (paymentItems.length === 0 && (selectedCategory === "Airtime" || selectedCategory === "Data")) {
+        const syntheticItem: BillerItem = {
+          id: `syn-${biller.id}`,
+          billerid: biller.id,
+          amount: "0",
+          code: biller.id,
+          paymentitemname: `${biller.name} ${selectedCategory}`,
+          productId: biller.product,
+          paymentitemid: biller.product,
+          currencySymbol: "NGN",
+          isAmountFixed: "false",
+          itemFee: "0",
+          paymentCode: biller.id,
+          billerType: "MO",
+        };
+        setItems([]);
+        setSelectedItem(syntheticItem);
+        setAmount("");
+        setCustomerId("");
+        setPhoneNumber("");
+        setValidationResult(null);
+        setStep("payment");
+      } else {
+        setItems(paymentItems);
+        setStep("items");
+      }
     } catch {
       setItems([]);
+      setStep("items");
     } finally {
       setLoading(false);
-      setStep("items");
     }
-  }, [callProducts]);
+  }, [callProducts, selectedCategory]);
 
   /* ─── Select Item → Payment ─── */
   const selectItem = (item: BillerItem) => {
