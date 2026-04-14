@@ -95,6 +95,38 @@ export function useVfdBanking() {
     return result;
   }, [invokeVfd]);
 
+  // Auto-refresh transactions via realtime subscription
+  const realtimeSetup = useRef(false);
+  useEffect(() => {
+    const userId = session?.user?.id;
+    if (!userId || realtimeSetup.current) return;
+    realtimeSetup.current = true;
+
+    const channel = supabase
+      .channel('vfd-tx-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'vfd_sandbox_transactions',
+          filter: `user_id=eq.${userId}`,
+        },
+        () => {
+          // Auto-fetch latest transactions when a new one is inserted
+          invokeVfd("get_transactions").then((result) => {
+            if (result?.data) setTransactions(result.data);
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+      realtimeSetup.current = false;
+    };
+  }, [session?.user?.id, invokeVfd]);
+
   const lookupBvn = useCallback(
     (bvn: string) => invokeVfd("bvn_lookup", { bvn }),
     [invokeVfd]
