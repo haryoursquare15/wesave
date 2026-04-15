@@ -3019,6 +3019,173 @@ export type Database = {
         }
         Relationships: []
       }
+      vestara_accounts: {
+        Row: {
+          account_type: Database["public"]["Enums"]["vestara_account_type"]
+          balance: number
+          campaign_ref: string | null
+          created_at: string
+          currency: string
+          group_ref: string | null
+          id: string
+          is_system: boolean
+          label: string | null
+          split_ref: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          account_type: Database["public"]["Enums"]["vestara_account_type"]
+          balance?: number
+          campaign_ref?: string | null
+          created_at?: string
+          currency?: string
+          group_ref?: string | null
+          id?: string
+          is_system?: boolean
+          label?: string | null
+          split_ref?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          account_type?: Database["public"]["Enums"]["vestara_account_type"]
+          balance?: number
+          campaign_ref?: string | null
+          created_at?: string
+          currency?: string
+          group_ref?: string | null
+          id?: string
+          is_system?: boolean
+          label?: string | null
+          split_ref?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      vestara_ledger_entries: {
+        Row: {
+          account_id: string
+          created_at: string
+          credit: number
+          debit: number
+          id: string
+          transaction_id: string
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          credit?: number
+          debit?: number
+          id?: string
+          transaction_id: string
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          credit?: number
+          debit?: number
+          id?: string
+          transaction_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vestara_ledger_entries_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "vestara_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vestara_ledger_entries_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "vestara_derived_balances"
+            referencedColumns: ["account_id"]
+          },
+          {
+            foreignKeyName: "vestara_ledger_entries_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "vestara_transaction_detail"
+            referencedColumns: ["transaction_id"]
+          },
+          {
+            foreignKeyName: "vestara_ledger_entries_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "vestara_transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vestara_reconciliation_log: {
+        Row: {
+          created_at: string
+          discrepancy: number
+          id: string
+          ledger_balance: number
+          notes: string | null
+          resolved: boolean
+          vfd_balance: number
+        }
+        Insert: {
+          created_at?: string
+          discrepancy?: number
+          id?: string
+          ledger_balance: number
+          notes?: string | null
+          resolved?: boolean
+          vfd_balance: number
+        }
+        Update: {
+          created_at?: string
+          discrepancy?: number
+          id?: string
+          ledger_balance?: number
+          notes?: string | null
+          resolved?: boolean
+          vfd_balance?: number
+        }
+        Relationships: []
+      }
+      vestara_transactions: {
+        Row: {
+          amount: number
+          completed_at: string | null
+          created_at: string
+          id: string
+          initiated_by: string | null
+          metadata: Json | null
+          reference: string
+          status: Database["public"]["Enums"]["vestara_tx_status"]
+          type: Database["public"]["Enums"]["vestara_tx_type"]
+        }
+        Insert: {
+          amount: number
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          initiated_by?: string | null
+          metadata?: Json | null
+          reference: string
+          status?: Database["public"]["Enums"]["vestara_tx_status"]
+          type: Database["public"]["Enums"]["vestara_tx_type"]
+        }
+        Update: {
+          amount?: number
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          initiated_by?: string | null
+          metadata?: Json | null
+          reference?: string
+          status?: Database["public"]["Enums"]["vestara_tx_status"]
+          type?: Database["public"]["Enums"]["vestara_tx_type"]
+        }
+        Relationships: []
+      }
       vfd_interest_accruals: {
         Row: {
           accrual_date: string
@@ -4701,6 +4868,59 @@ export type Database = {
         }
         Relationships: []
       }
+      vestara_derived_balances: {
+        Row: {
+          account_id: string | null
+          account_type:
+            | Database["public"]["Enums"]["vestara_account_type"]
+            | null
+          derived_balance: number | null
+          drift: number | null
+          is_system: boolean | null
+          label: string | null
+          stored_balance: number | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
+      vestara_transaction_detail: {
+        Row: {
+          account_id: string | null
+          account_label: string | null
+          account_owner: string | null
+          account_type:
+            | Database["public"]["Enums"]["vestara_account_type"]
+            | null
+          amount: number | null
+          completed_at: string | null
+          created_at: string | null
+          credit: number | null
+          debit: number | null
+          entry_id: string | null
+          initiated_by: string | null
+          metadata: Json | null
+          reference: string | null
+          status: Database["public"]["Enums"]["vestara_tx_status"] | null
+          transaction_id: string | null
+          type: Database["public"]["Enums"]["vestara_tx_type"] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vestara_ledger_entries_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "vestara_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vestara_ledger_entries_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "vestara_derived_balances"
+            referencedColumns: ["account_id"]
+          },
+        ]
+      }
     }
     Functions: {
       add_member_to_group: {
@@ -5130,6 +5350,146 @@ export type Database = {
         Args: { amount: number; tx_ref: string }
         Returns: boolean
       }
+      vestara_accrue_interest: {
+        Args: {
+          _amount: number
+          _metadata?: Json
+          _reference: string
+          _user_id: string
+        }
+        Returns: Json
+      }
+      vestara_crowdfund_contribute: {
+        Args: {
+          _amount: number
+          _campaign_id: string
+          _metadata?: Json
+          _reference: string
+          _user_id: string
+        }
+        Returns: Json
+      }
+      vestara_crowdfund_disburse: {
+        Args: {
+          _amount: number
+          _beneficiary_id: string
+          _campaign_id: string
+          _metadata?: Json
+          _reference: string
+        }
+        Returns: Json
+      }
+      vestara_deposit: {
+        Args: {
+          _amount: number
+          _metadata?: Json
+          _reference: string
+          _user_id: string
+        }
+        Returns: Json
+      }
+      vestara_get_balance: { Args: { _user_id: string }; Returns: Json }
+      vestara_get_or_create_account: {
+        Args: {
+          _account_type: Database["public"]["Enums"]["vestara_account_type"]
+          _campaign_ref?: string
+          _group_ref?: string
+          _label?: string
+          _split_ref?: string
+          _user_id: string
+        }
+        Returns: string
+      }
+      vestara_lock_funds: {
+        Args: {
+          _amount: number
+          _duration_months: number
+          _metadata?: Json
+          _reference: string
+          _user_id: string
+        }
+        Returns: Json
+      }
+      vestara_payout_interest: {
+        Args: {
+          _amount: number
+          _metadata?: Json
+          _reference: string
+          _user_id: string
+        }
+        Returns: Json
+      }
+      vestara_post_transaction: {
+        Args: {
+          _amount: number
+          _entries: Json
+          _initiated_by: string
+          _metadata?: Json
+          _reference: string
+          _type: Database["public"]["Enums"]["vestara_tx_type"]
+        }
+        Returns: Json
+      }
+      vestara_split_distribute: {
+        Args: {
+          _initiated_by: string
+          _metadata?: Json
+          _recipients: Json
+          _reference: string
+          _split_id: string
+        }
+        Returns: Json
+      }
+      vestara_split_pay: {
+        Args: {
+          _amount: number
+          _metadata?: Json
+          _reference: string
+          _split_id: string
+          _user_id: string
+        }
+        Returns: Json
+      }
+      vestara_thrift_contribute: {
+        Args: {
+          _amount: number
+          _group_id: string
+          _metadata?: Json
+          _reference: string
+          _user_id: string
+        }
+        Returns: Json
+      }
+      vestara_thrift_payout: {
+        Args: {
+          _beneficiary_id: string
+          _fee?: number
+          _gross_amount: number
+          _group_id: string
+          _metadata?: Json
+          _reference?: string
+        }
+        Returns: Json
+      }
+      vestara_unlock_funds: {
+        Args: {
+          _lock_account_id: string
+          _metadata?: Json
+          _penalty?: number
+          _reference?: string
+          _user_id: string
+        }
+        Returns: Json
+      }
+      vestara_withdraw: {
+        Args: {
+          _amount: number
+          _metadata?: Json
+          _reference: string
+          _user_id: string
+        }
+        Returns: Json
+      }
     }
     Enums: {
       app_role:
@@ -5156,6 +5516,31 @@ export type Database = {
         | "unlock"
         | "service_fee"
         | "split_payment"
+      vestara_account_type:
+        | "wallet"
+        | "locked_savings"
+        | "accrued_interest"
+        | "thrift_pool"
+        | "crowdfunding_pool"
+        | "split_holding"
+        | "settlement"
+        | "interest_expense"
+        | "revenue"
+      vestara_tx_status: "pending" | "completed" | "failed" | "reversed"
+      vestara_tx_type:
+        | "deposit"
+        | "withdrawal"
+        | "lock"
+        | "unlock"
+        | "thrift_contribution"
+        | "thrift_payout"
+        | "split_payment"
+        | "split_distribution"
+        | "crowdfunding_contribution"
+        | "crowdfunding_disbursement"
+        | "interest_accrual"
+        | "interest_payout"
+        | "fee"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -5308,6 +5693,33 @@ export const Constants = {
         "unlock",
         "service_fee",
         "split_payment",
+      ],
+      vestara_account_type: [
+        "wallet",
+        "locked_savings",
+        "accrued_interest",
+        "thrift_pool",
+        "crowdfunding_pool",
+        "split_holding",
+        "settlement",
+        "interest_expense",
+        "revenue",
+      ],
+      vestara_tx_status: ["pending", "completed", "failed", "reversed"],
+      vestara_tx_type: [
+        "deposit",
+        "withdrawal",
+        "lock",
+        "unlock",
+        "thrift_contribution",
+        "thrift_payout",
+        "split_payment",
+        "split_distribution",
+        "crowdfunding_contribution",
+        "crowdfunding_disbursement",
+        "interest_accrual",
+        "interest_payout",
+        "fee",
       ],
     },
   },
