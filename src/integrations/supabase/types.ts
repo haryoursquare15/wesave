@@ -5283,6 +5283,146 @@ export type Database = {
         Args: { amount: number; tx_ref: string }
         Returns: boolean
       }
+      vestara_accrue_interest: {
+        Args: {
+          _amount: number
+          _metadata?: Json
+          _reference: string
+          _user_id: string
+        }
+        Returns: Json
+      }
+      vestara_crowdfund_contribute: {
+        Args: {
+          _amount: number
+          _campaign_id: string
+          _metadata?: Json
+          _reference: string
+          _user_id: string
+        }
+        Returns: Json
+      }
+      vestara_crowdfund_disburse: {
+        Args: {
+          _amount: number
+          _beneficiary_id: string
+          _campaign_id: string
+          _metadata?: Json
+          _reference: string
+        }
+        Returns: Json
+      }
+      vestara_deposit: {
+        Args: {
+          _amount: number
+          _metadata?: Json
+          _reference: string
+          _user_id: string
+        }
+        Returns: Json
+      }
+      vestara_get_balance: { Args: { _user_id: string }; Returns: Json }
+      vestara_get_or_create_account: {
+        Args: {
+          _account_type: Database["public"]["Enums"]["vestara_account_type"]
+          _campaign_ref?: string
+          _group_ref?: string
+          _label?: string
+          _split_ref?: string
+          _user_id: string
+        }
+        Returns: string
+      }
+      vestara_lock_funds: {
+        Args: {
+          _amount: number
+          _duration_months: number
+          _metadata?: Json
+          _reference: string
+          _user_id: string
+        }
+        Returns: Json
+      }
+      vestara_payout_interest: {
+        Args: {
+          _amount: number
+          _metadata?: Json
+          _reference: string
+          _user_id: string
+        }
+        Returns: Json
+      }
+      vestara_post_transaction: {
+        Args: {
+          _amount: number
+          _entries: Json
+          _initiated_by: string
+          _metadata?: Json
+          _reference: string
+          _type: Database["public"]["Enums"]["vestara_tx_type"]
+        }
+        Returns: Json
+      }
+      vestara_split_distribute: {
+        Args: {
+          _initiated_by: string
+          _metadata?: Json
+          _recipients: Json
+          _reference: string
+          _split_id: string
+        }
+        Returns: Json
+      }
+      vestara_split_pay: {
+        Args: {
+          _amount: number
+          _metadata?: Json
+          _reference: string
+          _split_id: string
+          _user_id: string
+        }
+        Returns: Json
+      }
+      vestara_thrift_contribute: {
+        Args: {
+          _amount: number
+          _group_id: string
+          _metadata?: Json
+          _reference: string
+          _user_id: string
+        }
+        Returns: Json
+      }
+      vestara_thrift_payout: {
+        Args: {
+          _beneficiary_id: string
+          _fee?: number
+          _gross_amount: number
+          _group_id: string
+          _metadata?: Json
+          _reference?: string
+        }
+        Returns: Json
+      }
+      vestara_unlock_funds: {
+        Args: {
+          _lock_account_id: string
+          _metadata?: Json
+          _penalty?: number
+          _reference?: string
+          _user_id: string
+        }
+        Returns: Json
+      }
+      vestara_withdraw: {
+        Args: {
+          _amount: number
+          _metadata?: Json
+          _reference: string
+          _user_id: string
+        }
+        Returns: Json
+      }
     }
     Enums: {
       app_role:
