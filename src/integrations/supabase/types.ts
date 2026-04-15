@@ -3098,6 +3098,20 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "vestara_ledger_entries_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "vestara_derived_balances"
+            referencedColumns: ["account_id"]
+          },
+          {
+            foreignKeyName: "vestara_ledger_entries_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "vestara_transaction_detail"
+            referencedColumns: ["transaction_id"]
+          },
+          {
             foreignKeyName: "vestara_ledger_entries_transaction_id_fkey"
             columns: ["transaction_id"]
             isOneToOne: false
@@ -4853,6 +4867,59 @@ export type Database = {
           status?: Database["public"]["Enums"]["group_status"] | null
         }
         Relationships: []
+      }
+      vestara_derived_balances: {
+        Row: {
+          account_id: string | null
+          account_type:
+            | Database["public"]["Enums"]["vestara_account_type"]
+            | null
+          derived_balance: number | null
+          drift: number | null
+          is_system: boolean | null
+          label: string | null
+          stored_balance: number | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
+      vestara_transaction_detail: {
+        Row: {
+          account_id: string | null
+          account_label: string | null
+          account_owner: string | null
+          account_type:
+            | Database["public"]["Enums"]["vestara_account_type"]
+            | null
+          amount: number | null
+          completed_at: string | null
+          created_at: string | null
+          credit: number | null
+          debit: number | null
+          entry_id: string | null
+          initiated_by: string | null
+          metadata: Json | null
+          reference: string | null
+          status: Database["public"]["Enums"]["vestara_tx_status"] | null
+          transaction_id: string | null
+          type: Database["public"]["Enums"]["vestara_tx_type"] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vestara_ledger_entries_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "vestara_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vestara_ledger_entries_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "vestara_derived_balances"
+            referencedColumns: ["account_id"]
+          },
+        ]
       }
     }
     Functions: {
