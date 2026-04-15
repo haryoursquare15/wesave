@@ -20,6 +20,24 @@ function err(message: string, status = 400) {
   });
 }
 
+// ── Webhook signature verification ──
+function verifyWebhookSignature(req: Request, body: string): boolean {
+  const webhookSecret = Deno.env.get("VFD_WEBHOOK_SECRET");
+  // In sandbox mode without a configured secret, allow through but log warning
+  if (!webhookSecret) {
+    console.warn("[vestara-ledger] VFD_WEBHOOK_SECRET not configured — skipping signature check (sandbox only)");
+    return true;
+  }
+  const signature = req.headers.get("x-vfd-signature") || req.headers.get("x-webhook-signature");
+  if (!signature) {
+    console.error("[vestara-ledger] Missing webhook signature header");
+    return false;
+  }
+  // HMAC-SHA256 verification (production pattern)
+  // For sandbox, we accept if secret matches signature directly
+  return signature === webhookSecret;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -28,7 +46,8 @@ serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    const { action, ...params } = await req.json();
+    const rawBody = await req.text();
+    const { action, ...params } = JSON.parse(rawBody);
     console.log(`vestara-ledger action: ${action}`);
 
     // Authenticate user (except for webhook and cron actions)
@@ -93,6 +112,11 @@ serve(async (req) => {
           if (authErr || !user) return err("Unauthorized for self-deposit", 401);
           targetUserId = user.id;
         } else {
+          // External webhook — verify signature
+          if (!verifyWebhookSignature(req, rawBody)) {
+            return err("Invalid webhook signature", 403);
+          }
+
           // Look up user by VFD virtual account (NUBAN)
           const { data: client } = await supabase
             .from("vfd_sandbox_clients")
@@ -141,7 +165,7 @@ serve(async (req) => {
         break;
       }
 
-      // ── Withdraw ──
+      // ── Withdraw (direct — for non-external withdrawals) ──
       case "withdraw": {
         const { amount, reference, metadata } = params;
         if (!amount || !reference) return err("amount and reference are required");
@@ -157,6 +181,36 @@ serve(async (req) => {
         if (data?.success) {
           console.log(`Withdrawal approved for ${userId}: ₦${amount}`);
         }
+        break;
+      }
+
+      // ── Transfer initiate (pending pattern for external transfers) ──
+      case "transfer_initiate": {
+        const { amount, reference, metadata } = params;
+        if (!amount || !reference) return err("amount and reference are required");
+
+        const { data } = await supabase.rpc("vestara_transfer_initiate", {
+          _user_id: userId,
+          _amount: amount,
+          _reference: reference,
+          _metadata: metadata || {},
+        });
+        result = data;
+        break;
+      }
+
+      // ── Transfer complete/fail ──
+      case "transfer_complete": {
+        const { original_reference, success: transferSuccess, metadata } = params;
+        if (!original_reference) return err("original_reference is required");
+
+        const { data } = await supabase.rpc("vestara_transfer_complete", {
+          _user_id: userId,
+          _original_reference: original_reference,
+          _success: transferSuccess ?? true,
+          _metadata: metadata || {},
+        });
+        result = data;
         break;
       }
 
@@ -182,10 +236,11 @@ serve(async (req) => {
         const { lock_account_id, penalty, reference, metadata } = params;
         if (!lock_account_id) return err("lock_account_id is required");
 
+        // penalty is now optional — RPC auto-calculates from metadata
         const { data } = await supabase.rpc("vestara_unlock_funds", {
           _user_id: userId,
           _lock_account_id: lock_account_id,
-          _penalty: penalty || 0,
+          _penalty: penalty ?? null,
           _reference: reference || `unlock-${crypto.randomUUID().slice(0, 8)}`,
           _metadata: metadata || {},
         });
@@ -325,8 +380,17 @@ serve(async (req) => {
 
         const results: unknown[] = [];
         for (const acct of lockedAccounts || []) {
-          const meta = acct.metadata as Record<string, unknown>;
+          const meta = (acct.metadata ?? {}) as Record<string, unknown>;
+          // Read interest_rate from account metadata (stored during lock creation)
           const rate = Number(meta?.interest_rate || 10); // default 10% p.a.
+
+          // Check maturity — skip if lock has already matured
+          const maturityDate = meta?.maturity_date ? new Date(meta.maturity_date as string) : null;
+          if (maturityDate && new Date() > maturityDate) {
+            console.log(`Skipping matured lock ${acct.id} (matured: ${meta.maturity_date})`);
+            continue;
+          }
+
           const dailyRate = rate / 100 / 365;
           const dailyInterest = Math.round(Number(acct.balance) * dailyRate * 100) / 100;
 
@@ -389,44 +453,84 @@ serve(async (req) => {
         break;
       }
 
-      // ── Reconcile (cron) ──
+      // ── Reverse transaction ──
+      case "reverse_transaction": {
+        const { original_reference, reason, metadata } = params;
+        if (!original_reference || !reason)
+          return err("original_reference and reason are required");
+
+        const { data } = await supabase.rpc("vestara_reverse_transaction", {
+          _original_reference: original_reference,
+          _reason: reason,
+          _initiated_by: userId,
+          _metadata: metadata || {},
+        });
+        result = data;
+        break;
+      }
+
+      // ── Reconcile (cron) — improved with per-account drift ──
       case "reconcile": {
-        // Sum all account balances
+        // Per-account drift check using the view
+        const { data: driftAccounts, error: driftErr } = await supabase
+          .from("vestara_account_drift")
+          .select("*");
+
+        if (driftErr) {
+          console.error("Drift view query failed, falling back to aggregate:", driftErr.message);
+        }
+
+        const driftingAccounts = (driftAccounts || []).filter(
+          (a: Record<string, unknown>) => Math.abs(Number(a.drift)) > 0.001
+        );
+
+        // Aggregate totals
         const { data: accountTotals, error: atErr } = await supabase
           .from("vestara_accounts")
           .select("account_type, balance");
         if (atErr) return err(atErr.message);
 
-        // Sum all ledger entries
         const { data: ledgerTotals, error: ltErr } = await supabase
           .from("vestara_ledger_entries")
           .select("debit, credit");
         if (ltErr) return err(ltErr.message);
 
-        const totalDebits = (ledgerTotals || []).reduce((s, e) => s + Number(e.debit), 0);
-        const totalCredits = (ledgerTotals || []).reduce((s, e) => s + Number(e.credit), 0);
+        const totalDebits = (ledgerTotals || []).reduce((s: number, e: Record<string, unknown>) => s + Number(e.debit), 0);
+        const totalCredits = (ledgerTotals || []).reduce((s: number, e: Record<string, unknown>) => s + Number(e.credit), 0);
         const balanceByType: Record<string, number> = {};
         for (const acct of accountTotals || []) {
           balanceByType[acct.account_type] = (balanceByType[acct.account_type] || 0) + Number(acct.balance);
         }
         const totalAccountBalance = Object.values(balanceByType).reduce((s, v) => s + v, 0);
-        const drift = Math.abs(totalDebits - totalCredits);
-        const healthy = drift < 0.01;
+        const aggregateDrift = Math.abs(totalDebits - totalCredits);
+        const healthy = aggregateDrift < 0.01 && driftingAccounts.length === 0;
 
         // Log reconciliation
         await supabase.from("vestara_reconciliation_log").insert({
           checked_at: new Date().toISOString(),
           settlement_ledger_balance: totalDebits,
           settlement_actual_balance: totalCredits,
-          drift_amount: drift,
+          drift_amount: aggregateDrift,
           status: healthy ? "healthy" : "drift_detected",
-          details: { balanceByType, totalDebits, totalCredits, totalAccountBalance },
+          details: {
+            balanceByType,
+            totalDebits,
+            totalCredits,
+            totalAccountBalance,
+            drifting_accounts_count: driftingAccounts.length,
+            drifting_accounts: driftingAccounts.slice(0, 10),
+          },
         });
+
+        if (!healthy) {
+          console.error(`[RECONCILE] DRIFT DETECTED: aggregate=${aggregateDrift}, per-account=${driftingAccounts.length} accounts drifting`);
+        }
 
         result = {
           success: true,
           healthy,
-          drift,
+          aggregate_drift: aggregateDrift,
+          drifting_accounts: driftingAccounts.length,
           total_debits: totalDebits,
           total_credits: totalCredits,
           balance_by_type: balanceByType,

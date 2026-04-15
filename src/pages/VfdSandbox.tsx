@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useVfdBanking } from "@/hooks/useVfdBanking";
-import { useVestaraLedger } from "@/hooks/useVestaraLedger";
+import { useVestaraLedger, VestaraLockedFund } from "@/hooks/useVestaraLedger";
 import { useToast } from "@/hooks/use-toast";
 import { RefreshCw } from "lucide-react";
 import { SandboxHeader } from "@/components/vfd-sandbox/SandboxHeader";
@@ -23,11 +23,6 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 
 interface LockConfig { id: string; duration_months: number; interest_rate: number; early_withdrawal_penalty: number; }
-interface LockedFund {
-  id: string; principal_amount: number; interest_rate: number; duration_months: number;
-  expected_interest: number; total_payout: number; start_date: string; maturity_date: string;
-  actual_unlock_date: string | null; penalty_amount: number; status: string;
-}
 interface UserBalance {
   total_balance: number; locked_balance: number; savings_balance: number; available_balance: number;
 }
@@ -45,12 +40,14 @@ export default function VfdSandbox() {
   const [currentView, setCurrentView] = useState<View>("dashboard");
   const [banks, setBanks] = useState<Array<{ code: string; name: string }>>([]);
 
-  // Vestara-driven balance
+  // Vestara-driven balance (single source of truth)
   const [vestaraBalance, setVestaraBalance] = useState<UserBalance | null>(null);
 
-  // Legacy lock state (from vfd_sandbox_locked_funds)
+  // Vestara-driven locked funds
+  const [vestaraLockedFunds, setVestaraLockedFunds] = useState<VestaraLockedFund[]>([]);
+
+  // Lock configs from vfd-banking (read-only config data)
   const [lockConfigs, setLockConfigs] = useState<LockConfig[]>([]);
-  const [lockedFunds, setLockedFunds] = useState<LockedFund[]>([]);
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/auth");
@@ -71,18 +68,21 @@ export default function VfdSandbox() {
             if (bankList.length > 0) setBanks(bankList);
           }
         });
-        // Load legacy lock configs
-        loadLockData();
+        // Load lock configs (read-only)
+        void vfd.getLockConfigs().then((configRes) => {
+          if (configRes?.data) setLockConfigs(configRes.data as LockConfig[]);
+        });
       }
     });
 
     // Initialize Vestara accounts & load balance
     refreshVestaraBalance();
     refreshVestaraTransactions();
+    refreshVestaraLockedFunds();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, user, session?.access_token]);
 
-  /* ─── Vestara Balance ─── */
+  /* ─── Vestara Balance (SINGLE SOURCE OF TRUTH) ─── */
   const refreshVestaraBalance = useCallback(async () => {
     const summary = await vestara.getBalanceSummary();
     if (summary) {
@@ -90,118 +90,137 @@ export default function VfdSandbox() {
         total_balance: summary.total,
         available_balance: summary.wallet,
         locked_balance: summary.locked_savings,
-        savings_balance: 0,
+        savings_balance: summary.accrued_interest,
       });
     }
   }, [vestara]);
 
-  /* ─── Vestara Transactions (mapped to legacy format) ─── */
+  /* ─── Vestara Locked Funds ─── */
+  const refreshVestaraLockedFunds = useCallback(async () => {
+    const funds = await vestara.getLockedFunds();
+    setVestaraLockedFunds(funds);
+  }, [vestara]);
+
+  /* ─── Vestara Transactions ─── */
   const refreshVestaraTransactions = useCallback(async () => {
     await vestara.fetchTransactions();
   }, [vestara]);
 
-  // Map vestara transactions to the format SandboxTransactions/Dashboard expects
+  // Map vestara transactions — use tx.amount directly (FIX: was using max of entries)
   const mappedTransactions = vestara.transactions.map((tx) => ({
     id: tx.id,
     transaction_type: tx.type.includes("deposit") ? "credit"
       : tx.type.includes("withdraw") ? "debit"
       : tx.type.includes("lock") ? "lock"
+      : tx.type.includes("unlock") ? "credit"
       : tx.type.includes("interest") ? "credit"
+      : tx.type.includes("reversal") ? "credit"
       : "debit",
-    amount: tx.vestara_ledger_entries
-      ? tx.vestara_ledger_entries.reduce((max, e) => Math.max(max, Number(e.debit) || Number(e.credit) || 0), 0)
-      : 0,
+    amount: Number(tx.amount),
     description: tx.type.replace(/_/g, " "),
     reference: tx.reference,
     status: tx.status,
     created_at: tx.created_at,
   }));
 
-  /* ─── Legacy Lock Data (still from vfd-banking for configs/UI) ─── */
-  const loadLockData = useCallback(async () => {
-    const [configRes, fundsRes] = await Promise.all([
-      vfd.getLockConfigs(),
-      vfd.getLockedFunds(),
-    ]);
-    if (configRes?.data) setLockConfigs(configRes.data as LockConfig[]);
-    if (fundsRes?.data) setLockedFunds(fundsRes.data as LockedFund[]);
-  }, [vfd]);
-
-  /* ─── Fund via Vestara Deposit ─── */
+  /* ─── Fund via Vestara Deposit ONLY (no dual-write) ─── */
   const handleFund = async (amount: number) => {
-    // Also credit VFD sandbox for consistency
-    if (vfd.client?.vfd_account_number) {
-      await vfd.sandboxCredit(vfd.client.vfd_account_number, amount);
-    }
-    // Post to Vestara ledger
     const result = await vestara.deposit(amount);
     if (result) {
       toast({ title: "Account funded!", description: `₦${amount.toLocaleString()} credited via ledger` });
+      // Also credit VFD sandbox for external parity (async, non-blocking)
+      if (vfd.client?.vfd_account_number) {
+        vfd.sandboxCredit(vfd.client.vfd_account_number, amount).catch(() => {
+          console.warn("VFD sandbox credit failed (non-critical)");
+        });
+      }
       setTimeout(async () => {
         await refreshVestaraBalance();
         await refreshVestaraTransactions();
-        await loadLockData();
       }, 500);
     }
   };
 
-  /* ─── Transfer via Vestara Withdraw ─── */
+  /* ─── Transfer via pending pattern (FIX: atomicity gap) ─── */
   const handleTransfer = async (params: {
     fromAccount: string; toAccount: string; bankCode: string;
     amount: number; narration: string; beneficiaryName: string;
   }) => {
-    // Debit from Vestara ledger
-    const result = await vestara.withdraw(params.amount, `transfer-${crypto.randomUUID().slice(0, 8)}`, {
+    const reference = `transfer-${crypto.randomUUID().slice(0, 8)}`;
+
+    // Step 1: Initiate transfer (moves funds to pending_transfer holding)
+    const initiateResult = await vestara.transferInitiate(params.amount, reference, {
       to_account: params.toAccount,
       bank_code: params.bankCode,
       narration: params.narration,
       beneficiary_name: params.beneficiaryName,
     });
-    if (result?.success) {
-      // Also execute VFD transfer
-      await vfd.transfer(params);
-      await refreshVestaraBalance();
-      await refreshVestaraTransactions();
-      return result;
+
+    if (!initiateResult?.success) return null;
+
+    // Step 2: Execute VFD transfer
+    try {
+      const vfdResult = await vfd.transfer(params);
+      
+      // Step 3: Complete or fail based on VFD result
+      if (vfdResult) {
+        await vestara.transferComplete(reference, true, {
+          vfd_result: vfdResult,
+        });
+        toast({ title: "Transfer successful!" });
+      } else {
+        // VFD failed — refund from holding back to wallet
+        await vestara.transferComplete(reference, false, {
+          failure_reason: "VFD transfer failed",
+        });
+        toast({ title: "Transfer failed", description: "Funds have been returned to your wallet", variant: "destructive" });
+      }
+    } catch (err) {
+      // Network error — refund
+      await vestara.transferComplete(reference, false, {
+        failure_reason: err instanceof Error ? err.message : "Unknown error",
+      });
+      toast({ title: "Transfer failed", description: "Funds have been returned to your wallet", variant: "destructive" });
     }
-    return null;
+
+    await refreshVestaraBalance();
+    await refreshVestaraTransactions();
+    return initiateResult;
   };
 
-  /* ─── Lock via Vestara Ledger ─── */
+  /* ─── Lock via Vestara Ledger ONLY (no dual-write) ─── */
   const handleCreateLock = async (amount: number, duration: number) => {
-    const result = await vestara.lockFunds(amount, duration);
+    // Find matching config for interest/penalty rates
+    const config = lockConfigs.find(c => c.duration_months === duration);
+    const metadata = config ? {
+      interest_rate: config.interest_rate,
+      penalty_rate: config.early_withdrawal_penalty,
+    } : {};
+
+    const result = await vestara.lockFunds(amount, duration, undefined, metadata);
     if (result?.success) {
       toast({ title: "Funds Locked!", description: `₦${amount.toLocaleString()} locked for ${duration} months` });
-      // Also create in legacy system for UI
-      await vfd.createLock(amount, duration);
-      await Promise.all([refreshVestaraBalance(), loadLockData()]);
+      await Promise.all([refreshVestaraBalance(), refreshVestaraLockedFunds()]);
     }
   };
 
+  /* ─── Unlock: uses specific vestara lock_account_id (FIX: was picking [0]) ─── */
   const handleUnlock = async (lockId: string) => {
-    // Find the vestara locked_savings account
-    const lockedAccounts = vestara.accounts.filter(a => a.account_type === "locked_savings" && Number(a.balance) > 0);
-    if (lockedAccounts.length > 0) {
-      await vestara.unlockFunds(lockedAccounts[0].id);
-    }
-    // Also unlock in legacy
-    const result = await vfd.unlockFunds(lockId);
-    if (result?.data) {
+    // lockId here is now the vestara_accounts.id directly
+    const result = await vestara.unlockFunds(lockId);
+    if (result?.success) {
       toast({ title: "Funds Unlocked!" });
-      await Promise.all([refreshVestaraBalance(), loadLockData()]);
+      await Promise.all([refreshVestaraBalance(), refreshVestaraLockedFunds()]);
     }
   };
 
   const handleBreakLock = async (lockId: string) => {
-    const lockedAccounts = vestara.accounts.filter(a => a.account_type === "locked_savings" && Number(a.balance) > 0);
-    if (lockedAccounts.length > 0) {
-      await vestara.unlockFunds(lockedAccounts[0].id, 0);
-    }
-    const result = await vfd.breakLock(lockId);
-    if (result?.data) {
-      const d = result.data as Record<string, unknown>;
-      toast({ title: "Lock Broken", description: `Penalty: ₦${Number(d.penalty).toLocaleString()}` });
-      await Promise.all([refreshVestaraBalance(), loadLockData()]);
+    // Breaking lock = early unlock, penalty auto-calculated by RPC
+    const result = await vestara.unlockFunds(lockId);
+    if (result?.success) {
+      const penalty = result.penalty || 0;
+      toast({ title: "Lock Broken", description: penalty > 0 ? `Penalty: ₦${Number(penalty).toLocaleString()}` : "No penalty applied" });
+      await Promise.all([refreshVestaraBalance(), refreshVestaraLockedFunds()]);
     }
   };
 
@@ -245,7 +264,7 @@ export default function VfdSandbox() {
     );
   }
 
-  // Use Vestara ledger balance as primary, fallback to VFD
+  // Use Vestara ledger balance as sole source of truth
   const balanceData = {
     totalBalance: vestaraBalance ? vestaraBalance.total_balance : 0,
     availableBalance: vestaraBalance ? vestaraBalance.available_balance : 0,
@@ -254,6 +273,21 @@ export default function VfdSandbox() {
     accountNumber: vfd.client?.vfd_account_number || "—",
     fullName: vfd.client?.full_name || "—",
   };
+
+  // Map vestara locked funds to the format SandboxLockFunds expects
+  const mappedLockedFunds = vestaraLockedFunds.map(lf => ({
+    id: lf.id, // This IS the vestara_accounts.id — used for unlock
+    principal_amount: lf.balance,
+    interest_rate: lf.metadata?.interest_rate || 10,
+    duration_months: lf.metadata?.duration_months || 0,
+    expected_interest: 0,
+    total_payout: lf.balance,
+    start_date: lf.metadata?.locked_at || lf.created_at,
+    maturity_date: lf.metadata?.maturity_date || "",
+    actual_unlock_date: null,
+    penalty_amount: 0,
+    status: lf.balance > 0 ? "active" : "unlocked",
+  }));
 
   const ProductWrapper = ({ children }: { children: React.ReactNode }) => (
     <div className="space-y-4">
@@ -276,7 +310,7 @@ export default function VfdSandbox() {
             onComplete={() => {
               setKycDone(true);
               refreshVestaraBalance();
-              loadLockData();
+              refreshVestaraLockedFunds();
             }}
           />
         ) : (
@@ -312,13 +346,13 @@ export default function VfdSandbox() {
             {currentView === "lock" && (
               <SandboxLockFunds
                 lockConfigs={lockConfigs}
-                lockedFunds={lockedFunds}
+                lockedFunds={mappedLockedFunds}
                 userBalance={vestaraBalance}
                 loading={vfd.loading || vestara.loading}
                 onCreateLock={handleCreateLock}
                 onUnlock={handleUnlock}
                 onBreakLock={handleBreakLock}
-                onRefresh={() => { loadLockData(); refreshVestaraBalance(); }}
+                onRefresh={() => { refreshVestaraLockedFunds(); refreshVestaraBalance(); }}
                 onBack={goBack}
               />
             )}

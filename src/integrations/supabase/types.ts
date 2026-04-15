@@ -3030,6 +3030,7 @@ export type Database = {
           id: string
           is_system: boolean
           label: string | null
+          metadata: Json
           split_ref: string | null
           updated_at: string
           user_id: string | null
@@ -3044,6 +3045,7 @@ export type Database = {
           id?: string
           is_system?: boolean
           label?: string | null
+          metadata?: Json
           split_ref?: string | null
           updated_at?: string
           user_id?: string | null
@@ -3058,6 +3060,7 @@ export type Database = {
           id?: string
           is_system?: boolean
           label?: string | null
+          metadata?: Json
           split_ref?: string | null
           updated_at?: string
           user_id?: string | null
@@ -3090,6 +3093,13 @@ export type Database = {
           transaction_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "vestara_ledger_entries_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "vestara_account_drift"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "vestara_ledger_entries_account_id_fkey"
             columns: ["account_id"]
@@ -3157,6 +3167,7 @@ export type Database = {
           created_at: string
           id: string
           initiated_by: string | null
+          ip_address: string | null
           metadata: Json | null
           reference: string
           status: Database["public"]["Enums"]["vestara_tx_status"]
@@ -3168,6 +3179,7 @@ export type Database = {
           created_at?: string
           id?: string
           initiated_by?: string | null
+          ip_address?: string | null
           metadata?: Json | null
           reference: string
           status?: Database["public"]["Enums"]["vestara_tx_status"]
@@ -3179,6 +3191,7 @@ export type Database = {
           created_at?: string
           id?: string
           initiated_by?: string | null
+          ip_address?: string | null
           metadata?: Json | null
           reference?: string
           status?: Database["public"]["Enums"]["vestara_tx_status"]
@@ -4868,6 +4881,20 @@ export type Database = {
         }
         Relationships: []
       }
+      vestara_account_drift: {
+        Row: {
+          account_type:
+            | Database["public"]["Enums"]["vestara_account_type"]
+            | null
+          derived_balance: number | null
+          drift: number | null
+          id: string | null
+          is_system: boolean | null
+          stored_balance: number | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
       vestara_derived_balances: {
         Row: {
           account_id: string | null
@@ -4905,6 +4932,13 @@ export type Database = {
           type: Database["public"]["Enums"]["vestara_tx_type"] | null
         }
         Relationships: [
+          {
+            foreignKeyName: "vestara_ledger_entries_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "vestara_account_drift"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "vestara_ledger_entries_account_id_fkey"
             columns: ["account_id"]
@@ -5430,6 +5464,15 @@ export type Database = {
         }
         Returns: Json
       }
+      vestara_reverse_transaction: {
+        Args: {
+          _initiated_by?: string
+          _metadata?: Json
+          _original_reference: string
+          _reason: string
+        }
+        Returns: Json
+      }
       vestara_split_distribute: {
         Args: {
           _initiated_by: string
@@ -5468,6 +5511,24 @@ export type Database = {
           _group_id: string
           _metadata?: Json
           _reference?: string
+        }
+        Returns: Json
+      }
+      vestara_transfer_complete: {
+        Args: {
+          _metadata?: Json
+          _original_reference: string
+          _success: boolean
+          _user_id: string
+        }
+        Returns: Json
+      }
+      vestara_transfer_initiate: {
+        Args: {
+          _amount: number
+          _metadata?: Json
+          _reference: string
+          _user_id: string
         }
         Returns: Json
       }
@@ -5526,6 +5587,7 @@ export type Database = {
         | "settlement"
         | "interest_expense"
         | "revenue"
+        | "pending_transfer"
       vestara_tx_status: "pending" | "completed" | "failed" | "reversed"
       vestara_tx_type:
         | "deposit"
@@ -5541,6 +5603,8 @@ export type Database = {
         | "interest_accrual"
         | "interest_payout"
         | "fee"
+        | "transfer"
+        | "reversal"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -5704,6 +5768,7 @@ export const Constants = {
         "settlement",
         "interest_expense",
         "revenue",
+        "pending_transfer",
       ],
       vestara_tx_status: ["pending", "completed", "failed", "reversed"],
       vestara_tx_type: [
@@ -5720,6 +5785,8 @@ export const Constants = {
         "interest_accrual",
         "interest_payout",
         "fee",
+        "transfer",
+        "reversal",
       ],
     },
   },
