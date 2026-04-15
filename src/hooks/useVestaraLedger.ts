@@ -20,6 +20,7 @@ export interface VestaraTransaction {
   type: string;
   status: string;
   reference: string;
+  amount: number;
   initiated_by: string | null;
   metadata: Record<string, unknown>;
   created_at: string;
@@ -39,8 +40,22 @@ export interface VestaraLedgerEntry {
 export interface VestaraBalanceSummary {
   wallet: number;
   locked_savings: number;
+  accrued_interest: number;
   total: number;
   accounts: VestaraAccount[];
+}
+
+export interface VestaraLockedFund {
+  id: string;
+  balance: number;
+  metadata: {
+    interest_rate?: number;
+    penalty_rate?: number;
+    duration_months?: number;
+    maturity_date?: string;
+    locked_at?: string;
+  };
+  created_at: string;
 }
 
 /* ─── Hook ─── */
@@ -110,13 +125,29 @@ export function useVestaraLedger() {
     const locked = accts
       .filter(a => a.account_type === "locked_savings")
       .reduce((sum, a) => sum + Number(a.balance), 0);
+    const interest = accts
+      .filter(a => a.account_type === "accrued_interest")
+      .reduce((sum, a) => sum + Number(a.balance), 0);
 
     return {
       wallet: Number(wallet),
       locked_savings: locked,
-      total: Number(wallet) + locked,
+      accrued_interest: interest,
+      total: Number(wallet) + locked + interest,
       accounts: accts,
     };
+  }, [invoke]);
+
+  /* ─── Locked Funds (from Vestara accounts with metadata) ─── */
+  const getLockedFunds = useCallback(async (): Promise<VestaraLockedFund[]> => {
+    const result = await invoke("get_locked_funds");
+    if (!result?.locked_funds) return [];
+    return (result.locked_funds as VestaraAccount[]).map(a => ({
+      id: a.id,
+      balance: Number(a.balance),
+      metadata: (a.metadata || {}) as VestaraLockedFund["metadata"],
+      created_at: a.created_at,
+    }));
   }, [invoke]);
 
   /* ─── Transactions ─── */
@@ -138,7 +169,7 @@ export function useVestaraLedger() {
     [invoke]
   );
 
-  /* ─── Withdraw ─── */
+  /* ─── Withdraw (direct, non-external) ─── */
   const withdraw = useCallback(
     (amount: number, reference?: string, metadata?: Record<string, unknown>) =>
       invoke("withdraw", {
@@ -149,23 +180,45 @@ export function useVestaraLedger() {
     [invoke]
   );
 
-  /* ─── Lock Funds ─── */
-  const lockFunds = useCallback(
-    (amount: number, durationMonths: number, reference?: string) =>
-      invoke("lock_funds", {
+  /* ─── Transfer (pending pattern for external transfers) ─── */
+  const transferInitiate = useCallback(
+    (amount: number, reference?: string, metadata?: Record<string, unknown>) =>
+      invoke("transfer_initiate", {
         amount,
-        duration_months: durationMonths,
-        reference: reference || `lock-${crypto.randomUUID().slice(0, 8)}`,
+        reference: reference || `txfr-${crypto.randomUUID().slice(0, 8)}`,
+        metadata: metadata || {},
       }),
     [invoke]
   );
 
-  /* ─── Unlock Funds ─── */
+  const transferComplete = useCallback(
+    (originalReference: string, success: boolean, metadata?: Record<string, unknown>) =>
+      invoke("transfer_complete", {
+        original_reference: originalReference,
+        success,
+        metadata: metadata || {},
+      }),
+    [invoke]
+  );
+
+  /* ─── Lock Funds ─── */
+  const lockFunds = useCallback(
+    (amount: number, durationMonths: number, reference?: string, metadata?: Record<string, unknown>) =>
+      invoke("lock_funds", {
+        amount,
+        duration_months: durationMonths,
+        reference: reference || `lock-${crypto.randomUUID().slice(0, 8)}`,
+        metadata: metadata || {},
+      }),
+    [invoke]
+  );
+
+  /* ─── Unlock Funds (auto-calculates penalty from metadata) ─── */
   const unlockFunds = useCallback(
-    (lockAccountId: string, penalty = 0, reference?: string) =>
+    (lockAccountId: string, penalty?: number, reference?: string) =>
       invoke("unlock_funds", {
         lock_account_id: lockAccountId,
-        penalty,
+        penalty: penalty ?? null,
         reference: reference || `unlock-${crypto.randomUUID().slice(0, 8)}`,
       }),
     [invoke]
@@ -247,6 +300,17 @@ export function useVestaraLedger() {
     [invoke]
   );
 
+  /* ─── Reversal ─── */
+  const reverseTransaction = useCallback(
+    (originalReference: string, reason: string, metadata?: Record<string, unknown>) =>
+      invoke("reverse_transaction", {
+        original_reference: originalReference,
+        reason,
+        metadata: metadata || {},
+      }),
+    [invoke]
+  );
+
   return {
     loading,
     accounts,
@@ -255,11 +319,14 @@ export function useVestaraLedger() {
     fetchAccounts,
     getBalance,
     getBalanceSummary,
+    getLockedFunds,
     // Transactions
     fetchTransactions,
     // Core operations
     deposit,
     withdraw,
+    transferInitiate,
+    transferComplete,
     lockFunds,
     unlockFunds,
     // Thrift
@@ -273,6 +340,8 @@ export function useVestaraLedger() {
     crowdfundDisburse,
     // Interest
     payoutInterest,
+    // Admin
+    reverseTransaction,
     // Raw invoke for custom actions
     invoke,
   };
