@@ -31,9 +31,10 @@ serve(async (req) => {
     const { action, ...params } = await req.json();
     console.log(`vestara-ledger action: ${action}`);
 
-    // Authenticate user (except for webhook)
+    // Authenticate user (except for webhook and cron actions)
     let userId: string | null = null;
-    if (action !== "deposit_webhook") {
+    const noAuthActions = ["deposit_webhook", "accrue_interest_batch", "reconcile"];
+    if (!noAuthActions.includes(action)) {
       const authHeader = req.headers.get("Authorization");
       if (!authHeader) return err("Unauthorized", 401);
       const { data: { user }, error: authErr } = await supabase.auth.getUser(
@@ -43,26 +44,70 @@ serve(async (req) => {
       userId = user.id;
     }
 
+    // Helper: ensure user has a wallet account
+    async function ensureWallet(uid: string) {
+      const { data: existing } = await supabase
+        .from("vestara_accounts")
+        .select("id")
+        .eq("user_id", uid)
+        .eq("account_type", "wallet")
+        .maybeSingle();
+      if (!existing) {
+        await supabase.from("vestara_accounts").insert({
+          user_id: uid,
+          account_type: "wallet",
+          balance: 0,
+          currency: "NGN",
+          metadata: {},
+        });
+      }
+    }
+
     let result: unknown;
 
     switch (action) {
+      // ── Ensure accounts exist for a user ──
+      case "ensure_accounts": {
+        await ensureWallet(userId!);
+        const { data } = await supabase
+          .from("vestara_accounts")
+          .select("*")
+          .eq("user_id", userId);
+        result = { success: true, accounts: data };
+        break;
+      }
+
       // ── Deposit webhook (VFD) ──
       case "deposit_webhook": {
         const { account_number, amount, reference, metadata } = params;
-        if (!account_number || !amount || !reference)
-          return err("account_number, amount, and reference are required");
+        if (!amount || !reference) return err("amount and reference are required");
 
-        // Look up user by VFD virtual account (NUBAN)
-        const { data: client } = await supabase
-          .from("vfd_sandbox_clients")
-          .select("user_id")
-          .eq("vfd_account_number", account_number)
-          .single();
+        // If __self__, this is a sandbox self-credit — use the authenticated user
+        let targetUserId: string;
+        if (account_number === "__self__") {
+          const authHeader = req.headers.get("Authorization");
+          if (!authHeader) return err("Unauthorized for self-deposit", 401);
+          const { data: { user }, error: authErr } = await supabase.auth.getUser(
+            authHeader.replace("Bearer ", "")
+          );
+          if (authErr || !user) return err("Unauthorized for self-deposit", 401);
+          targetUserId = user.id;
+        } else {
+          // Look up user by VFD virtual account (NUBAN)
+          const { data: client } = await supabase
+            .from("vfd_sandbox_clients")
+            .select("user_id")
+            .eq("vfd_account_number", account_number)
+            .single();
+          if (!client) return err("Unknown account number");
+          targetUserId = client.user_id;
+        }
 
-        if (!client) return err("Unknown account number");
+        // Ensure wallet exists
+        await ensureWallet(targetUserId);
 
         const { data } = await supabase.rpc("vestara_deposit", {
-          _user_id: client.user_id,
+          _user_id: targetUserId,
           _amount: amount,
           _reference: reference,
           _metadata: metadata || {},
@@ -73,6 +118,7 @@ serve(async (req) => {
 
       // ── Get balance ──
       case "get_balance": {
+        await ensureWallet(userId!);
         const { data } = await supabase.rpc("vestara_get_balance", {
           _user_id: userId,
         });
@@ -108,9 +154,7 @@ serve(async (req) => {
         });
         result = data;
 
-        // If successful, optionally call VFD transfer API here
         if (data?.success) {
-          // VFD transfer would go here in production
           console.log(`Withdrawal approved for ${userId}: ₦${amount}`);
         }
         break;
@@ -142,7 +186,7 @@ serve(async (req) => {
           _user_id: userId,
           _lock_account_id: lock_account_id,
           _penalty: penalty || 0,
-          _reference: reference,
+          _reference: reference || `unlock-${crypto.randomUUID().slice(0, 8)}`,
           _metadata: metadata || {},
         });
         result = data;
@@ -177,7 +221,7 @@ serve(async (req) => {
           _group_id: group_id,
           _gross_amount: gross_amount,
           _fee: fee || 0,
-          _reference: reference,
+          _reference: reference || `payout-${crypto.randomUUID().slice(0, 8)}`,
           _metadata: metadata || {},
         });
         result = data;
@@ -268,6 +312,43 @@ serve(async (req) => {
         break;
       }
 
+      // ── Batch accrue interest for ALL locked accounts (cron) ──
+      case "accrue_interest_batch": {
+        // Find all locked_savings accounts with balance > 0
+        const { data: lockedAccounts, error: laErr } = await supabase
+          .from("vestara_accounts")
+          .select("id, user_id, balance, metadata")
+          .eq("account_type", "locked_savings")
+          .gt("balance", 0);
+
+        if (laErr) return err(laErr.message);
+
+        const results: unknown[] = [];
+        for (const acct of lockedAccounts || []) {
+          const meta = acct.metadata as Record<string, unknown>;
+          const rate = Number(meta?.interest_rate || 10); // default 10% p.a.
+          const dailyRate = rate / 100 / 365;
+          const dailyInterest = Math.round(Number(acct.balance) * dailyRate * 100) / 100;
+
+          if (dailyInterest > 0 && acct.user_id) {
+            const { data } = await supabase.rpc("vestara_accrue_interest", {
+              _user_id: acct.user_id,
+              _amount: dailyInterest,
+              _reference: `interest-${acct.id}-${new Date().toISOString().slice(0, 10)}`,
+              _metadata: {
+                lock_account_id: acct.id,
+                rate,
+                daily_rate: dailyRate,
+                principal: acct.balance,
+              },
+            });
+            results.push({ account_id: acct.id, interest: dailyInterest, result: data });
+          }
+        }
+        result = { success: true, accrued_count: results.length, details: results };
+        break;
+      }
+
       // ── Payout interest ──
       case "payout_interest": {
         const { amount, reference, metadata } = params;
@@ -285,12 +366,72 @@ serve(async (req) => {
 
       // ── Get accounts (all user accounts) ──
       case "get_accounts": {
+        await ensureWallet(userId!);
         const { data, error: qErr } = await supabase
           .from("vestara_accounts")
           .select("*")
           .eq("user_id", userId);
         if (qErr) return err(qErr.message);
         result = { success: true, accounts: data };
+        break;
+      }
+
+      // ── Get locked funds detail ──
+      case "get_locked_funds": {
+        const { data, error: qErr } = await supabase
+          .from("vestara_accounts")
+          .select("*")
+          .eq("user_id", userId)
+          .eq("account_type", "locked_savings")
+          .order("created_at", { ascending: false });
+        if (qErr) return err(qErr.message);
+        result = { success: true, locked_funds: data };
+        break;
+      }
+
+      // ── Reconcile (cron) ──
+      case "reconcile": {
+        // Sum all account balances
+        const { data: accountTotals, error: atErr } = await supabase
+          .from("vestara_accounts")
+          .select("account_type, balance");
+        if (atErr) return err(atErr.message);
+
+        // Sum all ledger entries
+        const { data: ledgerTotals, error: ltErr } = await supabase
+          .from("vestara_ledger_entries")
+          .select("debit, credit");
+        if (ltErr) return err(ltErr.message);
+
+        const totalDebits = (ledgerTotals || []).reduce((s, e) => s + Number(e.debit), 0);
+        const totalCredits = (ledgerTotals || []).reduce((s, e) => s + Number(e.credit), 0);
+        const balanceByType: Record<string, number> = {};
+        for (const acct of accountTotals || []) {
+          balanceByType[acct.account_type] = (balanceByType[acct.account_type] || 0) + Number(acct.balance);
+        }
+        const totalAccountBalance = Object.values(balanceByType).reduce((s, v) => s + v, 0);
+        const drift = Math.abs(totalDebits - totalCredits);
+        const healthy = drift < 0.01;
+
+        // Log reconciliation
+        await supabase.from("vestara_reconciliation_log").insert({
+          checked_at: new Date().toISOString(),
+          settlement_ledger_balance: totalDebits,
+          settlement_actual_balance: totalCredits,
+          drift_amount: drift,
+          status: healthy ? "healthy" : "drift_detected",
+          details: { balanceByType, totalDebits, totalCredits, totalAccountBalance },
+        });
+
+        result = {
+          success: true,
+          healthy,
+          drift,
+          total_debits: totalDebits,
+          total_credits: totalCredits,
+          balance_by_type: balanceByType,
+          total_account_balance: totalAccountBalance,
+        };
         break;
       }
 
