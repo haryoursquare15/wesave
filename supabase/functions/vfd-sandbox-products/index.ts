@@ -1923,12 +1923,12 @@ async function handleInviteGroupMember(userId: string, body: Record<string, unkn
   // Check if already a member
   const { data: existing } = await db.from("vfd_sandbox_group_members")
     .select("id").eq("group_id", groupId).eq("user_id", inviteeId).maybeSingle();
-  if (existing) return jsonResponse({ error: "User is already a member" }, 400);
+  if (existing) return jsonResponse({ data: { already_member: true }, error: "User is already a member" });
 
   // Check for existing pending invite
   const { data: existingInvite } = await db.from("vfd_sandbox_group_invites")
     .select("id").eq("group_id", groupId).eq("invitee_id", inviteeId).eq("status", "pending").maybeSingle();
-  if (existingInvite) return jsonResponse({ error: "User already has a pending invite" }, 400);
+  if (existingInvite) return jsonResponse({ data: { already_invited: true }, error: "User already has a pending invite" });
 
   const { data: invite, error } = await db.from("vfd_sandbox_group_invites").insert({
     group_id: groupId, inviter_id: userId, invitee_id: inviteeId,

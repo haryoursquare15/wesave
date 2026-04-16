@@ -47,7 +47,10 @@ export function SandboxGroupInviteDialog({ open, onOpenChange, groupId, groupNam
 
   const handleInvite = async (userId: string) => {
     const res = await products.inviteGroupMember(groupId, userId);
-    if (res?.data) {
+    if (res?.data?.already_invited) {
+      setInvitedUsers(prev => new Set([...prev, userId]));
+      toast({ title: "Already invited", description: "This user already has a pending invite." });
+    } else if (res?.data) {
       setInvitedUsers(prev => new Set([...prev, userId]));
       toast({ title: "Invite sent!" });
       onMemberAdded?.();
