@@ -14,8 +14,9 @@ import { useToast } from "@/hooks/use-toast";
 import { useVfdSandboxProducts } from "@/hooks/useVfdSandboxProducts";
 import {
   Users, Plus, RefreshCw, ArrowRight, ArrowLeft, Play, Crown,
-  ListOrdered, Coins, Calendar, Info, LogOut, AlertCircle, ArrowLeftRight,
+  ListOrdered, Coins, Calendar, Info, LogOut, AlertCircle, ArrowLeftRight, Share2,
 } from "lucide-react";
+import { SandboxGroupInviteDialog } from "./SandboxGroupInviteDialog";
 
 interface Group {
   id: string; name: string; contribution_amount: number; period: string;
