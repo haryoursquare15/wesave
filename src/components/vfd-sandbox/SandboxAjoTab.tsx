@@ -137,10 +137,16 @@ export function SandboxAjoTab() {
                   ₦{fmt(Number(g.contribution_amount))} / {g.period} • {g.member_count}/{g.max_members} members
                 </p>
               </div>
-              <Badge variant="outline" className={g.status === "active" ? "text-green-600 border-green-500" : g.status === "completed" ? "text-primary border-primary" : "text-muted-foreground"}>
-                {g.status}
-              </Badge>
-            </div>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className={g.status === "active" ? "text-green-600 border-green-500" : g.status === "completed" ? "text-primary border-primary" : "text-muted-foreground"}>
+                  {g.status}
+                </Badge>
+                {g.status === "pending" && g.member_count < g.max_members && (
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowInviteDialog(true)}>
+                    <Share2 className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
 
             {g.status === "active" && (
               <div>
