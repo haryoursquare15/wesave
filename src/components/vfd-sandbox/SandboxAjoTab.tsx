@@ -14,8 +14,9 @@ import { useToast } from "@/hooks/use-toast";
 import { useVfdSandboxProducts } from "@/hooks/useVfdSandboxProducts";
 import {
   Users, Plus, RefreshCw, ArrowRight, ArrowLeft, Play, Crown,
-  ListOrdered, Coins, Calendar, Info, LogOut, AlertCircle, ArrowLeftRight,
+  ListOrdered, Coins, Calendar, Info, LogOut, AlertCircle, ArrowLeftRight, Share2,
 } from "lucide-react";
+import { SandboxGroupInviteDialog } from "./SandboxGroupInviteDialog";
 
 interface Group {
   id: string; name: string; contribution_amount: number; period: string;
@@ -60,6 +61,7 @@ export function SandboxAjoTab() {
   const [showCreate, setShowCreate] = useState(false);
   const [detailGroup, setDetailGroup] = useState<string | null>(null);
   const [detailData, setDetailData] = useState<any>(null);
+  const [showInviteDialog, setShowInviteDialog] = useState(false);
 
   const [form, setForm] = useState({
     name: "",
@@ -135,9 +137,16 @@ export function SandboxAjoTab() {
                   ₦{fmt(Number(g.contribution_amount))} / {g.period} • {g.member_count}/{g.max_members} members
                 </p>
               </div>
-              <Badge variant="outline" className={g.status === "active" ? "text-green-600 border-green-500" : g.status === "completed" ? "text-primary border-primary" : "text-muted-foreground"}>
-                {g.status}
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className={g.status === "active" ? "text-green-600 border-green-500" : g.status === "completed" ? "text-primary border-primary" : "text-muted-foreground"}>
+                  {g.status}
+                </Badge>
+                {g.status === "pending" && g.member_count < g.max_members && (
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowInviteDialog(true)}>
+                    <Share2 className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
             </div>
 
             {g.status === "active" && (
@@ -243,6 +252,14 @@ export function SandboxAjoTab() {
               : `₦${fmt(calculatePlatformFee(Number(g.contribution_amount) * Number(g.max_members)))} (1%, max ₦500)`}
           </p>
         </div>
+
+        <SandboxGroupInviteDialog
+          open={showInviteDialog}
+          onOpenChange={setShowInviteDialog}
+          groupId={g.id}
+          groupName={g.name}
+          onMemberAdded={() => loadDetail(g.id)}
+        />
       </div>
     );
   }

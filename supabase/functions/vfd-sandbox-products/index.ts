@@ -1891,8 +1891,156 @@ async function handleGetCardDetails(userId: string, body: Record<string, unknown
 }
 
 // =============================================
+// THRIFT GROUP INVITES (Production Parity)
+// =============================================
+
+async function handleSearchUsers(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const query = (body.query as string || "").trim();
+  if (!query || query.length < 2) return jsonResponse({ data: [] });
+
+  const escaped = query.replace(/[%_\\]/g, "\\$&");
+  const { data } = await db.from("profiles")
+    .select("id, full_name, username, avatar_url, membership_tier")
+    .or(`username.ilike.%${escaped}%,full_name.ilike.%${escaped}%`)
+    .neq("id", userId)
+    .limit(10);
+
+  return jsonResponse({ data: data || [] });
+}
+
+async function handleInviteGroupMember(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const groupId = body.group_id as string;
+  const inviteeId = body.invitee_id as string;
+  if (!groupId || !inviteeId) return jsonResponse({ error: "group_id and invitee_id required" }, 400);
+
+  const { data: group } = await db.from("vfd_sandbox_groups").select("*").eq("id", groupId).single();
+  if (!group) return jsonResponse({ error: "Group not found" }, 404);
+  if (group.status !== "pending") return jsonResponse({ error: "Group is no longer accepting members" }, 400);
+  if (group.member_count >= group.max_members) return jsonResponse({ error: "Group is full" }, 400);
+
+  // Check if already a member
+  const { data: existing } = await db.from("vfd_sandbox_group_members")
+    .select("id").eq("group_id", groupId).eq("user_id", inviteeId).maybeSingle();
+  if (existing) return jsonResponse({ error: "User is already a member" }, 400);
+
+  // Check for existing pending invite
+  const { data: existingInvite } = await db.from("vfd_sandbox_group_invites")
+    .select("id").eq("group_id", groupId).eq("invitee_id", inviteeId).eq("status", "pending").maybeSingle();
+  if (existingInvite) return jsonResponse({ error: "User already has a pending invite" }, 400);
+
+  const { data: invite, error } = await db.from("vfd_sandbox_group_invites").insert({
+    group_id: groupId, inviter_id: userId, invitee_id: inviteeId,
+  }).select().single();
+
+  if (error) return jsonResponse({ error: error.message }, 500);
+
+  // Get inviter profile for notification
+  const { data: inviterProfile } = await db.from("profiles").select("full_name, username").eq("id", userId).maybeSingle();
+  const inviterName = inviterProfile?.username ? `@${inviterProfile.username}` : inviterProfile?.full_name || "Someone";
+
+  await sendNotification(inviteeId, "Group Invite",
+    `${inviterName} invited you to join "${group.name}" (₦${group.contribution_amount}/${group.period})`,
+    "group_invite", groupId);
+
+  return jsonResponse({ data: invite });
+}
+
+async function handleRespondGroupInvite(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const inviteId = body.invite_id as string;
+  const accept = body.accept as boolean;
+
+  const { data: invite } = await db.from("vfd_sandbox_group_invites").select("*").eq("id", inviteId).single();
+  if (!invite) return jsonResponse({ error: "Invite not found" }, 404);
+  if (invite.invitee_id !== userId) return jsonResponse({ error: "Not authorized" }, 403);
+  if (invite.status !== "pending") return jsonResponse({ error: "Invite is no longer pending" }, 400);
+
+  await db.from("vfd_sandbox_group_invites").update({
+    status: accept ? "accepted" : "declined",
+    responded_at: new Date().toISOString(),
+  }).eq("id", inviteId);
+
+  if (accept) {
+    // Join the group (reuse join logic)
+    const joinResult = await handleJoinGroup(userId, { group_id: invite.group_id });
+    return joinResult;
+  }
+
+  return jsonResponse({ data: { success: true, status: "declined" } });
+}
+
+async function handleCreateGroupInviteLink(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const groupId = body.group_id as string;
+  if (!groupId) return jsonResponse({ error: "group_id required" }, 400);
+
+  const { data: group } = await db.from("vfd_sandbox_groups").select("admin_id, status").eq("id", groupId).single();
+  if (!group) return jsonResponse({ error: "Group not found" }, 404);
+  if (group.status !== "pending") return jsonResponse({ error: "Group is no longer accepting members" }, 400);
+
+  const { data: link, error } = await db.from("vfd_sandbox_group_invite_links").insert({
+    group_id: groupId, created_by: userId,
+  }).select("invite_token").single();
+
+  if (error) return jsonResponse({ error: error.message }, 500);
+
+  return jsonResponse({ data: { invite_token: link.invite_token } });
+}
+
+async function handleJoinGroupViaLink(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const token = body.token as string;
+  if (!token) return jsonResponse({ error: "token required" }, 400);
+
+  const { data: link } = await db.from("vfd_sandbox_group_invite_links")
+    .select("*").eq("invite_token", token).maybeSingle();
+
+  if (!link) return jsonResponse({ error: "Invalid invite link" }, 404);
+  if (new Date(link.expires_at) < new Date()) return jsonResponse({ error: "Invite link has expired" }, 400);
+  if (link.max_uses && link.use_count >= link.max_uses) return jsonResponse({ error: "Invite link has reached max uses" }, 400);
+
+  // Increment use count
+  await db.from("vfd_sandbox_group_invite_links").update({
+    use_count: link.use_count + 1,
+  }).eq("id", link.id);
+
+  return await handleJoinGroup(userId, { group_id: link.group_id });
+}
+
+async function handleListGroupInvites(userId: string) {
+  const db = getSupabaseAdmin();
+  const { data } = await db.from("vfd_sandbox_group_invites")
+    .select("*, vfd_sandbox_groups(id, name, contribution_amount, period, max_members, member_count)")
+    .eq("invitee_id", userId)
+    .eq("status", "pending")
+    .order("created_at", { ascending: false });
+
+  // Enrich with inviter names
+  if (data && data.length > 0) {
+    const inviterIds = [...new Set(data.map(d => d.inviter_id))];
+    const { data: profiles } = await db.from("profiles")
+      .select("id, full_name, username").in("id", inviterIds);
+    const profileMap = new Map((profiles || []).map(p => [p.id, p]));
+
+    const enriched = data.map(invite => {
+      const inviter = profileMap.get(invite.inviter_id);
+      return {
+        ...invite,
+        inviter_name: inviter?.username ? `@${inviter.username}` : inviter?.full_name || "Someone",
+      };
+    });
+    return jsonResponse({ data: enriched });
+  }
+
+  return jsonResponse({ data: data || [] });
+}
+
+// =============================================
 // MAIN HANDLER
 // =============================================
+
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -1918,6 +2066,12 @@ Deno.serve(async (req) => {
       case "exit_group": return await handleExitGroup(userId, body);
       case "confirm_continue": return await handleConfirmContinue(userId, body);
       case "restart_group": return await handleRestartGroup(userId, body);
+      case "search_users": return await handleSearchUsers(userId, body);
+      case "invite_group_member": return await handleInviteGroupMember(userId, body);
+      case "respond_group_invite": return await handleRespondGroupInvite(userId, body);
+      case "create_group_invite_link": return await handleCreateGroupInviteLink(userId, body);
+      case "join_group_via_link": return await handleJoinGroupViaLink(userId, body);
+      case "list_group_invites": return await handleListGroupInvites(userId);
 
       // Target Ajo (full parity)
       case "create_target": return await handleCreateTarget(userId, body);
