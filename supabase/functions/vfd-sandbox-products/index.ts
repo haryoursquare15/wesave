@@ -1918,6 +1918,12 @@ Deno.serve(async (req) => {
       case "exit_group": return await handleExitGroup(userId, body);
       case "confirm_continue": return await handleConfirmContinue(userId, body);
       case "restart_group": return await handleRestartGroup(userId, body);
+      case "search_users": return await handleSearchUsers(userId, body);
+      case "invite_group_member": return await handleInviteGroupMember(userId, body);
+      case "respond_group_invite": return await handleRespondGroupInvite(userId, body);
+      case "create_group_invite_link": return await handleCreateGroupInviteLink(userId, body);
+      case "join_group_via_link": return await handleJoinGroupViaLink(userId, body);
+      case "list_group_invites": return await handleListGroupInvites(userId);
 
       // Target Ajo (full parity)
       case "create_target": return await handleCreateTarget(userId, body);
