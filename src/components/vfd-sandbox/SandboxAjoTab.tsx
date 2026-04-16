@@ -252,6 +252,14 @@ export function SandboxAjoTab() {
               : `₦${fmt(calculatePlatformFee(Number(g.contribution_amount) * Number(g.max_members)))} (1%, max ₦500)`}
           </p>
         </div>
+
+        <SandboxGroupInviteDialog
+          open={showInviteDialog}
+          onOpenChange={setShowInviteDialog}
+          groupId={g.id}
+          groupName={g.name}
+          onMemberAdded={() => loadDetail(g.id)}
+        />
       </div>
     );
   }
