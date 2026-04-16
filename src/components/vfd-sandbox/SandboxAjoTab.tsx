@@ -147,6 +147,7 @@ export function SandboxAjoTab() {
                   </Button>
                 )}
               </div>
+            </div>
 
             {g.status === "active" && (
               <div>
