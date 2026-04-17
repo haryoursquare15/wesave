@@ -38,6 +38,7 @@ function VfdSandboxInner() {
   const vestara = useVestaraLedger();
 
   const [kycDone, setKycDone] = useState(false);
+  const [clientChecked, setClientChecked] = useState(false);
   const [currentView, setCurrentView] = useState<View>("dashboard");
   const [banks, setBanks] = useState<Array<{ code: string; name: string }>>([]);
 
