@@ -160,20 +160,26 @@ export default function VfdSandbox() {
 
     // Step 2: Execute VFD transfer
     try {
-      const vfdResult = await vfd.transfer(params);
-      
+      const vfdResult = await vfd.transfer(params) as { data?: { status?: string; message?: string } } | null;
+
+      // VFD returns status "00" on success; anything else (e.g. "99") is a failure
+      const vfdStatus = vfdResult?.data?.status;
+      const vfdSucceeded = vfdStatus === "00";
+
       // Step 3: Complete or fail based on VFD result
-      if (vfdResult) {
+      if (vfdSucceeded) {
         await vestara.transferComplete(reference, true, {
           vfd_result: vfdResult,
         });
         toast({ title: "Transfer successful!" });
       } else {
         // VFD failed — refund from holding back to wallet
+        const reason = vfdResult?.data?.message || "VFD transfer failed";
         await vestara.transferComplete(reference, false, {
-          failure_reason: "VFD transfer failed",
+          failure_reason: reason,
+          vfd_result: vfdResult,
         });
-        toast({ title: "Transfer failed", description: "Funds have been returned to your wallet", variant: "destructive" });
+        toast({ title: "Transfer failed", description: `${reason}. Funds returned to your wallet.`, variant: "destructive" });
       }
     } catch (err) {
       // Network error — refund
