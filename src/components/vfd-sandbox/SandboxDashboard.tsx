@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import vestaraBadge from "@/assets/vestara-badge.jpg";
 
 interface BalanceData {
   totalBalance: number;
@@ -210,9 +211,17 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [] 
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.05 }}
+        className="flex items-center gap-3"
       >
-        <p className="text-sm text-muted-foreground">{greeting},</p>
-        <h1 className="text-xl font-bold text-foreground">{firstName} 👋</h1>
+        <img
+          src={vestaraBadge}
+          alt="Vestara"
+          className="h-12 w-12 rounded-full object-cover ring-2 ring-primary/20 shadow-md shrink-0"
+        />
+        <div>
+          <p className="text-sm text-muted-foreground">{greeting},</p>
+          <h1 className="text-xl font-bold text-foreground">{firstName} 👋</h1>
+        </div>
       </motion.div>
 
       {/* ═══ BALANCE CARD ═══ */}
