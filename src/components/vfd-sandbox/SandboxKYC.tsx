@@ -438,6 +438,14 @@ export function SandboxKYC({ vfd, onComplete }: SandboxKYCProps) {
               )}
             </div>
 
+            {/* Document upload (Tier 2 & 3) */}
+            {selectedTier >= 2 && (
+              <SandboxKYCDocumentUpload
+                tierLevel={selectedTier}
+                onAllRequiredUploaded={setDocsReady}
+              />
+            )}
+
             {/* Test Data Helper */}
             <div className="rounded-xl bg-warning/5 border border-warning/20 p-3">
               <p className="text-[11px] text-warning font-medium mb-1.5">🧪 Sandbox Test Data</p>
