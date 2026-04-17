@@ -2,6 +2,7 @@ import { ArrowLeft, FlaskConical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
+import vestaraLogo from "@/assets/vestara-logo.jpg";
 
 export function SandboxHeader() {
   const navigate = useNavigate();
@@ -12,8 +13,12 @@ export function SandboxHeader() {
         <Button variant="ghost" size="icon" onClick={() => navigate("/dashboard")} className="shrink-0">
           <ArrowLeft className="h-5 w-5" />
         </Button>
-        <div className="flex-1">
-          <h1 className="text-base font-semibold">WeSave Sandbox</h1>
+        <div className="flex-1 flex items-center">
+          <img
+            src={vestaraLogo}
+            alt="Vestara — Grow Your Money Smarter"
+            className="h-8 w-auto object-contain"
+          />
         </div>
         <motion.div
           animate={{ opacity: [0.6, 1, 0.6] }}
