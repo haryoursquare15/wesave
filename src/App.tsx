@@ -39,15 +39,17 @@ import SplitPayDetail from "./pages/SplitPayDetail";
 import DeleteAccount from "./pages/DeleteAccount";
 import AppHome from "./pages/AppHome";
 import VfdSandbox from "./pages/VfdSandbox";
+import SandboxAuth from "./pages/SandboxAuth";
+import { SandboxAuthProvider } from "./contexts/SandboxAuthContext";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-const PUBLIC_ROUTES = ["/", "/auth", "/forgot-password", "/invite", "/onboarding", "/terms", "/privacy", "/goal", "/delete-account", "/app-home"];
+const PUBLIC_ROUTES = ["/", "/auth", "/forgot-password", "/invite", "/onboarding", "/terms", "/privacy", "/goal", "/delete-account", "/app-home", "/vfd-sandbox", "/vfd-sandbox/auth"];
 
 function isPublicRoute(pathname: string) {
   return PUBLIC_ROUTES.some(route => 
-    pathname === route || pathname.startsWith("/invite/") || pathname.startsWith("/goal/")
+    pathname === route || pathname.startsWith("/invite/") || pathname.startsWith("/goal/") || pathname.startsWith("/vfd-sandbox")
   );
 }
 
@@ -143,6 +145,11 @@ const App = () => {
                 <Route path="/terms" element={<TermsOfService />} />
                 <Route path="/privacy" element={<PrivacyPolicy />} />
                 <Route path="/delete-account" element={<DeleteAccount />} />
+                <Route path="/vfd-sandbox/auth" element={
+                  <SandboxAuthProvider>
+                    <SandboxAuth />
+                  </SandboxAuthProvider>
+                } />
                 <Route path="/vfd-sandbox" element={<VfdSandbox />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
