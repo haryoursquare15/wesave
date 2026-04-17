@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "@/contexts/AuthContext";
+import { SandboxAuthProvider, useSandboxAuth } from "@/contexts/SandboxAuthContext";
+import { SandboxModeContext } from "@/hooks/useSandboxAwareAuth";
 import { useVfdBanking } from "@/hooks/useVfdBanking";
 import { useVestaraLedger, VestaraLockedFund } from "@/hooks/useVestaraLedger";
 import { useToast } from "@/hooks/use-toast";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, LogOut } from "lucide-react";
 import { SandboxHeader } from "@/components/vfd-sandbox/SandboxHeader";
 import { SandboxDashboard } from "@/components/vfd-sandbox/SandboxDashboard";
 import { SandboxKYC } from "@/components/vfd-sandbox/SandboxKYC";
@@ -29,9 +30,9 @@ interface UserBalance {
 
 type View = "dashboard" | "fund" | "transfer" | "lock" | "history" | "ajo" | "target" | "goal" | "split" | "association" | "bills" | "card";
 
-export default function VfdSandbox() {
+function VfdSandboxInner() {
   const navigate = useNavigate();
-  const { user, session, loading: authLoading } = useAuth();
+  const { user, session, loading: authLoading, signOut } = useSandboxAuth();
   const { toast } = useToast();
   const vfd = useVfdBanking();
   const vestara = useVestaraLedger();
@@ -50,7 +51,7 @@ export default function VfdSandbox() {
   const [lockConfigs, setLockConfigs] = useState<LockConfig[]>([]);
 
   useEffect(() => {
-    if (!authLoading && !user) navigate("/auth");
+    if (!authLoading && !user) navigate("/vfd-sandbox/auth");
   }, [user, authLoading, navigate]);
 
   const initRef = useRef(false);
