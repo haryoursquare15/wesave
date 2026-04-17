@@ -91,6 +91,7 @@ export function SandboxKYC({ vfd, onComplete }: SandboxKYCProps) {
   const [address, setAddress] = useState("");
   const [bvnData, setBvnData] = useState<Record<string, unknown> | null>(null);
   const [isUpgrade, setIsUpgrade] = useState(false);
+  const [docsReady, setDocsReady] = useState(false);
 
   const currentTierNum = vfd.client?.tier ? parseInt(vfd.client.tier.replace("tier", "")) : 0;
 
@@ -196,20 +197,21 @@ export function SandboxKYC({ vfd, onComplete }: SandboxKYCProps) {
 
   // Validation
   const canProceed = () => {
+    const docsOk = selectedTier === 1 || docsReady;
     if (selectedTier === 1) {
-      return (bvn.length === 11 || nin.length === 11) && dob;
+      return (bvn.length === 11 || nin.length === 11) && !!dob;
     }
     if (selectedTier === 2) {
       if (isUpgrade) {
-        return (needsBvn ? bvn.length === 11 : true) && (needsNin ? nin.length === 11 : true);
+        return (needsBvn ? bvn.length === 11 : true) && (needsNin ? nin.length === 11 : true) && docsOk;
       }
-      return bvn.length === 11 && nin.length === 11 && dob;
+      return bvn.length === 11 && nin.length === 11 && !!dob && docsOk;
     }
     if (selectedTier === 3) {
       if (isUpgrade) {
-        return (needsBvn ? bvn.length === 11 : true) && (needsNin ? nin.length === 11 : true) && address.length > 5;
+        return (needsBvn ? bvn.length === 11 : true) && (needsNin ? nin.length === 11 : true) && address.length > 5 && docsOk;
       }
-      return bvn.length === 11 && nin.length === 11 && dob && address.length > 5;
+      return bvn.length === 11 && nin.length === 11 && !!dob && address.length > 5 && docsOk;
     }
     return false;
   };
