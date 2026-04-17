@@ -4131,6 +4131,51 @@ export type Database = {
         }
         Relationships: []
       }
+      vfd_sandbox_kyc_documents: {
+        Row: {
+          document_type: string
+          file_name: string | null
+          file_path: string
+          file_size: number | null
+          id: string
+          metadata: Json | null
+          mime_type: string | null
+          tier_level: number
+          uploaded_at: string
+          user_id: string
+          verification_status: string
+          verified_at: string | null
+        }
+        Insert: {
+          document_type: string
+          file_name?: string | null
+          file_path: string
+          file_size?: number | null
+          id?: string
+          metadata?: Json | null
+          mime_type?: string | null
+          tier_level: number
+          uploaded_at?: string
+          user_id: string
+          verification_status?: string
+          verified_at?: string | null
+        }
+        Update: {
+          document_type?: string
+          file_name?: string | null
+          file_path?: string
+          file_size?: number | null
+          id?: string
+          metadata?: Json | null
+          mime_type?: string | null
+          tier_level?: number
+          uploaded_at?: string
+          user_id?: string
+          verification_status?: string
+          verified_at?: string | null
+        }
+        Relationships: []
+      }
       vfd_sandbox_notifications: {
         Row: {
           created_at: string
