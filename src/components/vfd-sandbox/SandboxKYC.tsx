@@ -376,6 +376,7 @@ export function SandboxKYC({ vfd, onComplete }: SandboxKYCProps) {
                 <div>
                   <Label className="text-xs font-medium text-muted-foreground">
                     BVN (Bank Verification Number)
+                    {selectedTier >= 2 && <span className="text-destructive ml-1">*</span>}
                     {selectedTier === 1 && <span className="text-muted-foreground/60 ml-1">or NIN below</span>}
                   </Label>
                   <Input
