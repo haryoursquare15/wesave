@@ -57,7 +57,19 @@ export function SandboxAuthProvider({ children }: { children: ReactNode }) {
         data: { full_name: fullName, sandbox_account: true },
       },
     });
-    return { error };
+    if (error) return { error };
+
+    // Auto-confirm sandbox accounts so testers can use throwaway emails
+    // without waiting for a verification mail.
+    try {
+      await sandboxSupabase.functions.invoke("sandbox-auto-confirm", {
+        body: { email },
+      });
+    } catch (confirmErr) {
+      console.warn("sandbox auto-confirm failed:", confirmErr);
+    }
+
+    return { error: null };
   };
 
   const signIn = async (email: string, password: string) => {
