@@ -310,6 +310,23 @@ function VfdSandboxInner() {
   return (
     <div className="min-h-screen bg-background">
       <SandboxHeader />
+      <div className="max-w-lg mx-auto px-4 pt-3 flex items-center justify-between">
+        <span className="text-xs text-muted-foreground truncate">
+          Sandbox: <span className="font-medium text-foreground">{user?.email}</span>
+        </span>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={async () => {
+            await signOut();
+            navigate("/vfd-sandbox/auth");
+          }}
+          className="h-7 text-xs"
+        >
+          <LogOut className="h-3.5 w-3.5 mr-1" />
+          Sign out
+        </Button>
+      </div>
       <div className="max-w-lg mx-auto px-4 py-5 pb-32 space-y-5">
         {!kycDone ? (
           <SandboxKYC
@@ -382,5 +399,30 @@ function VfdSandboxInner() {
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * Provides the sandbox session to all hooks via SandboxModeContext, so that
+ * useVfdBanking / useVestaraLedger talk to the sandbox Supabase client (and
+ * the sandbox-authenticated user) instead of the main WeSave session.
+ */
+function SandboxSessionBridge({ children }: { children: React.ReactNode }) {
+  const { session } = useSandboxAuth();
+  const value = useMemo(() => ({ session }), [session]);
+  return (
+    <SandboxModeContext.Provider value={value}>
+      {children}
+    </SandboxModeContext.Provider>
+  );
+}
+
+export default function VfdSandbox() {
+  return (
+    <SandboxAuthProvider>
+      <SandboxSessionBridge>
+        <VfdSandboxInner />
+      </SandboxSessionBridge>
+    </SandboxAuthProvider>
   );
 }
