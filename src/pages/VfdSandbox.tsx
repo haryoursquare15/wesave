@@ -38,6 +38,7 @@ function VfdSandboxInner() {
   const vestara = useVestaraLedger();
 
   const [kycDone, setKycDone] = useState(false);
+  const [clientChecked, setClientChecked] = useState(false);
   const [currentView, setCurrentView] = useState<View>("dashboard");
   const [banks, setBanks] = useState<Array<{ code: string; name: string }>>([]);
 
@@ -74,6 +75,7 @@ function VfdSandboxInner() {
           if (configRes?.data) setLockConfigs(configRes.data as LockConfig[]);
         });
       }
+      setClientChecked(true);
     });
 
     // Initialize Vestara accounts & load balance
@@ -263,7 +265,7 @@ function VfdSandboxInner() {
 
   const goBack = () => setCurrentView("dashboard");
 
-  if (authLoading) {
+  if (authLoading || (user && !clientChecked)) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
