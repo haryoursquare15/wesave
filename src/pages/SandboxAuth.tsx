@@ -34,8 +34,15 @@ export default function SandboxAuth() {
           toast.error(error.message);
           return;
         }
-        toast.success("Sandbox account created. Check your email to confirm, or sign in if confirmation is disabled.");
-        setIsSignUp(false);
+        // Sandbox accounts are auto-confirmed, so we can sign in immediately
+        const { error: signInErr } = await signIn(form.email, form.password);
+        if (signInErr) {
+          toast.success("Sandbox account created. Please sign in.");
+          setIsSignUp(false);
+          return;
+        }
+        toast.success("Sandbox account ready. Welcome!");
+        navigate("/vfd-sandbox");
       } else {
         const { error } = await signIn(form.email, form.password);
         if (error) {
