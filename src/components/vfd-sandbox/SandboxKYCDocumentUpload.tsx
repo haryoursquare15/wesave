@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, FileText, Loader2, Upload, X } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -70,7 +69,8 @@ export function SandboxKYCDocumentUpload({
   tierLevel,
   onAllRequiredUploaded,
 }: SandboxKYCDocumentUploadProps) {
-  const { user } = useAuth();
+  const { session, client: supabase } = useSandboxAwareAuth();
+  const user = session?.user ?? null;
   const { toast } = useToast();
   const [uploading, setUploading] = useState<KycDocumentType | null>(null);
   const [uploaded, setUploaded] = useState<Record<string, UploadedDoc>>({});

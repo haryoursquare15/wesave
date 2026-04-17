@@ -1,6 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
 import { useToast } from "@/hooks/use-toast";
 
 interface VfdClient {
@@ -43,7 +42,7 @@ interface VfdTransaction {
 }
 
 export function useVfdBanking() {
-  const { session } = useAuth();
+  const { session, client: supabase } = useSandboxAwareAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [client, setClient] = useState<VfdClient | null>(null);
