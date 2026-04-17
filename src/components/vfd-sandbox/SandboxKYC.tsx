@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
+import { SandboxKYCDocumentUpload } from "./SandboxKYCDocumentUpload";
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -39,7 +40,7 @@ const TIERS = [
     badge: "bg-primary/10 text-primary border-primary/20",
     dailyLimit: "₦100,000",
     txnLimit: "₦100,000",
-    requirements: ["BVN + NIN", "Date of Birth"],
+    requirements: ["BVN + NIN", "Date of Birth", "Address", "Government ID"],
     description: "Enhanced limits for regular users",
   },
   {
@@ -50,7 +51,7 @@ const TIERS = [
     badge: "bg-gold/10 text-gold border-gold/20",
     dailyLimit: "₦10,000,000",
     txnLimit: "₦1,000,000",
-    requirements: ["BVN + NIN", "Date of Birth", "Address"],
+    requirements: ["BVN + NIN", "DOB", "Address", "Government ID", "Utility Bill", "Passport Photo"],
     description: "Maximum limits for power users",
   },
 ];
@@ -90,6 +91,7 @@ export function SandboxKYC({ vfd, onComplete }: SandboxKYCProps) {
   const [address, setAddress] = useState("");
   const [bvnData, setBvnData] = useState<Record<string, unknown> | null>(null);
   const [isUpgrade, setIsUpgrade] = useState(false);
+  const [docsReady, setDocsReady] = useState(false);
 
   const currentTierNum = vfd.client?.tier ? parseInt(vfd.client.tier.replace("tier", "")) : 0;
 
@@ -195,20 +197,21 @@ export function SandboxKYC({ vfd, onComplete }: SandboxKYCProps) {
 
   // Validation
   const canProceed = () => {
+    const docsOk = selectedTier === 1 || docsReady;
     if (selectedTier === 1) {
-      return (bvn.length === 11 || nin.length === 11) && dob;
+      return (bvn.length === 11 || nin.length === 11) && !!dob;
     }
     if (selectedTier === 2) {
       if (isUpgrade) {
-        return (needsBvn ? bvn.length === 11 : true) && (needsNin ? nin.length === 11 : true);
+        return (needsBvn ? bvn.length === 11 : true) && (needsNin ? nin.length === 11 : true) && docsOk;
       }
-      return bvn.length === 11 && nin.length === 11 && dob;
+      return bvn.length === 11 && nin.length === 11 && !!dob && docsOk;
     }
     if (selectedTier === 3) {
       if (isUpgrade) {
-        return (needsBvn ? bvn.length === 11 : true) && (needsNin ? nin.length === 11 : true) && address.length > 5;
+        return (needsBvn ? bvn.length === 11 : true) && (needsNin ? nin.length === 11 : true) && address.length > 5 && docsOk;
       }
-      return bvn.length === 11 && nin.length === 11 && dob && address.length > 5;
+      return bvn.length === 11 && nin.length === 11 && !!dob && address.length > 5 && docsOk;
     }
     return false;
   };
@@ -373,6 +376,7 @@ export function SandboxKYC({ vfd, onComplete }: SandboxKYCProps) {
                 <div>
                   <Label className="text-xs font-medium text-muted-foreground">
                     BVN (Bank Verification Number)
+                    {selectedTier >= 2 && <span className="text-destructive ml-1">*</span>}
                     {selectedTier === 1 && <span className="text-muted-foreground/60 ml-1">or NIN below</span>}
                   </Label>
                   <Input
@@ -433,6 +437,14 @@ export function SandboxKYC({ vfd, onComplete }: SandboxKYCProps) {
                 </div>
               )}
             </div>
+
+            {/* Document upload (Tier 2 & 3) */}
+            {selectedTier >= 2 && (
+              <SandboxKYCDocumentUpload
+                tierLevel={selectedTier}
+                onAllRequiredUploaded={setDocsReady}
+              />
+            )}
 
             {/* Test Data Helper */}
             <div className="rounded-xl bg-warning/5 border border-warning/20 p-3">
