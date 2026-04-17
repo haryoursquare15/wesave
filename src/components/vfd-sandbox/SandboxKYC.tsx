@@ -40,7 +40,7 @@ const TIERS = [
     badge: "bg-primary/10 text-primary border-primary/20",
     dailyLimit: "₦100,000",
     txnLimit: "₦100,000",
-    requirements: ["BVN + NIN", "Date of Birth"],
+    requirements: ["BVN + NIN", "Date of Birth", "Address", "Government ID"],
     description: "Enhanced limits for regular users",
   },
   {
@@ -51,7 +51,7 @@ const TIERS = [
     badge: "bg-gold/10 text-gold border-gold/20",
     dailyLimit: "₦10,000,000",
     txnLimit: "₦1,000,000",
-    requirements: ["BVN + NIN", "Date of Birth", "Address"],
+    requirements: ["BVN + NIN", "DOB", "Address", "Government ID", "Utility Bill", "Passport Photo"],
     description: "Maximum limits for power users",
   },
 ];
