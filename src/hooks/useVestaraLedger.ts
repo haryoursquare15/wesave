@@ -1,6 +1,5 @@
 import { useState, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
 import { useToast } from "@/hooks/use-toast";
 
 /* ─── Types ─── */
@@ -60,7 +59,7 @@ export interface VestaraLockedFund {
 
 /* ─── Hook ─── */
 export function useVestaraLedger() {
-  const { session } = useAuth();
+  const { session, client: supabase } = useSandboxAwareAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [accounts, setAccounts] = useState<VestaraAccount[]>([]);
