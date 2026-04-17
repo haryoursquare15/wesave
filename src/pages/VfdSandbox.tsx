@@ -75,6 +75,7 @@ function VfdSandboxInner() {
           if (configRes?.data) setLockConfigs(configRes.data as LockConfig[]);
         });
       }
+      setClientChecked(true);
     });
 
     // Initialize Vestara accounts & load balance
