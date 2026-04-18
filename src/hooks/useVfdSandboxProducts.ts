@@ -1,10 +1,9 @@
 import { useState, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
 import { useToast } from "@/hooks/use-toast";
 
 export function useVfdSandboxProducts() {
-  const { session } = useAuth();
+  const { session, client } = useSandboxAwareAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
 
@@ -18,7 +17,7 @@ export function useVfdSandboxProducts() {
 
       setLoading(true);
       try {
-        const { data, error } = await supabase.functions.invoke("vfd-sandbox-products", {
+        const { data, error } = await client.functions.invoke("vfd-sandbox-products", {
           body: { action, ...body },
           headers: { Authorization: `Bearer ${accessToken}` },
         });
