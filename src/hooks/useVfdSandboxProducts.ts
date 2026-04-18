@@ -41,7 +41,7 @@ export function useVfdSandboxProducts() {
         setLoading(false);
       }
     },
-    [session?.access_token, toast]
+    [session?.access_token, client, toast]
   );
 
   // Thrift Groups (full parity)
