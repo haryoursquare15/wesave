@@ -283,9 +283,27 @@ export function SandboxSplitTab() {
               </div>
             )}
 
-            <div>
-              <Label>Merchant Name (optional)</Label>
-              <Input value={form.merchant_name} onChange={(e) => setForm(p => ({ ...p, merchant_name: e.target.value }))} placeholder="Restaurant name" />
+            {/* Merchant Bank Details */}
+            <div className="border-t border-border pt-3 space-y-3">
+              <h4 className="text-sm font-semibold">Merchant Bank Details *</h4>
+              <p className="text-xs text-muted-foreground">Once every participant pays, the full bill is auto-transferred to this account.</p>
+              <div>
+                <Label>Account Name</Label>
+                <Input value={form.merchant_name} onChange={(e) => setForm(p => ({ ...p, merchant_name: e.target.value }))} placeholder="e.g. Nkoyo Restaurant Ltd" />
+              </div>
+              <div>
+                <Label>Bank</Label>
+                <Select value={form.merchant_bank_name} onValueChange={(v) => setForm(p => ({ ...p, merchant_bank_name: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Select bank" /></SelectTrigger>
+                  <SelectContent>
+                    {NIGERIAN_BANKS.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Account Number (10 digits)</Label>
+                <Input value={form.merchant_account_number} onChange={(e) => setForm(p => ({ ...p, merchant_account_number: e.target.value.replace(/\D/g, "").slice(0, 10) }))} placeholder="0123456789" maxLength={10} inputMode="numeric" />
+              </div>
             </div>
 
             <Button onClick={handleCreate} disabled={products.loading || !form.purpose || !form.total_amount} className="w-full">
