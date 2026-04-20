@@ -138,7 +138,12 @@ export function SandboxSplitTab() {
               <span>Bill share: ₦{fmt(perPerson)}</span>
               <span>Platform fee: ₦{fmt(fee)}</span>
             </div>
-            {s.merchant_name && <p className="text-xs text-muted-foreground">Merchant: {s.merchant_name}</p>}
+            {s.merchant_name && (
+              <div className="text-xs text-muted-foreground border-t border-border pt-2">
+                <p className="font-semibold text-foreground">Merchant: {s.merchant_name}</p>
+                {s.merchant_bank_name && <p>{s.merchant_bank_name} — {s.merchant_account_number}</p>}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -151,6 +156,11 @@ export function SandboxSplitTab() {
               <p className="text-xs text-muted-foreground">{paidCount} paid so far. Settlement happens when all {s.split_count} have paid.</p>
             </div>
           </div>
+        )}
+
+        {/* Invite participants — share link */}
+        {s.status === "active" && slotsRemaining > 0 && isCreator && (
+          <SplitInviteBlock splitId={s.id} title={s.title || s.purpose} />
         )}
 
         {/* Action buttons */}
