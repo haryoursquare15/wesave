@@ -1198,9 +1198,10 @@ async function handleCreateSplit(userId: string, body: Record<string, unknown>) 
   // PRODUCTION PARITY: minimum ₦1,000 (not ₦100)
   if (!title || !totalAmount || totalAmount < 1000) return jsonResponse({ error: "Title and total amount (min ₦1,000) required" }, 400);
   if (splitCount < 2) return jsonResponse({ error: "Need at least 2 participants" }, 400);
+  if (splitCount > 50) return jsonResponse({ error: "Maximum 50 participants allowed" }, 400);
 
   const perPerson = Math.ceil((totalAmount / splitCount) * 100) / 100;
-  // PRODUCTION PARITY: ₦100 flat fee (not 1.5%)
+  // PRODUCTION PARITY: ₦100 flat fee, fee-per-person rounded to 2dp
   const platformFee = 100;
   const feePerPerson = Math.ceil((platformFee / splitCount) * 100) / 100;
   const expiryDate = new Date();
