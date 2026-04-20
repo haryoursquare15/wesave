@@ -156,10 +156,16 @@ export function SandboxGoalTab() {
           <ArrowLeft className="h-3 w-3" /> Back to Campaigns
         </button>
 
-        {/* Hero */}
-        <div className="h-28 rounded-xl bg-gradient-to-br from-primary/10 to-secondary/10 flex items-center justify-center">
-          <Target className="h-10 w-10 text-primary/30" />
-        </div>
+        {/* Hero — image or placeholder */}
+        {c.campaign_image ? (
+          <div className="h-44 rounded-xl overflow-hidden bg-muted">
+            <img src={c.campaign_image} alt={c.title} className="w-full h-full object-cover" />
+          </div>
+        ) : (
+          <div className="h-28 rounded-xl bg-gradient-to-br from-primary/10 to-secondary/10 flex items-center justify-center">
+            <Target className="h-10 w-10 text-primary/30" />
+          </div>
+        )}
 
         <div className="flex items-center gap-2">
           <Badge variant={c.status === "active" ? "default" : "secondary"}>{c.status}</Badge>
@@ -185,6 +191,19 @@ export function SandboxGoalTab() {
         <div className="flex items-center gap-4 text-sm text-muted-foreground">
           <span className="flex items-center gap-1"><Users className="h-4 w-4" /> {c.contributor_count} contributors</span>
           {c.deadline && <span className="flex items-center gap-1"><Clock className="h-4 w-4" /> {format(new Date(c.deadline), "MMM d, yyyy")}</span>}
+        </div>
+
+        {/* Share */}
+        <div className="p-3 rounded-xl bg-card border border-border space-y-2">
+          <div className="flex items-center gap-2">
+            <Share2 className="h-4 w-4 text-primary" />
+            <p className="text-sm font-semibold">Share this campaign</p>
+          </div>
+          <SocialShareButtons
+            url={`${window.location.origin}/goal/${c.campaign_slug || c.id}`}
+            title={c.title}
+            message={`Help support "${c.title}" on Wesave`}
+          />
         </div>
 
         {/* Contribute */}
