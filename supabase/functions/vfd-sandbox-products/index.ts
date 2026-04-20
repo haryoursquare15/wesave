@@ -1054,17 +1054,30 @@ async function handleIndependentWithdrawal(userId: string, body: Record<string, 
 
 async function handleCreateCampaign(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
-  const title = body.title as string;
+  const title = (body.title as string)?.trim();
   const goalAmount = Number(body.goal_amount);
-  const description = body.description as string || null;
+  const description = (body.description as string)?.trim() || null;
   const deadline = body.deadline as string || null;
   const contributionVisibility = (body.contribution_visibility as string) || "public";
-  const beneficiaryAccountName = body.beneficiary_account_name as string || null;
-  const beneficiaryBankName = body.beneficiary_bank_name as string || null;
-  const beneficiaryAccountNumber = body.beneficiary_account_number as string || null;
+  const beneficiaryAccountName = (body.beneficiary_account_name as string)?.trim() || null;
+  const beneficiaryBankName = (body.beneficiary_bank_name as string)?.trim() || null;
+  const beneficiaryAccountNumber = (body.beneficiary_account_number as string)?.trim() || null;
   const campaignImage = body.campaign_image as string || null;
 
-  if (!title || !goalAmount) return jsonResponse({ error: "Title and goal amount required" }, 400);
+  // Parity with main app validation
+  if (!title) return jsonResponse({ error: "Campaign title is required" }, 400);
+  if (!goalAmount || isNaN(goalAmount) || goalAmount < 1000) {
+    return jsonResponse({ error: "Goal amount must be at least ₦1,000" }, 400);
+  }
+  if (!beneficiaryBankName || !beneficiaryAccountNumber || !beneficiaryAccountName) {
+    return jsonResponse({ error: "Beneficiary bank details are required" }, 400);
+  }
+  if (!/^\d{10}$/.test(beneficiaryAccountNumber)) {
+    return jsonResponse({ error: "Account number must be 10 digits" }, 400);
+  }
+  if (!["public", "anonymous"].includes(contributionVisibility)) {
+    return jsonResponse({ error: "Invalid contribution visibility" }, 400);
+  }
 
   const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') + '-' + Date.now().toString(36);
 
