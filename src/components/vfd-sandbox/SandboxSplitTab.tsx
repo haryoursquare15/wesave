@@ -64,15 +64,26 @@ export function SandboxSplitTab() {
     if (!form.purpose.trim()) { toast({ title: "Purpose is required", variant: "destructive" }); return; }
     if (totalAmount < 1000) { toast({ title: "Minimum ₦1,000", description: "The total bill must be at least ₦1,000.", variant: "destructive" }); return; }
     if (splitCount < 2) { toast({ title: "Need at least 2 participants", variant: "destructive" }); return; }
+    if (!form.merchant_name.trim() || !form.merchant_bank_name || !form.merchant_account_number) {
+      toast({ title: "Merchant bank details required", description: "Add the merchant's account name, bank, and 10-digit account number.", variant: "destructive" });
+      return;
+    }
+    if (form.merchant_account_number.length !== 10) {
+      toast({ title: "Account number must be 10 digits", variant: "destructive" }); return;
+    }
 
     const result = await products.createSplit({
       title: form.purpose,
       total_amount: totalAmount,
       split_count: splitCount,
-      merchant_name: form.merchant_name || null,
+      merchant_name: form.merchant_name,
+      merchant_account_name: form.merchant_name,
+      merchant_bank_name: form.merchant_bank_name,
+      merchant_account_number: form.merchant_account_number,
+      purpose: form.purpose,
     });
     if (result?.data) {
-      toast({ title: "Split Created!" });
+      toast({ title: "Split Created!", description: "Share the link with participants. Funds auto-transfer to the merchant once everyone has paid." });
       setForm({ purpose: "", total_amount: "", split_count: "2", merchant_name: "", merchant_bank_name: "", merchant_account_number: "", expiry_date: "" });
       setShowCreate(false);
       await loadSplits();
