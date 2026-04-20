@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { addDays, addWeeks, addMonths, format } from "date-fns";
 import { SandboxTargetInviteDialog } from "./SandboxTargetInviteDialog";
+import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
 
 interface TargetGroup {
   id: string; name: string; goal_amount: number; contribution_amount: number;
@@ -30,6 +31,8 @@ const fmt = (n: number) => new Intl.NumberFormat("en-NG").format(n);
 export function SandboxTargetTab() {
   const { toast } = useToast();
   const products = useVfdSandboxProducts();
+  const { session } = useSandboxAwareAuth();
+  const currentUserId = session?.user?.id;
   const [targets, setTargets] = useState<TargetGroup[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -103,7 +106,7 @@ export function SandboxTargetTab() {
           <button onClick={() => { setDetailId(null); setDetailData(null); }} className="text-sm text-primary flex items-center gap-1">
             <ArrowLeft className="h-3 w-3" /> Back to Targets
           </button>
-          {!isIndependent && !isClosed && (
+          {!isIndependent && !isClosed && t.admin_id === currentUserId && (
             <Button size="sm" variant="outline" onClick={() => setShowInviteDialog(true)}>
               <UserPlus className="h-4 w-4 mr-1" /> Invite
             </Button>
