@@ -294,13 +294,9 @@ export function SandboxGoalTab() {
                   Post Update
                 </Button>
               </div>
-              {c.beneficiary_bank_name && (
-                <div className="p-3 rounded-lg bg-muted/30 border border-border text-xs space-y-1">
-                  <p className="font-semibold">Beneficiary Details</p>
-                  <p>{c.beneficiary_account_name}</p>
-                  <p>{c.beneficiary_bank_name} — {c.beneficiary_account_number}</p>
-                </div>
-              )}
+              <p className="text-[11px] text-muted-foreground p-2 rounded bg-muted/30">
+                Beneficiary bank details are kept private and used only to settle contributions to you. They are not shown to contributors.
+              </p>
             </TabsContent>
           )}
         </Tabs>
@@ -338,6 +334,36 @@ export function SandboxGoalTab() {
               <Label>Campaign Title *</Label>
               <Input value={form.title} onChange={(e) => setForm(p => ({ ...p, title: e.target.value }))} placeholder="e.g., Help Aisha's Surgery Fund" maxLength={100} />
             </div>
+
+            {/* Image upload */}
+            <div>
+              <Label>Campaign Image (optional)</Label>
+              {form.campaign_image ? (
+                <div className="relative rounded-lg overflow-hidden border border-border h-40 mt-1">
+                  <img src={form.campaign_image} alt="preview" className="w-full h-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => setForm(p => ({ ...p, campaign_image: "" }))}
+                    className="absolute top-2 right-2 bg-background/80 backdrop-blur text-xs px-2 py-1 rounded-md border border-border"
+                  >
+                    Replace
+                  </button>
+                </div>
+              ) : (
+                <label className="mt-1 flex flex-col items-center justify-center h-32 rounded-lg border-2 border-dashed border-border cursor-pointer hover:border-primary/40 transition">
+                  {uploadingImage ? (
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  ) : (
+                    <>
+                      <ImagePlus className="h-6 w-6 text-muted-foreground mb-1" />
+                      <span className="text-xs text-muted-foreground">Tap to upload (max 5MB)</span>
+                    </>
+                  )}
+                  <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={uploadingImage} />
+                </label>
+              )}
+            </div>
+
             <div>
               <Label>Description</Label>
               <Textarea value={form.description} onChange={(e) => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Describe your campaign..." rows={3} maxLength={2000} />
