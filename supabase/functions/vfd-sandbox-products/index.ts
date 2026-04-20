@@ -1343,6 +1343,11 @@ async function handlePaySplit(userId: string, body: Record<string, unknown>) {
     await sendNotification(split.creator_id, "SplitPay Complete!",
       `All participants have paid for "${split.title}". Settlement sent to ${split.merchant_account_name}.`,
       "split_completed");
+  } else if (split.creator_id !== userId) {
+    // Notify creator of incremental payment
+    await sendNotification(split.creator_id, "SplitPay Payment Received",
+      `A participant just paid their share of "${split.title}" (${paidCount}/${split.split_count} paid).`,
+      "split_payment");
   }
 
   return jsonResponse({ data: { paid: true, amount: totalDebit, bill_share: amount, fee_share: feeShare, all_paid: allPaid } });
