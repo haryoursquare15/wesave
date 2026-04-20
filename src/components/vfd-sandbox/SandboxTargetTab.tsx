@@ -16,6 +16,7 @@ import {
   CalendarDays, AlertTriangle, Wallet, Vote, ArrowDownToLine, UserPlus,
 } from "lucide-react";
 import { addDays, addWeeks, addMonths, format } from "date-fns";
+import { SandboxTargetInviteDialog } from "./SandboxTargetInviteDialog";
 
 interface TargetGroup {
   id: string; name: string; goal_amount: number; contribution_amount: number;
