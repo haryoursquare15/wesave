@@ -42,7 +42,8 @@ const nigerianBanks = [
 export function SandboxGoalTab() {
   const { toast } = useToast();
   const products = useVfdSandboxProducts();
-  const { client, user } = useSandboxAwareAuth();
+  const { client, session } = useSandboxAwareAuth();
+  const userId = session?.user?.id;
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
