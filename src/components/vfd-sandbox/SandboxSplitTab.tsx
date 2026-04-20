@@ -359,3 +359,61 @@ export function SandboxSplitTab() {
     </div>
   );
 }
+
+/* ─── Inline share/invite block for a split ─── */
+function SplitInviteBlock({ splitId, title }: { splitId: string; title: string }) {
+  const { toast } = useToast();
+  const [copied, setCopied] = useState(false);
+  const link = `${window.location.origin}/vfd-sandbox?split=${splitId}`;
+  const text = `Join me to split the bill for "${title}" on Vestara: ${link}`;
+
+  const copy = async () => {
+    await navigator.clipboard.writeText(link);
+    setCopied(true);
+    toast({ title: "Link copied!" });
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const share = async (channel: "whatsapp" | "twitter" | "telegram" | "email" | "native") => {
+    const encoded = encodeURIComponent(text);
+    if (channel === "native" && navigator.share) {
+      try { await navigator.share({ title: `Split: ${title}`, text, url: link }); } catch { /* cancelled */ }
+      return;
+    }
+    const urls: Record<string, string> = {
+      whatsapp: `https://wa.me/?text=${encoded}`,
+      twitter: `https://twitter.com/intent/tweet?text=${encoded}`,
+      telegram: `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`,
+      email: `mailto:?subject=${encodeURIComponent(`Split: ${title}`)}&body=${encoded}`,
+    };
+    window.open(urls[channel], "_blank", "noopener,noreferrer");
+  };
+
+  return (
+    <Card>
+      <CardContent className="p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <UserPlus className="h-4 w-4 text-primary" />
+          <p className="text-sm font-semibold">Invite participants</p>
+        </div>
+        <div className="flex gap-2">
+          <Input value={link} readOnly className="text-xs" />
+          <Button variant="outline" size="icon" onClick={copy} title="Copy link">
+            {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+          </Button>
+        </div>
+        <div className="grid grid-cols-4 gap-2">
+          <Button variant="outline" size="sm" onClick={() => share("whatsapp")}>WhatsApp</Button>
+          <Button variant="outline" size="sm" onClick={() => share("twitter")}>X</Button>
+          <Button variant="outline" size="sm" onClick={() => share("telegram")}>Telegram</Button>
+          <Button variant="outline" size="sm" onClick={() => share("email")}>Email</Button>
+        </div>
+        {typeof navigator !== "undefined" && "share" in navigator && (
+          <Button variant="ghost" size="sm" className="w-full" onClick={() => share("native")}>
+            <Share2 className="h-3 w-3 mr-1" /> More share options
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
