@@ -4,13 +4,23 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useVfdSandboxProducts } from "@/hooks/useVfdSandboxProducts";
 import {
   Receipt, Plus, RefreshCw, CreditCard, ArrowLeft, CheckCircle,
-  XCircle, Ban, Info, AlertTriangle,
+  XCircle, Ban, Info, AlertTriangle, UserPlus, Share2, Copy, Check,
 } from "lucide-react";
 import { format } from "date-fns";
+import { SandboxGroupInviteDialog } from "./SandboxGroupInviteDialog";
+
+const NIGERIAN_BANKS = [
+  "Access Bank", "Citibank", "Ecobank", "Fidelity Bank", "First Bank",
+  "FCMB", "GTBank", "Heritage Bank", "Keystone Bank", "Kuda Bank",
+  "Moniepoint MFB", "OPay", "Palmpay", "Polaris Bank", "Providus Bank",
+  "Stanbic IBTC", "Sterling Bank", "UBA", "Union Bank", "Unity Bank",
+  "VFD MFB", "Wema Bank", "Zenith Bank",
+];
 
 interface Split {
   id: string; title: string; total_amount: number; split_count: number;
