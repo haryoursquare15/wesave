@@ -2082,6 +2082,12 @@ Deno.serve(async (req) => {
       case "create_group_invite_link": return await handleCreateGroupInviteLink(userId, body);
       case "join_group_via_link": return await handleJoinGroupViaLink(userId, body);
       case "list_group_invites": return await handleListGroupInvites(userId);
+      case "list_pending_group_invitees": return await handleListPendingGroupInvitees(body);
+
+      // In-app notifications
+      case "list_notifications": return await handleListNotifications(userId);
+      case "mark_notification_read": return await handleMarkNotificationRead(userId, body);
+      case "mark_all_notifications_read": return await handleMarkAllNotificationsRead(userId);
 
       // Target Ajo (full parity)
       case "create_target": return await handleCreateTarget(userId, body);
