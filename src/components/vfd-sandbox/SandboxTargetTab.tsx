@@ -106,7 +106,7 @@ export function SandboxTargetTab() {
           <button onClick={() => { setDetailId(null); setDetailData(null); }} className="text-sm text-primary flex items-center gap-1">
             <ArrowLeft className="h-3 w-3" /> Back to Targets
           </button>
-          {!isIndependent && !isClosed && (
+          {!isIndependent && !isClosed && t.admin_id === currentUserId && (
             <Button size="sm" variant="outline" onClick={() => setShowInviteDialog(true)}>
               <UserPlus className="h-4 w-4 mr-1" /> Invite
             </Button>
