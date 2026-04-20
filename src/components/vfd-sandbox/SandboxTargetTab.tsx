@@ -31,6 +31,8 @@ const fmt = (n: number) => new Intl.NumberFormat("en-NG").format(n);
 export function SandboxTargetTab() {
   const { toast } = useToast();
   const products = useVfdSandboxProducts();
+  const { session } = useSandboxAwareAuth();
+  const currentUserId = session?.user?.id;
   const [targets, setTargets] = useState<TargetGroup[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
