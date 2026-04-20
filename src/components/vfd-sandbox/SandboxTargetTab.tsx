@@ -244,6 +244,14 @@ export function SandboxTargetTab() {
             ))}
           </TabsContent>
         </Tabs>
+
+        <SandboxTargetInviteDialog
+          open={showInviteDialog}
+          onOpenChange={setShowInviteDialog}
+          targetId={t.id}
+          targetName={t.name}
+          onMemberAdded={() => loadDetail(t.id)}
+        />
       </div>
     );
   }
