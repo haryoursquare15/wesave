@@ -2076,7 +2076,7 @@ async function handleListNotifications(userId: string) {
   const { data } = await db.from("vfd_sandbox_notifications")
     .select("*").eq("user_id", userId)
     .order("created_at", { ascending: false }).limit(50);
-  const unreadCount = (data || []).filter((n: { read_at: string | null }) => !n.read_at).length;
+  const unreadCount = (data || []).filter((n: { is_read: boolean | null }) => !n.is_read).length;
   return jsonResponse({ data: data || [], unread_count: unreadCount });
 }
 
@@ -2084,15 +2084,15 @@ async function handleMarkNotificationRead(userId: string, body: Record<string, u
   const db = getSupabaseAdmin();
   const id = body.notification_id as string;
   if (!id) return jsonResponse({ error: "notification_id required" }, 400);
-  await db.from("vfd_sandbox_notifications").update({ read_at: new Date().toISOString() })
+  await db.from("vfd_sandbox_notifications").update({ is_read: true })
     .eq("id", id).eq("user_id", userId);
   return jsonResponse({ data: { success: true } });
 }
 
 async function handleMarkAllNotificationsRead(userId: string) {
   const db = getSupabaseAdmin();
-  await db.from("vfd_sandbox_notifications").update({ read_at: new Date().toISOString() })
-    .eq("user_id", userId).is("read_at", null);
+  await db.from("vfd_sandbox_notifications").update({ is_read: true })
+    .eq("user_id", userId).eq("is_read", false);
   return jsonResponse({ data: { success: true } });
 }
 
