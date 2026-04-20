@@ -1503,6 +1503,7 @@ async function handleJoinAssociation(userId: string, body: Record<string, unknow
 
   const { data: assoc } = await db.from("vfd_sandbox_associations").select("*").eq("id", associationId).single();
   if (!assoc) return jsonResponse({ error: "Association not found" }, 404);
+  if (assoc.status !== "active") return jsonResponse({ error: "Association is not active" }, 400);
   if (assoc.member_count >= assoc.max_members) return jsonResponse({ error: "Association is full" }, 400);
 
   const { data: existing } = await db.from("vfd_sandbox_association_memberships")
@@ -1518,6 +1519,13 @@ async function handleJoinAssociation(userId: string, body: Record<string, unknow
     member_count: assoc.member_count + 1,
     updated_at: new Date().toISOString(),
   }).eq("id", associationId);
+
+  // Notify admin
+  if (assoc.admin_id !== userId) {
+    await sendNotification(assoc.admin_id, "New Association Member",
+      `A new member has joined "${assoc.name}".`,
+      "association_joined");
+  }
 
   return jsonResponse({ data: { joined: true } });
 }
