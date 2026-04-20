@@ -4,13 +4,23 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useVfdSandboxProducts } from "@/hooks/useVfdSandboxProducts";
 import {
   Receipt, Plus, RefreshCw, CreditCard, ArrowLeft, CheckCircle,
-  XCircle, Ban, Info, AlertTriangle,
+  XCircle, Ban, Info, AlertTriangle, UserPlus, Share2, Copy, Check,
 } from "lucide-react";
 import { format } from "date-fns";
+import { SandboxGroupInviteDialog } from "./SandboxGroupInviteDialog";
+
+const NIGERIAN_BANKS = [
+  "Access Bank", "Citibank", "Ecobank", "Fidelity Bank", "First Bank",
+  "FCMB", "GTBank", "Heritage Bank", "Keystone Bank", "Kuda Bank",
+  "Moniepoint MFB", "OPay", "Palmpay", "Polaris Bank", "Providus Bank",
+  "Stanbic IBTC", "Sterling Bank", "UBA", "Union Bank", "Unity Bank",
+  "VFD MFB", "Wema Bank", "Zenith Bank",
+];
 
 interface Split {
   id: string; title: string; total_amount: number; split_count: number;
@@ -54,15 +64,26 @@ export function SandboxSplitTab() {
     if (!form.purpose.trim()) { toast({ title: "Purpose is required", variant: "destructive" }); return; }
     if (totalAmount < 1000) { toast({ title: "Minimum ₦1,000", description: "The total bill must be at least ₦1,000.", variant: "destructive" }); return; }
     if (splitCount < 2) { toast({ title: "Need at least 2 participants", variant: "destructive" }); return; }
+    if (!form.merchant_name.trim() || !form.merchant_bank_name || !form.merchant_account_number) {
+      toast({ title: "Merchant bank details required", description: "Add the merchant's account name, bank, and 10-digit account number.", variant: "destructive" });
+      return;
+    }
+    if (form.merchant_account_number.length !== 10) {
+      toast({ title: "Account number must be 10 digits", variant: "destructive" }); return;
+    }
 
     const result = await products.createSplit({
       title: form.purpose,
       total_amount: totalAmount,
       split_count: splitCount,
-      merchant_name: form.merchant_name || null,
+      merchant_name: form.merchant_name,
+      merchant_account_name: form.merchant_name,
+      merchant_bank_name: form.merchant_bank_name,
+      merchant_account_number: form.merchant_account_number,
+      purpose: form.purpose,
     });
     if (result?.data) {
-      toast({ title: "Split Created!" });
+      toast({ title: "Split Created!", description: "Share the link with participants. Funds auto-transfer to the merchant once everyone has paid." });
       setForm({ purpose: "", total_amount: "", split_count: "2", merchant_name: "", merchant_bank_name: "", merchant_account_number: "", expiry_date: "" });
       setShowCreate(false);
       await loadSplits();
@@ -117,7 +138,12 @@ export function SandboxSplitTab() {
               <span>Bill share: ₦{fmt(perPerson)}</span>
               <span>Platform fee: ₦{fmt(fee)}</span>
             </div>
-            {s.merchant_name && <p className="text-xs text-muted-foreground">Merchant: {s.merchant_name}</p>}
+            {s.merchant_name && (
+              <div className="text-xs text-muted-foreground border-t border-border pt-2">
+                <p className="font-semibold text-foreground">Merchant: {s.merchant_name}</p>
+                {s.merchant_bank_name && <p>{s.merchant_bank_name} — {s.merchant_account_number}</p>}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -130,6 +156,11 @@ export function SandboxSplitTab() {
               <p className="text-xs text-muted-foreground">{paidCount} paid so far. Settlement happens when all {s.split_count} have paid.</p>
             </div>
           </div>
+        )}
+
+        {/* Invite participants — share link */}
+        {s.status === "active" && slotsRemaining > 0 && isCreator && (
+          <SplitInviteBlock splitId={s.id} title={s.title || s.purpose} />
         )}
 
         {/* Action buttons */}
@@ -262,9 +293,27 @@ export function SandboxSplitTab() {
               </div>
             )}
 
-            <div>
-              <Label>Merchant Name (optional)</Label>
-              <Input value={form.merchant_name} onChange={(e) => setForm(p => ({ ...p, merchant_name: e.target.value }))} placeholder="Restaurant name" />
+            {/* Merchant Bank Details */}
+            <div className="border-t border-border pt-3 space-y-3">
+              <h4 className="text-sm font-semibold">Merchant Bank Details *</h4>
+              <p className="text-xs text-muted-foreground">Once every participant pays, the full bill is auto-transferred to this account.</p>
+              <div>
+                <Label>Account Name</Label>
+                <Input value={form.merchant_name} onChange={(e) => setForm(p => ({ ...p, merchant_name: e.target.value }))} placeholder="e.g. Nkoyo Restaurant Ltd" />
+              </div>
+              <div>
+                <Label>Bank</Label>
+                <Select value={form.merchant_bank_name} onValueChange={(v) => setForm(p => ({ ...p, merchant_bank_name: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Select bank" /></SelectTrigger>
+                  <SelectContent>
+                    {NIGERIAN_BANKS.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Account Number (10 digits)</Label>
+                <Input value={form.merchant_account_number} onChange={(e) => setForm(p => ({ ...p, merchant_account_number: e.target.value.replace(/\D/g, "").slice(0, 10) }))} placeholder="0123456789" maxLength={10} inputMode="numeric" />
+              </div>
             </div>
 
             <Button onClick={handleCreate} disabled={products.loading || !form.purpose || !form.total_amount} className="w-full">
@@ -308,5 +357,63 @@ export function SandboxSplitTab() {
         </div>
       )}
     </div>
+  );
+}
+
+/* ─── Inline share/invite block for a split ─── */
+function SplitInviteBlock({ splitId, title }: { splitId: string; title: string }) {
+  const { toast } = useToast();
+  const [copied, setCopied] = useState(false);
+  const link = `${window.location.origin}/vfd-sandbox?split=${splitId}`;
+  const text = `Join me to split the bill for "${title}" on Vestara: ${link}`;
+
+  const copy = async () => {
+    await navigator.clipboard.writeText(link);
+    setCopied(true);
+    toast({ title: "Link copied!" });
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const share = async (channel: "whatsapp" | "twitter" | "telegram" | "email" | "native") => {
+    const encoded = encodeURIComponent(text);
+    if (channel === "native" && navigator.share) {
+      try { await navigator.share({ title: `Split: ${title}`, text, url: link }); } catch { /* cancelled */ }
+      return;
+    }
+    const urls: Record<string, string> = {
+      whatsapp: `https://wa.me/?text=${encoded}`,
+      twitter: `https://twitter.com/intent/tweet?text=${encoded}`,
+      telegram: `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`,
+      email: `mailto:?subject=${encodeURIComponent(`Split: ${title}`)}&body=${encoded}`,
+    };
+    window.open(urls[channel], "_blank", "noopener,noreferrer");
+  };
+
+  return (
+    <Card>
+      <CardContent className="p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <UserPlus className="h-4 w-4 text-primary" />
+          <p className="text-sm font-semibold">Invite participants</p>
+        </div>
+        <div className="flex gap-2">
+          <Input value={link} readOnly className="text-xs" />
+          <Button variant="outline" size="icon" onClick={copy} title="Copy link">
+            {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+          </Button>
+        </div>
+        <div className="grid grid-cols-4 gap-2">
+          <Button variant="outline" size="sm" onClick={() => share("whatsapp")}>WhatsApp</Button>
+          <Button variant="outline" size="sm" onClick={() => share("twitter")}>X</Button>
+          <Button variant="outline" size="sm" onClick={() => share("telegram")}>Telegram</Button>
+          <Button variant="outline" size="sm" onClick={() => share("email")}>Email</Button>
+        </div>
+        {typeof navigator !== "undefined" && "share" in navigator && (
+          <Button variant="ghost" size="sm" className="w-full" onClick={() => share("native")}>
+            <Share2 className="h-3 w-3 mr-1" /> More share options
+          </Button>
+        )}
+      </CardContent>
+    </Card>
   );
 }

@@ -1926,7 +1926,8 @@ async function handleInviteGroupMember(userId: string, body: Record<string, unkn
 
   const { data: group } = await db.from("vfd_sandbox_groups").select("*").eq("id", groupId).single();
   if (!group) return jsonResponse({ error: "Group not found" }, 404);
-  if (group.status !== "pending") return jsonResponse({ error: "Group is no longer accepting members" }, 400);
+  // Allow inviting while group is pending OR active-but-not-full
+  if (group.status === "completed") return jsonResponse({ error: "Group has already completed" }, 400);
   if (group.member_count >= group.max_members) return jsonResponse({ error: "Group is full" }, 400);
 
   // Check if already a member
@@ -2047,6 +2048,55 @@ async function handleListGroupInvites(userId: string) {
 }
 
 // =============================================
+// PENDING-INVITEE LOOKUP (for "Already invited" badge in search)
+// =============================================
+async function handleListPendingGroupInvitees(body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const groupId = body.group_id as string;
+  if (!groupId) return jsonResponse({ error: "group_id required" }, 400);
+
+  const { data: invites } = await db.from("vfd_sandbox_group_invites")
+    .select("invitee_id, status").eq("group_id", groupId).eq("status", "pending");
+  const { data: members } = await db.from("vfd_sandbox_group_members")
+    .select("user_id").eq("group_id", groupId);
+
+  return jsonResponse({
+    data: {
+      invited_user_ids: (invites || []).map((i: { invitee_id: string }) => i.invitee_id),
+      member_user_ids: (members || []).map((m: { user_id: string }) => m.user_id),
+    },
+  });
+}
+
+// =============================================
+// IN-APP NOTIFICATIONS
+// =============================================
+async function handleListNotifications(userId: string) {
+  const db = getSupabaseAdmin();
+  const { data } = await db.from("vfd_sandbox_notifications")
+    .select("*").eq("user_id", userId)
+    .order("created_at", { ascending: false }).limit(50);
+  const unreadCount = (data || []).filter((n: { is_read: boolean | null }) => !n.is_read).length;
+  return jsonResponse({ data: data || [], unread_count: unreadCount });
+}
+
+async function handleMarkNotificationRead(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const id = body.notification_id as string;
+  if (!id) return jsonResponse({ error: "notification_id required" }, 400);
+  await db.from("vfd_sandbox_notifications").update({ is_read: true })
+    .eq("id", id).eq("user_id", userId);
+  return jsonResponse({ data: { success: true } });
+}
+
+async function handleMarkAllNotificationsRead(userId: string) {
+  const db = getSupabaseAdmin();
+  await db.from("vfd_sandbox_notifications").update({ is_read: true })
+    .eq("user_id", userId).eq("is_read", false);
+  return jsonResponse({ data: { success: true } });
+}
+
+// =============================================
 // MAIN HANDLER
 // =============================================
 
@@ -2081,6 +2131,12 @@ Deno.serve(async (req) => {
       case "create_group_invite_link": return await handleCreateGroupInviteLink(userId, body);
       case "join_group_via_link": return await handleJoinGroupViaLink(userId, body);
       case "list_group_invites": return await handleListGroupInvites(userId);
+      case "list_pending_group_invitees": return await handleListPendingGroupInvitees(body);
+
+      // In-app notifications
+      case "list_notifications": return await handleListNotifications(userId);
+      case "mark_notification_read": return await handleMarkNotificationRead(userId, body);
+      case "mark_all_notifications_read": return await handleMarkAllNotificationsRead(userId);
 
       // Target Ajo (full parity)
       case "create_target": return await handleCreateTarget(userId, body);
