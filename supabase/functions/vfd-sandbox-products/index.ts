@@ -1383,7 +1383,7 @@ async function handleCancelSplit(userId: string, body: Record<string, unknown>) 
     .select("*").eq("split_id", splitId).eq("status", "paid");
 
   let refundedCount = 0;
-  const feeShare = Math.ceil(100 / split.split_count);
+  const feeShare = Number(split.fee_per_person || (Math.ceil(100 / split.split_count * 100) / 100));
   for (const p of paidParticipants || []) {
     const refundAmount = Number(p.amount) + feeShare;
     await creditWallet(p.user_id, refundAmount);
@@ -1417,7 +1417,7 @@ async function handleRemoveSplitParticipant(userId: string, body: Record<string,
 
   // Refund if already paid
   if (participant.status === "paid") {
-    const feeShare = Math.ceil(100 / split.split_count);
+    const feeShare = Number(split.fee_per_person || (Math.ceil(100 / split.split_count * 100) / 100));
     const refundAmount = Number(participant.amount) + feeShare;
     await creditWallet(participantUserId, refundAmount);
     await db.from("vfd_sandbox_splits").update({
