@@ -60,6 +60,7 @@ export function useVfdSandboxProducts() {
   const inviteGroupMember = useCallback((group_id: string, invitee_id: string) => invoke("invite_group_member", { group_id, invitee_id }), [invoke]);
   const respondGroupInvite = useCallback((invite_id: string, accept: boolean) => invoke("respond_group_invite", { invite_id, accept }), [invoke]);
   const createGroupInviteLink = useCallback((group_id: string) => invoke("create_group_invite_link", { group_id }), [invoke]);
+  const validateGroupInviteLink = useCallback((token: string) => invoke("validate_group_invite_link", { token }), [invoke]);
   const joinGroupViaLink = useCallback((token: string) => invoke("join_group_via_link", { token }), [invoke]);
   const listGroupInvites = useCallback(() => invoke("list_group_invites"), [invoke]);
   const listPendingGroupInvitees = useCallback((group_id: string) => invoke("list_pending_group_invitees", { group_id }), [invoke]);
@@ -126,7 +127,7 @@ export function useVfdSandboxProducts() {
     // Thrift Groups
     createGroup, listGroups, joinGroup, commenceGroup, contributeGroup, getGroupDetail,
     requestSwap, respondSwap, exitGroup, confirmContinue, restartGroup,
-    searchUsers, inviteGroupMember, respondGroupInvite, createGroupInviteLink, joinGroupViaLink, listGroupInvites, listPendingGroupInvitees,
+    searchUsers, inviteGroupMember, respondGroupInvite, createGroupInviteLink, validateGroupInviteLink, joinGroupViaLink, listGroupInvites, listPendingGroupInvitees,
     // Notifications
     listNotifications, markNotificationRead, markAllNotificationsRead,
     // Target Ajo

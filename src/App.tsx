@@ -40,6 +40,7 @@ import DeleteAccount from "./pages/DeleteAccount";
 import AppHome from "./pages/AppHome";
 import VfdSandbox from "./pages/VfdSandbox";
 import SandboxAuth from "./pages/SandboxAuth";
+import SandboxInvite from "./pages/SandboxInvite";
 import { SandboxAuthProvider } from "./contexts/SandboxAuthContext";
 import NotFound from "./pages/NotFound";
 
@@ -150,6 +151,7 @@ const App = () => {
                     <SandboxAuth />
                   </SandboxAuthProvider>
                 } />
+                <Route path="/vfd-sandbox/invite/:token" element={<SandboxInvite />} />
                 <Route path="/vfd-sandbox" element={<VfdSandbox />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>

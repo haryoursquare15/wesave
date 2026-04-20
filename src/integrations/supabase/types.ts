@@ -3961,6 +3961,7 @@ export type Database = {
       }
       vfd_sandbox_group_members: {
         Row: {
+          continue_confirmed_at: string | null
           group_id: string
           has_contributed_current: boolean
           has_received_payout: boolean
@@ -3971,8 +3972,10 @@ export type Database = {
           status: string | null
           terms_accepted_at: string | null
           user_id: string
+          wants_continue: boolean
         }
         Insert: {
+          continue_confirmed_at?: string | null
           group_id: string
           has_contributed_current?: boolean
           has_received_payout?: boolean
@@ -3983,8 +3986,10 @@ export type Database = {
           status?: string | null
           terms_accepted_at?: string | null
           user_id: string
+          wants_continue?: boolean
         }
         Update: {
+          continue_confirmed_at?: string | null
           group_id?: string
           has_contributed_current?: boolean
           has_received_payout?: boolean
@@ -3995,6 +4000,7 @@ export type Database = {
           status?: string | null
           terms_accepted_at?: string | null
           user_id?: string
+          wants_continue?: boolean
         }
         Relationships: [
           {

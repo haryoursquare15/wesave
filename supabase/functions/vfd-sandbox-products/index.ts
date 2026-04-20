@@ -627,6 +627,11 @@ async function handleConfirmContinue(userId: string, body: Record<string, unknow
     .select("*").eq("group_id", groupId).eq("user_id", userId).eq("status", "active").maybeSingle();
   if (!membership) return jsonResponse({ error: "Not an active member" }, 400);
 
+  const { error: updateError } = await db.from("vfd_sandbox_group_members")
+    .update({ wants_continue: true, continue_confirmed_at: new Date().toISOString() })
+    .eq("id", membership.id);
+  if (updateError) return jsonResponse({ error: updateError.message }, 500);
+
   return jsonResponse({ data: { success: true, confirmed: true } });
 }
 
@@ -1910,12 +1915,53 @@ async function handleSearchUsers(userId: string, body: Record<string, unknown>) 
 
   const escaped = query.replace(/[%_\\]/g, "\\$&");
   const { data } = await db.from("profiles")
-    .select("id, full_name, username, avatar_url, membership_tier")
-    .or(`username.ilike.%${escaped}%,full_name.ilike.%${escaped}%`)
+    .select("id, full_name, username, avatar_url, membership_tier, credit_score, email")
+    .or(`username.ilike.%${escaped}%,full_name.ilike.%${escaped}%,email.ilike.%${escaped}%`)
     .neq("id", userId)
     .limit(10);
 
-  return jsonResponse({ data: data || [] });
+  // Strip email from response (used only for matching, not for display)
+  const sanitized = (data || []).map((u: Record<string, unknown>) => {
+    const { email: _email, ...rest } = u;
+    return rest;
+  });
+  return jsonResponse({ data: sanitized });
+}
+
+// Validate a sandbox group invite link without joining (preview step)
+async function handleValidateGroupInviteLink(body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const token = body.token as string;
+  if (!token) return jsonResponse({ error: "token required" }, 400);
+
+  const { data: link } = await db.from("vfd_sandbox_group_invite_links")
+    .select("*").eq("invite_token", token).maybeSingle();
+
+  if (!link) return jsonResponse({ data: { valid: false, error_message: "Invalid invite link" } });
+  if (new Date(link.expires_at) < new Date())
+    return jsonResponse({ data: { valid: false, error_message: "Invite link has expired" } });
+  if (link.max_uses && link.use_count >= link.max_uses)
+    return jsonResponse({ data: { valid: false, error_message: "Invite link has reached max uses" } });
+
+  const { data: group } = await db.from("vfd_sandbox_groups")
+    .select("id, name, contribution_amount, period, max_members, member_count, status, admin_id")
+    .eq("id", link.group_id).maybeSingle();
+  if (!group) return jsonResponse({ data: { valid: false, error_message: "Group not found" } });
+  if (group.status === "completed")
+    return jsonResponse({ data: { valid: false, error_message: "Group has already completed" } });
+  if (group.member_count >= group.max_members)
+    return jsonResponse({ data: { valid: false, error_message: "Group is full" } });
+
+  const { data: admin } = await db.from("profiles")
+    .select("full_name, username").eq("id", group.admin_id).maybeSingle();
+
+  return jsonResponse({
+    data: {
+      valid: true,
+      group,
+      admin_name: admin?.username ? `@${admin.username}` : admin?.full_name || "Admin",
+    },
+  });
 }
 
 async function handleInviteGroupMember(userId: string, body: Record<string, unknown>) {
@@ -2129,6 +2175,7 @@ Deno.serve(async (req) => {
       case "invite_group_member": return await handleInviteGroupMember(userId, body);
       case "respond_group_invite": return await handleRespondGroupInvite(userId, body);
       case "create_group_invite_link": return await handleCreateGroupInviteLink(userId, body);
+      case "validate_group_invite_link": return await handleValidateGroupInviteLink(body);
       case "join_group_via_link": return await handleJoinGroupViaLink(userId, body);
       case "list_group_invites": return await handleListGroupInvites(userId);
       case "list_pending_group_invitees": return await handleListPendingGroupInvitees(body);
