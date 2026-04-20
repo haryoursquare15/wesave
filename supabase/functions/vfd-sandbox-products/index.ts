@@ -1564,7 +1564,11 @@ async function handleContributeAssociation(userId: string, body: Record<string, 
   const narration = (body.narration as string) || null;
 
   if (!associationId) return jsonResponse({ error: "association_id required" }, 400);
-  if (!amount || amount <= 0) return jsonResponse({ error: "Valid amount required" }, 400);
+  if (!amount || amount < 100) return jsonResponse({ error: "Minimum contribution is ₦100" }, 400);
+
+  const { data: assoc } = await db.from("vfd_sandbox_associations").select("*").eq("id", associationId).single();
+  if (!assoc) return jsonResponse({ error: "Association not found" }, 404);
+  if (assoc.status !== "active") return jsonResponse({ error: "Association is not active" }, 400);
 
   const { data: membership } = await db.from("vfd_sandbox_association_memberships")
     .select("id").eq("association_id", associationId).eq("user_id", userId).maybeSingle();
@@ -1586,6 +1590,13 @@ async function handleContributeAssociation(userId: string, body: Record<string, 
   await db.from("vfd_sandbox_association_contributions").insert({
     association_id: associationId, user_id: userId, amount, narration,
   });
+
+  // Notify admin (skip if contributor is admin)
+  if (assoc.admin_id !== userId) {
+    await sendNotification(assoc.admin_id, "Association Contribution",
+      `A member contributed ₦${amount.toLocaleString()} to "${assoc.name}".`,
+      "association_contribution");
+  }
 
   return jsonResponse({ data: { contributed: true, amount } });
 }
