@@ -1288,6 +1288,11 @@ async function handlePaySplit(userId: string, body: Record<string, unknown>) {
   if (!split) return jsonResponse({ error: "Split not found" }, 404);
   if (split.status !== "active") return jsonResponse({ error: "Split is not active" }, 400);
 
+  // PRODUCTION PARITY: enforce expiry on pay
+  if (split.expiry_date && new Date(split.expiry_date) < new Date()) {
+    return jsonResponse({ error: "Split has expired" }, 400);
+  }
+
   const { data: participant } = await db.from("vfd_sandbox_split_participants")
     .select("*").eq("split_id", splitId).eq("user_id", userId).maybeSingle();
   if (!participant) return jsonResponse({ error: "Not a participant" }, 400);
@@ -1295,7 +1300,7 @@ async function handlePaySplit(userId: string, body: Record<string, unknown>) {
   if (participant.status === "declined") return jsonResponse({ error: "You have declined this split" }, 400);
 
   const amount = Number(split.per_person_amount);
-  const feeShare = Number(split.fee_per_person || Math.ceil(100 / split.split_count));
+  const feeShare = Number(split.fee_per_person || (Math.ceil(100 / split.split_count * 100) / 100));
   const totalDebit = amount + feeShare;
 
   // Production parity: debit bill share + fee share
