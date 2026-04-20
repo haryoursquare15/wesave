@@ -16,6 +16,7 @@ import {
   CalendarDays, AlertTriangle, Wallet, Vote, ArrowDownToLine, UserPlus,
 } from "lucide-react";
 import { addDays, addWeeks, addMonths, format } from "date-fns";
+import { SandboxTargetInviteDialog } from "./SandboxTargetInviteDialog";
 
 interface TargetGroup {
   id: string; name: string; goal_amount: number; contribution_amount: number;
@@ -33,6 +34,7 @@ export function SandboxTargetTab() {
   const [showCreate, setShowCreate] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detailData, setDetailData] = useState<any>(null);
+  const [showInviteDialog, setShowInviteDialog] = useState(false);
 
   const [form, setForm] = useState({
     name: "", description: "", reason: "", goal_amount: "",
@@ -97,9 +99,16 @@ export function SandboxTargetTab() {
 
     return (
       <div className="space-y-4">
-        <button onClick={() => { setDetailId(null); setDetailData(null); }} className="text-sm text-primary flex items-center gap-1">
-          <ArrowLeft className="h-3 w-3" /> Back to Targets
-        </button>
+        <div className="flex items-center justify-between">
+          <button onClick={() => { setDetailId(null); setDetailData(null); }} className="text-sm text-primary flex items-center gap-1">
+            <ArrowLeft className="h-3 w-3" /> Back to Targets
+          </button>
+          {!isIndependent && !isClosed && (
+            <Button size="sm" variant="outline" onClick={() => setShowInviteDialog(true)}>
+              <UserPlus className="h-4 w-4 mr-1" /> Invite
+            </Button>
+          )}
+        </div>
 
         {/* Status badges */}
         <div className="flex items-center gap-2 flex-wrap">
@@ -235,6 +244,14 @@ export function SandboxTargetTab() {
             ))}
           </TabsContent>
         </Tabs>
+
+        <SandboxTargetInviteDialog
+          open={showInviteDialog}
+          onOpenChange={setShowInviteDialog}
+          targetId={t.id}
+          targetName={t.name}
+          onMemberAdded={() => loadDetail(t.id)}
+        />
       </div>
     );
   }
