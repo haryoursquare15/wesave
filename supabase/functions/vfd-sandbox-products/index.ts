@@ -38,6 +38,25 @@ function jsonResponse(data: unknown, status = 200) {
   });
 }
 
+// Fetch a map of user_id -> display name from profiles
+async function fetchProfileNames(userIds: string[]): Promise<Record<string, string>> {
+  const ids = Array.from(new Set(userIds.filter(Boolean)));
+  if (ids.length === 0) return {};
+  const db = getSupabaseAdmin();
+  const { data } = await db.from("profiles").select("id, full_name, username, email").in("id", ids);
+  const map: Record<string, string> = {};
+  (data || []).forEach((p: { id: string; full_name?: string | null; username?: string | null; email?: string | null }) => {
+    map[p.id] = p.full_name || p.username || (p.email ? p.email.split("@")[0] : null) || `User ${p.id.slice(0, 6)}`;
+  });
+  ids.forEach(id => { if (!map[id]) map[id] = `User ${id.slice(0, 6)}`; });
+  return map;
+}
+
+// Attach display_name to records that have a user_id field
+function attachNames<T extends { user_id?: string | null }>(rows: T[] | null | undefined, names: Record<string, string>): (T & { display_name: string })[] {
+  return (rows || []).map(r => ({ ...r, display_name: r.user_id ? (names[r.user_id] || `User ${r.user_id.slice(0, 6)}`) : "Unknown" }));
+}
+
 // =============================================
 // VFD ADAPTER LAYER
 // =============================================
