@@ -188,7 +188,7 @@ export function SandboxTargetTab() {
             ) : contributions.map((c: any) => (
               <div key={c.id} className="p-3 rounded-lg bg-card border border-border flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium">{c.user_id?.slice(0, 8)}... contributed</p>
+                  <p className="text-sm font-medium">{c.display_name || `User ${c.user_id?.slice(0, 6)}`} contributed</p>
                   <p className="text-xs text-muted-foreground">{format(new Date(c.created_at), "MMM d, h:mm a")}</p>
                 </div>
                 <p className="text-sm font-bold text-primary">₦{fmt(Number(c.amount))}</p>
@@ -198,7 +198,7 @@ export function SandboxTargetTab() {
           <TabsContent value="members" className="space-y-2 mt-3">
             {members.map((m: any, i: number) => (
               <div key={i} className="flex items-center justify-between text-xs p-2 rounded-lg bg-muted/50">
-                <span className="font-mono">{m.user_id?.slice(0, 8)}...</span>
+                <span className="font-medium truncate max-w-[180px]">{m.display_name || `User ${m.user_id?.slice(0, 6)}`}</span>
                 <span className="font-semibold text-primary">₦{fmt(Number(m.contributed_amount || 0))}</span>
               </div>
             ))}

@@ -188,7 +188,7 @@ export function SandboxSplitTab() {
           <div className="space-y-2">
             {participants.map((p: any, i: number) => (
               <div key={i} className="flex items-center justify-between text-xs p-2 rounded-lg bg-muted/50">
-                <span className="font-mono">{p.user_id?.slice(0, 8)}...</span>
+                <span className="font-medium truncate max-w-[160px]">{p.display_name || `User ${p.user_id?.slice(0, 6)}`}</span>
                 <div className="flex items-center gap-2">
                   {p.status === "paid" && (
                     <>

@@ -38,6 +38,25 @@ function jsonResponse(data: unknown, status = 200) {
   });
 }
 
+// Fetch a map of user_id -> display name from profiles
+async function fetchProfileNames(userIds: string[]): Promise<Record<string, string>> {
+  const ids = Array.from(new Set(userIds.filter(Boolean)));
+  if (ids.length === 0) return {};
+  const db = getSupabaseAdmin();
+  const { data } = await db.from("profiles").select("id, full_name, username, email").in("id", ids);
+  const map: Record<string, string> = {};
+  (data || []).forEach((p: { id: string; full_name?: string | null; username?: string | null; email?: string | null }) => {
+    map[p.id] = p.full_name || p.username || (p.email ? p.email.split("@")[0] : null) || `User ${p.id.slice(0, 6)}`;
+  });
+  ids.forEach(id => { if (!map[id]) map[id] = `User ${id.slice(0, 6)}`; });
+  return map;
+}
+
+// Attach display_name to records that have a user_id field
+function attachNames<T extends { user_id?: string | null }>(rows: T[] | null | undefined, names: Record<string, string>): (T & { display_name: string })[] {
+  return (rows || []).map(r => ({ ...r, display_name: r.user_id ? (names[r.user_id] || `User ${r.user_id.slice(0, 6)}`) : "Unknown" }));
+}
+
 // =============================================
 // VFD ADAPTER LAYER
 // =============================================
@@ -585,7 +604,25 @@ async function handleGetGroupDetail(body: Record<string, unknown>) {
   const { data: swaps } = await db.from("vfd_sandbox_position_swaps").select("*").eq("group_id", groupId).order("created_at", { ascending: false });
   const { data: chat } = await db.from("vfd_sandbox_chat_messages").select("*").eq("group_id", groupId).order("created_at", { ascending: false }).limit(50);
 
-  return jsonResponse({ data: { group, members, contributions, payouts, cycles, swaps, chat } });
+  const nameMap = await fetchProfileNames([
+    ...(members || []).map((m: { user_id: string }) => m.user_id),
+    ...(contributions || []).map((c: { user_id: string }) => c.user_id),
+    ...(payouts || []).map((p: { recipient_id?: string }) => p.recipient_id || ""),
+    ...(group?.payout_order || []) as string[],
+  ]);
+
+  return jsonResponse({
+    data: {
+      group,
+      members: attachNames(members, nameMap),
+      contributions: attachNames(contributions, nameMap),
+      payouts: (payouts || []).map((p: { recipient_id?: string }) => ({ ...p, display_name: p.recipient_id ? (nameMap[p.recipient_id] || `User ${p.recipient_id.slice(0, 6)}`) : "Unknown" })),
+      cycles,
+      swaps,
+      chat: attachNames(chat, nameMap),
+      payout_order_names: (group?.payout_order || []).map((uid: string) => nameMap[uid] || `User ${uid.slice(0, 6)}`),
+    },
+  });
 }
 
 // GROUP LIFECYCLE: Exit
@@ -830,7 +867,23 @@ async function handleGetTargetDetail(body: Record<string, unknown>) {
     votes = v || [];
   }
 
-  return jsonResponse({ data: { target, members: members || [], contributions: contributions || [], invites: invites || [], withdrawal_requests: withdrawalRequests || [], votes } });
+  const nameMap = await fetchProfileNames([
+    ...(members || []).map((m: { user_id: string }) => m.user_id),
+    ...(contributions || []).map((c: { user_id: string }) => c.user_id),
+    ...(withdrawalRequests || []).map((w: { user_id?: string }) => w.user_id || ""),
+    ...(votes as { user_id?: string }[]).map(v => v.user_id || ""),
+  ]);
+
+  return jsonResponse({
+    data: {
+      target,
+      members: attachNames(members, nameMap),
+      contributions: attachNames(contributions, nameMap),
+      invites: invites || [],
+      withdrawal_requests: attachNames(withdrawalRequests, nameMap),
+      votes: attachNames(votes as { user_id?: string }[], nameMap),
+    },
+  });
 }
 
 // Target Ajo: Invite member
@@ -1449,7 +1502,18 @@ async function handleGetSplitDetail(body: Record<string, unknown>) {
   const { data: transactions } = await db.from("vfd_sandbox_split_transactions")
     .select("*").eq("split_id", splitId).order("created_at", { ascending: false });
 
-  return jsonResponse({ data: { split, participants: participants || [], transactions: transactions || [] } });
+  const nameMap = await fetchProfileNames([
+    ...(participants || []).map((p: { user_id: string }) => p.user_id),
+    ...(transactions || []).map((t: { user_id?: string }) => t.user_id || ""),
+  ]);
+
+  return jsonResponse({
+    data: {
+      split,
+      participants: attachNames(participants, nameMap),
+      transactions: attachNames(transactions, nameMap),
+    },
+  });
 }
 
 // =============================================
@@ -1547,12 +1611,17 @@ async function handleGetAssociationDetail(body: Record<string, unknown>) {
   const { data: contributions } = await db.from("vfd_sandbox_association_contributions")
     .select("*").eq("association_id", associationId).order("created_at", { ascending: false }).limit(50);
 
+  const nameMap = await fetchProfileNames([
+    ...(members || []).map((m: { user_id: string }) => m.user_id),
+    ...(contributions || []).map((c: { user_id: string }) => c.user_id),
+  ]);
+
   return jsonResponse({
     data: {
       ...assoc,
       wallet_balance: wallet?.available_balance || 0,
-      members: members || [],
-      contributions: contributions || [],
+      members: attachNames(members, nameMap),
+      contributions: attachNames(contributions, nameMap),
     },
   });
 }

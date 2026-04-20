@@ -135,9 +135,9 @@ export function SandboxAssociationTab() {
             <div>
               <h4 className="text-sm font-semibold mb-2">Members ({selectedAssoc.members?.length || 0})</h4>
               <div className="space-y-1.5">
-                {(selectedAssoc.members || []).map((m, i) => (
+                {(selectedAssoc.members || []).map((m: any, i: number) => (
                   <div key={i} className="flex items-center justify-between text-xs p-2 rounded-lg bg-muted/50">
-                    <span className="font-mono truncate max-w-[180px]">{m.user_id.slice(0, 8)}...</span>
+                    <span className="font-medium truncate max-w-[180px]">{m.display_name || `User ${m.user_id?.slice(0, 6)}`}</span>
                     <Badge variant={m.role === "admin" ? "default" : "secondary"} className="text-[10px]">{m.role}</Badge>
                   </div>
                 ))}
@@ -151,10 +151,10 @@ export function SandboxAssociationTab() {
                 <p className="text-xs text-muted-foreground text-center py-4">No contributions yet</p>
               ) : (
                 <div className="space-y-1.5">
-                  {(selectedAssoc.contributions || []).slice(0, 10).map((c) => (
+                  {(selectedAssoc.contributions || []).slice(0, 10).map((c: any) => (
                     <div key={c.id} className="flex items-center justify-between text-xs p-2 rounded-lg bg-muted/50">
                       <div>
-                        <span className="font-mono">{c.user_id.slice(0, 8)}...</span>
+                        <span className="font-medium">{c.display_name || `User ${c.user_id?.slice(0, 6)}`}</span>
                         {c.narration && <span className="text-muted-foreground ml-2">— {c.narration}</span>}
                       </div>
                       <span className="font-semibold text-success">+₦{Number(c.amount).toLocaleString()}</span>

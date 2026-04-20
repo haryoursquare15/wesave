@@ -118,7 +118,10 @@ export function SandboxAjoTab() {
   if (detailGroup && detailData) {
     const g = detailData.group || detailData;
     const members = detailData.members || g.vfd_sandbox_group_members || [];
-    const payoutOrder = detailData.payout_order || [];
+    const payoutOrder = detailData.payout_order || g.payout_order || [];
+    const payoutOrderNames: string[] = detailData.payout_order_names || [];
+    const memberNameMap: Record<string, string> = {};
+    members.forEach((m: any) => { if (m.user_id && m.display_name) memberNameMap[m.user_id] = m.display_name; });
     const isAdmin = true; // sandbox user is always creator
     const progress = g.total_cycles > 0 ? ((g.current_cycle - 1) / g.total_cycles) * 100 : 0;
 
@@ -221,7 +224,7 @@ export function SandboxAjoTab() {
             ) : members.map((m: any, i: number) => (
               <div key={i} className="flex items-center justify-between text-xs p-2 rounded-lg bg-muted/50">
                 <div className="flex items-center gap-2">
-                  <span className="font-mono truncate max-w-[160px]">{m.user_id?.slice(0, 8)}...</span>
+                  <span className="font-medium truncate max-w-[180px]">{m.display_name || `User ${m.user_id?.slice(0, 6)}`}</span>
                   {m.user_id === g.admin_id && <Crown className="h-3 w-3 text-warning" />}
                 </div>
                 <div className="flex items-center gap-2">
@@ -238,7 +241,7 @@ export function SandboxAjoTab() {
             ) : payoutOrder.map((userId: string, i: number) => (
               <div key={i} className="flex items-center justify-between text-xs p-2 rounded-lg bg-muted/50">
                 <span>Position #{i + 1}</span>
-                <span className="font-mono">{userId.slice(0, 8)}...</span>
+                <span className="font-medium truncate max-w-[180px]">{payoutOrderNames[i] || memberNameMap[userId] || `User ${userId.slice(0, 6)}`}</span>
               </div>
             ))}
           </TabsContent>
