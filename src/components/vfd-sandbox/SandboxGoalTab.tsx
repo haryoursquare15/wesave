@@ -12,11 +12,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useVfdSandboxProducts } from "@/hooks/useVfdSandboxProducts";
+import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
 import {
   Heart, Plus, RefreshCw, ArrowLeft, Target, Users, Clock,
-  AlertTriangle, Share2,
+  AlertTriangle, Share2, ImagePlus, Loader2,
 } from "lucide-react";
 import { format } from "date-fns";
+import { SocialShareButtons } from "./SocialShareButtons";
 
 interface Campaign {
   id: string; title: string; description: string | null;
@@ -40,15 +42,19 @@ const nigerianBanks = [
 export function SandboxGoalTab() {
   const { toast } = useToast();
   const products = useVfdSandboxProducts();
+  const { client, session } = useSandboxAwareAuth();
+  const userId = session?.user?.id;
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detailData, setDetailData] = useState<any>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   const [form, setForm] = useState({
     title: "", description: "", goal_amount: "", deadline: "",
     beneficiary_account_name: "", beneficiary_bank_name: "",
     beneficiary_account_number: "", contribution_visibility: "public",
+    campaign_image: "",
   });
   const [contributeId, setContributeId] = useState<string | null>(null);
   const [contributeAmount, setContributeAmount] = useState("");
@@ -64,6 +70,30 @@ export function SandboxGoalTab() {
 
   const generateSlug = (title: string) =>
     title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").substring(0, 60);
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !userId) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: "Image too large", description: "Max 5MB", variant: "destructive" });
+      return;
+    }
+    setUploadingImage(true);
+    try {
+      const ext = file.name.split(".").pop() || "jpg";
+      const path = `${userId}/${Date.now()}.${ext}`;
+      const { error } = await client.storage.from("sandbox-campaign-images").upload(path, file, { upsert: false });
+      if (error) {
+        toast({ title: "Upload failed", description: error.message, variant: "destructive" });
+        return;
+      }
+      const { data } = client.storage.from("sandbox-campaign-images").getPublicUrl(path);
+      setForm(p => ({ ...p, campaign_image: data.publicUrl }));
+      toast({ title: "Image uploaded" });
+    } finally {
+      setUploadingImage(false);
+    }
+  };
 
   const handleCreate = async () => {
     if (!form.title.trim()) return;
@@ -85,11 +115,12 @@ export function SandboxGoalTab() {
       beneficiary_bank_name: form.beneficiary_bank_name,
       beneficiary_account_number: form.beneficiary_account_number,
       contribution_visibility: form.contribution_visibility,
+      campaign_image: form.campaign_image || null,
       campaign_slug: slug,
     });
     if (result?.data) {
       toast({ title: "Campaign Created!" });
-      setForm({ title: "", description: "", goal_amount: "", deadline: "", beneficiary_account_name: "", beneficiary_bank_name: "", beneficiary_account_number: "", contribution_visibility: "public" });
+      setForm({ title: "", description: "", goal_amount: "", deadline: "", beneficiary_account_name: "", beneficiary_bank_name: "", beneficiary_account_number: "", contribution_visibility: "public", campaign_image: "" });
       setShowCreate(false);
       await loadCampaigns();
     }
@@ -125,10 +156,16 @@ export function SandboxGoalTab() {
           <ArrowLeft className="h-3 w-3" /> Back to Campaigns
         </button>
 
-        {/* Hero */}
-        <div className="h-28 rounded-xl bg-gradient-to-br from-primary/10 to-secondary/10 flex items-center justify-center">
-          <Target className="h-10 w-10 text-primary/30" />
-        </div>
+        {/* Hero — image or placeholder */}
+        {c.campaign_image ? (
+          <div className="h-44 rounded-xl overflow-hidden bg-muted">
+            <img src={c.campaign_image} alt={c.title} className="w-full h-full object-cover" />
+          </div>
+        ) : (
+          <div className="h-28 rounded-xl bg-gradient-to-br from-primary/10 to-secondary/10 flex items-center justify-center">
+            <Target className="h-10 w-10 text-primary/30" />
+          </div>
+        )}
 
         <div className="flex items-center gap-2">
           <Badge variant={c.status === "active" ? "default" : "secondary"}>{c.status}</Badge>
@@ -154,6 +191,19 @@ export function SandboxGoalTab() {
         <div className="flex items-center gap-4 text-sm text-muted-foreground">
           <span className="flex items-center gap-1"><Users className="h-4 w-4" /> {c.contributor_count} contributors</span>
           {c.deadline && <span className="flex items-center gap-1"><Clock className="h-4 w-4" /> {format(new Date(c.deadline), "MMM d, yyyy")}</span>}
+        </div>
+
+        {/* Share */}
+        <div className="p-3 rounded-xl bg-card border border-border space-y-2">
+          <div className="flex items-center gap-2">
+            <Share2 className="h-4 w-4 text-primary" />
+            <p className="text-sm font-semibold">Share this campaign</p>
+          </div>
+          <SocialShareButtons
+            url={`${window.location.origin}/goal/${c.campaign_slug || c.id}`}
+            title={c.title}
+            message={`Help support "${c.title}" on Wesave`}
+          />
         </div>
 
         {/* Contribute */}
@@ -244,13 +294,9 @@ export function SandboxGoalTab() {
                   Post Update
                 </Button>
               </div>
-              {c.beneficiary_bank_name && (
-                <div className="p-3 rounded-lg bg-muted/30 border border-border text-xs space-y-1">
-                  <p className="font-semibold">Beneficiary Details</p>
-                  <p>{c.beneficiary_account_name}</p>
-                  <p>{c.beneficiary_bank_name} — {c.beneficiary_account_number}</p>
-                </div>
-              )}
+              <p className="text-[11px] text-muted-foreground p-2 rounded bg-muted/30">
+                Beneficiary bank details are kept private and used only to settle contributions to you. They are not shown to contributors.
+              </p>
             </TabsContent>
           )}
         </Tabs>
@@ -288,6 +334,36 @@ export function SandboxGoalTab() {
               <Label>Campaign Title *</Label>
               <Input value={form.title} onChange={(e) => setForm(p => ({ ...p, title: e.target.value }))} placeholder="e.g., Help Aisha's Surgery Fund" maxLength={100} />
             </div>
+
+            {/* Image upload */}
+            <div>
+              <Label>Campaign Image (optional)</Label>
+              {form.campaign_image ? (
+                <div className="relative rounded-lg overflow-hidden border border-border h-40 mt-1">
+                  <img src={form.campaign_image} alt="preview" className="w-full h-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => setForm(p => ({ ...p, campaign_image: "" }))}
+                    className="absolute top-2 right-2 bg-background/80 backdrop-blur text-xs px-2 py-1 rounded-md border border-border"
+                  >
+                    Replace
+                  </button>
+                </div>
+              ) : (
+                <label className="mt-1 flex flex-col items-center justify-center h-32 rounded-lg border-2 border-dashed border-border cursor-pointer hover:border-primary/40 transition">
+                  {uploadingImage ? (
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  ) : (
+                    <>
+                      <ImagePlus className="h-6 w-6 text-muted-foreground mb-1" />
+                      <span className="text-xs text-muted-foreground">Tap to upload (max 5MB)</span>
+                    </>
+                  )}
+                  <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={uploadingImage} />
+                </label>
+              )}
+            </div>
+
             <div>
               <Label>Description</Label>
               <Textarea value={form.description} onChange={(e) => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Describe your campaign..." rows={3} maxLength={2000} />
@@ -350,14 +426,19 @@ export function SandboxGoalTab() {
           {campaigns.map((c) => {
             const progress = Number(c.goal_amount) > 0 ? (Number(c.raised_amount) / Number(c.goal_amount)) * 100 : 0;
             return (
-              <Card key={c.id} className="cursor-pointer hover:border-primary/30 transition-colors" onClick={() => loadDetail(c.id)}>
+              <Card key={c.id} className="cursor-pointer hover:border-primary/30 transition-colors overflow-hidden" onClick={() => loadDetail(c.id)}>
+                {c.campaign_image && (
+                  <div className="h-32 bg-muted overflow-hidden">
+                    <img src={c.campaign_image} alt={c.title} className="w-full h-full object-cover" />
+                  </div>
+                )}
                 <CardContent className="p-4 space-y-3">
                   <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold">{c.title}</p>
+                    <div className="min-w-0">
+                      <p className="font-semibold truncate">{c.title}</p>
                       {c.description && <p className="text-xs text-muted-foreground line-clamp-1">{c.description}</p>}
                     </div>
-                    <Badge variant="outline" className={c.status === "active" ? "text-green-600 border-green-500" : "text-primary border-primary"}>
+                    <Badge variant="outline" className={c.status === "active" ? "text-success border-success" : "text-primary border-primary"}>
                       {c.status}
                     </Badge>
                   </div>
