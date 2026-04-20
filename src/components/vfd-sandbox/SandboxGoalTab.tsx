@@ -12,11 +12,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useVfdSandboxProducts } from "@/hooks/useVfdSandboxProducts";
+import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
 import {
   Heart, Plus, RefreshCw, ArrowLeft, Target, Users, Clock,
-  AlertTriangle, Share2,
+  AlertTriangle, Share2, ImagePlus, Loader2,
 } from "lucide-react";
 import { format } from "date-fns";
+import { SocialShareButtons } from "./SocialShareButtons";
 
 interface Campaign {
   id: string; title: string; description: string | null;
@@ -40,15 +42,18 @@ const nigerianBanks = [
 export function SandboxGoalTab() {
   const { toast } = useToast();
   const products = useVfdSandboxProducts();
+  const { client, user } = useSandboxAwareAuth();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detailData, setDetailData] = useState<any>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   const [form, setForm] = useState({
     title: "", description: "", goal_amount: "", deadline: "",
     beneficiary_account_name: "", beneficiary_bank_name: "",
     beneficiary_account_number: "", contribution_visibility: "public",
+    campaign_image: "",
   });
   const [contributeId, setContributeId] = useState<string | null>(null);
   const [contributeAmount, setContributeAmount] = useState("");
@@ -64,6 +69,30 @@ export function SandboxGoalTab() {
 
   const generateSlug = (title: string) =>
     title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").substring(0, 60);
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user?.id) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: "Image too large", description: "Max 5MB", variant: "destructive" });
+      return;
+    }
+    setUploadingImage(true);
+    try {
+      const ext = file.name.split(".").pop() || "jpg";
+      const path = `${user.id}/${Date.now()}.${ext}`;
+      const { error } = await client.storage.from("sandbox-campaign-images").upload(path, file, { upsert: false });
+      if (error) {
+        toast({ title: "Upload failed", description: error.message, variant: "destructive" });
+        return;
+      }
+      const { data } = client.storage.from("sandbox-campaign-images").getPublicUrl(path);
+      setForm(p => ({ ...p, campaign_image: data.publicUrl }));
+      toast({ title: "Image uploaded" });
+    } finally {
+      setUploadingImage(false);
+    }
+  };
 
   const handleCreate = async () => {
     if (!form.title.trim()) return;
@@ -85,11 +114,12 @@ export function SandboxGoalTab() {
       beneficiary_bank_name: form.beneficiary_bank_name,
       beneficiary_account_number: form.beneficiary_account_number,
       contribution_visibility: form.contribution_visibility,
+      campaign_image: form.campaign_image || null,
       campaign_slug: slug,
     });
     if (result?.data) {
       toast({ title: "Campaign Created!" });
-      setForm({ title: "", description: "", goal_amount: "", deadline: "", beneficiary_account_name: "", beneficiary_bank_name: "", beneficiary_account_number: "", contribution_visibility: "public" });
+      setForm({ title: "", description: "", goal_amount: "", deadline: "", beneficiary_account_name: "", beneficiary_bank_name: "", beneficiary_account_number: "", contribution_visibility: "public", campaign_image: "" });
       setShowCreate(false);
       await loadCampaigns();
     }
