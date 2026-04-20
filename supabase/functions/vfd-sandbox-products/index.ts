@@ -1926,7 +1926,8 @@ async function handleInviteGroupMember(userId: string, body: Record<string, unkn
 
   const { data: group } = await db.from("vfd_sandbox_groups").select("*").eq("id", groupId).single();
   if (!group) return jsonResponse({ error: "Group not found" }, 404);
-  if (group.status !== "pending") return jsonResponse({ error: "Group is no longer accepting members" }, 400);
+  // Allow inviting while group is pending OR active-but-not-full
+  if (group.status === "completed") return jsonResponse({ error: "Group has already completed" }, 400);
   if (group.member_count >= group.max_members) return jsonResponse({ error: "Group is full" }, 400);
 
   // Check if already a member
