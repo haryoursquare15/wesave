@@ -88,7 +88,7 @@ export function SandboxTargetTab() {
 
   // Detail View
   if (detailId && detailData) {
-    const t = detailData.group || detailData;
+    const t = detailData.target || detailData;
     const members = detailData.members || [];
     const contributions = detailData.contributions || [];
     const withdrawalRequests = detailData.withdrawal_requests || [];
