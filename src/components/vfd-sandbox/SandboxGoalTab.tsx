@@ -426,14 +426,19 @@ export function SandboxGoalTab() {
           {campaigns.map((c) => {
             const progress = Number(c.goal_amount) > 0 ? (Number(c.raised_amount) / Number(c.goal_amount)) * 100 : 0;
             return (
-              <Card key={c.id} className="cursor-pointer hover:border-primary/30 transition-colors" onClick={() => loadDetail(c.id)}>
+              <Card key={c.id} className="cursor-pointer hover:border-primary/30 transition-colors overflow-hidden" onClick={() => loadDetail(c.id)}>
+                {c.campaign_image && (
+                  <div className="h-32 bg-muted overflow-hidden">
+                    <img src={c.campaign_image} alt={c.title} className="w-full h-full object-cover" />
+                  </div>
+                )}
                 <CardContent className="p-4 space-y-3">
                   <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold">{c.title}</p>
+                    <div className="min-w-0">
+                      <p className="font-semibold truncate">{c.title}</p>
                       {c.description && <p className="text-xs text-muted-foreground line-clamp-1">{c.description}</p>}
                     </div>
-                    <Badge variant="outline" className={c.status === "active" ? "text-green-600 border-green-500" : "text-primary border-primary"}>
+                    <Badge variant="outline" className={c.status === "active" ? "text-success border-success" : "text-primary border-primary"}>
                       {c.status}
                     </Badge>
                   </div>
