@@ -9,9 +9,12 @@ export function useVfdSandboxProducts() {
 
   const invoke = useCallback(
     async (action: string, body: Record<string, unknown> = {}) => {
-      const accessToken = session?.access_token;
+      // Always fetch a fresh session so we never send an expired JWT.
+      // supabase-js auto-refreshes the token if it's expired.
+      const { data: sessionData } = await client.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
       if (!accessToken) {
-        toast({ title: "Not authenticated", variant: "destructive" });
+        toast({ title: "Not authenticated", description: "Please sign in again.", variant: "destructive" });
         return null;
       }
 
