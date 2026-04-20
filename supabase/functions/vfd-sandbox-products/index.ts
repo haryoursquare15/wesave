@@ -908,13 +908,25 @@ async function handleRequestTargetWithdrawal(userId: string, body: Record<string
   const amount = Number(body.amount);
   const reason = (body.reason as string) || null;
 
+  if (!Number.isFinite(amount) || amount < 100) {
+    return jsonResponse({ error: "Withdrawal amount must be at least ₦100" }, 400);
+  }
+
   const { data: target } = await db.from("vfd_sandbox_targets").select("*").eq("id", targetId).single();
   if (!target) return jsonResponse({ error: "Target not found" }, 404);
   if (target.savings_type !== "group") return jsonResponse({ error: "Withdrawal requests are only for group mode" }, 400);
+  if (amount > Number(target.total_contributed)) {
+    return jsonResponse({ error: "Withdrawal amount exceeds the group's pooled balance" }, 400);
+  }
 
   const { data: membership } = await db.from("vfd_sandbox_target_members")
     .select("*").eq("target_id", targetId).eq("user_id", userId).maybeSingle();
   if (!membership) return jsonResponse({ error: "Not a member" }, 400);
+
+  // Block overlapping pending requests for the same group
+  const { data: pendingExisting } = await db.from("vfd_sandbox_target_withdrawal_requests")
+    .select("id").eq("target_id", targetId).eq("status", "pending").maybeSingle();
+  if (pendingExisting) return jsonResponse({ error: "There is already a pending withdrawal request for this group" }, 400);
 
   // Production parity: Required votes = 2/3 of members (matching live which says "2/3 member approval")
   const { count: memberCount } = await db.from("vfd_sandbox_target_members")
@@ -927,6 +939,18 @@ async function handleRequestTargetWithdrawal(userId: string, body: Record<string
   }).select().single();
 
   if (error) return jsonResponse({ error: error.message }, 500);
+
+  // Notify all other members about the new vote
+  const { data: allMembers } = await db.from("vfd_sandbox_target_members")
+    .select("user_id").eq("target_id", targetId);
+  for (const m of allMembers || []) {
+    if (m.user_id !== userId) {
+      await sendNotification(m.user_id, "Withdrawal Vote Needed",
+        `A member requested ₦${amount.toLocaleString()} from "${target.name}". Cast your vote.`,
+        "withdrawal_vote_request", targetId);
+    }
+  }
+
   return jsonResponse({ data: wr });
 }
 
@@ -960,13 +984,24 @@ async function handleVoteTargetWithdrawal(userId: string, body: Record<string, u
   }).eq("id", requestId);
 
   if (newApproval >= wr.required_votes) {
-    await creditFromSavings(wr.requested_by, Number(wr.amount));
+    const wrAmount = Number(wr.amount);
+    await creditFromSavings(wr.requested_by, wrAmount);
     await db.from("vfd_sandbox_target_withdrawal_requests").update({
       status: "approved", resolved_at: new Date().toISOString(),
     }).eq("id", requestId);
 
+    // Decrement the group's pooled balance to keep progress accurate
+    const { data: tgt } = await db.from("vfd_sandbox_targets")
+      .select("total_contributed").eq("id", wr.target_id).maybeSingle();
+    if (tgt) {
+      await db.from("vfd_sandbox_targets").update({
+        total_contributed: Math.max(0, Number(tgt.total_contributed) - wrAmount),
+        updated_at: new Date().toISOString(),
+      }).eq("id", wr.target_id);
+    }
+
     await sendNotification(wr.requested_by, "Withdrawal Approved",
-      `Your withdrawal of ₦${Number(wr.amount).toLocaleString()} has been approved and credited.`,
+      `Your withdrawal of ₦${wrAmount.toLocaleString()} has been approved and credited.`,
       "withdrawal_approved");
   }
 
