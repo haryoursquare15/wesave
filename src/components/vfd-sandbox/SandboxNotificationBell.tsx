@@ -10,8 +10,9 @@ import { formatDistanceToNow } from "date-fns";
 interface Notification {
   id: string;
   title: string;
-  body: string | null;
-  read_at: string | null;
+  message: string | null;
+  body?: string | null;
+  is_read: boolean | null;
   created_at: string;
   notification_type?: string;
 }
@@ -40,16 +41,16 @@ export function SandboxNotificationBell() {
     if (open) refresh();
   }, [open, refresh]);
 
-  const unreadCount = items.filter(n => !n.read_at).length;
+  const unreadCount = items.filter(n => !n.is_read).length;
 
   const handleMarkRead = async (id: string) => {
     await products.markNotificationRead(id);
-    setItems(prev => prev.map(n => n.id === id ? { ...n, read_at: new Date().toISOString() } : n));
+    setItems(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
   };
 
   const handleMarkAll = async () => {
     await products.markAllNotificationsRead();
-    setItems(prev => prev.map(n => ({ ...n, read_at: n.read_at || new Date().toISOString() })));
+    setItems(prev => prev.map(n => ({ ...n, is_read: true })));
   };
 
   return (
@@ -81,16 +82,16 @@ export function SandboxNotificationBell() {
           ) : (
             <ul className="divide-y divide-border">
               {items.map((n) => (
-                <li key={n.id} className={`p-3 ${!n.read_at ? "bg-primary/5" : ""}`}>
+                <li key={n.id} className={`p-3 ${!n.is_read ? "bg-primary/5" : ""}`}>
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-semibold truncate">{n.title}</p>
-                      {n.body && <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">{n.body}</p>}
+                      {(n.message || n.body) && <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">{n.message || n.body}</p>}
                       <p className="text-[10px] text-muted-foreground mt-1">
                         {formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}
                       </p>
                     </div>
-                    {!n.read_at && (
+                    {!n.is_read && (
                       <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0" onClick={() => handleMarkRead(n.id)}>
                         <Check className="h-3.5 w-3.5" />
                       </Button>
