@@ -72,7 +72,7 @@ export function SandboxGroupInviteDialog({ open, onOpenChange, groupId, groupNam
     const res = await products.createGroupInviteLink(groupId);
     if (res?.data?.invite_token) {
       const baseUrl = window.location.origin;
-      setInviteLink(`${baseUrl}/invite/${res.data.invite_token}`);
+      setInviteLink(`${baseUrl}/vfd-sandbox/invite/${res.data.invite_token}`);
     }
     setCreatingLink(false);
   };
@@ -155,6 +155,11 @@ export function SandboxGroupInviteDialog({ open, onOpenChange, groupId, groupNam
                       <Badge variant="outline" className={getTierColor(user.membership_tier)}>
                         {user.membership_tier || "newbie"}
                       </Badge>
+                      {typeof user.credit_score === "number" && (
+                        <Badge variant="outline" className="text-[10px] border-primary/30 text-primary bg-primary/5">
+                          {user.credit_score}
+                        </Badge>
+                      )}
                       {invitedUsers.has(user.id) ? (
                         <Badge variant="outline" className="text-[10px] gap-1 border-success/40 text-success bg-success/10">
                           <Check className="h-3 w-3" /> Invited
