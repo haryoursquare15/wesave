@@ -33,6 +33,16 @@ export function SandboxGroupInviteDialog({ open, onOpenChange, groupId, groupNam
 
   const debouncedSearch = useDebounce(searchTerm, 300);
 
+  // Pre-load already-invited users so the badge shows up on first search
+  useEffect(() => {
+    if (!open || !groupId) return;
+    products.listPendingGroupInvitees(groupId).then((res) => {
+      const ids: string[] = res?.data?.invitee_ids || [];
+      if (ids.length) setInvitedUsers(new Set(ids));
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, groupId]);
+
   useEffect(() => {
     if (debouncedSearch && debouncedSearch.length >= 2) {
       setSearching(true);
@@ -146,9 +156,9 @@ export function SandboxGroupInviteDialog({ open, onOpenChange, groupId, groupNam
                         {user.membership_tier || "newbie"}
                       </Badge>
                       {invitedUsers.has(user.id) ? (
-                        <Button size="sm" disabled variant="ghost">
-                          <Check className="h-4 w-4 text-green-500" />
-                        </Button>
+                        <Badge variant="outline" className="text-[10px] gap-1 border-success/40 text-success bg-success/10">
+                          <Check className="h-3 w-3" /> Invited
+                        </Badge>
                       ) : (
                         <Button size="sm" variant="ghost" onClick={() => handleInvite(user.id)} disabled={products.loading}>
                           <UserPlus className="h-4 w-4" />
