@@ -34,6 +34,7 @@ export function SandboxTargetTab() {
   const [showCreate, setShowCreate] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detailData, setDetailData] = useState<any>(null);
+  const [showInviteDialog, setShowInviteDialog] = useState(false);
 
   const [form, setForm] = useState({
     name: "", description: "", reason: "", goal_amount: "",
