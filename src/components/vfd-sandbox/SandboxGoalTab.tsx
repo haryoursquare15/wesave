@@ -73,7 +73,7 @@ export function SandboxGoalTab() {
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !user?.id) return;
+    if (!file || !userId) return;
     if (file.size > 5 * 1024 * 1024) {
       toast({ title: "Image too large", description: "Max 5MB", variant: "destructive" });
       return;
@@ -81,7 +81,7 @@ export function SandboxGoalTab() {
     setUploadingImage(true);
     try {
       const ext = file.name.split(".").pop() || "jpg";
-      const path = `${user.id}/${Date.now()}.${ext}`;
+      const path = `${userId}/${Date.now()}.${ext}`;
       const { error } = await client.storage.from("sandbox-campaign-images").upload(path, file, { upsert: false });
       if (error) {
         toast({ title: "Upload failed", description: error.message, variant: "destructive" });
