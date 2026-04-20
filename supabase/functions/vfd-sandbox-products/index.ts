@@ -2048,6 +2048,55 @@ async function handleListGroupInvites(userId: string) {
 }
 
 // =============================================
+// PENDING-INVITEE LOOKUP (for "Already invited" badge in search)
+// =============================================
+async function handleListPendingGroupInvitees(body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const groupId = body.group_id as string;
+  if (!groupId) return jsonResponse({ error: "group_id required" }, 400);
+
+  const { data: invites } = await db.from("vfd_sandbox_group_invites")
+    .select("invitee_id, status").eq("group_id", groupId).eq("status", "pending");
+  const { data: members } = await db.from("vfd_sandbox_group_members")
+    .select("user_id").eq("group_id", groupId);
+
+  return jsonResponse({
+    data: {
+      invited_user_ids: (invites || []).map((i: { invitee_id: string }) => i.invitee_id),
+      member_user_ids: (members || []).map((m: { user_id: string }) => m.user_id),
+    },
+  });
+}
+
+// =============================================
+// IN-APP NOTIFICATIONS
+// =============================================
+async function handleListNotifications(userId: string) {
+  const db = getSupabaseAdmin();
+  const { data } = await db.from("vfd_sandbox_notifications")
+    .select("*").eq("user_id", userId)
+    .order("created_at", { ascending: false }).limit(50);
+  const unreadCount = (data || []).filter((n: { read_at: string | null }) => !n.read_at).length;
+  return jsonResponse({ data: data || [], unread_count: unreadCount });
+}
+
+async function handleMarkNotificationRead(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const id = body.notification_id as string;
+  if (!id) return jsonResponse({ error: "notification_id required" }, 400);
+  await db.from("vfd_sandbox_notifications").update({ read_at: new Date().toISOString() })
+    .eq("id", id).eq("user_id", userId);
+  return jsonResponse({ data: { success: true } });
+}
+
+async function handleMarkAllNotificationsRead(userId: string) {
+  const db = getSupabaseAdmin();
+  await db.from("vfd_sandbox_notifications").update({ read_at: new Date().toISOString() })
+    .eq("user_id", userId).is("read_at", null);
+  return jsonResponse({ data: { success: true } });
+}
+
+// =============================================
 // MAIN HANDLER
 // =============================================
 
