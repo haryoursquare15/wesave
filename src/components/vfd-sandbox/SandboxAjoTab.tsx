@@ -456,9 +456,11 @@ export function SandboxAjoTab() {
                     {g.status === "active" && g.member_count < g.max_members && (
                       <Button size="sm" variant="outline" onClick={async (e) => {
                         e.stopPropagation();
-                        await products.joinGroup(g.id);
-                        toast({ title: "Joined group!" });
-                        loadGroups();
+                        const r = await products.joinGroup(g.id);
+                        if (r?.data) {
+                          toast({ title: "Joined group!" });
+                          loadGroups();
+                        }
                       }} disabled={products.loading}>
                         Join
                       </Button>

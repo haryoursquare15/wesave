@@ -275,8 +275,17 @@ async function handleJoinGroup(userId: string, body: Record<string, unknown>) {
 
   const { data: group } = await db.from("vfd_sandbox_groups").select("*").eq("id", groupId).single();
   if (!group) return jsonResponse({ error: "Group not found" }, 404);
-  if (group.status !== "pending") return jsonResponse({ error: "Group is no longer accepting members" }, 400);
+  // Allow joining groups that are still pending OR active-but-not-full.
+  // Reject only if the group has completed or is already full.
+  if (group.status === "completed") return jsonResponse({ error: "Group has already completed" }, 400);
   if (group.member_count >= group.max_members) return jsonResponse({ error: "Group is full" }, 400);
+
+  // Prevent duplicate membership
+  const { data: existingMember } = await db.from("vfd_sandbox_group_members")
+    .select("id, status").eq("group_id", groupId).eq("user_id", userId).maybeSingle();
+  if (existingMember && existingMember.status === "active") {
+    return jsonResponse({ error: "You are already a member of this group" }, 400);
+  }
 
   const newCount = group.member_count + 1;
   const { error } = await db.from("vfd_sandbox_group_members").insert({
