@@ -788,8 +788,15 @@ async function handleContributeTarget(userId: string, body: Record<string, unkno
   if (!target) return jsonResponse({ error: "Target not found" }, 404);
   if (target.status !== "active") return jsonResponse({ error: "Target is not active" }, 400);
 
-  const { data: membership } = await db.from("vfd_sandbox_target_members")
+  let { data: membership } = await db.from("vfd_sandbox_target_members")
     .select("*").eq("target_id", targetId).eq("user_id", userId).maybeSingle();
+  // Auto-enroll the target admin if they were never added as a member (legacy targets)
+  if (!membership && target.admin_id === userId) {
+    const { data: inserted } = await db.from("vfd_sandbox_target_members")
+      .insert({ target_id: targetId, user_id: userId })
+      .select("*").maybeSingle();
+    membership = inserted;
+  }
   if (!membership) return jsonResponse({ error: "You must be a member to contribute" }, 400);
 
   const amount = Number(target.contribution_amount);
