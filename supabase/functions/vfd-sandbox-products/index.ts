@@ -799,12 +799,11 @@ async function handleContributeTarget(userId: string, body: Record<string, unkno
 
   let { data: membership } = await db.from("vfd_sandbox_target_members")
     .select("*").eq("target_id", targetId).eq("user_id", userId).maybeSingle();
-  // Auto-enroll the target admin if they were never added as a member (legacy targets)
-  if (!membership && target.admin_id === userId) {
-    const { data: inserted } = await db.from("vfd_sandbox_target_members")
-      .insert({ target_id: targetId, user_id: userId })
+  if (target.admin_id === userId) {
+    const { data: ensuredMembership } = await db.from("vfd_sandbox_target_members")
+      .upsert({ target_id: targetId, user_id: userId }, { onConflict: "target_id,user_id" })
       .select("*").maybeSingle();
-    membership = inserted;
+    membership = ensuredMembership || membership;
   }
   if (!membership) return jsonResponse({ error: "You must be a member to contribute" }, 400);
 
@@ -1643,12 +1642,11 @@ async function handleContributeAssociation(userId: string, body: Record<string, 
 
   let { data: membership } = await db.from("vfd_sandbox_association_memberships")
     .select("id").eq("association_id", associationId).eq("user_id", userId).maybeSingle();
-  // Auto-enroll the association admin if missing (legacy associations)
-  if (!membership && assoc.admin_id === userId) {
-    const { data: inserted } = await db.from("vfd_sandbox_association_memberships")
-      .insert({ association_id: associationId, user_id: userId, role: "admin" })
+  if (assoc.admin_id === userId) {
+    const { data: ensuredMembership } = await db.from("vfd_sandbox_association_memberships")
+      .upsert({ association_id: associationId, user_id: userId, role: "admin" }, { onConflict: "association_id,user_id" })
       .select("id").maybeSingle();
-    membership = inserted;
+    membership = ensuredMembership || membership;
   }
   if (!membership) return jsonResponse({ error: "You must be a member to contribute" }, 403);
 
