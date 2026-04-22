@@ -1347,8 +1347,20 @@ async function handlePaySplit(userId: string, body: Record<string, unknown>) {
     return jsonResponse({ error: "Split has expired" }, 400);
   }
 
-  const { data: participant } = await db.from("vfd_sandbox_split_participants")
+  let { data: participant } = await db.from("vfd_sandbox_split_participants")
     .select("*").eq("split_id", splitId).eq("user_id", userId).maybeSingle();
+
+  // Auto-enroll the split creator if they are not yet a participant (legacy splits)
+  if (!participant && split.creator_id === userId) {
+    const { data: ensured } = await db.from("vfd_sandbox_split_participants")
+      .upsert(
+        { split_id: splitId, user_id: userId, amount: Number(split.per_person_amount) },
+        { onConflict: "split_id,user_id" },
+      )
+      .select("*").maybeSingle();
+    participant = ensured || participant;
+  }
+
   if (!participant) return jsonResponse({ error: "Not a participant" }, 400);
   if (participant.status === "paid") return jsonResponse({ error: "Already paid" }, 400);
   if (participant.status === "declined") return jsonResponse({ error: "You have declined this split" }, 400);
