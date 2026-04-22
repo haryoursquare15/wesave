@@ -1632,8 +1632,15 @@ async function handleContributeAssociation(userId: string, body: Record<string, 
   if (!assoc) return jsonResponse({ error: "Association not found" }, 404);
   if (assoc.status !== "active") return jsonResponse({ error: "Association is not active" }, 400);
 
-  const { data: membership } = await db.from("vfd_sandbox_association_memberships")
+  let { data: membership } = await db.from("vfd_sandbox_association_memberships")
     .select("id").eq("association_id", associationId).eq("user_id", userId).maybeSingle();
+  // Auto-enroll the association admin if missing (legacy associations)
+  if (!membership && assoc.admin_id === userId) {
+    const { data: inserted } = await db.from("vfd_sandbox_association_memberships")
+      .insert({ association_id: associationId, user_id: userId, role: "admin" })
+      .select("id").maybeSingle();
+    membership = inserted;
+  }
   if (!membership) return jsonResponse({ error: "You must be a member to contribute" }, 403);
 
   const debited = await debitWallet(userId, amount);
