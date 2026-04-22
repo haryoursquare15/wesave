@@ -222,14 +222,7 @@ function fisherYatesShuffle(arr: string[]): string[] {
 async function handleCreateGroup(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
 
-  // Production parity: max 2 active groups per user
-  const { count: activeCount } = await db.from("vfd_sandbox_group_members")
-    .select("*, vfd_sandbox_groups!inner(status)", { count: "exact", head: true })
-    .eq("user_id", userId).eq("status", "active")
-    .in("vfd_sandbox_groups.status", ["pending", "active"]);
-  if (activeCount && activeCount >= 2) {
-    return jsonResponse({ error: "You can only be a member of up to 2 active groups at a time" }, 400);
-  }
+  // Sandbox: no group limit (testing environment)
 
   const name = body.name as string;
   const amount = Number(body.contribution_amount);
@@ -283,14 +276,7 @@ async function handleJoinGroup(userId: string, body: Record<string, unknown>) {
     .select("id").eq("group_id", groupId).eq("user_id", userId).maybeSingle();
   if (existing) return jsonResponse({ data: { joined: true, message: "Already a member" } });
 
-  // Production parity: max 2 active groups per user
-  const { count: activeCount } = await db.from("vfd_sandbox_group_members")
-    .select("*, vfd_sandbox_groups!inner(status)", { count: "exact", head: true })
-    .eq("user_id", userId).eq("status", "active")
-    .in("vfd_sandbox_groups.status", ["pending", "active"]);
-  if (activeCount && activeCount >= 2) {
-    return jsonResponse({ error: "You can only be a member of up to 2 active groups at a time" }, 400);
-  }
+  // Sandbox: no group limit (testing environment)
 
   const { data: group } = await db.from("vfd_sandbox_groups").select("*").eq("id", groupId).single();
   if (!group) return jsonResponse({ error: "Group not found" }, 404);
