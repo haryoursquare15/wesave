@@ -454,6 +454,15 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
   if (!group) return jsonResponse({ error: "Group not found" }, 404);
   if (group.status !== "active") return jsonResponse({ error: "Group is not active" }, 400);
 
+  // Auto-enroll the group admin if missing (legacy groups)
+  const { data: existingMember } = await db.from("vfd_sandbox_group_members")
+    .select("id").eq("group_id", groupId).eq("user_id", userId).maybeSingle();
+  if (!existingMember && group.admin_id === userId) {
+    await db.from("vfd_sandbox_group_members").insert({
+      group_id: groupId, user_id: userId, status: "active",
+    });
+  }
+
   const { data: activeCycle } = await db.from("vfd_sandbox_contribution_cycles")
     .select("*").eq("group_id", groupId).eq("status", "active").single();
   if (!activeCycle) return jsonResponse({ error: "No active contribution cycle" }, 400);
