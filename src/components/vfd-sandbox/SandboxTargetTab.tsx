@@ -44,20 +44,24 @@ export function SandboxTargetTab() {
     max_members: "10", frequency: "monthly", savings_type: "group" as "group" | "independent",
   });
 
+  const isIndependentForm = form.savings_type === "independent";
   const targetAmount = parseFloat(form.goal_amount) || 0;
-  const maxMembers = parseInt(form.max_members) || 1;
-  const contributionAmount = maxMembers > 0 ? Math.ceil(targetAmount / maxMembers) : 0;
+  // Independent savings = solo wallet; no member splitting
+  const maxMembers = isIndependentForm ? 1 : (parseInt(form.max_members) || 1);
+  const contributionAmount = isIndependentForm
+    ? targetAmount
+    : (maxMembers > 0 ? Math.ceil(targetAmount / maxMembers) : 0);
 
   const autoTargetDate = useMemo(() => {
-    const members = parseInt(form.max_members) || 1;
+    const periods = isIndependentForm ? 1 : (parseInt(form.max_members) || 1);
     const start = new Date();
     switch (form.frequency) {
-      case "daily": return addDays(start, members);
-      case "weekly": return addWeeks(start, members);
-      case "monthly": return addMonths(start, members);
-      default: return addDays(start, members);
+      case "daily": return addDays(start, periods);
+      case "weekly": return addWeeks(start, periods);
+      case "monthly": return addMonths(start, periods);
+      default: return addDays(start, periods);
     }
-  }, [form.frequency, form.max_members]);
+  }, [form.frequency, form.max_members, isIndependentForm]);
 
   const freqLabel = form.frequency === "daily" ? "days" : form.frequency === "weekly" ? "weeks" : "months";
 
@@ -81,6 +85,8 @@ export function SandboxTargetTab() {
       setForm({ name: "", description: "", reason: "", goal_amount: "", max_members: "10", frequency: "monthly", savings_type: "group" });
       setShowCreate(false);
       await loadTargets();
+    } else {
+      toast({ title: "Could not create target", description: "Please try again or check the form values.", variant: "destructive" });
     }
   };
 
@@ -189,10 +195,10 @@ export function SandboxTargetTab() {
 
         {/* Tabs */}
         <Tabs defaultValue="activity">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className={`grid w-full ${isIndependent ? "grid-cols-1" : "grid-cols-3"}`}>
             <TabsTrigger value="activity">Activity</TabsTrigger>
-            <TabsTrigger value="members">Members</TabsTrigger>
-            <TabsTrigger value="votes"><Vote className="h-3 w-3 mr-1" /> Votes</TabsTrigger>
+            {!isIndependent && <TabsTrigger value="members">Members</TabsTrigger>}
+            {!isIndependent && <TabsTrigger value="votes"><Vote className="h-3 w-3 mr-1" /> Votes</TabsTrigger>}
           </TabsList>
           <TabsContent value="activity" className="space-y-2 mt-3">
             {contributions.length === 0 ? (
@@ -336,18 +342,26 @@ export function SandboxTargetTab() {
                   </SelectContent>
                 </Select>
               </div>
-              <div>
-                <Label>Max Members (incl. you)</Label>
-                <Input type="number" value={form.max_members} onChange={(e) => setForm(p => ({ ...p, max_members: e.target.value }))} min={2} max={100} />
-              </div>
+              {!isIndependentForm && (
+                <div>
+                  <Label>Max Members (incl. you)</Label>
+                  <Input type="number" value={form.max_members} onChange={(e) => setForm(p => ({ ...p, max_members: e.target.value }))} min={2} max={100} />
+                </div>
+              )}
             </div>
 
             {/* Auto-calculated contribution */}
-            {targetAmount > 0 && maxMembers > 0 && (
+            {targetAmount > 0 && (
               <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
-                <p className="text-xs text-muted-foreground mb-1">Contribution per member (auto-calculated)</p>
+                <p className="text-xs text-muted-foreground mb-1">
+                  {isIndependentForm ? "Your contribution" : "Contribution per member (auto-calculated)"}
+                </p>
                 <p className="text-lg font-bold">₦{fmt(contributionAmount)}</p>
-                <p className="text-xs text-muted-foreground">₦{fmt(targetAmount)} ÷ {maxMembers} members</p>
+                <p className="text-xs text-muted-foreground">
+                  {isIndependentForm
+                    ? "You save toward this target alone — no other members."
+                    : `₦${fmt(targetAmount)} ÷ ${maxMembers} members`}
+                </p>
               </div>
             )}
 

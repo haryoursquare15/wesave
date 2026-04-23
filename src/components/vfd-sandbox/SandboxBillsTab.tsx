@@ -109,10 +109,16 @@ export function SandboxBillsTab() {
     setBillerSearch("");
     try {
       const result = await callProducts("bills_billers", { categoryName: category });
-      setBillers(result?.data?.data || []);
-    } catch {
+      const list = result?.data?.data || [];
+      setBillers(Array.isArray(list) ? list : []);
+      if (!Array.isArray(list) || list.length === 0) {
+        const msg = result?.data?.message || result?.raw?.message || `No ${category} billers available right now`;
+        toast({ title: "No billers", description: String(msg) });
+      }
+    } catch (err) {
       setBillers([]);
-      toast({ title: "Error", description: "Could not load billers", variant: "destructive" });
+      const msg = err instanceof Error ? err.message : "Could not load billers";
+      toast({ title: "Error", description: msg, variant: "destructive" });
     } finally {
       setLoading(false);
       setStep("billers");
