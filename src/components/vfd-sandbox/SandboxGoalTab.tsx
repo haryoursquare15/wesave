@@ -236,7 +236,7 @@ export function SandboxGoalTab() {
           <div className="flex items-start gap-2">
             <AlertTriangle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
             <p className="text-xs text-muted-foreground">
-              Wesave provides a platform for coordinating contributions. Payments go directly to the campaign beneficiary. Wesave does not hold or manage contributed funds.
+              Contributions are held in campaign escrow and can be withdrawn by the campaign owner to their wallet. Wesave coordinates the escrow but does not own or control the funds.
             </p>
           </div>
         </div>
@@ -285,6 +285,25 @@ export function SandboxGoalTab() {
           </TabsContent>
           {isOwner && (
             <TabsContent value="manage" className="space-y-3 mt-3">
+              <div className="p-3 rounded-xl bg-primary/5 border border-primary/20">
+                <p className="text-xs text-muted-foreground mb-1">Escrow balance (available to withdraw)</p>
+                <p className="text-2xl font-bold text-primary">₦{fmt(escrow)}</p>
+                <p className="text-[11px] text-muted-foreground mt-1">Total withdrawn so far: ₦{fmt(withdrawn)}</p>
+
+                <div className="mt-3 space-y-2">
+                  <Input
+                    type="number"
+                    placeholder={`Amount (leave empty to withdraw full ₦${fmt(escrow)})`}
+                    value={withdrawAmount}
+                    onChange={(e) => setWithdrawAmount(e.target.value)}
+                    disabled={escrow <= 0}
+                  />
+                  <Button className="w-full" size="sm" onClick={handleWithdraw} disabled={products.loading || escrow <= 0}>
+                    Withdraw to my wallet
+                  </Button>
+                </div>
+              </div>
+
               <div>
                 <Label>Post an Update</Label>
                 <Textarea value={updateMessage} onChange={(e) => setUpdateMessage(e.target.value)} placeholder="Share progress with supporters..." rows={3} />
@@ -299,7 +318,7 @@ export function SandboxGoalTab() {
                 </Button>
               </div>
               <p className="text-[11px] text-muted-foreground p-2 rounded bg-muted/30">
-                Beneficiary bank details are kept private and used only to settle contributions to you. They are not shown to contributors.
+                Contributions are held in this campaign's escrow until you withdraw them to your wallet. Wesave does not access or hold escrow funds for any other purpose.
               </p>
             </TabsContent>
           )}
@@ -320,12 +339,12 @@ export function SandboxGoalTab() {
         </div>
       </div>
 
-      {/* Legal notice */}
+      {/* Escrow notice */}
       <div className="p-3 rounded-xl bg-primary/5 border border-primary/20">
         <div className="flex items-start gap-2">
           <AlertTriangle className="h-4 w-4 text-primary mt-0.5" />
           <p className="text-xs text-muted-foreground">
-            Wesave facilitates contributions. Payments go directly to the campaign beneficiary. Wesave does not hold or manage contributed funds.
+            Contributions are held in each campaign's escrow until the owner withdraws them to their wallet. Wesave coordinates the escrow but does not own or use the funds.
           </p>
         </div>
       </div>
