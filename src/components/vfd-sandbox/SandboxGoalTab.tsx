@@ -27,6 +27,7 @@ interface Campaign {
   contribution_visibility?: string; campaign_slug?: string;
   beneficiary_account_name?: string; beneficiary_bank_name?: string;
   beneficiary_account_number?: string; campaign_image?: string;
+  escrow_balance?: number; total_withdrawn?: number;
 }
 
 const fmt = (n: number) => new Intl.NumberFormat("en-NG").format(n);
@@ -53,6 +54,7 @@ export function SandboxGoalTab() {
   const [contributeAmount, setContributeAmount] = useState("");
   const [contributeAnonymous, setContributeAnonymous] = useState(false);
   const [updateMessage, setUpdateMessage] = useState("");
+  const [withdrawAmount, setWithdrawAmount] = useState("");
 
   const loadCampaigns = async () => {
     const result = await products.listCampaigns();
@@ -132,7 +134,25 @@ export function SandboxGoalTab() {
     const contributions = detailData.contributions || [];
     const updates = detailData.updates || [];
     const progress = Number(c.goal_amount) > 0 ? (Number(c.raised_amount) / Number(c.goal_amount)) * 100 : 0;
-    const isOwner = true; // sandbox
+    const isOwner = !!userId && c.creator_id === userId;
+    const escrow = Number(c.escrow_balance || 0);
+    const withdrawn = Number(c.total_withdrawn || 0);
+
+    const handleWithdraw = async () => {
+      const amt = withdrawAmount.trim() ? Number(withdrawAmount) : undefined;
+      if (amt !== undefined && (isNaN(amt) || amt <= 0)) {
+        toast({ title: "Invalid amount", variant: "destructive" }); return;
+      }
+      if (amt !== undefined && amt > escrow) {
+        toast({ title: "Amount exceeds escrow balance", variant: "destructive" }); return;
+      }
+      const res = await products.withdrawCampaignEscrow(c.id, amt);
+      if (res?.data) {
+        toast({ title: "Funds moved to wallet", description: `₦${fmt(Number(res.data.withdrawn))}` });
+        setWithdrawAmount("");
+        loadDetail(c.id);
+      }
+    };
 
     return (
       <div className="space-y-4">
