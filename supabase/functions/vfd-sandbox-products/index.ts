@@ -2634,8 +2634,15 @@ Deno.serve(async (req) => {
       case "create_association": return await handleCreateAssociation(userId, body);
       case "list_associations": return await handleListAssociations(userId);
       case "join_association": return await handleJoinAssociation(userId, body);
-      case "get_association_detail": return await handleGetAssociationDetail(body);
+      case "get_association_detail": return await handleGetAssociationDetail(userId, body);
       case "contribute_association": return await handleContributeAssociation(userId, body);
+      case "invite_assoc_member": return await handleInviteAssocMember(userId, body);
+      case "respond_assoc_invite": return await handleRespondAssocInvite(userId, body);
+      case "list_assoc_chat": return await handleListAssocChat(userId, body);
+      case "post_assoc_chat": return await handlePostAssocChat(userId, body);
+      case "admin_list_pending_assoc": return await handleAdminListPendingAssoc(userId);
+      case "admin_review_assoc": return await handleAdminReviewAssoc(userId, body);
+      case "admin_assoc_doc_url": return await handleAdminAssocDocUrl(userId, body);
 
       // Bills Payment (VFD BaaS)
       case "bills_categories": return await handleBillsCategories();
