@@ -5447,6 +5447,22 @@ export type Database = {
       }
       is_target_ajo_admin: { Args: { p_group_id: string }; Returns: boolean }
       is_target_ajo_member: { Args: { p_group_id: string }; Returns: boolean }
+      is_vfd_sandbox_association_member: {
+        Args: { _association_id: string; _user_id: string }
+        Returns: boolean
+      }
+      is_vfd_sandbox_group_member: {
+        Args: { _group_id: string; _user_id: string }
+        Returns: boolean
+      }
+      is_vfd_sandbox_split_participant: {
+        Args: { _split_id: string; _user_id: string }
+        Returns: boolean
+      }
+      is_vfd_sandbox_target_member: {
+        Args: { _target_id: string; _user_id: string }
+        Returns: boolean
+      }
       join_group_via_invite: { Args: { token: string }; Returns: Json }
       log_audit_event: {
         Args: {
