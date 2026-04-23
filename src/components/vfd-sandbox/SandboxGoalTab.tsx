@@ -31,13 +31,7 @@ interface Campaign {
 
 const fmt = (n: number) => new Intl.NumberFormat("en-NG").format(n);
 
-const nigerianBanks = [
-  "Access Bank", "Citibank", "Ecobank", "Fidelity Bank", "First Bank",
-  "FCMB", "GTBank", "Heritage Bank", "Keystone Bank", "Kuda Bank",
-  "Moniepoint MFB", "OPay", "Palmpay", "Polaris Bank", "Providus Bank",
-  "Stanbic IBTC", "Sterling Bank", "UBA", "Union Bank", "Unity Bank",
-  "VFD MFB", "Wema Bank", "Zenith Bank",
-];
+// (beneficiary bank list removed — funds credit to creator's wallet)
 
 export function SandboxGoalTab() {
   const { toast } = useToast();
