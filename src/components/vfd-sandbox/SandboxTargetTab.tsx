@@ -342,18 +342,26 @@ export function SandboxTargetTab() {
                   </SelectContent>
                 </Select>
               </div>
-              <div>
-                <Label>Max Members (incl. you)</Label>
-                <Input type="number" value={form.max_members} onChange={(e) => setForm(p => ({ ...p, max_members: e.target.value }))} min={2} max={100} />
-              </div>
+              {!isIndependentForm && (
+                <div>
+                  <Label>Max Members (incl. you)</Label>
+                  <Input type="number" value={form.max_members} onChange={(e) => setForm(p => ({ ...p, max_members: e.target.value }))} min={2} max={100} />
+                </div>
+              )}
             </div>
 
             {/* Auto-calculated contribution */}
-            {targetAmount > 0 && maxMembers > 0 && (
+            {targetAmount > 0 && (
               <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
-                <p className="text-xs text-muted-foreground mb-1">Contribution per member (auto-calculated)</p>
+                <p className="text-xs text-muted-foreground mb-1">
+                  {isIndependentForm ? "Your contribution" : "Contribution per member (auto-calculated)"}
+                </p>
                 <p className="text-lg font-bold">₦{fmt(contributionAmount)}</p>
-                <p className="text-xs text-muted-foreground">₦{fmt(targetAmount)} ÷ {maxMembers} members</p>
+                <p className="text-xs text-muted-foreground">
+                  {isIndependentForm
+                    ? "You save toward this target alone — no other members."
+                    : `₦${fmt(targetAmount)} ÷ ${maxMembers} members`}
+                </p>
               </div>
             )}
 
