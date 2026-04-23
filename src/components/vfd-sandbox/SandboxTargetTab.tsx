@@ -44,20 +44,24 @@ export function SandboxTargetTab() {
     max_members: "10", frequency: "monthly", savings_type: "group" as "group" | "independent",
   });
 
+  const isIndependentForm = form.savings_type === "independent";
   const targetAmount = parseFloat(form.goal_amount) || 0;
-  const maxMembers = parseInt(form.max_members) || 1;
-  const contributionAmount = maxMembers > 0 ? Math.ceil(targetAmount / maxMembers) : 0;
+  // Independent savings = solo wallet; no member splitting
+  const maxMembers = isIndependentForm ? 1 : (parseInt(form.max_members) || 1);
+  const contributionAmount = isIndependentForm
+    ? targetAmount
+    : (maxMembers > 0 ? Math.ceil(targetAmount / maxMembers) : 0);
 
   const autoTargetDate = useMemo(() => {
-    const members = parseInt(form.max_members) || 1;
+    const periods = isIndependentForm ? 1 : (parseInt(form.max_members) || 1);
     const start = new Date();
     switch (form.frequency) {
-      case "daily": return addDays(start, members);
-      case "weekly": return addWeeks(start, members);
-      case "monthly": return addMonths(start, members);
-      default: return addDays(start, members);
+      case "daily": return addDays(start, periods);
+      case "weekly": return addWeeks(start, periods);
+      case "monthly": return addMonths(start, periods);
+      default: return addDays(start, periods);
     }
-  }, [form.frequency, form.max_members]);
+  }, [form.frequency, form.max_members, isIndependentForm]);
 
   const freqLabel = form.frequency === "daily" ? "days" : form.frequency === "weekly" ? "weeks" : "months";
 
@@ -81,6 +85,8 @@ export function SandboxTargetTab() {
       setForm({ name: "", description: "", reason: "", goal_amount: "", max_members: "10", frequency: "monthly", savings_type: "group" });
       setShowCreate(false);
       await loadTargets();
+    } else {
+      toast({ title: "Could not create target", description: "Please try again or check the form values.", variant: "destructive" });
     }
   };
 
