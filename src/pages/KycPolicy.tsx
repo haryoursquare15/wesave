@@ -16,7 +16,7 @@ export default function KycPolicy() {
             <h1 className="text-xl font-bold text-foreground">KYC Onboarding Policy</h1>
           </div>
           <Button variant="outline" size="sm" asChild>
-            <a href="/compliance/WeSave_KYC_Onboarding_Policy_v1.0.docx" download>
+            <a href="/compliance/Vestara_KYC_Onboarding_Policy_v1.1.docx" download>
               <Download className="h-4 w-4 mr-2" /> DOCX
             </a>
           </Button>
@@ -26,10 +26,10 @@ export default function KycPolicy() {
       <main className="container mx-auto px-4 py-8 max-w-3xl">
         <div className="flex items-center gap-2 mb-4 text-primary">
           <UserCheck className="h-5 w-5" />
-          <span className="text-sm font-medium">Effective: April 2026 • Version 1.0</span>
+          <span className="text-sm font-medium">Effective: April 2026 • Version 1.1</span>
         </div>
-        <h1 className="text-2xl font-bold text-foreground mb-2">WESAVE — KYC ONBOARDING POLICY</h1>
-        <p className="text-muted-foreground mb-6">Aligned with the CBN 3-Tier KYC framework, MLPPA 2022, and NDPA 2023.</p>
+        <h1 className="text-2xl font-bold text-foreground mb-2">VESTARA — KYC ONBOARDING POLICY</h1>
+        <p className="text-muted-foreground mb-6">Operated by LLH Premium Enterprise on vestara.ng. Identity, BVN, NIN, and account verification powered exclusively by VFD Microfinance Bank Plc (BaaS). Aligned with the CBN 3-Tier KYC framework, MLPPA 2022, and NDPA 2023.</p>
 
         <section className="space-y-6">
           <div>
@@ -92,8 +92,8 @@ export default function KycPolicy() {
 
           <div className="pt-4 border-t border-border">
             <h3 className="text-base font-semibold text-foreground">Contact</h3>
-            <p className="text-muted-foreground">KYC Desk: kyc@wesave.ng</p>
-            <p className="text-muted-foreground">Phone: 09039479554 • Lagos, Nigeria</p>
+            <p className="text-muted-foreground">KYC Desk: kyc@vestara.ng • DPO: dpo@vestara.ng</p>
+            <p className="text-muted-foreground">Phone: 09039479554 • Lagos, Nigeria • vestara.ng</p>
           </div>
         </section>
       </main>
