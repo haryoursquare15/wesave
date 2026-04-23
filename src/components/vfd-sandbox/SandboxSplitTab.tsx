@@ -204,8 +204,8 @@ export function SandboxSplitTab() {
                       <span className="text-destructive">Declined</span>
                     </>
                   )}
-                  {/* Creator can remove pending participants */}
-                  {isCreator && p.status === "pending" && s.status === "active" && (
+                  {/* Creator can remove pending participants — but never themselves */}
+                  {isCreator && p.status === "pending" && s.status === "active" && p.user_id !== s.creator_id && (
                     <Button size="sm" variant="ghost" className="h-6 px-2 text-destructive text-[10px]" onClick={async () => {
                       await products.removeSplitParticipant(s.id, p.user_id);
                       toast({ title: "Removed" });

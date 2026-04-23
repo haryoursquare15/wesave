@@ -1,14 +1,15 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Lock, Unlock, TrendingUp, CheckCircle2, ArrowLeft,
-  RefreshCw, Calendar, Percent, ArrowRight, AlertTriangle,
+  Lock, Unlock, TrendingUp, ArrowLeft,
+  RefreshCw, Percent, ArrowRight, AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/hooks/use-toast";
 
 interface LockConfig {
   id: string; duration_months: number; interest_rate: number; early_withdrawal_penalty: number;
@@ -40,6 +41,7 @@ export function SandboxLockFunds({
   lockConfigs, lockedFunds, userBalance, loading,
   onCreateLock, onUnlock, onBreakLock, onRefresh, onBack,
 }: Props) {
+  const { toast } = useToast();
   const [step, setStep] = useState<FlowStep>("amount");
   const [amount, setAmount] = useState("");
   const [selectedDuration, setSelectedDuration] = useState<number | null>(null);
@@ -47,6 +49,8 @@ export function SandboxLockFunds({
 
   const selectedConfig = lockConfigs.find(c => c.duration_months === selectedDuration);
   const amtNum = parseFloat(amount);
+  const availableBalance = Number(userBalance?.available_balance || 0);
+  const exceedsAvailable = !isNaN(amtNum) && amtNum > availableBalance;
   const preview = selectedConfig && !isNaN(amtNum) && amtNum > 0 ? (() => {
     const interest = amtNum * (selectedConfig.interest_rate / 100) * (selectedConfig.duration_months / 12);
     const maturity = new Date();
@@ -56,6 +60,14 @@ export function SandboxLockFunds({
 
   const handleConfirm = async () => {
     if (!selectedDuration || isNaN(amtNum)) return;
+    if (amtNum > availableBalance) {
+      toast({
+        title: "Insufficient available balance",
+        description: `You only have ₦${availableBalance.toLocaleString()} available to lock.`,
+        variant: "destructive",
+      });
+      return;
+    }
     await onCreateLock(amtNum, selectedDuration);
     setStep("amount");
     setAmount("");
@@ -139,9 +151,15 @@ export function SandboxLockFunds({
                   </button>
                 ))}
               </div>
+              {exceedsAvailable && (
+                <p className="text-xs text-destructive flex items-center gap-1.5">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  Amount exceeds available balance (₦{availableBalance.toLocaleString()})
+                </p>
+              )}
               <Button
                 onClick={() => setStep("duration")}
-                disabled={!amount || isNaN(amtNum) || amtNum <= 0}
+                disabled={!amount || isNaN(amtNum) || amtNum <= 0 || exceedsAvailable}
                 className="w-full"
               >
                 Continue <ArrowRight className="h-4 w-4 ml-2" />
@@ -316,11 +334,15 @@ export function SandboxLockFunds({
                   )}
 
                   <div className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-1 text-success">
+                    <div className="flex items-center gap-1 text-success" title="Interest accrued so far (paid out at maturity)">
                       <TrendingUp className="h-3 w-3" />
-                      <span>+₦{Number(lock.expected_interest).toLocaleString()}</span>
+                      <span>
+                        Accrued: <span className="font-semibold">+₦{Number(lock.expected_interest || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                      </span>
                     </div>
-                    <span className="text-muted-foreground">Total: ₦{Number(lock.total_payout).toLocaleString()}</span>
+                    <span className="text-muted-foreground">
+                      Total: ₦{Number(lock.total_payout || lock.principal_amount).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    </span>
                   </div>
 
                   {lock.status === "active" && (

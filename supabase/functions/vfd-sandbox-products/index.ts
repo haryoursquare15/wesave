@@ -1475,6 +1475,7 @@ async function handleRemoveSplitParticipant(userId: string, body: Record<string,
   const { data: split } = await db.from("vfd_sandbox_splits").select("*").eq("id", splitId).single();
   if (!split) return jsonResponse({ error: "Split not found" }, 404);
   if (split.creator_id !== userId) return jsonResponse({ error: "Only the creator can remove participants" }, 400);
+  if (participantUserId === split.creator_id) return jsonResponse({ error: "The split creator cannot be removed — they are always part of the split." }, 400);
   if (split.status !== "active") return jsonResponse({ error: "Can only manage active splits" }, 400);
 
   const { data: participant } = await db.from("vfd_sandbox_split_participants")
