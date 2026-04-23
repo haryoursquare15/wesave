@@ -283,20 +283,34 @@ function VfdSandboxInner() {
     fullName: vfd.client?.full_name || "—",
   };
 
+  // Compute accrued interest per lock from accrued_interest accounts
+  // (each accrued_interest account stores metadata.lock_account_id pointing
+  // back to its parent locked_savings account).
+  const interestByLock = vestara.accounts
+    .filter((a) => a.account_type === "accrued_interest")
+    .reduce<Record<string, number>>((acc, a) => {
+      const lockId = (a.metadata as Record<string, unknown> | null)?.lock_account_id as string | undefined;
+      if (lockId) acc[lockId] = (acc[lockId] || 0) + Number(a.balance);
+      return acc;
+    }, {});
+
   // Map vestara locked funds to the format SandboxLockFunds expects
-  const mappedLockedFunds = vestaraLockedFunds.map(lf => ({
-    id: lf.id, // This IS the vestara_accounts.id — used for unlock
-    principal_amount: lf.balance,
-    interest_rate: lf.metadata?.interest_rate || 10,
-    duration_months: lf.metadata?.duration_months || 0,
-    expected_interest: 0,
-    total_payout: lf.balance,
-    start_date: lf.metadata?.locked_at || lf.created_at,
-    maturity_date: lf.metadata?.maturity_date || "",
-    actual_unlock_date: null,
-    penalty_amount: 0,
-    status: lf.balance > 0 ? "active" : "unlocked",
-  }));
+  const mappedLockedFunds = vestaraLockedFunds.map(lf => {
+    const accrued = interestByLock[lf.id] || 0;
+    return {
+      id: lf.id, // This IS the vestara_accounts.id — used for unlock
+      principal_amount: lf.balance,
+      interest_rate: lf.metadata?.interest_rate || 10,
+      duration_months: lf.metadata?.duration_months || 0,
+      expected_interest: accrued,
+      total_payout: lf.balance + accrued,
+      start_date: lf.metadata?.locked_at || lf.created_at,
+      maturity_date: lf.metadata?.maturity_date || "",
+      actual_unlock_date: null,
+      penalty_amount: 0,
+      status: lf.balance > 0 ? "active" : "unlocked",
+    };
+  });
 
   // Product tabs render their own internal back navigation (e.g. "Back to Targets"
   // when in detail view). We only need a single, top-level back button that
