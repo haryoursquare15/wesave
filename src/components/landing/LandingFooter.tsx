@@ -16,6 +16,8 @@ export function LandingFooter() {
           <div className="flex flex-col sm:flex-row gap-4 text-sm text-muted-foreground">
             <Link to="/terms" className="hover:text-primary transition-colors">Terms of Service</Link>
             <Link to="/privacy" className="hover:text-primary transition-colors">Privacy Policy</Link>
+            <Link to="/aml-policy" className="hover:text-primary transition-colors">AML Policy</Link>
+            <Link to="/kyc-policy" className="hover:text-primary transition-colors">KYC Policy</Link>
             <a
               href="https://instagram.com/Wesave.ng"
               target="_blank"
