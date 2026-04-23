@@ -298,13 +298,19 @@ function VfdSandboxInner() {
     status: lf.balance > 0 ? "active" : "unlocked",
   }));
 
+  // Product tabs render their own internal back navigation (e.g. "Back to Targets"
+  // when in detail view). We only need a single, top-level back button that
+  // returns to the dashboard. To avoid the glitch where two stacked back
+  // buttons confuse users, the wrapper exposes a small "Dashboard" link
+  // instead of a duplicate ArrowLeft.
   const ProductWrapper = ({ children }: { children: React.ReactNode }) => (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={goBack}>
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-      </div>
+      <button
+        onClick={goBack}
+        className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+      >
+        <ArrowLeft className="h-3 w-3" /> Dashboard
+      </button>
       {children}
     </div>
   );
