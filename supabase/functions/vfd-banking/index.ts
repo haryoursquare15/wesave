@@ -595,7 +595,8 @@ async function handleTransfer(
   // Step 3: Build VFD transfer payload
   const walletPrefix = Deno.env.get("VFD_WALLET_NAME") || "WeSave";
   const reference = body.reference as string || `${walletPrefix}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
-  const transferType = body.transferType as string || body.bankCode === "999999" ? "intra" : "inter";
+  // VFD: bankCode "999999" = intra-bank (within VFD); anything else = inter-bank
+  const transferType = (body.transferType as string) || (body.bankCode === "999999" ? "intra" : "inter");
 
   const transferPayload: Record<string, unknown> = {
     fromAccount,

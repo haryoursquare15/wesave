@@ -169,7 +169,12 @@ export function useVfdBanking() {
 
   const validateBeneficiary = useCallback(
     (accountNo: string, bankCode: string) =>
-      invokeVfd("validate_beneficiary", { accountNo, bankCode }),
+      invokeVfd("validate_beneficiary", {
+        accountNo,
+        bankCode,
+        // VFD: 999999 = intra-bank (within VFD); anything else = inter
+        transferType: bankCode === "999999" ? "intra" : "inter",
+      }),
     [invokeVfd]
   );
 
