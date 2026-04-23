@@ -2668,6 +2668,7 @@ Deno.serve(async (req) => {
       case "contribute_campaign": return await handleContributeCampaign(userId, body);
       case "get_campaign_detail": return await handleGetCampaignDetail(body);
       case "post_campaign_update": return await handlePostCampaignUpdate(userId, body);
+      case "withdraw_campaign_escrow": return await handleWithdrawCampaignEscrow(userId, body);
 
       // SplitPay (full parity)
       case "create_split": return await handleCreateSplit(userId, body);
