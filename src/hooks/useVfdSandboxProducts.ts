@@ -94,6 +94,8 @@ export function useVfdSandboxProducts() {
   const getCampaignDetail = useCallback((campaign_id: string) => invoke("get_campaign_detail", { campaign_id }), [invoke]);
   const postCampaignUpdate = useCallback((campaign_id: string, update_message: string) =>
     invoke("post_campaign_update", { campaign_id, update_message }), [invoke]);
+  const withdrawCampaignEscrow = useCallback((campaign_id: string, amount?: number) =>
+    invoke("withdraw_campaign_escrow", { campaign_id, amount }), [invoke]);
 
   // SplitPay (full parity)
   const createSplit = useCallback((body: Record<string, unknown>) => invoke("create_split", body), [invoke]);
@@ -149,7 +151,7 @@ export function useVfdSandboxProducts() {
     inviteTargetMember, respondTargetInvite,
     requestTargetWithdrawal, voteTargetWithdrawal, independentWithdrawal,
     // Goal Funding
-    createCampaign, listCampaigns, contributeCampaign, getCampaignDetail, postCampaignUpdate,
+    createCampaign, listCampaigns, contributeCampaign, getCampaignDetail, postCampaignUpdate, withdrawCampaignEscrow,
     // SplitPay
     createSplit, listSplits, joinSplit, paySplit,
     declineSplit, cancelSplit, removeSplitParticipant, getSplitDetail,

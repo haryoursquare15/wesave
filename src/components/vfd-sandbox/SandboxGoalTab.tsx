@@ -27,6 +27,7 @@ interface Campaign {
   contribution_visibility?: string; campaign_slug?: string;
   beneficiary_account_name?: string; beneficiary_bank_name?: string;
   beneficiary_account_number?: string; campaign_image?: string;
+  escrow_balance?: number; total_withdrawn?: number;
 }
 
 const fmt = (n: number) => new Intl.NumberFormat("en-NG").format(n);
@@ -53,6 +54,7 @@ export function SandboxGoalTab() {
   const [contributeAmount, setContributeAmount] = useState("");
   const [contributeAnonymous, setContributeAnonymous] = useState(false);
   const [updateMessage, setUpdateMessage] = useState("");
+  const [withdrawAmount, setWithdrawAmount] = useState("");
 
   const loadCampaigns = async () => {
     const result = await products.listCampaigns();
@@ -132,7 +134,25 @@ export function SandboxGoalTab() {
     const contributions = detailData.contributions || [];
     const updates = detailData.updates || [];
     const progress = Number(c.goal_amount) > 0 ? (Number(c.raised_amount) / Number(c.goal_amount)) * 100 : 0;
-    const isOwner = true; // sandbox
+    const isOwner = !!userId && c.creator_id === userId;
+    const escrow = Number(c.escrow_balance || 0);
+    const withdrawn = Number(c.total_withdrawn || 0);
+
+    const handleWithdraw = async () => {
+      const amt = withdrawAmount.trim() ? Number(withdrawAmount) : undefined;
+      if (amt !== undefined && (isNaN(amt) || amt <= 0)) {
+        toast({ title: "Invalid amount", variant: "destructive" }); return;
+      }
+      if (amt !== undefined && amt > escrow) {
+        toast({ title: "Amount exceeds escrow balance", variant: "destructive" }); return;
+      }
+      const res = await products.withdrawCampaignEscrow(c.id, amt);
+      if (res?.data) {
+        toast({ title: "Funds moved to wallet", description: `₦${fmt(Number(res.data.withdrawn))}` });
+        setWithdrawAmount("");
+        loadDetail(c.id);
+      }
+    };
 
     return (
       <div className="space-y-4">
@@ -216,7 +236,7 @@ export function SandboxGoalTab() {
           <div className="flex items-start gap-2">
             <AlertTriangle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
             <p className="text-xs text-muted-foreground">
-              Wesave provides a platform for coordinating contributions. Payments go directly to the campaign beneficiary. Wesave does not hold or manage contributed funds.
+              Contributions are held in campaign escrow and can be withdrawn by the campaign owner to their wallet. Wesave coordinates the escrow but does not own or control the funds.
             </p>
           </div>
         </div>
@@ -265,6 +285,25 @@ export function SandboxGoalTab() {
           </TabsContent>
           {isOwner && (
             <TabsContent value="manage" className="space-y-3 mt-3">
+              <div className="p-3 rounded-xl bg-primary/5 border border-primary/20">
+                <p className="text-xs text-muted-foreground mb-1">Escrow balance (available to withdraw)</p>
+                <p className="text-2xl font-bold text-primary">₦{fmt(escrow)}</p>
+                <p className="text-[11px] text-muted-foreground mt-1">Total withdrawn so far: ₦{fmt(withdrawn)}</p>
+
+                <div className="mt-3 space-y-2">
+                  <Input
+                    type="number"
+                    placeholder={`Amount (leave empty to withdraw full ₦${fmt(escrow)})`}
+                    value={withdrawAmount}
+                    onChange={(e) => setWithdrawAmount(e.target.value)}
+                    disabled={escrow <= 0}
+                  />
+                  <Button className="w-full" size="sm" onClick={handleWithdraw} disabled={products.loading || escrow <= 0}>
+                    Withdraw to my wallet
+                  </Button>
+                </div>
+              </div>
+
               <div>
                 <Label>Post an Update</Label>
                 <Textarea value={updateMessage} onChange={(e) => setUpdateMessage(e.target.value)} placeholder="Share progress with supporters..." rows={3} />
@@ -279,7 +318,7 @@ export function SandboxGoalTab() {
                 </Button>
               </div>
               <p className="text-[11px] text-muted-foreground p-2 rounded bg-muted/30">
-                Beneficiary bank details are kept private and used only to settle contributions to you. They are not shown to contributors.
+                Contributions are held in this campaign's escrow until you withdraw them to your wallet. Wesave does not access or hold escrow funds for any other purpose.
               </p>
             </TabsContent>
           )}
@@ -300,12 +339,12 @@ export function SandboxGoalTab() {
         </div>
       </div>
 
-      {/* Legal notice */}
+      {/* Escrow notice */}
       <div className="p-3 rounded-xl bg-primary/5 border border-primary/20">
         <div className="flex items-start gap-2">
           <AlertTriangle className="h-4 w-4 text-primary mt-0.5" />
           <p className="text-xs text-muted-foreground">
-            Wesave facilitates contributions. Payments go directly to the campaign beneficiary. Wesave does not hold or manage contributed funds.
+            Contributions are held in each campaign's escrow until the owner withdraws them to their wallet. Wesave coordinates the escrow but does not own or use the funds.
           </p>
         </div>
       </div>

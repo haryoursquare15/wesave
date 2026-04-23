@@ -3695,11 +3695,13 @@ export type Database = {
           creator_id: string
           deadline: string | null
           description: string | null
+          escrow_balance: number
           goal_amount: number
           id: string
           raised_amount: number
           status: string
           title: string
+          total_withdrawn: number
           updated_at: string
         }
         Insert: {
@@ -3714,11 +3716,13 @@ export type Database = {
           creator_id: string
           deadline?: string | null
           description?: string | null
+          escrow_balance?: number
           goal_amount: number
           id?: string
           raised_amount?: number
           status?: string
           title: string
+          total_withdrawn?: number
           updated_at?: string
         }
         Update: {
@@ -3733,11 +3737,13 @@ export type Database = {
           creator_id?: string
           deadline?: string | null
           description?: string | null
+          escrow_balance?: number
           goal_amount?: number
           id?: string
           raised_amount?: number
           status?: string
           title?: string
+          total_withdrawn?: number
           updated_at?: string
         }
         Relationships: []

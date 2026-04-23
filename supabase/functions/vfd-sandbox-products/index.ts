@@ -1201,16 +1201,65 @@ async function handleContributeCampaign(userId: string, body: Record<string, unk
     contribution_reference: contributionRef,
   });
 
+  // Escrow accounting: funds sit in the campaign's escrow_balance until the
+  // owner withdraws them. They are NOT auto-credited to the owner's wallet.
   const newRaised = Number(campaign.raised_amount) + amount;
+  const newEscrow = Number(campaign.escrow_balance || 0) + amount;
   const updates: Record<string, unknown> = {
     raised_amount: newRaised,
+    escrow_balance: newEscrow,
     contributor_count: campaign.contributor_count + 1,
     updated_at: new Date().toISOString(),
   };
   if (newRaised >= Number(campaign.goal_amount)) updates.status = "completed";
   await db.from("vfd_sandbox_campaigns").update(updates).eq("id", campaignId);
 
-  return jsonResponse({ data: { contributed: true, amount, total_raised: newRaised } });
+  // Notify the owner so they can see new escrow funds awaiting withdrawal.
+  if (campaign.creator_id !== userId) {
+    await sendNotification(
+      campaign.creator_id,
+      "New campaign contribution",
+      `Your campaign “${campaign.title}” received ₦${amount.toLocaleString()}. Escrow balance: ₦${newEscrow.toLocaleString()}.`,
+      "campaign_contribution",
+    );
+  }
+
+  return jsonResponse({ data: { contributed: true, amount, total_raised: newRaised, escrow_balance: newEscrow } });
+}
+
+async function handleWithdrawCampaignEscrow(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const campaignId = body.campaign_id as string;
+  const requestedAmount = body.amount !== undefined ? Number(body.amount) : null;
+
+  if (!campaignId) return jsonResponse({ error: "Campaign id required" }, 400);
+
+  const { data: campaign } = await db.from("vfd_sandbox_campaigns").select("*").eq("id", campaignId).single();
+  if (!campaign) return jsonResponse({ error: "Campaign not found" }, 404);
+  if (campaign.creator_id !== userId) return jsonResponse({ error: "Only the campaign owner can withdraw" }, 403);
+
+  const escrow = Number(campaign.escrow_balance || 0);
+  if (escrow <= 0) return jsonResponse({ error: "No funds available in escrow" }, 400);
+
+  const amount = requestedAmount && requestedAmount > 0 ? Math.min(requestedAmount, escrow) : escrow;
+  if (amount <= 0) return jsonResponse({ error: "Invalid withdrawal amount" }, 400);
+
+  // Move funds from campaign escrow to owner's wallet.
+  await creditWallet(userId, amount);
+  await db.from("vfd_sandbox_campaigns").update({
+    escrow_balance: escrow - amount,
+    total_withdrawn: Number(campaign.total_withdrawn || 0) + amount,
+    updated_at: new Date().toISOString(),
+  }).eq("id", campaignId);
+
+  await sendNotification(
+    userId,
+    "Campaign funds withdrawn",
+    `₦${amount.toLocaleString()} from “${campaign.title}” has been moved to your wallet.`,
+    "campaign_withdrawal",
+  );
+
+  return jsonResponse({ data: { withdrawn: amount, remaining_escrow: escrow - amount } });
 }
 
 async function handleGetCampaignDetail(body: Record<string, unknown>) {
@@ -2619,6 +2668,7 @@ Deno.serve(async (req) => {
       case "contribute_campaign": return await handleContributeCampaign(userId, body);
       case "get_campaign_detail": return await handleGetCampaignDetail(body);
       case "post_campaign_update": return await handlePostCampaignUpdate(userId, body);
+      case "withdraw_campaign_escrow": return await handleWithdrawCampaignEscrow(userId, body);
 
       // SplitPay (full parity)
       case "create_split": return await handleCreateSplit(userId, body);

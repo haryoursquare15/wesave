@@ -31,6 +31,8 @@ import TargetAjoDetail from "./pages/TargetAjoDetail";
 import Associations from "./pages/Associations";
 import TermsOfService from "./pages/TermsOfService";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
+import AmlPolicy from "./pages/AmlPolicy";
+import KycPolicy from "./pages/KycPolicy";
 import RecurringTestDashboard from "./pages/RecurringTestDashboard";
 import Referrals from "./pages/Referrals";
 import SplitPay from "./pages/SplitPay";
@@ -46,7 +48,7 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-const PUBLIC_ROUTES = ["/", "/auth", "/forgot-password", "/invite", "/onboarding", "/terms", "/privacy", "/goal", "/delete-account", "/app-home", "/vfd-sandbox", "/vfd-sandbox/auth"];
+const PUBLIC_ROUTES = ["/", "/auth", "/forgot-password", "/invite", "/onboarding", "/terms", "/privacy", "/aml-policy", "/kyc-policy", "/goal", "/delete-account", "/app-home", "/vfd-sandbox", "/vfd-sandbox/auth"];
 
 function isPublicRoute(pathname: string) {
   return PUBLIC_ROUTES.some(route => 
@@ -145,6 +147,8 @@ const App = () => {
                 <Route path="/split-pay/:requestId" element={<SplitPayDetail />} />
                 <Route path="/terms" element={<TermsOfService />} />
                 <Route path="/privacy" element={<PrivacyPolicy />} />
+                <Route path="/aml-policy" element={<AmlPolicy />} />
+                <Route path="/kyc-policy" element={<KycPolicy />} />
                 <Route path="/delete-account" element={<DeleteAccount />} />
                 <Route path="/vfd-sandbox/auth" element={
                   <SandboxAuthProvider>
