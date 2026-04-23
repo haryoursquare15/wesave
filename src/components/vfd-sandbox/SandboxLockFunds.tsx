@@ -151,9 +151,15 @@ export function SandboxLockFunds({
                   </button>
                 ))}
               </div>
+              {exceedsAvailable && (
+                <p className="text-xs text-destructive flex items-center gap-1.5">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  Amount exceeds available balance (₦{availableBalance.toLocaleString()})
+                </p>
+              )}
               <Button
                 onClick={() => setStep("duration")}
-                disabled={!amount || isNaN(amtNum) || amtNum <= 0}
+                disabled={!amount || isNaN(amtNum) || amtNum <= 0 || exceedsAvailable}
                 className="w-full"
               >
                 Continue <ArrowRight className="h-4 w-4 ml-2" />
