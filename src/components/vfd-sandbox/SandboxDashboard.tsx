@@ -194,7 +194,14 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [] 
     return "Good evening";
   })();
 
-  const firstName = balance.fullName?.split(" ")[0] || "there";
+  const firstName = (() => {
+    const raw = balance.fullName?.trim();
+    if (!raw || raw === "—") return "there";
+    // Take first non-empty word, capitalize first letter
+    const first = raw.split(/\s+/)[0];
+    if (!first) return "there";
+    return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
+  })();
 
   return (
     <div className="space-y-6">
