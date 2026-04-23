@@ -1750,7 +1750,24 @@ async function handleBillsBillers(body: Record<string, unknown>) {
   if (!token) return jsonResponse({ error: "VFD auth failed" }, 500);
   const url = cat ? `${getBillsBase()}/billerlist?categoryName=${encodeURIComponent(cat)}` : `${getBillsBase()}/billerlist`;
   const resp = await fetch(url, { headers: { AccessToken: token } });
-  return jsonResponse({ data: await safeJson(resp) });
+  const raw = await safeJson(resp) as Record<string, unknown> | null;
+  console.log(`[bills_billers] cat=${cat} status=${resp.status} resp=`, JSON.stringify(raw)?.slice(0, 500));
+
+  // Normalize: VFD response shape is { status, message, data: [...] }; sometimes nested under data.data
+  let billersList: unknown[] = [];
+  const rawData = raw?.data;
+  if (Array.isArray(rawData)) {
+    billersList = rawData;
+  } else if (rawData && typeof rawData === "object" && Array.isArray((rawData as Record<string, unknown>).data)) {
+    billersList = (rawData as { data: unknown[] }).data;
+  }
+
+  // Always return a normalized envelope so the frontend has predictable access
+  return jsonResponse({
+    data: { data: billersList, status: raw?.status, message: raw?.message },
+    raw,
+    vfd_status: resp.status,
+  });
 }
 
 async function handleBillsItems(body: Record<string, unknown>) {

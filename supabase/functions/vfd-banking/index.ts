@@ -556,12 +556,24 @@ async function handleValidateBeneficiary(accountNo: string, bankCode: string, tr
     bank: bankCode,
     transfer_type: transferType,
   });
-  console.log("[VFD validate_beneficiary] Raw response:", JSON.stringify(data));
+  console.log("[VFD validate_beneficiary] Status:", status, "Response:", JSON.stringify(data));
 
   // Normalize: extract account name from various possible response shapes
-  const vfdData = data as Record<string, unknown>;
+  const vfdData = data as Record<string, unknown> | null;
   const innerData = vfdData?.data as Record<string, unknown> | undefined;
   const accountName = innerData?.accountName || innerData?.account_name || innerData?.beneficiaryName || innerData?.name || null;
+  const vfdStatusCode = vfdData?.status as string | undefined;
+  const vfdMessage = (vfdData?.message as string | undefined) || (innerData?.message as string | undefined);
+
+  // Surface a clear error so the UI can show a meaningful toast instead of silent failure
+  if (!accountName) {
+    return jsonResponse({
+      data,
+      accountName: null,
+      vfd_status: status,
+      error: vfdMessage || `Could not verify account (VFD status ${vfdStatusCode || status})`,
+    }, status >= 400 ? status : 200);
+  }
 
   return jsonResponse({ data, accountName, vfd_status: status });
 }
