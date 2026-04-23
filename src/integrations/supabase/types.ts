@@ -3374,6 +3374,41 @@ export type Database = {
         }
         Relationships: []
       }
+      vfd_sandbox_association_chat: {
+        Row: {
+          association_id: string
+          created_at: string
+          id: string
+          message: string
+          message_type: string | null
+          user_id: string
+        }
+        Insert: {
+          association_id: string
+          created_at?: string
+          id?: string
+          message: string
+          message_type?: string | null
+          user_id: string
+        }
+        Update: {
+          association_id?: string
+          created_at?: string
+          id?: string
+          message?: string
+          message_type?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vfd_sandbox_association_chat_association_id_fkey"
+            columns: ["association_id"]
+            isOneToOne: false
+            referencedRelation: "vfd_sandbox_associations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vfd_sandbox_association_contributions: {
         Row: {
           amount: number
@@ -3402,6 +3437,44 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "vfd_sandbox_association_contributions_association_id_fkey"
+            columns: ["association_id"]
+            isOneToOne: false
+            referencedRelation: "vfd_sandbox_associations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vfd_sandbox_association_invites: {
+        Row: {
+          association_id: string
+          created_at: string
+          id: string
+          invitee_id: string
+          inviter_id: string
+          responded_at: string | null
+          status: string
+        }
+        Insert: {
+          association_id: string
+          created_at?: string
+          id?: string
+          invitee_id: string
+          inviter_id: string
+          responded_at?: string | null
+          status?: string
+        }
+        Update: {
+          association_id?: string
+          created_at?: string
+          id?: string
+          invitee_id?: string
+          inviter_id?: string
+          responded_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vfd_sandbox_association_invites_association_id_fkey"
             columns: ["association_id"]
             isOneToOne: false
             referencedRelation: "vfd_sandbox_associations"
@@ -3476,34 +3549,55 @@ export type Database = {
       vfd_sandbox_associations: {
         Row: {
           admin_id: string
+          approval_status: string
           created_at: string
           description: string | null
+          executive_ids_url: string | null
           id: string
           max_members: number
           member_count: number
           name: string
+          rejection_reason: string | null
+          request_letter_url: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          signatures_url: string | null
           status: string
           updated_at: string
         }
         Insert: {
           admin_id: string
+          approval_status?: string
           created_at?: string
           description?: string | null
+          executive_ids_url?: string | null
           id?: string
           max_members?: number
           member_count?: number
           name: string
+          rejection_reason?: string | null
+          request_letter_url?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          signatures_url?: string | null
           status?: string
           updated_at?: string
         }
         Update: {
           admin_id?: string
+          approval_status?: string
           created_at?: string
           description?: string | null
+          executive_ids_url?: string | null
           id?: string
           max_members?: number
           member_count?: number
           name?: string
+          rejection_reason?: string | null
+          request_letter_url?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          signatures_url?: string | null
           status?: string
           updated_at?: string
         }
