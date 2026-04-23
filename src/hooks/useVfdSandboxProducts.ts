@@ -109,10 +109,21 @@ export function useVfdSandboxProducts() {
   // Associations (full parity)
   const createAssociation = useCallback((body: Record<string, unknown>) => invoke("create_association", body), [invoke]);
   const listAssociations = useCallback(() => invoke("list_associations"), [invoke]);
-  const joinAssociation = useCallback((association_id: string) => invoke("join_association", { association_id }), [invoke]);
+  const joinAssociation = useCallback((association_id: string, role?: "member" | "exco") => invoke("join_association", { association_id, role }), [invoke]);
   const getAssociationDetail = useCallback((association_id: string) => invoke("get_association_detail", { association_id }), [invoke]);
   const contributeAssociation = useCallback((association_id: string, amount: number, narration?: string) =>
     invoke("contribute_association", { association_id, amount, narration }), [invoke]);
+  const inviteAssocMember = useCallback((association_id: string, invitee_id: string) =>
+    invoke("invite_assoc_member", { association_id, invitee_id }), [invoke]);
+  const respondAssocInvite = useCallback((invite_id: string, accept: boolean, role?: "member" | "exco") =>
+    invoke("respond_assoc_invite", { invite_id, accept, role }), [invoke]);
+  const listAssocChat = useCallback((association_id: string) => invoke("list_assoc_chat", { association_id }), [invoke]);
+  const postAssocChat = useCallback((association_id: string, message: string) =>
+    invoke("post_assoc_chat", { association_id, message }), [invoke]);
+  const adminListPendingAssoc = useCallback(() => invoke("admin_list_pending_assoc"), [invoke]);
+  const adminReviewAssoc = useCallback((association_id: string, decision: "approve" | "reject", reason?: string) =>
+    invoke("admin_review_assoc", { association_id, decision, reason }), [invoke]);
+  const adminAssocDocUrl = useCallback((path: string) => invoke("admin_assoc_doc_url", { path }), [invoke]);
 
   // Virtual Cards
   const createVirtualCard = useCallback(() => invoke("create_virtual_card"), [invoke]);
@@ -144,6 +155,8 @@ export function useVfdSandboxProducts() {
     declineSplit, cancelSplit, removeSplitParticipant, getSplitDetail,
     // Associations
     createAssociation, listAssociations, joinAssociation, getAssociationDetail, contributeAssociation,
+    inviteAssocMember, respondAssocInvite, listAssocChat, postAssocChat,
+    adminListPendingAssoc, adminReviewAssoc, adminAssocDocUrl,
     // Virtual Cards
     createVirtualCard, activateCard, cardPinChange, blockCard, unblockCard, getCards, getCardDetails,
   };
