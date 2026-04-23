@@ -334,11 +334,15 @@ export function SandboxLockFunds({
                   )}
 
                   <div className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-1 text-success">
+                    <div className="flex items-center gap-1 text-success" title="Interest accrued so far (paid out at maturity)">
                       <TrendingUp className="h-3 w-3" />
-                      <span>+₦{Number(lock.expected_interest).toLocaleString()}</span>
+                      <span>
+                        Accrued: <span className="font-semibold">+₦{Number(lock.expected_interest || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                      </span>
                     </div>
-                    <span className="text-muted-foreground">Total: ₦{Number(lock.total_payout).toLocaleString()}</span>
+                    <span className="text-muted-foreground">
+                      Total: ₦{Number(lock.total_payout || lock.principal_amount).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    </span>
                   </div>
 
                   {lock.status === "active" && (
