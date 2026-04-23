@@ -727,7 +727,7 @@ async function handleCreateTarget(userId: string, body: Record<string, unknown>)
   const db = getSupabaseAdmin();
   const name = body.name as string;
   const goalAmount = Number(body.goal_amount);
-  const maxMembers = Number(body.max_members) || 5;
+  const requestedMaxMembers = Number(body.max_members) || 5;
   const frequency = (body.frequency as string) || "daily";
   const savingsType = (body.savings_type as string) || "group";
   const description = (body.description as string) || null;
@@ -736,15 +736,21 @@ async function handleCreateTarget(userId: string, body: Record<string, unknown>)
   if (!name || !goalAmount) return jsonResponse({ error: "Name and goal amount required" }, 400);
   if (goalAmount < 1000) return jsonResponse({ error: "Target must be at least ₦1,000" }, 400);
 
-  const contributionAmount = Math.ceil(goalAmount / maxMembers);
-  if (contributionAmount < 100) return jsonResponse({ error: "Contribution per member is too low. Increase target or reduce members." }, 400);
+  // Independent = solo savings; force a single-member target with no invites
+  const isIndependent = savingsType === "independent";
+  const maxMembers = isIndependent ? 1 : Math.max(2, requestedMaxMembers);
+
+  const contributionAmount = isIndependent ? goalAmount : Math.ceil(goalAmount / maxMembers);
+  if (!isIndependent && contributionAmount < 100) {
+    return jsonResponse({ error: "Contribution per member is too low. Increase target or reduce members." }, 400);
+  }
 
   const targetDate = new Date();
   if (frequency === "daily") targetDate.setDate(targetDate.getDate() + maxMembers);
   else if (frequency === "weekly") targetDate.setDate(targetDate.getDate() + maxMembers * 7);
   else targetDate.setMonth(targetDate.getMonth() + maxMembers);
 
-  const inviteLimit = maxMembers - 1;
+  const inviteLimit = isIndependent ? 0 : Math.max(0, maxMembers - 1);
 
   const { data: target, error } = await db.from("vfd_sandbox_targets").insert({
     name, admin_id: userId, goal_amount: goalAmount,
@@ -753,19 +759,27 @@ async function handleCreateTarget(userId: string, body: Record<string, unknown>)
     description, reason, invite_limit: inviteLimit,
   }).select().single();
 
-  if (error) return jsonResponse({ error: error.message }, 500);
-  await db.from("vfd_sandbox_target_members").insert({ target_id: target.id, user_id: userId });
+  if (error) {
+    console.error("[create_target] insert failed", error);
+    return jsonResponse({ error: error.message || "Could not create target" }, 500);
+  }
 
-  // Send invites if provided
-  const inviteeIds = body.invitee_ids as string[] | undefined;
-  if (inviteeIds && inviteeIds.length > 0) {
-    const invites = inviteeIds.slice(0, inviteLimit).map(inviteeId => ({
-      target_id: target.id, inviter_id: userId, invitee_id: inviteeId,
-    }));
-    await db.from("vfd_sandbox_target_invites").insert(invites);
-    for (const inv of invites) {
-      await sendNotification(inv.invitee_id, "Target Ajo Invite",
-        `You've been invited to join "${name}" savings group.`, "target_invite");
+  const { error: memberErr } = await db.from("vfd_sandbox_target_members")
+    .insert({ target_id: target.id, user_id: userId });
+  if (memberErr) console.error("[create_target] admin enrol failed", memberErr);
+
+  // Independent targets never accept invites
+  if (!isIndependent) {
+    const inviteeIds = body.invitee_ids as string[] | undefined;
+    if (inviteeIds && inviteeIds.length > 0) {
+      const invites = inviteeIds.slice(0, inviteLimit).map((inviteeId) => ({
+        target_id: target.id, inviter_id: userId, invitee_id: inviteeId,
+      }));
+      await db.from("vfd_sandbox_target_invites").insert(invites);
+      for (const inv of invites) {
+        await sendNotification(inv.invitee_id, "Target Ajo Invite",
+          `You've been invited to join "${name}" savings group.`, "target_invite");
+      }
     }
   }
 
