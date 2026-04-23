@@ -1552,13 +1552,24 @@ async function handleCreateAssociation(userId: string, body: Record<string, unkn
   const db = getSupabaseAdmin();
   const name = body.name as string;
   const description = (body.description as string) || null;
-  const maxMembers = Math.min(Math.max(Number(body.max_members) || 50, 5), 50);
+  const maxMembers = Math.min(Math.max(Number(body.max_members) || 50, 5), 200);
+  const signaturesUrl = (body.signatures_url as string) || null;
+  const requestLetterUrl = (body.request_letter_url as string) || null;
+  const executiveIdsUrl = (body.executive_ids_url as string) || null;
 
   if (!name?.trim()) return jsonResponse({ error: "Association name is required" }, 400);
+  if (!signaturesUrl || !requestLetterUrl || !executiveIdsUrl) {
+    return jsonResponse({ error: "All three documents (signatures list, request letter, executive IDs) are required" }, 400);
+  }
 
   const { data: assoc, error } = await db.from("vfd_sandbox_associations").insert({
     name: name.trim(), description, admin_id: userId,
     max_members: maxMembers, member_count: 1,
+    status: "active",
+    approval_status: "pending",
+    signatures_url: signaturesUrl,
+    request_letter_url: requestLetterUrl,
+    executive_ids_url: executiveIdsUrl,
   }).select().single();
   if (error) return jsonResponse({ error: error.message }, 500);
 
@@ -1576,36 +1587,62 @@ async function handleCreateAssociation(userId: string, body: Record<string, unkn
 async function handleListAssociations(userId: string) {
   const db = getSupabaseAdmin();
 
-  const { data: all } = await db.from("vfd_sandbox_associations")
-    .select("*").eq("status", "active").order("created_at", { ascending: false });
+  // Public list: only approved associations
+  const { data: approved } = await db.from("vfd_sandbox_associations")
+    .select("*").eq("status", "active").eq("approval_status", "approved")
+    .order("created_at", { ascending: false });
 
+  // My memberships (any approval status — I might be admin of a pending one)
   const { data: memberships } = await db.from("vfd_sandbox_association_memberships")
-    .select("association_id").eq("user_id", userId);
-  const myIds = new Set((memberships || []).map((m: { association_id: string }) => m.association_id));
+    .select("association_id, role").eq("user_id", userId);
+  const myIds = (memberships || []).map((m: { association_id: string }) => m.association_id);
 
-  const mine = (all || []).filter((a: { id: string }) => myIds.has(a.id));
+  let mine: unknown[] = [];
+  if (myIds.length > 0) {
+    const { data } = await db.from("vfd_sandbox_associations")
+      .select("*").in("id", myIds).order("created_at", { ascending: false });
+    mine = data || [];
+  }
 
-  return jsonResponse({ all: all || [], mine });
+  // Pending invites for this user
+  const { data: invites } = await db.from("vfd_sandbox_association_invites")
+    .select("id, association_id, inviter_id, created_at, vfd_sandbox_associations(id,name,description,member_count,max_members,approval_status)")
+    .eq("invitee_id", userId).eq("status", "pending");
+
+  return jsonResponse({ all: approved || [], mine, invites: invites || [] });
 }
 
 async function handleJoinAssociation(userId: string, body: Record<string, unknown>) {
+  // Direct join is invite-only now: this endpoint requires an accepted invite OR a valid invite to consume.
   const db = getSupabaseAdmin();
   const associationId = body.association_id as string;
+  const role = ((body.role as string) === "exco") ? "exco" : "member";
   if (!associationId) return jsonResponse({ error: "association_id required" }, 400);
 
   const { data: assoc } = await db.from("vfd_sandbox_associations").select("*").eq("id", associationId).single();
   if (!assoc) return jsonResponse({ error: "Association not found" }, 404);
   if (assoc.status !== "active") return jsonResponse({ error: "Association is not active" }, 400);
+  if (assoc.approval_status !== "approved") return jsonResponse({ error: "Association is awaiting platform approval" }, 400);
   if (assoc.member_count >= assoc.max_members) return jsonResponse({ error: "Association is full" }, 400);
+
+  // Must have a pending invite
+  const { data: invite } = await db.from("vfd_sandbox_association_invites")
+    .select("*").eq("association_id", associationId).eq("invitee_id", userId).eq("status", "pending").maybeSingle();
+  if (!invite) return jsonResponse({ error: "You must be invited by the association admin to join" }, 403);
 
   const { data: existing } = await db.from("vfd_sandbox_association_memberships")
     .select("id").eq("association_id", associationId).eq("user_id", userId).maybeSingle();
-  if (existing) return jsonResponse({ data: { joined: true, already_member: true } });
+  if (existing) {
+    await db.from("vfd_sandbox_association_invites").update({ status: "accepted", responded_at: new Date().toISOString() }).eq("id", invite.id);
+    return jsonResponse({ data: { joined: true, already_member: true } });
+  }
 
   const { error } = await db.from("vfd_sandbox_association_memberships").insert({
-    association_id: associationId, user_id: userId, role: "member",
+    association_id: associationId, user_id: userId, role,
   });
   if (error) return jsonResponse({ error: error.message }, 500);
+
+  await db.from("vfd_sandbox_association_invites").update({ status: "accepted", responded_at: new Date().toISOString() }).eq("id", invite.id);
 
   await db.from("vfd_sandbox_associations").update({
     member_count: assoc.member_count + 1,
@@ -1615,14 +1652,14 @@ async function handleJoinAssociation(userId: string, body: Record<string, unknow
   // Notify admin
   if (assoc.admin_id !== userId) {
     await sendNotification(assoc.admin_id, "New Association Member",
-      `A new member has joined "${assoc.name}".`,
+      `A new ${role} has joined "${assoc.name}".`,
       "association_joined");
   }
 
-  return jsonResponse({ data: { joined: true } });
+  return jsonResponse({ data: { joined: true, role } });
 }
 
-async function handleGetAssociationDetail(body: Record<string, unknown>) {
+async function handleGetAssociationDetail(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const associationId = body.association_id as string;
   if (!associationId) return jsonResponse({ error: "association_id required" }, 400);
@@ -1636,20 +1673,44 @@ async function handleGetAssociationDetail(body: Record<string, unknown>) {
   const { data: members } = await db.from("vfd_sandbox_association_memberships")
     .select("user_id, role, joined_at").eq("association_id", associationId).order("joined_at");
 
-  const { data: contributions } = await db.from("vfd_sandbox_association_contributions")
-    .select("*").eq("association_id", associationId).order("created_at", { ascending: false }).limit(50);
+  const isMember = (members || []).some((m: { user_id: string }) => m.user_id === userId);
+
+  // Only members can see contributions ledger / chat
+  const { data: contributions } = isMember
+    ? await db.from("vfd_sandbox_association_contributions")
+        .select("*").eq("association_id", associationId).order("created_at", { ascending: false }).limit(100)
+    : { data: [] };
 
   const nameMap = await fetchProfileNames([
     ...(members || []).map((m: { user_id: string }) => m.user_id),
-    ...(contributions || []).map((c: { user_id: string }) => c.user_id),
+    ...((contributions as { user_id: string }[] | null) || []).map((c) => c.user_id),
   ]);
+
+  // Smart summary (members only)
+  let summary: Record<string, number> | null = null;
+  if (isMember) {
+    const totalInflow = ((contributions as { amount: number }[] | null) || []).reduce((s, c) => s + Number(c.amount), 0);
+    const last30 = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const inflow30 = ((contributions as { amount: number; created_at: string }[] | null) || [])
+      .filter(c => new Date(c.created_at).getTime() >= last30)
+      .reduce((s, c) => s + Number(c.amount), 0);
+    summary = {
+      total_inflow: totalInflow,
+      inflow_last_30_days: inflow30,
+      // outflow tracking would need a payouts table; for now expose 0
+      total_outflow: 0,
+      contributor_count: new Set(((contributions as { user_id: string }[] | null) || []).map(c => c.user_id)).size,
+    };
+  }
 
   return jsonResponse({
     data: {
       ...assoc,
       wallet_balance: wallet?.available_balance || 0,
       members: attachNames(members, nameMap),
-      contributions: attachNames(contributions, nameMap),
+      contributions: attachNames(contributions as { user_id?: string }[] | null, nameMap),
+      is_member: isMember,
+      summary,
     },
   });
 }
@@ -1666,6 +1727,7 @@ async function handleContributeAssociation(userId: string, body: Record<string, 
   const { data: assoc } = await db.from("vfd_sandbox_associations").select("*").eq("id", associationId).single();
   if (!assoc) return jsonResponse({ error: "Association not found" }, 404);
   if (assoc.status !== "active") return jsonResponse({ error: "Association is not active" }, 400);
+  if (assoc.approval_status !== "approved") return jsonResponse({ error: "Association is awaiting platform approval" }, 400);
 
   let { data: membership } = await db.from("vfd_sandbox_association_memberships")
     .select("id").eq("association_id", associationId).eq("user_id", userId).maybeSingle();
@@ -1702,6 +1764,163 @@ async function handleContributeAssociation(userId: string, body: Record<string, 
   }
 
   return jsonResponse({ data: { contributed: true, amount } });
+}
+
+// =============================================
+// ASSOCIATION INVITES + CHAT
+// =============================================
+
+async function handleInviteAssocMember(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const associationId = body.association_id as string;
+  const inviteeId = body.invitee_id as string;
+  if (!associationId || !inviteeId) return jsonResponse({ error: "association_id and invitee_id required" }, 400);
+
+  const { data: assoc } = await db.from("vfd_sandbox_associations").select("*").eq("id", associationId).single();
+  if (!assoc) return jsonResponse({ error: "Association not found" }, 404);
+  if (assoc.admin_id !== userId) return jsonResponse({ error: "Only the association admin can invite members" }, 403);
+  if (assoc.member_count >= assoc.max_members) return jsonResponse({ error: "Association is full" }, 400);
+
+  const { data: existing } = await db.from("vfd_sandbox_association_memberships")
+    .select("id").eq("association_id", associationId).eq("user_id", inviteeId).maybeSingle();
+  if (existing) return jsonResponse({ error: "User is already a member" }, 400);
+
+  const { data: existingInvite } = await db.from("vfd_sandbox_association_invites")
+    .select("id, status").eq("association_id", associationId).eq("invitee_id", inviteeId).maybeSingle();
+  if (existingInvite?.status === "pending") return jsonResponse({ error: "User already has a pending invite" }, 400);
+
+  if (existingInvite) {
+    await db.from("vfd_sandbox_association_invites").update({
+      status: "pending", inviter_id: userId, responded_at: null, created_at: new Date().toISOString(),
+    }).eq("id", existingInvite.id);
+  } else {
+    await db.from("vfd_sandbox_association_invites").insert({
+      association_id: associationId, inviter_id: userId, invitee_id: inviteeId,
+    });
+  }
+
+  await sendNotification(inviteeId, "Association Invite",
+    `You've been invited to join "${assoc.name}". Open Vestara to accept.`,
+    "association_invite");
+
+  return jsonResponse({ data: { invited: true } });
+}
+
+async function handleRespondAssocInvite(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const inviteId = body.invite_id as string;
+  const accept = body.accept as boolean;
+  const role = ((body.role as string) === "exco") ? "exco" : "member";
+
+  const { data: invite } = await db.from("vfd_sandbox_association_invites").select("*").eq("id", inviteId).single();
+  if (!invite) return jsonResponse({ error: "Invite not found" }, 404);
+  if (invite.invitee_id !== userId) return jsonResponse({ error: "Not your invite" }, 403);
+  if (invite.status !== "pending") return jsonResponse({ error: "Invite already responded to" }, 400);
+
+  if (!accept) {
+    await db.from("vfd_sandbox_association_invites").update({
+      status: "declined", responded_at: new Date().toISOString(),
+    }).eq("id", inviteId);
+    return jsonResponse({ data: { declined: true } });
+  }
+
+  // Accept: reuse handleJoinAssociation logic but with the role from this call.
+  return await handleJoinAssociation(userId, { association_id: invite.association_id, role });
+}
+
+async function handleListAssocChat(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const associationId = body.association_id as string;
+  if (!associationId) return jsonResponse({ error: "association_id required" }, 400);
+
+  const { data: membership } = await db.from("vfd_sandbox_association_memberships")
+    .select("id").eq("association_id", associationId).eq("user_id", userId).maybeSingle();
+  if (!membership) return jsonResponse({ error: "Members only" }, 403);
+
+  const { data: msgs } = await db.from("vfd_sandbox_association_chat")
+    .select("*").eq("association_id", associationId).order("created_at", { ascending: true }).limit(200);
+
+  const nameMap = await fetchProfileNames((msgs || []).map((m: { user_id: string }) => m.user_id));
+  return jsonResponse({ data: attachNames(msgs, nameMap) });
+}
+
+async function handlePostAssocChat(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const associationId = body.association_id as string;
+  const message = (body.message as string || "").trim();
+  if (!associationId || !message) return jsonResponse({ error: "association_id and message required" }, 400);
+  if (message.length > 2000) return jsonResponse({ error: "Message too long (max 2000 chars)" }, 400);
+
+  const { data: membership } = await db.from("vfd_sandbox_association_memberships")
+    .select("id").eq("association_id", associationId).eq("user_id", userId).maybeSingle();
+  if (!membership) return jsonResponse({ error: "Members only" }, 403);
+
+  const { data: msg, error } = await db.from("vfd_sandbox_association_chat").insert({
+    association_id: associationId, user_id: userId, message, message_type: "text",
+  }).select().single();
+  if (error) return jsonResponse({ error: error.message }, 500);
+
+  return jsonResponse({ data: msg });
+}
+
+// Admin: list pending associations for review
+async function handleAdminListPendingAssoc(userId: string) {
+  const db = getSupabaseAdmin();
+  // Verify caller is platform admin
+  const { data: hasRole } = await db.rpc("has_role", { _user_id: userId, _role: "admin" });
+  if (!hasRole) return jsonResponse({ error: "Admin access required" }, 403);
+
+  const { data } = await db.from("vfd_sandbox_associations")
+    .select("*").eq("approval_status", "pending").order("created_at", { ascending: false });
+
+  const nameMap = await fetchProfileNames((data || []).map((a: { admin_id: string }) => a.admin_id));
+  const enriched = (data || []).map((a: { admin_id: string }) => ({ ...a, admin_name: nameMap[a.admin_id] }));
+  return jsonResponse({ data: enriched });
+}
+
+// Admin: approve / reject association
+async function handleAdminReviewAssoc(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const { data: hasRole } = await db.rpc("has_role", { _user_id: userId, _role: "admin" });
+  if (!hasRole) return jsonResponse({ error: "Admin access required" }, 403);
+
+  const associationId = body.association_id as string;
+  const decision = body.decision as string; // "approve" | "reject"
+  const reason = (body.reason as string) || null;
+  if (!associationId || !decision) return jsonResponse({ error: "association_id and decision required" }, 400);
+  if (!["approve", "reject"].includes(decision)) return jsonResponse({ error: "decision must be 'approve' or 'reject'" }, 400);
+
+  const newStatus = decision === "approve" ? "approved" : "rejected";
+  const { data: assoc, error } = await db.from("vfd_sandbox_associations").update({
+    approval_status: newStatus,
+    rejection_reason: decision === "reject" ? reason : null,
+    reviewed_by: userId,
+    reviewed_at: new Date().toISOString(),
+  }).eq("id", associationId).select().single();
+  if (error) return jsonResponse({ error: error.message }, 500);
+
+  await sendNotification(assoc.admin_id,
+    decision === "approve" ? "Association Approved" : "Association Rejected",
+    decision === "approve"
+      ? `Your association "${assoc.name}" has been approved. You can now invite members.`
+      : `Your association "${assoc.name}" was rejected. ${reason || "Please contact support."}`,
+    decision === "approve" ? "association_approved" : "association_rejected");
+
+  return jsonResponse({ data: assoc });
+}
+
+// Generate a short-lived signed URL for a private association doc (admin panel preview)
+async function handleAdminAssocDocUrl(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const { data: hasRole } = await db.rpc("has_role", { _user_id: userId, _role: "admin" });
+  if (!hasRole) return jsonResponse({ error: "Admin access required" }, 403);
+
+  const path = body.path as string;
+  if (!path) return jsonResponse({ error: "path required" }, 400);
+
+  const { data, error } = await db.storage.from("sandbox-association-docs").createSignedUrl(path, 60 * 60); // 1 hour
+  if (error) return jsonResponse({ error: error.message }, 500);
+  return jsonResponse({ data: { url: data.signedUrl } });
 }
 
 // =============================================
@@ -2415,8 +2634,15 @@ Deno.serve(async (req) => {
       case "create_association": return await handleCreateAssociation(userId, body);
       case "list_associations": return await handleListAssociations(userId);
       case "join_association": return await handleJoinAssociation(userId, body);
-      case "get_association_detail": return await handleGetAssociationDetail(body);
+      case "get_association_detail": return await handleGetAssociationDetail(userId, body);
       case "contribute_association": return await handleContributeAssociation(userId, body);
+      case "invite_assoc_member": return await handleInviteAssocMember(userId, body);
+      case "respond_assoc_invite": return await handleRespondAssocInvite(userId, body);
+      case "list_assoc_chat": return await handleListAssocChat(userId, body);
+      case "post_assoc_chat": return await handlePostAssocChat(userId, body);
+      case "admin_list_pending_assoc": return await handleAdminListPendingAssoc(userId);
+      case "admin_review_assoc": return await handleAdminReviewAssoc(userId, body);
+      case "admin_assoc_doc_url": return await handleAdminAssocDocUrl(userId, body);
 
       // Bills Payment (VFD BaaS)
       case "bills_categories": return await handleBillsCategories();
