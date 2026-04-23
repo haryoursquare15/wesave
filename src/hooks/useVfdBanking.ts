@@ -186,7 +186,11 @@ export function useVfdBanking() {
       amount: number;
       narration: string;
       beneficiaryName: string;
-    }) => invokeVfd("transfer", params),
+    }) => invokeVfd("transfer", {
+      ...params,
+      // VFD: 999999 = intra-bank (within VFD); anything else = inter
+      transferType: params.bankCode === "999999" ? "intra" : "inter",
+    }),
     [invokeVfd]
   );
 
