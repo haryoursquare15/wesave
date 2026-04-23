@@ -1,14 +1,15 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Lock, Unlock, TrendingUp, CheckCircle2, ArrowLeft,
-  RefreshCw, Calendar, Percent, ArrowRight, AlertTriangle,
+  Lock, Unlock, TrendingUp, ArrowLeft,
+  RefreshCw, Percent, ArrowRight, AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/hooks/use-toast";
 
 interface LockConfig {
   id: string; duration_months: number; interest_rate: number; early_withdrawal_penalty: number;
@@ -40,6 +41,7 @@ export function SandboxLockFunds({
   lockConfigs, lockedFunds, userBalance, loading,
   onCreateLock, onUnlock, onBreakLock, onRefresh, onBack,
 }: Props) {
+  const { toast } = useToast();
   const [step, setStep] = useState<FlowStep>("amount");
   const [amount, setAmount] = useState("");
   const [selectedDuration, setSelectedDuration] = useState<number | null>(null);
@@ -47,6 +49,8 @@ export function SandboxLockFunds({
 
   const selectedConfig = lockConfigs.find(c => c.duration_months === selectedDuration);
   const amtNum = parseFloat(amount);
+  const availableBalance = Number(userBalance?.available_balance || 0);
+  const exceedsAvailable = !isNaN(amtNum) && amtNum > availableBalance;
   const preview = selectedConfig && !isNaN(amtNum) && amtNum > 0 ? (() => {
     const interest = amtNum * (selectedConfig.interest_rate / 100) * (selectedConfig.duration_months / 12);
     const maturity = new Date();
@@ -56,6 +60,14 @@ export function SandboxLockFunds({
 
   const handleConfirm = async () => {
     if (!selectedDuration || isNaN(amtNum)) return;
+    if (amtNum > availableBalance) {
+      toast({
+        title: "Insufficient available balance",
+        description: `You only have ₦${availableBalance.toLocaleString()} available to lock.`,
+        variant: "destructive",
+      });
+      return;
+    }
     await onCreateLock(amtNum, selectedDuration);
     setStep("amount");
     setAmount("");
