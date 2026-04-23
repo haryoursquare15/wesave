@@ -195,10 +195,10 @@ export function SandboxTargetTab() {
 
         {/* Tabs */}
         <Tabs defaultValue="activity">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className={`grid w-full ${isIndependent ? "grid-cols-1" : "grid-cols-3"}`}>
             <TabsTrigger value="activity">Activity</TabsTrigger>
-            <TabsTrigger value="members">Members</TabsTrigger>
-            <TabsTrigger value="votes"><Vote className="h-3 w-3 mr-1" /> Votes</TabsTrigger>
+            {!isIndependent && <TabsTrigger value="members">Members</TabsTrigger>}
+            {!isIndependent && <TabsTrigger value="votes"><Vote className="h-3 w-3 mr-1" /> Votes</TabsTrigger>}
           </TabsList>
           <TabsContent value="activity" className="space-y-2 mt-3">
             {contributions.length === 0 ? (
