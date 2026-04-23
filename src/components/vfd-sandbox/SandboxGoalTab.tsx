@@ -52,8 +52,7 @@ export function SandboxGoalTab() {
 
   const [form, setForm] = useState({
     title: "", description: "", goal_amount: "", deadline: "",
-    beneficiary_account_name: "", beneficiary_bank_name: "",
-    beneficiary_account_number: "", contribution_visibility: "public",
+    contribution_visibility: "public",
     campaign_image: "",
   });
   const [contributeId, setContributeId] = useState<string | null>(null);
@@ -99,28 +98,19 @@ export function SandboxGoalTab() {
     if (!form.title.trim()) return;
     const goalAmount = parseFloat(form.goal_amount);
     if (isNaN(goalAmount) || goalAmount < 1000) { toast({ title: "Goal must be at least ₦1,000", variant: "destructive" }); return; }
-    if (!form.beneficiary_bank_name || !form.beneficiary_account_number || !form.beneficiary_account_name) {
-      toast({ title: "Beneficiary bank details required", variant: "destructive" }); return;
-    }
-    if (form.beneficiary_account_number.length !== 10) {
-      toast({ title: "Account number must be 10 digits", variant: "destructive" }); return;
-    }
 
     const slug = generateSlug(form.title) + "-" + Date.now().toString(36);
     const result = await products.createCampaign({
       title: form.title, description: form.description,
       goal_amount: goalAmount,
       deadline: form.deadline ? new Date(form.deadline).toISOString() : null,
-      beneficiary_account_name: form.beneficiary_account_name,
-      beneficiary_bank_name: form.beneficiary_bank_name,
-      beneficiary_account_number: form.beneficiary_account_number,
       contribution_visibility: form.contribution_visibility,
       campaign_image: form.campaign_image || null,
       campaign_slug: slug,
     });
     if (result?.data) {
       toast({ title: "Campaign Created!" });
-      setForm({ title: "", description: "", goal_amount: "", deadline: "", beneficiary_account_name: "", beneficiary_bank_name: "", beneficiary_account_number: "", contribution_visibility: "public", campaign_image: "" });
+      setForm({ title: "", description: "", goal_amount: "", deadline: "", contribution_visibility: "public", campaign_image: "" });
       setShowCreate(false);
       await loadCampaigns();
     }
@@ -387,29 +377,10 @@ export function SandboxGoalTab() {
               </Select>
             </div>
 
-            {/* Beneficiary Bank Details */}
-            <div className="border-t border-border pt-3">
-              <h4 className="text-sm font-semibold mb-3">Beneficiary Bank Details *</h4>
-              <div className="space-y-3">
-                <div>
-                  <Label>Account Name</Label>
-                  <Input value={form.beneficiary_account_name} onChange={(e) => setForm(p => ({ ...p, beneficiary_account_name: e.target.value }))} placeholder="Account holder name" />
-                </div>
-                <div>
-                  <Label>Bank</Label>
-                  <Select value={form.beneficiary_bank_name} onValueChange={(v) => setForm(p => ({ ...p, beneficiary_bank_name: v }))}>
-                    <SelectTrigger><SelectValue placeholder="Select bank" /></SelectTrigger>
-                    <SelectContent>
-                      {nigerianBanks.map(bank => <SelectItem key={bank} value={bank}>{bank}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Account Number</Label>
-                  <Input value={form.beneficiary_account_number} onChange={(e) => setForm(p => ({ ...p, beneficiary_account_number: e.target.value.replace(/\D/g, "").slice(0, 10) }))} placeholder="0123456789" maxLength={10} />
-                </div>
-              </div>
-            </div>
+            {/* Note: contributors pay into the platform collection account.
+                Funds are credited to the campaign creator's wallet on success
+                and can be withdrawn from there. No beneficiary bank account
+                is collected here. */}
 
             <Button onClick={handleCreate} disabled={products.loading || !form.title || !form.goal_amount} className="w-full">
               {products.loading ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : null}
