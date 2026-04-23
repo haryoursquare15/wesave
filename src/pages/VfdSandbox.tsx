@@ -254,13 +254,19 @@ function VfdSandboxInner() {
 
   const handleValidateBeneficiary = async (account: string, bankCode: string): Promise<string | null> => {
     const result = await vfd.validateBeneficiary(account, bankCode);
-    if (result) {
-      const name = result.accountName ||
-        ((result.data as Record<string, unknown>)?.data as Record<string, unknown>)?.accountName ||
-        ((result.data as Record<string, unknown>)?.data as Record<string, unknown>)?.account_name;
-      return name?.toString() || null;
+    if (!result) return null;
+    if (result.error) {
+      toast({ title: "Verification failed", description: String(result.error), variant: "destructive" });
+      return null;
     }
-    return null;
+    const name = result.accountName ||
+      ((result.data as Record<string, unknown>)?.data as Record<string, unknown>)?.accountName ||
+      ((result.data as Record<string, unknown>)?.data as Record<string, unknown>)?.account_name;
+    if (!name) {
+      toast({ title: "Verification failed", description: "VFD could not return an account name. Check the bank/account number.", variant: "destructive" });
+      return null;
+    }
+    return name?.toString() || null;
   };
 
   const goBack = () => setCurrentView("dashboard");
