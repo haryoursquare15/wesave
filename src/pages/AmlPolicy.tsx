@@ -16,7 +16,7 @@ export default function AmlPolicy() {
             <h1 className="text-xl font-bold text-foreground">AML / CFT Policy</h1>
           </div>
           <Button variant="outline" size="sm" asChild>
-            <a href="/compliance/WeSave_AML_Policy_v1.0.docx" download>
+            <a href="/compliance/Vestara_AML_Policy_v1.1.docx" download>
               <Download className="h-4 w-4 mr-2" /> DOCX
             </a>
           </Button>
@@ -26,15 +26,15 @@ export default function AmlPolicy() {
       <main className="container mx-auto px-4 py-8 max-w-3xl">
         <div className="flex items-center gap-2 mb-4 text-primary">
           <ShieldCheck className="h-5 w-5" />
-          <span className="text-sm font-medium">Effective: April 2026 • Version 1.0</span>
+          <span className="text-sm font-medium">Effective: April 2026 • Version 1.1</span>
         </div>
-        <h1 className="text-2xl font-bold text-foreground mb-2">WESAVE — ANTI-MONEY LAUNDERING & CFT POLICY</h1>
-        <p className="text-muted-foreground mb-6">Operated by LLH Premium Enterprise. Compliant with MLPPA 2022, CBN AML/CFT/CPF Regulations 2022, and NFIU Guidelines.</p>
+        <h1 className="text-2xl font-bold text-foreground mb-2">VESTARA — ANTI-MONEY LAUNDERING & CFT POLICY</h1>
+        <p className="text-muted-foreground mb-6">Operated by LLH Premium Enterprise on vestara.ng. Banking, KYC, transfers, and bills powered exclusively by VFD Microfinance Bank Plc (BaaS). Compliant with MLPPA 2022, CBN AML/CFT/CPF Regulations 2022, and NFIU Guidelines.</p>
 
         <section className="space-y-6">
           <div>
             <h2 className="text-lg font-semibold text-foreground">1. Purpose & Scope</h2>
-            <p className="text-muted-foreground">Wesave detects, prevents, and reports money laundering and terrorist financing across all digital thrift, savings, and contribution services. Applies to staff, contractors, and partner institutions (VFD Microfinance Bank, Flutterwave).</p>
+            <p className="text-muted-foreground">Vestara detects, prevents, and reports money laundering and terrorist financing across all digital thrift, savings, target-Ajo, association, SplitPay, and crowdfunding services. Applies to staff, contractors, mobile-app (Android/iOS) wrapper users, and our partner bank VFD Microfinance Bank Plc — the sole banking provider in the sandbox.</p>
           </div>
 
           <div>
@@ -82,13 +82,13 @@ export default function AmlPolicy() {
 
           <div>
             <h2 className="text-lg font-semibold text-foreground">9. Whistleblowing</h2>
-            <p className="text-muted-foreground">Suspected breaches may be reported confidentially to <a href="mailto:compliance@wesave.ng" className="text-primary underline">compliance@wesave.ng</a>. Wesave guarantees protection from retaliation.</p>
+            <p className="text-muted-foreground">Suspected breaches may be reported confidentially to <a href="mailto:compliance@vestara.ng" className="text-primary underline">compliance@vestara.ng</a>. Vestara guarantees protection from retaliation.</p>
           </div>
 
           <div className="pt-4 border-t border-border">
             <h3 className="text-base font-semibold text-foreground">Contact</h3>
-            <p className="text-muted-foreground">Compliance Officer: compliance@wesave.ng</p>
-            <p className="text-muted-foreground">Phone: 09039479554 • Lagos, Nigeria</p>
+            <p className="text-muted-foreground">Compliance Officer: compliance@vestara.ng</p>
+            <p className="text-muted-foreground">Phone: 09039479554 • Lagos, Nigeria • vestara.ng</p>
           </div>
         </section>
       </main>
