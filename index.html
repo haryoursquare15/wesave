@@ -54,6 +54,18 @@
   </head>
 
   <body>
+    <script>
+      // Early redirect: vestara.ng visitors land directly on the VFD sandbox
+      (function() {
+        try {
+          var host = window.location.hostname.toLowerCase();
+          var path = window.location.pathname;
+          if ((host === 'vestara.ng' || host === 'www.vestara.ng') && (path === '/' || path === '')) {
+            window.location.replace('/vfd-sandbox');
+          }
+        } catch (e) { /* noop */ }
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <script>
