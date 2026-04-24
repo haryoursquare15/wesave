@@ -66,11 +66,11 @@ export default function SandboxAuth() {
         className="w-full max-w-md"
       >
         <Link
-          to="/"
+          to="/vfd-sandbox"
           className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          Back to WeSave
+          Back to Vestara
         </Link>
 
         <div className="bg-card border border-border rounded-2xl shadow-xl p-8">
