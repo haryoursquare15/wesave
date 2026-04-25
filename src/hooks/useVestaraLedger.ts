@@ -422,6 +422,12 @@ export function useVestaraLedger() {
     crowdfundDisburse,
     // Interest
     payoutInterest,
+    // Savings Products
+    listProducts,
+    listSavings,
+    createSavings,
+    matureSavings,
+    earlyWithdrawSavings,
     // Admin
     reverseTransaction,
     // Raw invoke for custom actions
