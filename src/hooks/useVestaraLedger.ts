@@ -57,6 +57,57 @@ export interface VestaraLockedFund {
   created_at: string;
 }
 
+/* ─── Savings Products ─── */
+export type VestaraProductCode = "goalsave" | "vault" | "lockmax" | "upfront_yield";
+
+export interface VestaraProduct {
+  id: string;
+  code: VestaraProductCode;
+  name: string;
+  description: string | null;
+  min_user_rate: number;
+  max_user_rate: number;
+  vfd_rate: number;
+  min_tenor_days: number;
+  max_tenor_days: number;
+  early_withdrawal_penalty_pct: number;
+  allow_early_withdrawal: boolean;
+  is_upfront_yield: boolean;
+  is_active: boolean;
+}
+
+export interface VestaraSavings {
+  id: string;
+  user_id: string;
+  product_id: string;
+  product_code: VestaraProductCode;
+  lock_account_id: string;
+  principal: number;
+  original_principal: number;
+  user_rate: number;
+  vfd_rate: number;
+  tenor_days: number;
+  start_date: string;
+  maturity_date: string;
+  accrued_interest: number;
+  discounted_interest_paid: number;
+  effective_rate: number | null;
+  status: "active" | "matured" | "withdrawn_early" | "cancelled";
+  matured_at: string | null;
+  withdrawn_at: string | null;
+  penalty_amount: number;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  vestara_products?: {
+    code: VestaraProductCode;
+    name: string;
+    description: string | null;
+    allow_early_withdrawal: boolean;
+    early_withdrawal_penalty_pct: number;
+    is_upfront_yield: boolean;
+  };
+}
+
 /* ─── Hook ─── */
 export function useVestaraLedger() {
   const { session, client: supabase } = useSandboxAwareAuth();
