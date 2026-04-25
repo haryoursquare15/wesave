@@ -9,7 +9,7 @@ import { RefreshCw, LogOut } from "lucide-react";
 import { SandboxHeader } from "@/components/vfd-sandbox/SandboxHeader";
 import { SandboxDashboard } from "@/components/vfd-sandbox/SandboxDashboard";
 import { SandboxKYC } from "@/components/vfd-sandbox/SandboxKYC";
-import { SandboxLockFunds } from "@/components/vfd-sandbox/SandboxLockFunds";
+import { SandboxSavings } from "@/components/vfd-sandbox/SandboxSavings";
 import { SandboxFund } from "@/components/vfd-sandbox/SandboxFund";
 import { SandboxTransfer } from "@/components/vfd-sandbox/SandboxTransfer";
 import { SandboxTransactions } from "@/components/vfd-sandbox/SandboxTransactions";
@@ -396,15 +396,9 @@ function VfdSandboxInner() {
               />
             )}
             {currentView === "lock" && (
-              <SandboxLockFunds
-                lockConfigs={lockConfigs}
-                lockedFunds={mappedLockedFunds}
+              <SandboxSavings
                 userBalance={vestaraBalance}
-                loading={vfd.loading || vestara.loading}
-                onCreateLock={handleCreateLock}
-                onUnlock={handleUnlock}
-                onBreakLock={handleBreakLock}
-                onRefresh={() => { refreshVestaraLockedFunds(); refreshVestaraBalance(); }}
+                onRefresh={() => { refreshVestaraBalance(); refreshVestaraTransactions(); }}
                 onBack={goBack}
               />
             )}

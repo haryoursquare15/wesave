@@ -57,6 +57,57 @@ export interface VestaraLockedFund {
   created_at: string;
 }
 
+/* ─── Savings Products ─── */
+export type VestaraProductCode = "goalsave" | "vault" | "lockmax" | "upfront_yield";
+
+export interface VestaraProduct {
+  id: string;
+  code: VestaraProductCode;
+  name: string;
+  description: string | null;
+  min_user_rate: number;
+  max_user_rate: number;
+  vfd_rate: number;
+  min_tenor_days: number;
+  max_tenor_days: number;
+  early_withdrawal_penalty_pct: number;
+  allow_early_withdrawal: boolean;
+  is_upfront_yield: boolean;
+  is_active: boolean;
+}
+
+export interface VestaraSavings {
+  id: string;
+  user_id: string;
+  product_id: string;
+  product_code: VestaraProductCode;
+  lock_account_id: string;
+  principal: number;
+  original_principal: number;
+  user_rate: number;
+  vfd_rate: number;
+  tenor_days: number;
+  start_date: string;
+  maturity_date: string;
+  accrued_interest: number;
+  discounted_interest_paid: number;
+  effective_rate: number | null;
+  status: "active" | "matured" | "withdrawn_early" | "cancelled";
+  matured_at: string | null;
+  withdrawn_at: string | null;
+  penalty_amount: number;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  vestara_products?: {
+    code: VestaraProductCode;
+    name: string;
+    description: string | null;
+    allow_early_withdrawal: boolean;
+    early_withdrawal_penalty_pct: number;
+    is_upfront_yield: boolean;
+  };
+}
+
 /* ─── Hook ─── */
 export function useVestaraLedger() {
   const { session, client: supabase } = useSandboxAwareAuth();
@@ -299,6 +350,38 @@ export function useVestaraLedger() {
     [invoke]
   );
 
+  /* ─── Savings Products ─── */
+  const listProducts = useCallback(async (): Promise<VestaraProduct[]> => {
+    const result = await invoke("list_products");
+    return (result?.products as VestaraProduct[]) || [];
+  }, [invoke]);
+
+  const listSavings = useCallback(async (): Promise<VestaraSavings[]> => {
+    const result = await invoke("list_savings");
+    return (result?.savings as VestaraSavings[]) || [];
+  }, [invoke]);
+
+  const createSavings = useCallback(
+    (productCode: VestaraProductCode, principal: number, tenorDays: number, reference?: string) =>
+      invoke("create_savings", {
+        product_code: productCode,
+        principal,
+        tenor_days: tenorDays,
+        reference,
+      }),
+    [invoke]
+  );
+
+  const matureSavings = useCallback(
+    (savingsId: string) => invoke("mature_savings", { savings_id: savingsId }),
+    [invoke]
+  );
+
+  const earlyWithdrawSavings = useCallback(
+    (savingsId: string) => invoke("early_withdraw_savings", { savings_id: savingsId }),
+    [invoke]
+  );
+
   /* ─── Reversal ─── */
   const reverseTransaction = useCallback(
     (originalReference: string, reason: string, metadata?: Record<string, unknown>) =>
@@ -339,6 +422,12 @@ export function useVestaraLedger() {
     crowdfundDisburse,
     // Interest
     payoutInterest,
+    // Savings Products
+    listProducts,
+    listSavings,
+    createSavings,
+    matureSavings,
+    earlyWithdrawSavings,
     // Admin
     reverseTransaction,
     // Raw invoke for custom actions
