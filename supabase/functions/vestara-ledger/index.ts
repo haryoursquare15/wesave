@@ -52,7 +52,10 @@ serve(async (req) => {
 
     // Authenticate user (except for webhook and cron actions)
     let userId: string | null = null;
-    const noAuthActions = ["deposit_webhook", "accrue_interest_batch", "reconcile"];
+    const noAuthActions = [
+      "deposit_webhook", "accrue_interest_batch", "reconcile",
+      "accrue_daily_interest", "auto_mature_due", "run_savings_reconciliation",
+    ];
     if (!noAuthActions.includes(action)) {
       const authHeader = req.headers.get("Authorization");
       if (!authHeader) return err("Unauthorized", 401);
@@ -536,6 +539,121 @@ serve(async (req) => {
           balance_by_type: balanceByType,
           total_account_balance: totalAccountBalance,
         };
+        break;
+      }
+
+      // ─────────── Vestara Savings Products ───────────
+      case "list_products": {
+        const { data, error: e } = await supabase
+          .from("vestara_products")
+          .select("*")
+          .eq("is_active", true)
+          .order("code");
+        if (e) return err(e.message);
+        result = { success: true, products: data };
+        break;
+      }
+
+      case "list_savings": {
+        const { data, error: e } = await supabase
+          .from("vestara_savings")
+          .select("*, vestara_products(code,name,description,allow_early_withdrawal,early_withdrawal_penalty_pct,is_upfront_yield)")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false });
+        if (e) return err(e.message);
+        result = { success: true, savings: data };
+        break;
+      }
+
+      case "create_savings": {
+        const { product_code, principal, tenor_days, reference } = params;
+        if (!product_code || !principal || !tenor_days) {
+          return err("product_code, principal, and tenor_days are required");
+        }
+        const ref = reference || `sav-${crypto.randomUUID().slice(0, 8)}`;
+        const { data, error: e } = await supabase.rpc("vestara_create_savings", {
+          _user_id: userId,
+          _product_code: product_code,
+          _principal: principal,
+          _tenor_days: tenor_days,
+          _reference: ref,
+        });
+        if (e) return err(e.message);
+        result = data;
+        break;
+      }
+
+      case "mature_savings": {
+        const { savings_id } = params;
+        if (!savings_id) return err("savings_id is required");
+        const { data, error: e } = await supabase.rpc("vestara_mature_savings", {
+          _savings_id: savings_id,
+        });
+        if (e) return err(e.message);
+        result = data;
+        break;
+      }
+
+      case "early_withdraw_savings": {
+        const { savings_id } = params;
+        if (!savings_id) return err("savings_id is required");
+        const { data, error: e } = await supabase.rpc(
+          "vestara_early_withdraw_savings",
+          { _user_id: userId, _savings_id: savings_id }
+        );
+        if (e) return err(e.message);
+        result = data;
+        break;
+      }
+
+      // ─────────── Cron jobs ───────────
+      case "accrue_daily_interest": {
+        const { data, error: e } = await supabase.rpc("vestara_accrue_daily_interest");
+        if (e) return err(e.message);
+        result = data;
+        break;
+      }
+
+      case "auto_mature_due": {
+        const { data, error: e } = await supabase.rpc("vestara_auto_mature_due");
+        if (e) return err(e.message);
+        result = data;
+        break;
+      }
+
+      case "run_savings_reconciliation": {
+        const { data, error: e } = await supabase.rpc("vestara_run_reconciliation");
+        if (e) return err(e.message);
+        result = data;
+        break;
+      }
+
+      // ─────────── Admin ───────────
+      case "get_treasury": {
+        // verify admin
+        const { data: roles } = await supabase
+          .from("user_roles").select("role").eq("user_id", userId);
+        const isAdmin = (roles ?? []).some((r: { role: string }) => r.role === "admin");
+        if (!isAdmin) return err("Admin only", 403);
+        const { data: t } = await supabase.from("vestara_treasury").select("*").limit(1).maybeSingle();
+        const { data: findings } = await supabase
+          .from("vestara_reconciliation_findings")
+          .select("*").order("checked_at", { ascending: false }).limit(20);
+        result = { success: true, treasury: t, recent_findings: findings };
+        break;
+      }
+
+      case "admin_update_product": {
+        const { product_id, updates } = params;
+        if (!product_id || !updates) return err("product_id and updates required");
+        const { data: roles } = await supabase
+          .from("user_roles").select("role").eq("user_id", userId);
+        const isAdmin = (roles ?? []).some((r: { role: string }) => r.role === "admin");
+        if (!isAdmin) return err("Admin only", 403);
+        const { data, error: e } = await supabase
+          .from("vestara_products").update(updates).eq("id", product_id).select().single();
+        if (e) return err(e.message);
+        result = { success: true, product: data };
         break;
       }
 
