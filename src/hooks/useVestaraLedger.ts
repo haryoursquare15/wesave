@@ -350,6 +350,38 @@ export function useVestaraLedger() {
     [invoke]
   );
 
+  /* ─── Savings Products ─── */
+  const listProducts = useCallback(async (): Promise<VestaraProduct[]> => {
+    const result = await invoke("list_products");
+    return (result?.products as VestaraProduct[]) || [];
+  }, [invoke]);
+
+  const listSavings = useCallback(async (): Promise<VestaraSavings[]> => {
+    const result = await invoke("list_savings");
+    return (result?.savings as VestaraSavings[]) || [];
+  }, [invoke]);
+
+  const createSavings = useCallback(
+    (productCode: VestaraProductCode, principal: number, tenorDays: number, reference?: string) =>
+      invoke("create_savings", {
+        product_code: productCode,
+        principal,
+        tenor_days: tenorDays,
+        reference,
+      }),
+    [invoke]
+  );
+
+  const matureSavings = useCallback(
+    (savingsId: string) => invoke("mature_savings", { savings_id: savingsId }),
+    [invoke]
+  );
+
+  const earlyWithdrawSavings = useCallback(
+    (savingsId: string) => invoke("early_withdraw_savings", { savings_id: savingsId }),
+    [invoke]
+  );
+
   /* ─── Reversal ─── */
   const reverseTransaction = useCallback(
     (originalReference: string, reason: string, metadata?: Record<string, unknown>) =>
