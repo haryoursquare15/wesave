@@ -3130,6 +3130,93 @@ export type Database = {
           },
         ]
       }
+      vestara_products: {
+        Row: {
+          allow_early_withdrawal: boolean
+          code: Database["public"]["Enums"]["vestara_product_code"]
+          created_at: string
+          description: string | null
+          early_withdrawal_penalty_pct: number
+          id: string
+          is_active: boolean
+          is_upfront_yield: boolean
+          max_tenor_days: number
+          max_user_rate: number
+          min_tenor_days: number
+          min_user_rate: number
+          name: string
+          updated_at: string
+          vfd_rate: number
+        }
+        Insert: {
+          allow_early_withdrawal?: boolean
+          code: Database["public"]["Enums"]["vestara_product_code"]
+          created_at?: string
+          description?: string | null
+          early_withdrawal_penalty_pct?: number
+          id?: string
+          is_active?: boolean
+          is_upfront_yield?: boolean
+          max_tenor_days: number
+          max_user_rate: number
+          min_tenor_days: number
+          min_user_rate: number
+          name: string
+          updated_at?: string
+          vfd_rate: number
+        }
+        Update: {
+          allow_early_withdrawal?: boolean
+          code?: Database["public"]["Enums"]["vestara_product_code"]
+          created_at?: string
+          description?: string | null
+          early_withdrawal_penalty_pct?: number
+          id?: string
+          is_active?: boolean
+          is_upfront_yield?: boolean
+          max_tenor_days?: number
+          max_user_rate?: number
+          min_tenor_days?: number
+          min_user_rate?: number
+          name?: string
+          updated_at?: string
+          vfd_rate?: number
+        }
+        Relationships: []
+      }
+      vestara_reconciliation_findings: {
+        Row: {
+          actual: number | null
+          check_name: string
+          checked_at: string
+          details: Json
+          drift: number | null
+          expected: number | null
+          id: string
+          is_healthy: boolean
+        }
+        Insert: {
+          actual?: number | null
+          check_name: string
+          checked_at?: string
+          details?: Json
+          drift?: number | null
+          expected?: number | null
+          id?: string
+          is_healthy: boolean
+        }
+        Update: {
+          actual?: number | null
+          check_name?: string
+          checked_at?: string
+          details?: Json
+          drift?: number | null
+          expected?: number | null
+          id?: string
+          is_healthy?: boolean
+        }
+        Relationships: []
+      }
       vestara_reconciliation_log: {
         Row: {
           created_at: string
@@ -3159,6 +3246,110 @@ export type Database = {
           vfd_balance?: number
         }
         Relationships: []
+      }
+      vestara_savings: {
+        Row: {
+          accrued_interest: number
+          created_at: string
+          discounted_interest_paid: number
+          effective_rate: number | null
+          id: string
+          lock_account_id: string
+          matured_at: string | null
+          maturity_date: string
+          metadata: Json
+          original_principal: number
+          penalty_amount: number
+          principal: number
+          product_code: Database["public"]["Enums"]["vestara_product_code"]
+          product_id: string
+          start_date: string
+          status: Database["public"]["Enums"]["vestara_savings_status"]
+          tenor_days: number
+          updated_at: string
+          user_id: string
+          user_rate: number
+          vfd_rate: number
+          withdrawn_at: string | null
+        }
+        Insert: {
+          accrued_interest?: number
+          created_at?: string
+          discounted_interest_paid?: number
+          effective_rate?: number | null
+          id?: string
+          lock_account_id: string
+          matured_at?: string | null
+          maturity_date: string
+          metadata?: Json
+          original_principal: number
+          penalty_amount?: number
+          principal: number
+          product_code: Database["public"]["Enums"]["vestara_product_code"]
+          product_id: string
+          start_date?: string
+          status?: Database["public"]["Enums"]["vestara_savings_status"]
+          tenor_days: number
+          updated_at?: string
+          user_id: string
+          user_rate: number
+          vfd_rate: number
+          withdrawn_at?: string | null
+        }
+        Update: {
+          accrued_interest?: number
+          created_at?: string
+          discounted_interest_paid?: number
+          effective_rate?: number | null
+          id?: string
+          lock_account_id?: string
+          matured_at?: string | null
+          maturity_date?: string
+          metadata?: Json
+          original_principal?: number
+          penalty_amount?: number
+          principal?: number
+          product_code?: Database["public"]["Enums"]["vestara_product_code"]
+          product_id?: string
+          start_date?: string
+          status?: Database["public"]["Enums"]["vestara_savings_status"]
+          tenor_days?: number
+          updated_at?: string
+          user_id?: string
+          user_rate?: number
+          vfd_rate?: number
+          withdrawn_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vestara_savings_lock_account_id_fkey"
+            columns: ["lock_account_id"]
+            isOneToOne: false
+            referencedRelation: "vestara_account_drift"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vestara_savings_lock_account_id_fkey"
+            columns: ["lock_account_id"]
+            isOneToOne: false
+            referencedRelation: "vestara_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vestara_savings_lock_account_id_fkey"
+            columns: ["lock_account_id"]
+            isOneToOne: false
+            referencedRelation: "vestara_derived_balances"
+            referencedColumns: ["account_id"]
+          },
+          {
+            foreignKeyName: "vestara_savings_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "vestara_products"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vestara_transactions: {
         Row: {
@@ -3196,6 +3387,42 @@ export type Database = {
           reference?: string
           status?: Database["public"]["Enums"]["vestara_tx_status"]
           type?: Database["public"]["Enums"]["vestara_tx_type"]
+        }
+        Relationships: []
+      }
+      vestara_treasury: {
+        Row: {
+          id: string
+          interest_spread_profit: number
+          invest_ratio: number
+          liquidity_buffer: number
+          total_interest_from_vfd: number
+          total_interest_paid: number
+          total_invested_with_vfd: number
+          total_locked_funds: number
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          interest_spread_profit?: number
+          invest_ratio?: number
+          liquidity_buffer?: number
+          total_interest_from_vfd?: number
+          total_interest_paid?: number
+          total_invested_with_vfd?: number
+          total_locked_funds?: number
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          interest_spread_profit?: number
+          invest_ratio?: number
+          liquidity_buffer?: number
+          total_interest_from_vfd?: number
+          total_interest_paid?: number
+          total_invested_with_vfd?: number
+          total_locked_funds?: number
+          updated_at?: string
         }
         Relationships: []
       }
@@ -5630,11 +5857,23 @@ export type Database = {
         Args: { amount: number; tx_ref: string }
         Returns: boolean
       }
+      vestara_accrue_daily_interest: { Args: never; Returns: Json }
       vestara_accrue_interest: {
         Args: {
           _amount: number
           _metadata?: Json
           _reference: string
+          _user_id: string
+        }
+        Returns: Json
+      }
+      vestara_auto_mature_due: { Args: never; Returns: Json }
+      vestara_create_savings: {
+        Args: {
+          _principal: number
+          _product_code: Database["public"]["Enums"]["vestara_product_code"]
+          _reference: string
+          _tenor_days: number
           _user_id: string
         }
         Returns: Json
@@ -5668,6 +5907,10 @@ export type Database = {
         }
         Returns: Json
       }
+      vestara_early_withdraw_savings: {
+        Args: { _savings_id: string; _user_id: string }
+        Returns: Json
+      }
       vestara_get_balance: { Args: { _user_id: string }; Returns: Json }
       vestara_get_or_create_account: {
         Args: {
@@ -5690,6 +5933,7 @@ export type Database = {
         }
         Returns: Json
       }
+      vestara_mature_savings: { Args: { _savings_id: string }; Returns: Json }
       vestara_payout_interest: {
         Args: {
           _amount: number
@@ -5719,6 +5963,7 @@ export type Database = {
         }
         Returns: Json
       }
+      vestara_run_reconciliation: { Args: never; Returns: Json }
       vestara_split_distribute: {
         Args: {
           _initiated_by: string
@@ -5834,6 +6079,12 @@ export type Database = {
         | "interest_expense"
         | "revenue"
         | "pending_transfer"
+      vestara_product_code: "goalsave" | "vault" | "lockmax" | "upfront_yield"
+      vestara_savings_status:
+        | "active"
+        | "matured"
+        | "early_withdrawn"
+        | "cancelled"
       vestara_tx_status: "pending" | "completed" | "failed" | "reversed"
       vestara_tx_type:
         | "deposit"
@@ -6015,6 +6266,13 @@ export const Constants = {
         "interest_expense",
         "revenue",
         "pending_transfer",
+      ],
+      vestara_product_code: ["goalsave", "vault", "lockmax", "upfront_yield"],
+      vestara_savings_status: [
+        "active",
+        "matured",
+        "early_withdrawn",
+        "cancelled",
       ],
       vestara_tx_status: ["pending", "completed", "failed", "reversed"],
       vestara_tx_type: [
