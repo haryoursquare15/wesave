@@ -34,7 +34,8 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    // deno-lint-ignore no-explicit-any
+    const supabase = createClient<any>(supabaseUrl, supabaseServiceKey);
 
     console.log('Target Ajo auto-contribution sweep started at:', new Date().toISOString());
 
