@@ -269,8 +269,9 @@ serve(async (req) => {
 });
 
 // Process a confirmed legacy card charge — credit wallet, process contribution
+// deno-lint-ignore no-explicit-any
 async function processConfirmedCharge(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   charge: Record<string, unknown>,
 ) {
   const userId = charge.user_id as string;
