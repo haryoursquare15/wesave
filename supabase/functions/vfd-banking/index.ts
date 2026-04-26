@@ -635,9 +635,6 @@ async function handleTransfer(
   const { data: senderEnquiry, status: senderStatus } = await vfdRequest("/account/enquiry", "GET", undefined, {
     accountNumber: fromAccount,
   });
-  const { data: senderEnquiry, status: senderStatus } = await vfdRequest("/account/enquiry", "GET", undefined, {
-    accountNumber: fromAccount,
-  });
 
   if (senderStatus !== 200 || (senderEnquiry as Record<string, unknown>)?.status !== "00") {
     return jsonResponse({ error: "Could not retrieve sender account details", data: senderEnquiry }, 400);
