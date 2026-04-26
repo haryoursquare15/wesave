@@ -6,8 +6,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// deno-lint-ignore no-explicit-any
 async function insertNotification(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   userId: string,
   title: string,
   message: string,
