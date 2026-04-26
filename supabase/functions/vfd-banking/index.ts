@@ -327,10 +327,59 @@ async function ensureBalanceRow(
 // ─── ACTION HANDLERS ────────────────────────────────────────────
 
 // BVN Lookup
-async function handleBvnLookup(bvn: string) {
+// SECURITY: BVN -> PII. Restrict to:
+//   1. Admins (compliance/super/finance), OR
+//   2. Users who haven't completed onboarding (no vfd_sandbox_clients row yet)
+// Also rate-limited to 10 lookups per user per hour to prevent BVN enumeration.
+async function handleBvnLookup(userId: string, bvn: string) {
   if (!/^\d{11}$/.test(bvn)) {
     return jsonResponse({ error: "BVN must be exactly 11 digits" }, 400);
   }
+
+  const supabaseAdmin = getSupabaseAdmin();
+
+  // Check admin role
+  const { data: roleRows } = await supabaseAdmin
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId);
+  const isAdmin = (roleRows ?? []).some((r) =>
+    ["super_admin", "admin", "compliance_admin", "finance_admin"].includes(r.role as string)
+  );
+
+  if (!isAdmin) {
+    // Onboarding-only path: caller must NOT yet have a VFD client record
+    const { data: existing } = await supabaseAdmin
+      .from("vfd_sandbox_clients")
+      .select("id")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (existing) {
+      return jsonResponse(
+        { error: "BVN lookup is only available during onboarding" },
+        403
+      );
+    }
+  }
+
+  // Rate-limit: max 10 lookups / user / hour (logged via webhook_logs as a generic audit)
+  const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const { count } = await supabaseAdmin
+    .from("vfd_sandbox_webhook_logs")
+    .select("id", { count: "exact", head: true })
+    .eq("event_type", "bvn_lookup_audit")
+    .gte("created_at", since)
+    .filter("payload->>user_id", "eq", userId);
+  if ((count ?? 0) >= 10) {
+    return jsonResponse({ error: "Too many BVN lookups. Try again later." }, 429);
+  }
+
+  // Audit the lookup attempt
+  await supabaseAdmin.from("vfd_sandbox_webhook_logs").insert({
+    event_type: "bvn_lookup_audit",
+    payload: { user_id: userId, bvn_last4: bvn.slice(-4), at: new Date().toISOString() },
+    processed: true,
+  });
 
   const { data, status } = await vfdRequest("/client", "GET", undefined, { bvn });
   return jsonResponse({ data, vfd_status: status });
