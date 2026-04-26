@@ -516,7 +516,16 @@ async function handleTierUpgrade(userId: string, body: Record<string, unknown>) 
 }
 
 // Balance Enquiry - VFD uses accountNumber (not accountNo)
-async function handleBalanceEnquiry(accountNo: string) {
+async function handleBalanceEnquiry(userId: string, accountNo: string) {
+  // SECURITY: only allow balance lookup on accounts owned by the caller
+  try {
+    await assertOwnsAccount(userId, accountNo);
+  } catch (err) {
+    return jsonResponse(
+      { error: err instanceof Error ? err.message : "unauthorized" },
+      403
+    );
+  }
   const { data, status } = await vfdRequest("/account/enquiry", "GET", undefined, {
     accountNumber: accountNo,
   });
@@ -525,6 +534,7 @@ async function handleBalanceEnquiry(accountNo: string) {
 
 // Transaction History - VFD requires transactionType, startDate, endDate
 async function handleTransactionHistory(
+  userId: string,
   accountNo: string,
   transactionType: string = "wallet",
   startDate?: string,
@@ -532,6 +542,16 @@ async function handleTransactionHistory(
   page: string = "0",
   size: string = "20"
 ) {
+  // SECURITY: only allow history lookup on accounts owned by the caller
+  try {
+    await assertOwnsAccount(userId, accountNo);
+  } catch (err) {
+    return jsonResponse(
+      { error: err instanceof Error ? err.message : "unauthorized" },
+      403
+    );
+  }
+
   // Default to last 90 days if not provided
   const now = new Date();
   const defaultEnd = now.toISOString().slice(0, 10) + " 23:59:59";
