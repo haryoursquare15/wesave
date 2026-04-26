@@ -5733,6 +5733,24 @@ export type Database = {
           username: string
         }[]
       }
+      get_vfd_clients_redacted: {
+        Args: never
+        Returns: {
+          account_status: string
+          balance: number
+          consent_status: string
+          created_at: string
+          full_name: string
+          id: string
+          kyc_method: string
+          source: string
+          tier: string
+          updated_at: string
+          user_id: string
+          vfd_account_number: string
+          vfd_client_id: string
+        }[]
+      }
       has_permission: {
         Args: { _permission: string; _user_id: string }
         Returns: boolean
