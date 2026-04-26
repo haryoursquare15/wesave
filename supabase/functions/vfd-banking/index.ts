@@ -90,6 +90,28 @@ async function getUserFromRequest(req: Request) {
   return { id: userId };
 }
 
+/**
+ * SECURITY: Confirms that the supplied VFD account number actually belongs
+ * to the authenticated user. Used to prevent users from initiating transfers
+ * or credits on accounts they do not own.
+ */
+async function assertOwnsAccount(userId: string, accountNo: string): Promise<void> {
+  if (!accountNo) throw new Error("accountNo required");
+  const supabaseAdmin = getSupabaseAdmin();
+  const { data, error } = await supabaseAdmin
+    .from("vfd_sandbox_clients")
+    .select("vfd_account_number")
+    .eq("user_id", userId)
+    .eq("vfd_account_number", accountNo)
+    .maybeSingle();
+  if (error) throw new Error("Account ownership check failed");
+  if (!data) throw new Error("Account does not belong to authenticated user");
+}
+
+// Sandbox credit caps (per user) to prevent abuse of test-credit endpoint
+const SANDBOX_CREDIT_MAX_PER_TXN = 500_000; // ₦500k single
+const SANDBOX_CREDIT_MAX_PER_DAY = 1_000_000; // ₦1M daily
+
 // VFD API helper
 async function vfdRequest(
   endpoint: string,
@@ -305,10 +327,59 @@ async function ensureBalanceRow(
 // ─── ACTION HANDLERS ────────────────────────────────────────────
 
 // BVN Lookup
-async function handleBvnLookup(bvn: string) {
+// SECURITY: BVN -> PII. Restrict to:
+//   1. Admins (compliance/super/finance), OR
+//   2. Users who haven't completed onboarding (no vfd_sandbox_clients row yet)
+// Also rate-limited to 10 lookups per user per hour to prevent BVN enumeration.
+async function handleBvnLookup(userId: string, bvn: string) {
   if (!/^\d{11}$/.test(bvn)) {
     return jsonResponse({ error: "BVN must be exactly 11 digits" }, 400);
   }
+
+  const supabaseAdmin = getSupabaseAdmin();
+
+  // Check admin role
+  const { data: roleRows } = await supabaseAdmin
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId);
+  const isAdmin = (roleRows ?? []).some((r) =>
+    ["super_admin", "admin", "compliance_admin", "finance_admin"].includes(r.role as string)
+  );
+
+  if (!isAdmin) {
+    // Onboarding-only path: caller must NOT yet have a VFD client record
+    const { data: existing } = await supabaseAdmin
+      .from("vfd_sandbox_clients")
+      .select("id")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (existing) {
+      return jsonResponse(
+        { error: "BVN lookup is only available during onboarding" },
+        403
+      );
+    }
+  }
+
+  // Rate-limit: max 10 lookups / user / hour (logged via webhook_logs as a generic audit)
+  const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const { count } = await supabaseAdmin
+    .from("vfd_sandbox_webhook_logs")
+    .select("id", { count: "exact", head: true })
+    .eq("event_type", "bvn_lookup_audit")
+    .gte("created_at", since)
+    .filter("payload->>user_id", "eq", userId);
+  if ((count ?? 0) >= 10) {
+    return jsonResponse({ error: "Too many BVN lookups. Try again later." }, 429);
+  }
+
+  // Audit the lookup attempt
+  await supabaseAdmin.from("vfd_sandbox_webhook_logs").insert({
+    event_type: "bvn_lookup_audit",
+    payload: { user_id: userId, bvn_last4: bvn.slice(-4), at: new Date().toISOString() },
+    processed: true,
+  });
 
   const { data, status } = await vfdRequest("/client", "GET", undefined, { bvn });
   return jsonResponse({ data, vfd_status: status });
@@ -494,7 +565,16 @@ async function handleTierUpgrade(userId: string, body: Record<string, unknown>) 
 }
 
 // Balance Enquiry - VFD uses accountNumber (not accountNo)
-async function handleBalanceEnquiry(accountNo: string) {
+async function handleBalanceEnquiry(userId: string, accountNo: string) {
+  // SECURITY: only allow balance lookup on accounts owned by the caller
+  try {
+    await assertOwnsAccount(userId, accountNo);
+  } catch (err) {
+    return jsonResponse(
+      { error: err instanceof Error ? err.message : "unauthorized" },
+      403
+    );
+  }
   const { data, status } = await vfdRequest("/account/enquiry", "GET", undefined, {
     accountNumber: accountNo,
   });
@@ -503,6 +583,7 @@ async function handleBalanceEnquiry(accountNo: string) {
 
 // Transaction History - VFD requires transactionType, startDate, endDate
 async function handleTransactionHistory(
+  userId: string,
   accountNo: string,
   transactionType: string = "wallet",
   startDate?: string,
@@ -510,6 +591,16 @@ async function handleTransactionHistory(
   page: string = "0",
   size: string = "20"
 ) {
+  // SECURITY: only allow history lookup on accounts owned by the caller
+  try {
+    await assertOwnsAccount(userId, accountNo);
+  } catch (err) {
+    return jsonResponse(
+      { error: err instanceof Error ? err.message : "unauthorized" },
+      403
+    );
+  }
+
   // Default to last 90 days if not provided
   const now = new Date();
   const defaultEnd = now.toISOString().slice(0, 10) + " 23:59:59";
@@ -588,6 +679,25 @@ async function handleTransfer(
 
   if (!fromAccount || !toAccount) {
     return jsonResponse({ error: "fromAccount and toAccount are required" }, 400);
+  }
+
+  // SECURITY: prevent users from transferring from accounts they don't own
+  try {
+    await assertOwnsAccount(userId, fromAccount);
+  } catch (err) {
+    return jsonResponse(
+      { error: err instanceof Error ? err.message : "unauthorized" },
+      403
+    );
+  }
+
+  // SECURITY: amount validation + cap
+  const amountNum = Number(body.amount);
+  if (!Number.isFinite(amountNum) || amountNum <= 0) {
+    return jsonResponse({ error: "Invalid amount" }, 400);
+  }
+  if (amountNum > 5_000_000) {
+    return jsonResponse({ error: "Amount exceeds per-transfer limit (₦5,000,000)" }, 400);
   }
 
   // Step 1: Get sender account details via enquiry
@@ -671,6 +781,46 @@ async function handleTransfer(
 
 // Sandbox Credit - per VFD docs requires senderAccountNo and senderBank
 async function handleSandboxCredit(userId: string, accountNo: string, amount: number) {
+  // SECURITY: validate amount and enforce per-txn / per-day caps
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return jsonResponse({ error: "Invalid amount" }, 400);
+  }
+  if (amount > SANDBOX_CREDIT_MAX_PER_TXN) {
+    return jsonResponse(
+      { error: `Sandbox credit per-transaction limit is ₦${SANDBOX_CREDIT_MAX_PER_TXN.toLocaleString()}` },
+      400
+    );
+  }
+
+  // SECURITY: prevent users from crediting accounts they don't own
+  try {
+    await assertOwnsAccount(userId, accountNo);
+  } catch (err) {
+    return jsonResponse(
+      { error: err instanceof Error ? err.message : "unauthorized" },
+      403
+    );
+  }
+
+  const supabaseAdmin = getSupabaseAdmin();
+
+  // SECURITY: per-day cap across all sandbox credits for this user
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { data: recent } = await supabaseAdmin
+    .from("vfd_sandbox_transactions")
+    .select("amount")
+    .eq("user_id", userId)
+    .eq("transaction_type", "credit")
+    .eq("status", "completed")
+    .gte("created_at", since);
+  const usedToday = (recent ?? []).reduce((s, r) => s + Number(r.amount || 0), 0);
+  if (usedToday + amount > SANDBOX_CREDIT_MAX_PER_DAY) {
+    return jsonResponse(
+      { error: `Daily sandbox credit limit (₦${SANDBOX_CREDIT_MAX_PER_DAY.toLocaleString()}) exceeded` },
+      429
+    );
+  }
+
   const reference = `WeSave-credit-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
 
   const { data, status } = await vfdRequest("/credit", "POST", {
@@ -681,7 +831,6 @@ async function handleSandboxCredit(userId: string, accountNo: string, amount: nu
     senderNarration: `Sandbox test credit - ${reference}`,
   });
 
-  const supabaseAdmin = getSupabaseAdmin();
   const vfdData = data as Record<string, unknown>;
   const isSuccess = vfdData?.status === "00";
 
@@ -736,11 +885,32 @@ async function handleSubAccounts(entity: string = "individual", page: string = "
 
 // Webhook handler (no auth required)
 async function handleWebhook(req: Request) {
-  const payload = await req.json();
-  const supabaseAdmin = getSupabaseAdmin();
+  // SECURITY: verify shared-secret header before accepting webhook payloads
+  const expected = Deno.env.get("VFD_WEBHOOK_SECRET");
+  const provided =
+    req.headers.get("x-vfd-signature") ||
+    req.headers.get("x-webhook-secret") ||
+    req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
 
+  if (!expected) {
+    console.error("[VFD Webhook] VFD_WEBHOOK_SECRET not configured; rejecting payload");
+    return jsonResponse({ error: "Webhook not configured" }, 503);
+  }
+  if (!provided || provided !== expected) {
+    console.warn("[VFD Webhook] invalid signature");
+    return jsonResponse({ error: "Unauthorized" }, 401);
+  }
+
+  let payload: Record<string, unknown> = {};
+  try {
+    payload = await req.json();
+  } catch {
+    return jsonResponse({ error: "Invalid JSON" }, 400);
+  }
+
+  const supabaseAdmin = getSupabaseAdmin();
   await supabaseAdmin.from("vfd_sandbox_webhook_logs").insert({
-    event_type: payload?.event || payload?.type || "unknown",
+    event_type: (payload?.event as string) || (payload?.type as string) || "unknown",
     payload,
     processed: false,
   });
@@ -1126,7 +1296,7 @@ Deno.serve(async (req) => {
 
     switch (action) {
       case "bvn_lookup":
-        return await handleBvnLookup(body.bvn as string);
+        return await handleBvnLookup(userId, body.bvn as string);
 
       case "create_tiered":
         return await handleCreateTiered(userId, body);
@@ -1147,10 +1317,11 @@ Deno.serve(async (req) => {
         return await handleTierUpgrade(userId, body);
 
       case "balance_enquiry":
-        return await handleBalanceEnquiry(body.accountNo as string);
+        return await handleBalanceEnquiry(userId, body.accountNo as string);
 
       case "transaction_history":
         return await handleTransactionHistory(
+          userId,
           body.accountNo as string,
           body.transactionType as string || "wallet",
           body.startDate as string | undefined,

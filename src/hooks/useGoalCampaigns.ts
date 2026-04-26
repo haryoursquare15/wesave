@@ -114,11 +114,10 @@ export function useGoalCampaignDetail(campaignId: string | undefined) {
       setCampaign(c);
       setIsOwner(user?.id === c?.campaign_owner_user_id);
 
+      // Use safe RPC that respects anonymous + visibility settings.
+      // Owner / admin paths still see full identity via the direct table policy.
       const { data: contribs } = await (supabase as any)
-        .from("goal_contributions")
-        .select("*")
-        .eq("campaign_id", campaignId)
-        .order("created_at", { ascending: false });
+        .rpc("get_public_goal_contributions", { p_campaign_id: campaignId });
       setContributions(contribs || []);
 
       const { data: upds } = await (supabase as any)
