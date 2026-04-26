@@ -1247,10 +1247,11 @@ Deno.serve(async (req) => {
         return await handleTierUpgrade(userId, body);
 
       case "balance_enquiry":
-        return await handleBalanceEnquiry(body.accountNo as string);
+        return await handleBalanceEnquiry(userId, body.accountNo as string);
 
       case "transaction_history":
         return await handleTransactionHistory(
+          userId,
           body.accountNo as string,
           body.transactionType as string || "wallet",
           body.startDate as string | undefined,
