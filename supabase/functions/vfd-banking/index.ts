@@ -712,6 +712,46 @@ async function handleTransfer(
 
 // Sandbox Credit - per VFD docs requires senderAccountNo and senderBank
 async function handleSandboxCredit(userId: string, accountNo: string, amount: number) {
+  // SECURITY: validate amount and enforce per-txn / per-day caps
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return jsonResponse({ error: "Invalid amount" }, 400);
+  }
+  if (amount > SANDBOX_CREDIT_MAX_PER_TXN) {
+    return jsonResponse(
+      { error: `Sandbox credit per-transaction limit is ₦${SANDBOX_CREDIT_MAX_PER_TXN.toLocaleString()}` },
+      400
+    );
+  }
+
+  // SECURITY: prevent users from crediting accounts they don't own
+  try {
+    await assertOwnsAccount(userId, accountNo);
+  } catch (err) {
+    return jsonResponse(
+      { error: err instanceof Error ? err.message : "unauthorized" },
+      403
+    );
+  }
+
+  const supabaseAdmin = getSupabaseAdmin();
+
+  // SECURITY: per-day cap across all sandbox credits for this user
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { data: recent } = await supabaseAdmin
+    .from("vfd_sandbox_transactions")
+    .select("amount")
+    .eq("user_id", userId)
+    .eq("transaction_type", "credit")
+    .eq("status", "completed")
+    .gte("created_at", since);
+  const usedToday = (recent ?? []).reduce((s, r) => s + Number(r.amount || 0), 0);
+  if (usedToday + amount > SANDBOX_CREDIT_MAX_PER_DAY) {
+    return jsonResponse(
+      { error: `Daily sandbox credit limit (₦${SANDBOX_CREDIT_MAX_PER_DAY.toLocaleString()}) exceeded` },
+      429
+    );
+  }
+
   const reference = `WeSave-credit-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
 
   const { data, status } = await vfdRequest("/credit", "POST", {
@@ -722,7 +762,6 @@ async function handleSandboxCredit(userId: string, accountNo: string, amount: nu
     senderNarration: `Sandbox test credit - ${reference}`,
   });
 
-  const supabaseAdmin = getSupabaseAdmin();
   const vfdData = data as Record<string, unknown>;
   const isSuccess = vfdData?.status === "00";
 
