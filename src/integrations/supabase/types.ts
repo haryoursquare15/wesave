@@ -5718,6 +5718,17 @@ export type Database = {
           updated_at: string
         }[]
       }
+      get_public_goal_contributions: {
+        Args: { p_campaign_id: string }
+        Returns: {
+          anonymous: boolean
+          campaign_id: string
+          contribution_amount: number
+          contributor_name: string
+          created_at: string
+          id: string
+        }[]
+      }
       get_public_profile: {
         Args: { target_user_id: string }
         Returns: {
@@ -5740,6 +5751,44 @@ export type Database = {
           id: string
           membership_tier: Database["public"]["Enums"]["membership_tier"]
           username: string
+        }[]
+      }
+      get_public_vfd_sandbox_campaign: {
+        Args: { p_id: string }
+        Returns: {
+          campaign_image: string
+          campaign_slug: string
+          contribution_visibility: string
+          contributor_count: number
+          created_at: string
+          creator_id: string
+          deadline: string
+          description: string
+          goal_amount: number
+          id: string
+          raised_amount: number
+          status: string
+          title: string
+          updated_at: string
+        }[]
+      }
+      get_public_vfd_sandbox_campaigns: {
+        Args: never
+        Returns: {
+          campaign_image: string
+          campaign_slug: string
+          contribution_visibility: string
+          contributor_count: number
+          created_at: string
+          creator_id: string
+          deadline: string
+          description: string
+          goal_amount: number
+          id: string
+          raised_amount: number
+          status: string
+          title: string
+          updated_at: string
         }[]
       }
       get_vfd_clients_redacted: {
