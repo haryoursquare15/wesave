@@ -1275,7 +1275,7 @@ Deno.serve(async (req) => {
 
     switch (action) {
       case "bvn_lookup":
-        return await handleBvnLookup(body.bvn as string);
+        return await handleBvnLookup(userId, body.bvn as string);
 
       case "create_tiered":
         return await handleCreateTiered(userId, body);
