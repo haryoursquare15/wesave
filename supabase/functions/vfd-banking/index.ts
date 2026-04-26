@@ -90,6 +90,28 @@ async function getUserFromRequest(req: Request) {
   return { id: userId };
 }
 
+/**
+ * SECURITY: Confirms that the supplied VFD account number actually belongs
+ * to the authenticated user. Used to prevent users from initiating transfers
+ * or credits on accounts they do not own.
+ */
+async function assertOwnsAccount(userId: string, accountNo: string): Promise<void> {
+  if (!accountNo) throw new Error("accountNo required");
+  const supabaseAdmin = getSupabaseAdmin();
+  const { data, error } = await supabaseAdmin
+    .from("vfd_sandbox_clients")
+    .select("vfd_account_number")
+    .eq("user_id", userId)
+    .eq("vfd_account_number", accountNo)
+    .maybeSingle();
+  if (error) throw new Error("Account ownership check failed");
+  if (!data) throw new Error("Account does not belong to authenticated user");
+}
+
+// Sandbox credit caps (per user) to prevent abuse of test-credit endpoint
+const SANDBOX_CREDIT_MAX_PER_TXN = 500_000; // ₦500k single
+const SANDBOX_CREDIT_MAX_PER_DAY = 1_000_000; // ₦1M daily
+
 // VFD API helper
 async function vfdRequest(
   endpoint: string,
