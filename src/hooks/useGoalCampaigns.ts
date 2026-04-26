@@ -93,13 +93,24 @@ export function useGoalCampaignDetail(campaignId: string | undefined) {
   async function fetchDetail() {
     if (!campaignId) return;
     try {
-      const { data: c, error } = await (supabase as any)
+      // Try direct fetch first (works for owner/admin via RLS).
+      // If forbidden/not-found, fall back to the safe public RPC (no bank fields).
+      let c: GoalCampaign | null = null;
+      const { data: directData } = await (supabase as any)
         .from("goal_campaigns")
         .select("*")
         .eq("id", campaignId)
-        .single();
+        .maybeSingle();
 
-      if (error) throw error;
+      if (directData) {
+        c = directData;
+      } else {
+        const { data: rpcData, error: rpcErr } = await (supabase as any)
+          .rpc("get_public_goal_campaign", { _id: campaignId });
+        if (rpcErr) throw rpcErr;
+        c = (rpcData && rpcData[0]) || null;
+      }
+
       setCampaign(c);
       setIsOwner(user?.id === c?.campaign_owner_user_id);
 
