@@ -362,7 +362,9 @@ async function handleBvnLookup(userId: string, bvn: string) {
     }
   }
 
-  // Rate-limit: max 10 lookups / user / hour (logged via webhook_logs as a generic audit)
+  // Rate-limit: max 10 lookups / user / hour. Admins are exempt from the
+  // throttle (they may legitimately need bulk lookups for compliance work),
+  // but every attempt — admin or not — is still audited below.
   const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
   const { count } = await supabaseAdmin
     .from("vfd_sandbox_webhook_logs")
@@ -370,14 +372,36 @@ async function handleBvnLookup(userId: string, bvn: string) {
     .eq("event_type", "bvn_lookup_audit")
     .gte("created_at", since)
     .filter("payload->>user_id", "eq", userId);
-  if ((count ?? 0) >= 10) {
-    return jsonResponse({ error: "Too many BVN lookups. Try again later." }, 429);
+
+  if (!isAdmin && (count ?? 0) >= 10) {
+    // Audit the throttled attempt so burst probes are still visible
+    await supabaseAdmin.from("vfd_sandbox_webhook_logs").insert({
+      event_type: "bvn_lookup_audit",
+      payload: {
+        user_id: userId,
+        bvn_last4: bvn.slice(-4),
+        at: new Date().toISOString(),
+        outcome: "rate_limited",
+      },
+      processed: true,
+    });
+    return jsonResponse(
+      { error: "Too many BVN lookups. Try again later." },
+      429,
+    );
   }
 
-  // Audit the lookup attempt
+  // Audit the lookup attempt BEFORE calling upstream so that even crashes
+  // during the VFD round-trip count toward the per-hour quota.
   await supabaseAdmin.from("vfd_sandbox_webhook_logs").insert({
     event_type: "bvn_lookup_audit",
-    payload: { user_id: userId, bvn_last4: bvn.slice(-4), at: new Date().toISOString() },
+    payload: {
+      user_id: userId,
+      bvn_last4: bvn.slice(-4),
+      at: new Date().toISOString(),
+      outcome: "attempt",
+      is_admin: isAdmin,
+    },
     processed: true,
   });
 
