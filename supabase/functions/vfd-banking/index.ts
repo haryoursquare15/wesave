@@ -612,7 +612,29 @@ async function handleTransfer(
     return jsonResponse({ error: "fromAccount and toAccount are required" }, 400);
   }
 
+  // SECURITY: prevent users from transferring from accounts they don't own
+  try {
+    await assertOwnsAccount(userId, fromAccount);
+  } catch (err) {
+    return jsonResponse(
+      { error: err instanceof Error ? err.message : "unauthorized" },
+      403
+    );
+  }
+
+  // SECURITY: amount validation + cap
+  const amountNum = Number(body.amount);
+  if (!Number.isFinite(amountNum) || amountNum <= 0) {
+    return jsonResponse({ error: "Invalid amount" }, 400);
+  }
+  if (amountNum > 5_000_000) {
+    return jsonResponse({ error: "Amount exceeds per-transfer limit (₦5,000,000)" }, 400);
+  }
+
   // Step 1: Get sender account details via enquiry
+  const { data: senderEnquiry, status: senderStatus } = await vfdRequest("/account/enquiry", "GET", undefined, {
+    accountNumber: fromAccount,
+  });
   const { data: senderEnquiry, status: senderStatus } = await vfdRequest("/account/enquiry", "GET", undefined, {
     accountNumber: fromAccount,
   });
