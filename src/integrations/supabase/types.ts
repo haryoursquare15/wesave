@@ -5853,6 +5853,16 @@ export type Database = {
         Returns: Json
       }
       restart_completed_group: { Args: { _group_id: string }; Returns: Json }
+      search_public_profiles: {
+        Args: { _limit?: number; _query: string }
+        Returns: {
+          avatar_url: string
+          email: string
+          full_name: string
+          id: string
+          username: string
+        }[]
+      }
       search_users: {
         Args: { search_term: string }
         Returns: {

@@ -54,14 +54,16 @@ export default function TargetAjoDetail() {
       ])];
       if (!userIds.length) return;
 
-      const { data } = await supabase
-        .from("profiles")
-        .select("id, full_name, username, avatar_url")
-        .in("id", userIds);
+      const { data } = await supabase.rpc("get_public_profiles", { user_ids: userIds });
 
       if (data) {
         const map = new Map<string, MemberProfile>();
-        data.forEach(p => map.set(p.id, p));
+        data.forEach((p: any) => map.set(p.id, {
+          id: p.id,
+          full_name: p.full_name,
+          username: p.username,
+          avatar_url: p.avatar_url,
+        }));
         setMemberProfiles(map);
       }
     };
