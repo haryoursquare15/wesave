@@ -257,29 +257,35 @@ export type Database = {
       }
       bank_change_otps: {
         Row: {
+          attempt_count: number
           created_at: string
           email: string
           expires_at: string
           id: string
           otp_code: string
+          otp_hash: string | null
           user_id: string
           verified: boolean
         }
         Insert: {
+          attempt_count?: number
           created_at?: string
           email: string
           expires_at?: string
           id?: string
           otp_code: string
+          otp_hash?: string | null
           user_id: string
           verified?: boolean
         }
         Update: {
+          attempt_count?: number
           created_at?: string
           email?: string
           expires_at?: string
           id?: string
           otp_code?: string
+          otp_hash?: string | null
           user_id?: string
           verified?: boolean
         }
@@ -5663,6 +5669,44 @@ export type Database = {
           member_user_id: string
           member_username: string
           payout_position: number
+        }[]
+      }
+      get_public_goal_campaign: {
+        Args: { _id: string }
+        Returns: {
+          amount_raised: number
+          campaign_deadline: string
+          campaign_image: string
+          campaign_owner_user_id: string
+          campaign_slug: string
+          campaign_status: string
+          campaign_title: string
+          contribution_visibility: string
+          contributor_count: number
+          created_at: string
+          description: string
+          goal_amount: number
+          id: string
+          updated_at: string
+        }[]
+      }
+      get_public_goal_campaigns: {
+        Args: never
+        Returns: {
+          amount_raised: number
+          campaign_deadline: string
+          campaign_image: string
+          campaign_owner_user_id: string
+          campaign_slug: string
+          campaign_status: string
+          campaign_title: string
+          contribution_visibility: string
+          contributor_count: number
+          created_at: string
+          description: string
+          goal_amount: number
+          id: string
+          updated_at: string
         }[]
       }
       get_public_profile: {
