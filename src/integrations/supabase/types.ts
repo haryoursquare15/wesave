@@ -3184,6 +3184,57 @@ export type Database = {
         }
         Relationships: []
       }
+      vestara_rate_configs: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          max_amount: number | null
+          max_tenor_days: number
+          min_amount: number
+          min_tenor_days: number
+          notes: string | null
+          priority: number
+          product_code: Database["public"]["Enums"]["vestara_product_code"]
+          updated_at: string
+          user_rate: number
+          vfd_rate: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          max_amount?: number | null
+          max_tenor_days: number
+          min_amount?: number
+          min_tenor_days: number
+          notes?: string | null
+          priority?: number
+          product_code: Database["public"]["Enums"]["vestara_product_code"]
+          updated_at?: string
+          user_rate: number
+          vfd_rate: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          max_amount?: number | null
+          max_tenor_days?: number
+          min_amount?: number
+          min_tenor_days?: number
+          notes?: string | null
+          priority?: number
+          product_code?: Database["public"]["Enums"]["vestara_product_code"]
+          updated_at?: string
+          user_rate?: number
+          vfd_rate?: number
+        }
+        Relationships: []
+      }
       vestara_reconciliation_findings: {
         Row: {
           actual: number | null
@@ -5872,7 +5923,7 @@ export type Database = {
         Args: {
           _principal: number
           _product_code: Database["public"]["Enums"]["vestara_product_code"]
-          _reference: string
+          _reference?: string
           _tenor_days: number
           _user_id: string
         }
@@ -5953,6 +6004,18 @@ export type Database = {
           _type: Database["public"]["Enums"]["vestara_tx_type"]
         }
         Returns: Json
+      }
+      vestara_resolve_rate: {
+        Args: {
+          _amount: number
+          _product_code: Database["public"]["Enums"]["vestara_product_code"]
+          _tenor_days: number
+        }
+        Returns: {
+          source: string
+          user_rate: number
+          vfd_rate: number
+        }[]
       }
       vestara_reverse_transaction: {
         Args: {
