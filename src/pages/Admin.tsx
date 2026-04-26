@@ -22,6 +22,8 @@ import { PaymentAuthTab } from "@/components/admin/PaymentAuthTab";
 import { WithdrawalsTab } from "@/components/admin/WithdrawalsTab";
 import { SupportTab } from "@/components/admin/SupportTab";
 import { AdminEmailTab } from "@/components/admin/AdminEmailTab";
+import { VestaraRateConfigTab } from "@/components/admin/VestaraRateConfigTab";
+import { Percent } from "lucide-react";
 
 export default function Admin() {
   const navigate = useNavigate();
@@ -154,6 +156,10 @@ export default function Admin() {
               <Mail className="h-4 w-4" />
               Emails
             </TabsTrigger>
+            <TabsTrigger value="vestara-rates" className="flex items-center gap-1">
+              <Percent className="h-4 w-4" />
+              Vestara Rates
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview">
@@ -198,6 +204,10 @@ export default function Admin() {
 
           <TabsContent value="emails">
             <AdminEmailTab />
+          </TabsContent>
+
+          <TabsContent value="vestara-rates">
+            <VestaraRateConfigTab />
           </TabsContent>
         </Tabs>
       </div>
