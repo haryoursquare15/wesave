@@ -25,14 +25,11 @@ export function TargetAjoInviteDialog({ open, onOpenChange, groupId, onSuccess }
     if (!query.trim() || query.trim().length < 2) return;
     setSearching(true);
     try {
-      const escaped = query.trim().replace(/[%_\\]/g, "\\$&");
-      const { data } = await supabase
-        .from("profiles")
-        .select("id, full_name, username, email")
-        .or(`username.ilike.%${escaped}%,full_name.ilike.%${escaped}%`)
-        .neq("id", user?.id || "")
-        .limit(10);
-      setResults(data || []);
+      const { data } = await supabase.rpc("search_public_profiles", {
+        _query: query.trim(),
+        _limit: 10,
+      });
+      setResults((data || []).filter((u: any) => u.id !== user?.id));
     } catch {
       toast.error("Search failed");
     } finally {

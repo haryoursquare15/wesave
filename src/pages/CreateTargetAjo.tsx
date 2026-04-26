@@ -63,17 +63,14 @@ export default function CreateTargetAjo() {
     if (!memberQuery.trim() || memberQuery.trim().length < 2) return;
     setSearching(true);
     try {
-      const escaped = memberQuery.trim().replace(/[%_\\]/g, "\\$&");
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, full_name, username, email")
-        .or(`username.ilike.%${escaped}%,full_name.ilike.%${escaped}%,email.ilike.%${escaped}%`)
-        .neq("id", user?.id || "")
-        .limit(10);
+      const { data, error } = await supabase.rpc("search_public_profiles", {
+        _query: memberQuery.trim(),
+        _limit: 10,
+      });
       if (error) { toast.error("Search failed"); return; }
-      // Filter out already selected
+      // Filter out current user and already selected
       const selectedIds = new Set(selectedMembers.map(m => m.id));
-      setMemberResults((data || []).filter(u => !selectedIds.has(u.id)));
+      setMemberResults((data || []).filter((u: any) => u.id !== user?.id && !selectedIds.has(u.id)));
     } catch {
       toast.error("Search failed");
     } finally {
