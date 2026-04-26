@@ -809,10 +809,12 @@ serve(async (req) => {
         const otpDigits = crypto.getRandomValues(new Uint8Array(3));
         const otpCode = ((otpDigits[0] * 65536 + otpDigits[1] * 256 + otpDigits[2]) % 900000 + 100000).toString();
 
-        // Store OTP
+        // Store hashed OTP only — plaintext is sent via email and never persisted
+        const otpHash = await hashCode(otpCode);
         await supabase.from('bank_change_otps').insert({
           user_id: user.id,
-          otp_code: otpCode,
+          otp_code: otpHash, // legacy NOT NULL column — write hash to satisfy constraint
+          otp_hash: otpHash,
           email: userEmail,
         });
 
@@ -862,19 +864,38 @@ serve(async (req) => {
         const { otp_code } = params;
         if (!otp_code || otp_code.length !== 6) throw new Error('Invalid verification code');
 
-        // Find valid OTP
+        // Pull the most recent unverified OTP for this user
         const { data: otpRecord } = await supabase
           .from('bank_change_otps')
           .select('*')
           .eq('user_id', user.id)
-          .eq('otp_code', otp_code)
           .eq('verified', false)
           .gte('expires_at', new Date().toISOString())
           .order('created_at', { ascending: false })
           .limit(1)
-          .single();
+          .maybeSingle();
 
         if (!otpRecord) {
+          throw new Error('Invalid or expired verification code. Please request a new one.');
+        }
+
+        // Per-OTP attempt limit (defense against brute-force within the 5-min window)
+        if ((otpRecord.attempt_count || 0) >= 5) {
+          await supabase
+            .from('bank_change_otps')
+            .update({ verified: true })
+            .eq('id', otpRecord.id);
+          throw new Error('Too many failed attempts. Please request a new verification code.');
+        }
+
+        // Constant-time-ish hash comparison
+        const submittedHash = await hashCode(otp_code);
+        const storedHash = otpRecord.otp_hash || otpRecord.otp_code;
+        if (submittedHash !== storedHash) {
+          await supabase
+            .from('bank_change_otps')
+            .update({ attempt_count: (otpRecord.attempt_count || 0) + 1 })
+            .eq('id', otpRecord.id);
           throw new Error('Invalid or expired verification code. Please request a new one.');
         }
 

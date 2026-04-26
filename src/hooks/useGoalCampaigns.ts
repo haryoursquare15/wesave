@@ -50,16 +50,17 @@ export function useGoalCampaigns() {
 
   async function fetchCampaigns() {
     try {
-      const { data, error } = await (supabase as any)
-        .from("goal_campaigns")
-        .select("*")
-        .in("campaign_status", ["active", "completed"])
-        .order("created_at", { ascending: false });
+      // Public list goes through SECURITY DEFINER RPC that omits beneficiary bank fields
+      const { data, error } = await (supabase as any).rpc("get_public_goal_campaigns");
 
       if (error) throw error;
-      setCampaigns(data || []);
+      const sorted = (data || []).sort((a: GoalCampaign, b: GoalCampaign) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+      setCampaigns(sorted);
 
       if (user) {
+        // Owner queries directly — RLS still allows campaign_owner_user_id = auth.uid()
         const { data: mine } = await (supabase as any)
           .from("goal_campaigns")
           .select("*")
@@ -92,13 +93,24 @@ export function useGoalCampaignDetail(campaignId: string | undefined) {
   async function fetchDetail() {
     if (!campaignId) return;
     try {
-      const { data: c, error } = await (supabase as any)
+      // Try direct fetch first (works for owner/admin via RLS).
+      // If forbidden/not-found, fall back to the safe public RPC (no bank fields).
+      let c: GoalCampaign | null = null;
+      const { data: directData } = await (supabase as any)
         .from("goal_campaigns")
         .select("*")
         .eq("id", campaignId)
-        .single();
+        .maybeSingle();
 
-      if (error) throw error;
+      if (directData) {
+        c = directData;
+      } else {
+        const { data: rpcData, error: rpcErr } = await (supabase as any)
+          .rpc("get_public_goal_campaign", { _id: campaignId });
+        if (rpcErr) throw rpcErr;
+        c = (rpcData && rpcData[0]) || null;
+      }
+
       setCampaign(c);
       setIsOwner(user?.id === c?.campaign_owner_user_id);
 
