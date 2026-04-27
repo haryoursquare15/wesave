@@ -23,9 +23,20 @@ export function useTransactionPin() {
           body,
           headers: { Authorization: `Bearer ${accessToken}` },
         });
+        // For non-2xx responses, supabase-js sets `error` but ALSO returns the JSON body.
+        // We prefer the structured body (with error/attempts_remaining/is_locked) over the generic message.
         if (error) {
-          // Edge function returned non-2xx — try to read the body
-          // supabase.functions.invoke returns the JSON body on data even with 4xx in newer SDK
+          // Try to parse the response body from FunctionsHttpError
+          try {
+            const ctx = (error as { context?: Response }).context;
+            if (ctx && typeof ctx.json === "function") {
+              const body = await ctx.json();
+              if (body && typeof body === "object") return body;
+            }
+          } catch {
+            // fall through
+          }
+          if (data && typeof data === "object") return data;
           return { success: false, error: error.message || "Request failed" };
         }
         return data;
