@@ -267,7 +267,10 @@ async function persistResults(results: ProbeResult[]) {
     checked_at: new Date().toISOString(),
   }));
   const { error } = await db.from("flow_health").insert(rows);
-  if (error) throw error;
+  if (error) {
+    console.error("flow_health insert failed:", error);
+    throw new Error(error.message ?? JSON.stringify(error));
+  }
 }
 
 Deno.serve(async (req) => {
