@@ -5660,6 +5660,10 @@ export type Database = {
       }
       gen_random_bytes: { Args: { n: number }; Returns: string }
       gen_random_uuid: { Args: never; Returns: string }
+      get_group_active_member_count: {
+        Args: { _group_id: string }
+        Returns: number
+      }
       get_own_vfd_client_pii: {
         Args: never
         Returns: {

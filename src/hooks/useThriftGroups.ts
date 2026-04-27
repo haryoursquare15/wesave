@@ -174,16 +174,14 @@ export function usePoolGroups() {
         isMember: userGroupIds.includes(group.id!),
       }));
 
-      // Fetch member counts for pending groups
+      // Fetch member counts for pending groups via SECURITY DEFINER RPC
+      // (direct SELECT on group_memberships is restricted to members/admins)
       const pendingGroupsWithInfo = await Promise.all(
         (pendingResult.data || []).map(async (group) => {
-          const { count } = await supabase
-            .from("group_memberships")
-            .select("*", { count: "exact", head: true })
-            .eq("group_id", group.id)
-            .eq("status", "active");
+          const { data: countData } = await supabase
+            .rpc("get_group_active_member_count", { _group_id: group.id });
 
-          const memberCount = count || 0;
+          const memberCount = Number(countData) || 0;
 
           // Only include groups that need more members (not yet full)
           if (memberCount >= group.max_members) return null;
