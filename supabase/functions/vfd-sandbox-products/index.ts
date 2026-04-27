@@ -123,59 +123,60 @@ async function getAvailableBalance(userId: string): Promise<number> {
   return bal.total_balance - bal.locked_balance - bal.savings_balance;
 }
 
-async function debitForSavings(userId: string, amount: number): Promise<boolean> {
+// All ledger writes go through the atomic RPC `apply_balance_delta`
+// which row-locks vfd_user_balances and prevents race conditions.
+
+async function applyBalanceDelta(
+  userId: string,
+  deltas: { total?: number; locked?: number; savings?: number; requireAvailable?: number },
+): Promise<{ ok: boolean; available: number; reason?: string }> {
   const db = getSupabaseAdmin();
-  let bal = await ensureBalanceRow(userId);
-  let avail = bal.total_balance - bal.locked_balance - bal.savings_balance;
-
-  if (amount > avail) {
-    bal = await ensureBalanceRow(userId, true);
-    avail = bal.total_balance - bal.locked_balance - bal.savings_balance;
-    if (amount > avail) return false;
+  // Make sure the row exists and live VFD balance is synced before mutating.
+  await ensureBalanceRow(userId);
+  const { data, error } = await db.rpc("apply_balance_delta", {
+    _user_id: userId,
+    _total_delta: deltas.total ?? 0,
+    _locked_delta: deltas.locked ?? 0,
+    _savings_delta: deltas.savings ?? 0,
+    _require_available: deltas.requireAvailable ?? null,
+  });
+  if (error) {
+    console.error("[apply_balance_delta]", error);
+    return { ok: false, available: 0, reason: error.message };
   }
+  const result = data as { ok: boolean; available: number; reason?: string };
+  return result;
+}
 
-  await db.from("vfd_user_balances").update({
-    savings_balance: bal.savings_balance + amount,
-    updated_at: new Date().toISOString(),
-  }).eq("user_id", userId);
+async function debitForSavings(userId: string, amount: number): Promise<boolean> {
+  // Move `amount` from total_balance into savings_balance while
+  // requiring the available balance to cover it (atomic).
+  const r = await applyBalanceDelta(userId, { savings: amount, requireAvailable: 0 });
+  if (!r.ok) {
+    // Try once more after force-syncing live VFD balance
+    await ensureBalanceRow(userId, true);
+    const r2 = await applyBalanceDelta(userId, { savings: amount, requireAvailable: 0 });
+    return r2.ok;
+  }
   return true;
 }
 
 async function creditFromSavings(userId: string, amount: number): Promise<void> {
-  const db = getSupabaseAdmin();
-  const { data } = await db.from("vfd_user_balances").select("*").eq("user_id", userId).maybeSingle();
-  if (!data) return;
-  await db.from("vfd_user_balances").update({
-    savings_balance: Math.max(0, Number(data.savings_balance) - amount),
-    updated_at: new Date().toISOString(),
-  }).eq("user_id", userId);
+  await applyBalanceDelta(userId, { savings: -amount });
 }
 
 async function debitWallet(userId: string, amount: number): Promise<boolean> {
-  const db = getSupabaseAdmin();
-  let bal = await ensureBalanceRow(userId);
-  let avail = bal.total_balance - bal.locked_balance - bal.savings_balance;
-
-  if (amount > avail) {
-    bal = await ensureBalanceRow(userId, true);
-    avail = bal.total_balance - bal.locked_balance - bal.savings_balance;
-    if (amount > avail) return false;
+  const r = await applyBalanceDelta(userId, { total: -amount, requireAvailable: 0 });
+  if (!r.ok) {
+    await ensureBalanceRow(userId, true);
+    const r2 = await applyBalanceDelta(userId, { total: -amount, requireAvailable: 0 });
+    return r2.ok;
   }
-
-  await db.from("vfd_user_balances").update({
-    total_balance: bal.total_balance - amount,
-    updated_at: new Date().toISOString(),
-  }).eq("user_id", userId);
   return true;
 }
 
 async function creditWallet(userId: string, amount: number): Promise<void> {
-  const db = getSupabaseAdmin();
-  const bal = await ensureBalanceRow(userId);
-  await db.from("vfd_user_balances").update({
-    total_balance: bal.total_balance + amount,
-    updated_at: new Date().toISOString(),
-  }).eq("user_id", userId);
+  await applyBalanceDelta(userId, { total: amount });
 }
 
 // =============================================
@@ -536,9 +537,20 @@ async function processAutoPayout(
   const platformFee = calculatePlatformFee(grossAmount);
   const netAmount = grossAmount - platformFee;
 
-  // Release recipient's own savings contribution, then credit net gain
-  await creditFromSavings(recipientId, amount);
-  await creditWallet(recipientId, netAmount - amount);
+  // CRITICAL FIX: Release ALL contributors' savings_balance for this cycle
+  // (previously only the recipient's was released, causing the other members'
+  // contributions to remain frozen in their savings_balance forever).
+  const { data: cycleContribs } = await db.from("vfd_sandbox_group_contributions")
+    .select("user_id, amount")
+    .eq("group_id", groupId)
+    .eq("cycle_number", currentCycle);
+  for (const c of (cycleContribs as { user_id: string; amount: number }[] | null) || []) {
+    await creditFromSavings(c.user_id, Number(c.amount));
+  }
+
+  // Credit net payout to the recipient's wallet (their own contribution
+  // already returned via creditFromSavings above, so credit the full net).
+  await creditWallet(recipientId, netAmount);
 
   await db.from("vfd_sandbox_group_payouts").insert({
     group_id: groupId, recipient_id: recipientId,
