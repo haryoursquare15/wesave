@@ -537,9 +537,20 @@ async function processAutoPayout(
   const platformFee = calculatePlatformFee(grossAmount);
   const netAmount = grossAmount - platformFee;
 
-  // Release recipient's own savings contribution, then credit net gain
-  await creditFromSavings(recipientId, amount);
-  await creditWallet(recipientId, netAmount - amount);
+  // CRITICAL FIX: Release ALL contributors' savings_balance for this cycle
+  // (previously only the recipient's was released, causing the other members'
+  // contributions to remain frozen in their savings_balance forever).
+  const { data: cycleContribs } = await db.from("vfd_sandbox_group_contributions")
+    .select("user_id, amount")
+    .eq("group_id", groupId)
+    .eq("cycle_number", currentCycle);
+  for (const c of (cycleContribs as { user_id: string; amount: number }[] | null) || []) {
+    await creditFromSavings(c.user_id, Number(c.amount));
+  }
+
+  // Credit net payout to the recipient's wallet (their own contribution
+  // already returned via creditFromSavings above, so credit the full net).
+  await creditWallet(recipientId, netAmount);
 
   await db.from("vfd_sandbox_group_payouts").insert({
     group_id: groupId, recipient_id: recipientId,
