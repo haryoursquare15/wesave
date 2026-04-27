@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import * as bcrypt from "https://deno.land/x/bcrypt@v0.4.1/mod.ts";
+// NOTE: Use *Sync variants — async bcrypt spawns a Web Worker which is unavailable in Supabase edge runtime ("Worker is not defined").
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -109,7 +110,7 @@ serve(async (req) => {
           }, 400);
         }
 
-        const hash = await bcrypt.hash(pin);
+        const hash = bcrypt.hashSync(pin, bcrypt.genSaltSync(10));
         const { error: insertError } = await supabase
           .from("transaction_pins")
           .insert({
@@ -152,13 +153,13 @@ serve(async (req) => {
           }, 423);
         }
 
-        const valid = await bcrypt.compare(current_pin, row.pin_hash);
+        const valid = bcrypt.compareSync(current_pin, row.pin_hash);
         if (!valid) {
           await audit("verify_failed", { reason: "change_pin_wrong_current" });
           return jsonResponse({ success: false, error: "Current PIN is incorrect" }, 400);
         }
 
-        const newHash = await bcrypt.hash(new_pin);
+        const newHash = bcrypt.hashSync(new_pin, bcrypt.genSaltSync(10));
         await supabase
           .from("transaction_pins")
           .update({
@@ -196,7 +197,7 @@ serve(async (req) => {
           }, 423);
         }
 
-        const valid = await bcrypt.compare(pin, row.pin_hash);
+        const valid = bcrypt.compareSync(pin, row.pin_hash);
 
         if (!valid) {
           const newAttempts = (row.failed_attempts || 0) + 1;
