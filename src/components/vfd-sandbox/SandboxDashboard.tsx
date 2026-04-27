@@ -4,7 +4,7 @@ import {
   Wallet, Lock, Users, Target, Heart, Receipt, Send,
   CreditCard, Eye, EyeOff, TrendingUp, Plus, ArrowDownLeft, ArrowUpRight,
   Shield, ChevronRight, ChevronLeft, Sparkles, PiggyBank, Banknote,
-  Clock, Copy, Check, Building2,
+  Clock, Copy, Check, Building2, Vault as VaultIcon, Zap, Gift,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -65,12 +65,39 @@ function AnimatedNumber({ value, prefix = "₦" }: { value: number; prefix?: str
 const productBanners = [
   {
     key: "lock",
-    title: "Lock Funds & Earn",
-    subtitle: "Earn up to 15% p.a. by locking your savings",
-    cta: "Start Earning",
-    gradient: "from-emerald-600 to-teal-700",
-    icon: Lock,
+    title: "GoalSave",
+    subtitle: "Flexible savings • Earn 10–16% p.a. • 90–365 days",
+    cta: "Start GoalSave",
+    gradient: "from-blue-600 to-cyan-700",
+    icon: Target,
+    accent: "bg-blue-400/20",
+  },
+  {
+    key: "lock",
+    title: "Vault",
+    subtitle: "Higher yield safe • Earn 14–20.5% p.a. • 30–365 days",
+    cta: "Open a Vault",
+    gradient: "from-emerald-600 to-green-700",
+    icon: VaultIcon,
     accent: "bg-emerald-400/20",
+  },
+  {
+    key: "lock",
+    title: "LockMax",
+    subtitle: "Maximum returns • Earn 18–21% p.a. • 90–365 days",
+    cta: "Lock for Max",
+    gradient: "from-purple-600 to-fuchsia-700",
+    icon: Zap,
+    accent: "bg-purple-400/20",
+  },
+  {
+    key: "lock",
+    title: "Upfront Yield",
+    subtitle: "Get your interest paid up front • 12–18% p.a.",
+    cta: "Earn Upfront",
+    gradient: "from-amber-500 to-orange-600",
+    icon: Gift,
+    accent: "bg-amber-300/20",
   },
   {
     key: "target",
