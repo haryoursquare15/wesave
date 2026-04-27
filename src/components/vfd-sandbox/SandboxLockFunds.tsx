@@ -390,11 +390,11 @@ export function SandboxLockFunds({
                   {lock.status === "active" && (
                     <div className="flex gap-2">
                       {isMatured ? (
-                        <Button size="sm" className="flex-1 bg-success hover:bg-success/90 text-success-foreground" onClick={() => onUnlock(lock.id)} disabled={loading}>
+                        <Button size="sm" className="flex-1 bg-success hover:bg-success/90 text-success-foreground" onClick={() => requestUnlock(lock.id, lock.principal_amount)} disabled={loading}>
                           <Unlock className="h-3.5 w-3.5 mr-1.5" /> Unlock & Earn
                         </Button>
                       ) : (
-                        <Button size="sm" variant="outline" className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/5" onClick={() => onBreakLock(lock.id)} disabled={loading}>
+                        <Button size="sm" variant="outline" className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/5" onClick={() => requestBreak(lock.id, lock.principal_amount)} disabled={loading}>
                           <AlertTriangle className="h-3.5 w-3.5 mr-1.5" /> Break Lock
                         </Button>
                       )}
@@ -412,6 +412,33 @@ export function SandboxLockFunds({
           </div>
         )}
       </div>
+
+      <TransactionPinGate
+        open={!!pinGate}
+        onOpenChange={(o) => { if (!o) setPinGate(null); }}
+        purpose={pinGate?.purpose || ""}
+        description={pinGate?.description}
+        onVerified={() => {
+          const cb = pinGate?.onAuthorized;
+          setPinGate(null);
+          cb?.();
+        }}
+      />
+
+      <Dialog open={!!successModal} onOpenChange={(o) => { if (!o) setSuccessModal(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="mx-auto h-14 w-14 rounded-full bg-success/10 flex items-center justify-center mb-2">
+              <CheckCircle2 className="h-8 w-8 text-success" />
+            </div>
+            <DialogTitle className="text-center">{successModal?.title}</DialogTitle>
+            <DialogDescription className="text-center">{successModal?.description}</DialogDescription>
+          </DialogHeader>
+          <Button onClick={() => setSuccessModal(null)} className="w-full" variant="hero">
+            Done
+          </Button>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
