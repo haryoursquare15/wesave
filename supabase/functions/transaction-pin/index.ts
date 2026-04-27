@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import * as bcrypt from "https://deno.land/x/bcrypt@v0.4.1/mod.ts";
+// NOTE: Use *Sync variants — async bcrypt spawns a Web Worker which is unavailable in Supabase edge runtime ("Worker is not defined").
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
