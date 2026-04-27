@@ -197,7 +197,7 @@ serve(async (req) => {
           }, 423);
         }
 
-        const valid = await bcrypt.compare(pin, row.pin_hash);
+        const valid = bcrypt.compareSync(pin, row.pin_hash);
 
         if (!valid) {
           const newAttempts = (row.failed_attempts || 0) + 1;
