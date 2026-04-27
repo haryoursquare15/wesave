@@ -42,11 +42,18 @@ async function safeProbe(
   try {
     return await fn();
   } catch (err) {
+    const msg =
+      err instanceof Error
+        ? err.message
+        : typeof err === "object" && err !== null
+        ? JSON.stringify(err)
+        : String(err);
+    console.error(`probe ${name} failed:`, msg);
     return {
       flow_name: name,
       status: "down",
       success_rate: 0,
-      last_error: err instanceof Error ? err.message : String(err),
+      last_error: msg,
       details: {},
     };
   }
