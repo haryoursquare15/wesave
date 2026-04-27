@@ -9,9 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { TransactionPinGate } from "@/components/security/TransactionPinGate";
+import { TransactionSuccessModal, TransactionSuccessPayload } from "@/components/feedback/TransactionSuccessModal";
 
 interface LockConfig {
   id: string; duration_months: number; interest_rate: number; early_withdrawal_penalty: number;
@@ -49,7 +49,7 @@ export function SandboxLockFunds({
   const [selectedDuration, setSelectedDuration] = useState<number | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [pinGate, setPinGate] = useState<null | { purpose: string; description: string; onAuthorized: () => Promise<void> | void }>(null);
-  const [successModal, setSuccessModal] = useState<null | { title: string; description: string }>(null);
+  const [successPayload, setSuccessPayload] = useState<TransactionSuccessPayload | null>(null);
 
   const selectedConfig = lockConfigs.find(c => c.duration_months === selectedDuration);
   const amtNum = parseFloat(amount);
@@ -77,13 +77,25 @@ export function SandboxLockFunds({
       description: `Lock ₦${amtNum.toLocaleString()} for ${selectedDuration} months`,
       onAuthorized: async () => {
         await onCreateLock(amtNum, selectedDuration);
+        const cfg = selectedConfig;
+        const interest = preview?.interest || 0;
+        const total = preview?.total || amtNum;
+        const maturityDate = preview?.maturityDate;
         setStep("amount");
         setAmount("");
         setSelectedDuration(null);
         setShowCreate(false);
-        setSuccessModal({
-          title: "Funds locked successfully",
-          description: `₦${amtNum.toLocaleString()} locked for ${selectedDuration} months. View it under "My Locks" below.`,
+        setSuccessPayload({
+          title: "Funds Locked Successfully",
+          description: `Your funds are now earning interest until maturity.`,
+          details: [
+            { label: "Principal", value: `₦${amtNum.toLocaleString()}`, highlight: true },
+            { label: "Duration", value: `${selectedDuration} months` },
+            { label: "Interest Rate", value: `${cfg?.interest_rate}% p.a.` },
+            { label: "Expected Interest", value: `+₦${interest.toLocaleString()}` },
+            { label: "Total at Maturity", value: `₦${total.toLocaleString()}`, highlight: true },
+            ...(maturityDate ? [{ label: "Matures On", value: maturityDate.toLocaleDateString("en-NG", { year: "numeric", month: "long", day: "numeric" }) }] : []),
+          ],
         });
       },
     });
@@ -95,9 +107,14 @@ export function SandboxLockFunds({
       description: `Unlock and credit ₦${Number(principal).toLocaleString()} to wallet`,
       onAuthorized: async () => {
         await onUnlock(lockId);
-        setSuccessModal({
-          title: "Unlocked successfully",
+        setSuccessPayload({
+          title: "Unlocked Successfully",
           description: "Funds and earned interest have been credited to your wallet.",
+          details: [
+            { label: "Principal Returned", value: `₦${Number(principal).toLocaleString()}`, highlight: true },
+            { label: "Credited To", value: "Wallet (Available)" },
+            { label: "Date", value: new Date().toLocaleString("en-NG") },
+          ],
         });
       },
     });
@@ -109,9 +126,14 @@ export function SandboxLockFunds({
       description: `Break lock of ₦${Number(principal).toLocaleString()} early`,
       onAuthorized: async () => {
         await onBreakLock(lockId);
-        setSuccessModal({
-          title: "Lock broken",
-          description: "Funds returned to wallet (penalty applied if applicable).",
+        setSuccessPayload({
+          title: "Lock Broken",
+          description: "Funds returned to wallet. Any applicable penalty has been deducted.",
+          details: [
+            { label: "Principal", value: `₦${Number(principal).toLocaleString()}`, highlight: true },
+            { label: "Status", value: "Returned to wallet" },
+            { label: "Date", value: new Date().toLocaleString("en-NG") },
+          ],
         });
       },
     });
@@ -425,20 +447,11 @@ export function SandboxLockFunds({
         }}
       />
 
-      <Dialog open={!!successModal} onOpenChange={(o) => { if (!o) setSuccessModal(null); }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <div className="mx-auto h-14 w-14 rounded-full bg-success/10 flex items-center justify-center mb-2">
-              <CheckCircle2 className="h-8 w-8 text-success" />
-            </div>
-            <DialogTitle className="text-center">{successModal?.title}</DialogTitle>
-            <DialogDescription className="text-center">{successModal?.description}</DialogDescription>
-          </DialogHeader>
-          <Button onClick={() => setSuccessModal(null)} className="w-full" variant="hero">
-            Done
-          </Button>
-        </DialogContent>
-      </Dialog>
+      <TransactionSuccessModal
+        open={!!successPayload}
+        onOpenChange={(o) => { if (!o) setSuccessPayload(null); }}
+        payload={successPayload}
+      />
     </div>
   );
 }

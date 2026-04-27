@@ -5,9 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { TransactionPinGate } from "@/components/security/TransactionPinGate";
+import { TransactionSuccessModal, TransactionSuccessPayload } from "@/components/feedback/TransactionSuccessModal";
 
 interface Props {
   loading: boolean;
@@ -28,7 +28,7 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
     toAccount: "", bankCode: "", amount: "", narration: "", beneficiaryName: "",
   });
   const [pinOpen, setPinOpen] = useState(false);
-  const [successModal, setSuccessModal] = useState<null | { title: string; description: string }>(null);
+  const [successPayload, setSuccessPayload] = useState<TransactionSuccessPayload | null>(null);
 
   const handleValidate = async () => {
     const name = await onValidate(form.toAccount, form.bankCode);
@@ -46,6 +46,7 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
 
   const executeTransfer = async () => {
     const amount = parseFloat(form.amount);
+    const bankName = banks.find(b => b.code === form.bankCode)?.name || form.bankCode;
     const result = await onTransfer({
       fromAccount: accountNumber, toAccount: form.toAccount,
       bankCode: form.bankCode, amount,
@@ -53,9 +54,22 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
       beneficiaryName: form.beneficiaryName,
     });
     if (result) {
-      setSuccessModal({
-        title: "Transfer initiated",
-        description: `₦${amount.toLocaleString()} sent to ${form.beneficiaryName || form.toAccount}.`,
+      const ref = (result as { reference?: string; transactionId?: string })?.reference
+        || (result as { transactionId?: string })?.transactionId
+        || `TRF-${Date.now()}`;
+      setSuccessPayload({
+        title: "Transfer Successful",
+        description: `Your transfer of ₦${amount.toLocaleString()} has been sent.`,
+        details: [
+          { label: "Amount", value: `₦${amount.toLocaleString()}`, highlight: true },
+          { label: "Recipient", value: form.beneficiaryName || form.toAccount },
+          { label: "Bank", value: bankName },
+          { label: "Account", value: form.toAccount },
+          ...(form.narration ? [{ label: "Narration", value: form.narration }] : []),
+          { label: "Date", value: new Date().toLocaleString("en-NG") },
+        ],
+        reference: ref,
+        primaryLabel: "Done",
       });
       setForm({ toAccount: "", bankCode: "", amount: "", narration: "", beneficiaryName: "" });
     }
@@ -145,18 +159,11 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
         onVerified={executeTransfer}
       />
 
-      <Dialog open={!!successModal} onOpenChange={(o) => { if (!o) setSuccessModal(null); }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <div className="mx-auto h-14 w-14 rounded-full bg-success/10 flex items-center justify-center mb-2">
-              <CheckCircle2 className="h-8 w-8 text-success" />
-            </div>
-            <DialogTitle className="text-center">{successModal?.title}</DialogTitle>
-            <DialogDescription className="text-center">{successModal?.description}</DialogDescription>
-          </DialogHeader>
-          <Button onClick={() => setSuccessModal(null)} className="w-full" variant="hero">Done</Button>
-        </DialogContent>
-      </Dialog>
+      <TransactionSuccessModal
+        open={!!successPayload}
+        onOpenChange={(o) => { if (!o) setSuccessPayload(null); }}
+        payload={successPayload}
+      />
     </div>
   );
 }
