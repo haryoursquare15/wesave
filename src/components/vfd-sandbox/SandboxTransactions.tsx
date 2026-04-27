@@ -29,6 +29,7 @@ function getTxIcon(type: string) {
     case "credit": return { icon: ArrowDownLeft, bg: "bg-success/10", color: "text-success" };
     case "debit": return { icon: ArrowUpRight, bg: "bg-destructive/10", color: "text-destructive" };
     case "lock": return { icon: Lock, bg: "bg-warning/10", color: "text-warning" };
+    case "unlock": return { icon: ArrowDownLeft, bg: "bg-success/10", color: "text-success" };
     case "savings": return { icon: Users, bg: "bg-primary/10", color: "text-primary" };
     default: return { icon: CreditCard, bg: "bg-muted", color: "text-muted-foreground" };
   }
@@ -76,7 +77,8 @@ export function SandboxTransactions({ transactions, loading, onRefresh, onBack }
         <div className="space-y-2">
           {transactions.map((tx, i) => {
             const { icon: Icon, bg, color } = getTxIcon(tx.transaction_type);
-            const isCredit = tx.transaction_type === "credit";
+            const isCredit = tx.transaction_type === "credit" || tx.transaction_type === "unlock" || tx.transaction_type === "interest";
+            const displayLabel = tx.transaction_type === "unlock" ? "Unlock to wallet" : tx.transaction_type;
 
             return (
               <motion.div
@@ -90,7 +92,7 @@ export function SandboxTransactions({ transactions, loading, onRefresh, onBack }
                   <Icon className={`h-4 w-4 ${color}`} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium capitalize truncate">{tx.transaction_type}</p>
+                  <p className="text-sm font-medium capitalize truncate">{displayLabel}</p>
                   <p className="text-[10px] text-muted-foreground truncate">
                     {tx.description || tx.reference || "—"}
                   </p>

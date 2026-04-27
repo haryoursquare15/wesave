@@ -120,7 +120,9 @@ function getTxMeta(type: string) {
     case "credit": return { icon: ArrowDownLeft, bg: "bg-success/10", color: "text-success", sign: "+" };
     case "debit": return { icon: ArrowUpRight, bg: "bg-destructive/10", color: "text-destructive", sign: "-" };
     case "lock": return { icon: Lock, bg: "bg-warning/10", color: "text-warning", sign: "-" };
+    case "unlock": return { icon: ArrowDownLeft, bg: "bg-success/10", color: "text-success", sign: "+" };
     case "savings": return { icon: PiggyBank, bg: "bg-primary/10", color: "text-primary", sign: "-" };
+    case "interest": return { icon: TrendingUp, bg: "bg-success/10", color: "text-success", sign: "+" };
     default: return { icon: CreditCard, bg: "bg-muted", color: "text-muted-foreground", sign: "" };
   }
 }
@@ -452,7 +454,8 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [] 
             {recentTransactions.slice(0, 5).map((tx, i) => {
               const meta = getTxMeta(tx.transaction_type);
               const TxIcon = meta.icon;
-              const isCredit = tx.transaction_type === "credit";
+              const isCredit = tx.transaction_type === "credit" || tx.transaction_type === "unlock" || tx.transaction_type === "interest";
+              const displayLabel = tx.description || (tx.transaction_type === "unlock" ? "Unlocked to wallet" : tx.transaction_type);
               return (
                 <motion.div
                   key={tx.id}
@@ -466,7 +469,7 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [] 
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium capitalize text-foreground truncate">
-                      {tx.description || tx.transaction_type}
+                      {displayLabel}
                     </p>
                     <p className="text-[10px] text-muted-foreground">
                       {new Date(tx.created_at).toLocaleDateString("en-NG", {
