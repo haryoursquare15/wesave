@@ -189,12 +189,14 @@ serve(async (req) => {
 
         const isLocked = row.locked_until && new Date(row.locked_until) > new Date();
         if (isLocked) {
+          // Return 200 so supabase-js doesn't surface this as a console/runtime error.
+          // The client keys off `success` + `is_locked`, not the HTTP status.
           return jsonResponse({
             success: false,
             error: `Too many failed attempts. Try again after ${new Date(row.locked_until).toLocaleTimeString()}.`,
             locked_until: row.locked_until,
             is_locked: true,
-          }, 423);
+          });
         }
 
         const valid = bcrypt.compareSync(pin, row.pin_hash);
@@ -208,22 +210,24 @@ serve(async (req) => {
             updates.locked_until = lockUntil;
             await supabase.from("transaction_pins").update(updates).eq("user_id", user.id);
             await audit("locked_out", { attempts: newAttempts });
+            // Return 200 — handled gracefully by the client gate.
             return jsonResponse({
               success: false,
               error: `Too many failed attempts. PIN locked for ${LOCKOUT_MINUTES} minutes.`,
               locked_until: lockUntil,
               is_locked: true,
-            }, 423);
+            });
           }
 
           await supabase.from("transaction_pins").update(updates).eq("user_id", user.id);
           await audit("verify_failed", { attempts: newAttempts });
 
+          // Return 200 — wrong PIN is an expected user input case, not a transport error.
           return jsonResponse({
             success: false,
             error: `Incorrect PIN. ${MAX_ATTEMPTS - newAttempts} attempt${MAX_ATTEMPTS - newAttempts === 1 ? "" : "s"} remaining.`,
             attempts_remaining: MAX_ATTEMPTS - newAttempts,
-          }, 400);
+          });
         }
 
         // Success — reset counters
