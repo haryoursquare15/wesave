@@ -810,6 +810,36 @@ export type Database = {
           },
         ]
       }
+      flow_health: {
+        Row: {
+          checked_at: string
+          details: Json | null
+          flow_name: string
+          id: string
+          last_error: string | null
+          status: string
+          success_rate: number
+        }
+        Insert: {
+          checked_at?: string
+          details?: Json | null
+          flow_name: string
+          id?: string
+          last_error?: string | null
+          status: string
+          success_rate?: number
+        }
+        Update: {
+          checked_at?: string
+          details?: Json | null
+          flow_name?: string
+          id?: string
+          last_error?: string | null
+          status?: string
+          success_rate?: number
+        }
+        Relationships: []
+      }
       goal_campaigns: {
         Row: {
           amount_raised: number
@@ -5586,6 +5616,16 @@ export type Database = {
       admin_remove_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: Json
+      }
+      apply_balance_delta: {
+        Args: {
+          _locked_delta?: number
+          _require_available?: number
+          _savings_delta?: number
+          _total_delta?: number
           _user_id: string
         }
         Returns: Json
