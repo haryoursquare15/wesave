@@ -129,13 +129,34 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
             placeholder="Transfer description" className="mt-1" />
         </div>
 
-        <Button onClick={handleTransfer}
+        <Button onClick={handleTransferRequest}
           disabled={loading || !form.toAccount || !form.bankCode || !form.amount}
           className="w-full h-12" variant="hero">
           {loading ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
           Send Transfer
         </Button>
       </motion.div>
+
+      <TransactionPinGate
+        open={pinOpen}
+        onOpenChange={setPinOpen}
+        purpose="Bank Transfer"
+        description={`Send ₦${(parseFloat(form.amount) || 0).toLocaleString()} to ${form.beneficiaryName || form.toAccount}`}
+        onVerified={executeTransfer}
+      />
+
+      <Dialog open={!!successModal} onOpenChange={(o) => { if (!o) setSuccessModal(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="mx-auto h-14 w-14 rounded-full bg-success/10 flex items-center justify-center mb-2">
+              <CheckCircle2 className="h-8 w-8 text-success" />
+            </div>
+            <DialogTitle className="text-center">{successModal?.title}</DialogTitle>
+            <DialogDescription className="text-center">{successModal?.description}</DialogDescription>
+          </DialogHeader>
+          <Button onClick={() => setSuccessModal(null)} className="w-full" variant="hero">Done</Button>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
