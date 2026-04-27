@@ -469,7 +469,7 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [] 
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium capitalize text-foreground truncate">
-                      {tx.description || tx.transaction_type}
+                      {displayLabel}
                     </p>
                     <p className="text-[10px] text-muted-foreground">
                       {new Date(tx.created_at).toLocaleDateString("en-NG", {
