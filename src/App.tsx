@@ -158,6 +158,7 @@ const App = () => {
                 } />
                 <Route path="/vfd-sandbox/invite/:token" element={<SandboxInvite />} />
                 <Route path="/vfd-sandbox" element={<VfdSandbox />} />
+                <Route path="/sandbox-health" element={<SandboxHealth />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </OnboardingRedirect>
