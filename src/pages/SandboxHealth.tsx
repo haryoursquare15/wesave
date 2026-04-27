@@ -134,7 +134,7 @@ export default function SandboxHealth() {
                   <CardHeader className="pb-2">
                     <div className="flex items-center justify-between gap-2">
                       <CardTitle className="text-sm font-medium">
-                        {r.flow_name.replaceAll("_", " ")}
+                        {r.flow_name.replace(/_/g, " ")}
                       </CardTitle>
                       <Badge variant="outline" className={meta.className}>
                         <meta.Icon className="mr-1 h-3 w-3" />
