@@ -1296,6 +1296,48 @@ export type Database = {
           },
         ]
       }
+      notification_dlq: {
+        Row: {
+          attempts: number
+          created_at: string
+          failure_reason: string | null
+          failure_status: number | null
+          id: string
+          next_retry_at: string
+          notification_id: string | null
+          payload: Json
+          resolved_at: string | null
+          subscription_endpoint: string | null
+          user_id: string
+        }
+        Insert: {
+          attempts?: number
+          created_at?: string
+          failure_reason?: string | null
+          failure_status?: number | null
+          id?: string
+          next_retry_at?: string
+          notification_id?: string | null
+          payload: Json
+          resolved_at?: string | null
+          subscription_endpoint?: string | null
+          user_id: string
+        }
+        Update: {
+          attempts?: number
+          created_at?: string
+          failure_reason?: string | null
+          failure_status?: number | null
+          id?: string
+          next_retry_at?: string
+          notification_id?: string | null
+          payload?: Json
+          resolved_at?: string | null
+          subscription_endpoint?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       payments_test: {
         Row: {
           amount: number
@@ -5314,6 +5356,42 @@ export type Database = {
         }
         Relationships: []
       }
+      wallet_reversals: {
+        Row: {
+          amount: number
+          created_at: string
+          direction: string
+          id: string
+          initiated_by: string | null
+          metadata: Json | null
+          original_reference: string | null
+          reason: string | null
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          direction: string
+          id?: string
+          initiated_by?: string | null
+          metadata?: Json | null
+          original_reference?: string | null
+          reason?: string | null
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          direction?: string
+          id?: string
+          initiated_by?: string | null
+          metadata?: Json | null
+          original_reference?: string | null
+          reason?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       wallets: {
         Row: {
           available_balance: number | null
@@ -5421,6 +5499,36 @@ export type Database = {
       }
     }
     Views: {
+      card_token_orphans: {
+        Row: {
+          card_last4: string | null
+          card_type: string | null
+          created_at: string | null
+          id: string | null
+          is_active: boolean | null
+          last_tokenized_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          card_last4?: string | null
+          card_type?: string | null
+          created_at?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          last_tokenized_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          card_last4?: string | null
+          card_type?: string | null
+          created_at?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          last_tokenized_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       profiles_public: {
         Row: {
           avatar_url: string | null
@@ -5638,6 +5746,10 @@ export type Database = {
         Args: { _creator_id: string; _split_request_id: string }
         Returns: Json
       }
+      cast_target_withdrawal_vote: {
+        Args: { _request_id: string; _vote: string; _voter_id: string }
+        Returns: Json
+      }
       check_login_allowed: {
         Args: { _email: string; _ip_address?: string }
         Returns: Json
@@ -5659,6 +5771,11 @@ export type Database = {
         Args: { _amount: number; _user_id: string }
         Returns: Json
       }
+      claim_split_settlement: {
+        Args: { _split_request_id: string }
+        Returns: Json
+      }
+      cleanup_orphan_card_tokens: { Args: never; Returns: Json }
       cleanup_rate_limits: { Args: never; Returns: undefined }
       commence_thrift: { Args: { target_group_id: string }; Returns: Json }
       confirm_continue_group: { Args: { _group_id: string }; Returns: Json }

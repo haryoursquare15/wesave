@@ -158,6 +158,7 @@ Deno.serve(async (req) => {
 
       let sent = 0;
       const expired: string[] = [];
+      const dlqRows: Array<Record<string, unknown>> = [];
 
       for (const sub of subscriptions) {
         try {
@@ -175,10 +176,28 @@ Deno.serve(async (req) => {
             // Subscription expired, clean up
             expired.push(sub.id);
           } else {
+            // Persist failure to DLQ for retry instead of silently dropping
             console.error(`Push failed for ${sub.endpoint}: ${response.status}`);
+            dlqRows.push({
+              user_id,
+              notification_id: notification_id ?? null,
+              subscription_endpoint: sub.endpoint,
+              payload: { title, body, url, tag, notification_id },
+              failure_status: response.status,
+              failure_reason: `HTTP ${response.status}`,
+            });
           }
         } catch (err) {
-          console.error(`Push error for ${sub.endpoint}:`, err);
+          const reason = err instanceof Error ? err.message : String(err);
+          console.error(`Push error for ${sub.endpoint}:`, reason);
+          dlqRows.push({
+            user_id,
+            notification_id: notification_id ?? null,
+            subscription_endpoint: sub.endpoint,
+            payload: { title, body, url, tag, notification_id },
+            failure_status: 0,
+            failure_reason: reason,
+          });
         }
       }
 
@@ -190,8 +209,102 @@ Deno.serve(async (req) => {
           .in("id", expired);
       }
 
+      // Persist failures (best-effort; never block push response)
+      if (dlqRows.length > 0) {
+        const { error: dlqErr } = await supabaseAdmin
+          .from("notification_dlq")
+          .insert(dlqRows);
+        if (dlqErr) console.error("DLQ insert failed:", dlqErr.message);
+      }
+
       return new Response(
-        JSON.stringify({ sent, expired: expired.length }),
+        JSON.stringify({ sent, expired: expired.length, dlq: dlqRows.length }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Retry pending DLQ entries (cron). Re-fetches each subscription
+    // and re-sends; on success the entry is marked resolved, on failure
+    // attempts is incremented.
+    if (action === "retry_dlq") {
+      const supabaseAdmin = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      );
+
+      const vapidPublicKey = Deno.env.get("VAPID_PUBLIC_KEY")!;
+      const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY")!;
+      const vapidSubject = Deno.env.get("VAPID_SUBJECT") || "mailto:support@wesave.app";
+
+      const { data: pending } = await supabaseAdmin
+        .from("notification_dlq")
+        .select("*")
+        .is("resolved_at", null)
+        .lt("attempts", 5)
+        .lte("next_retry_at", new Date().toISOString())
+        .limit(50);
+
+      let resolved = 0;
+      let failed = 0;
+
+      for (const entry of pending ?? []) {
+        const { data: sub } = await supabaseAdmin
+          .from("push_subscriptions")
+          .select("*")
+          .eq("endpoint", entry.subscription_endpoint)
+          .maybeSingle();
+
+        if (!sub) {
+          // Subscription no longer exists — mark resolved so we stop retrying.
+          await supabaseAdmin
+            .from("notification_dlq")
+            .update({ resolved_at: new Date().toISOString(), failure_reason: "subscription_gone" })
+            .eq("id", entry.id);
+          resolved++;
+          continue;
+        }
+
+        try {
+          const response = await generatePushPayload(
+            sub,
+            JSON.stringify(entry.payload),
+            vapidSubject,
+            vapidPublicKey,
+            vapidPrivateKey
+          );
+          if (response.ok || response.status === 201) {
+            await supabaseAdmin
+              .from("notification_dlq")
+              .update({ resolved_at: new Date().toISOString() })
+              .eq("id", entry.id);
+            resolved++;
+          } else {
+            await supabaseAdmin
+              .from("notification_dlq")
+              .update({
+                attempts: entry.attempts + 1,
+                next_retry_at: new Date(Date.now() + Math.min(60, entry.attempts * 15) * 60 * 1000).toISOString(),
+                failure_status: response.status,
+                failure_reason: `HTTP ${response.status}`,
+              })
+              .eq("id", entry.id);
+            failed++;
+          }
+        } catch (err) {
+          await supabaseAdmin
+            .from("notification_dlq")
+            .update({
+              attempts: entry.attempts + 1,
+              next_retry_at: new Date(Date.now() + Math.min(60, entry.attempts * 15) * 60 * 1000).toISOString(),
+              failure_reason: err instanceof Error ? err.message : String(err),
+            })
+            .eq("id", entry.id);
+          failed++;
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ checked: pending?.length ?? 0, resolved, failed }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

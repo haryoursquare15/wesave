@@ -1,0 +1,1 @@
+ALTER VIEW public.card_token_orphans SET (security_invoker = true);

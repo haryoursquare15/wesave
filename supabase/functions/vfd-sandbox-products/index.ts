@@ -1034,71 +1034,91 @@ async function handleRequestTargetWithdrawal(userId: string, body: Record<string
   return jsonResponse({ data: wr });
 }
 
-// Target Ajo: Vote on withdrawal
+// Target Ajo: Vote on withdrawal — atomic via SQL function so concurrent
+// voters can't both trigger a payout when their votes tie at the threshold.
 async function handleVoteTargetWithdrawal(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const requestId = body.request_id as string;
   const vote = body.vote as string;
 
-  const { data: wr } = await db.from("vfd_sandbox_target_withdrawal_requests").select("*").eq("id", requestId).single();
-  if (!wr) return jsonResponse({ error: "Request not found" }, 404);
-  if (wr.status !== "pending") return jsonResponse({ error: "Request already resolved" }, 400);
-
-  const { data: membership } = await db.from("vfd_sandbox_target_members")
-    .select("id").eq("target_id", wr.target_id).eq("user_id", userId).maybeSingle();
-  if (!membership) return jsonResponse({ error: "Not a member" }, 400);
-
-  const { data: existingVote } = await db.from("vfd_sandbox_target_withdrawal_votes")
-    .select("id").eq("withdrawal_request_id", requestId).eq("user_id", userId).maybeSingle();
-  if (existingVote) return jsonResponse({ error: "Already voted" }, 400);
-
-  await db.from("vfd_sandbox_target_withdrawal_votes").insert({
-    withdrawal_request_id: requestId, user_id: userId, vote,
+  const { data, error } = await db.rpc("cast_target_withdrawal_vote", {
+    _request_id: requestId,
+    _voter_id: userId,
+    _vote: vote,
   });
 
-  const newApproval = wr.approval_count + (vote === "approve" ? 1 : 0);
-  const newRejection = wr.rejection_count + (vote === "reject" ? 1 : 0);
+  if (error) {
+    console.error("[vote_target_withdrawal] rpc failed:", error);
+    return jsonResponse({ error: error.message }, 500);
+  }
 
-  await db.from("vfd_sandbox_target_withdrawal_requests").update({
-    approval_count: newApproval, rejection_count: newRejection,
-  }).eq("id", requestId);
+  const result = data as {
+    ok: boolean;
+    reason?: string;
+    resolved?: boolean;
+    outcome?: string;
+    requested_by?: string;
+    amount?: number;
+    target_id?: string;
+    approval_count?: number;
+    rejection_count?: number;
+    required_votes?: number;
+  };
 
-  if (newApproval >= wr.required_votes) {
-    const wrAmount = Number(wr.amount);
-    await creditFromSavings(wr.requested_by, wrAmount);
-    await db.from("vfd_sandbox_target_withdrawal_requests").update({
-      status: "approved", resolved_at: new Date().toISOString(),
-    }).eq("id", requestId);
+  if (!result?.ok) {
+    const map: Record<string, [string, number]> = {
+      invalid_vote: ["Invalid vote", 400],
+      request_not_found: ["Request not found", 404],
+      already_resolved: ["Request already resolved", 400],
+      not_a_member: ["Not a member", 400],
+      already_voted: ["Already voted", 400],
+    };
+    const [msg, code] = map[result?.reason ?? ""] ?? ["Vote rejected", 400];
+    return jsonResponse({ error: msg }, code);
+  }
 
-    // Decrement the group's pooled balance to keep progress accurate
-    const { data: tgt } = await db.from("vfd_sandbox_targets")
-      .select("total_contributed").eq("id", wr.target_id).maybeSingle();
-    if (tgt) {
-      await db.from("vfd_sandbox_targets").update({
-        total_contributed: Math.max(0, Number(tgt.total_contributed) - wrAmount),
-        updated_at: new Date().toISOString(),
-      }).eq("id", wr.target_id);
+  // Side-effects (credit + decrement pool + notify) ONLY on the vote that
+  // actually flipped the request to its terminal state.
+  if (result.resolved && result.outcome === "approved" && result.requested_by && result.amount) {
+    const wrAmount = Number(result.amount);
+    await creditFromSavings(result.requested_by, wrAmount);
+
+    if (result.target_id) {
+      const { data: tgt } = await db.from("vfd_sandbox_targets")
+        .select("total_contributed").eq("id", result.target_id).maybeSingle();
+      if (tgt) {
+        await db.from("vfd_sandbox_targets").update({
+          total_contributed: Math.max(0, Number(tgt.total_contributed) - wrAmount),
+          updated_at: new Date().toISOString(),
+        }).eq("id", result.target_id);
+      }
     }
 
-    await sendNotification(wr.requested_by, "Withdrawal Approved",
+    await sendNotification(
+      result.requested_by,
+      "Withdrawal Approved",
       `Your withdrawal of ₦${wrAmount.toLocaleString()} has been approved and credited.`,
-      "withdrawal_approved");
-  }
-
-  const { count: totalMembers } = await db.from("vfd_sandbox_target_members")
-    .select("*", { count: "exact", head: true }).eq("target_id", wr.target_id);
-  const remainingVotes = (totalMembers || 0) - newApproval - newRejection;
-  if (newApproval + remainingVotes < wr.required_votes) {
-    await db.from("vfd_sandbox_target_withdrawal_requests").update({
-      status: "rejected", resolved_at: new Date().toISOString(),
-    }).eq("id", requestId);
-
-    await sendNotification(wr.requested_by, "Withdrawal Rejected",
+      "withdrawal_approved",
+    );
+  } else if (result.resolved && result.outcome === "rejected" && result.requested_by) {
+    await sendNotification(
+      result.requested_by,
+      "Withdrawal Rejected",
       `Your withdrawal request was rejected by the group.`,
-      "withdrawal_rejected");
+      "withdrawal_rejected",
+    );
   }
 
-  return jsonResponse({ data: { voted: true, vote } });
+  return jsonResponse({
+    data: {
+      voted: true,
+      vote,
+      resolved: result.resolved ?? false,
+      outcome: result.outcome ?? null,
+      approval_count: result.approval_count,
+      rejection_count: result.rejection_count,
+    },
+  });
 }
 
 // Target Ajo: Independent mode instant withdrawal

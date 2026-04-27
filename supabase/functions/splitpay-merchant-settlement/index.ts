@@ -62,24 +62,26 @@ serve(async (req) => {
 
     console.log(`[SPLIT SETTLEMENT] Processing for split ${split_request_id}: ₦${merchant_amount} to ${merchant_name} (${merchant_bank} - ${merchant_account})`);
 
-    // Validate the split request is actually completed and ready for settlement
-    const { data: splitReq, error: splitErr } = await supabase
-      .from('split_requests')
-      .select('status, settlement_status')
-      .eq('id', split_request_id)
-      .single();
+    // ATOMIC CLAIM: prevents two concurrent invocations from both initiating
+    // a Flutterwave transfer for the same split. The RPC flips
+    // settlement_status -> 'processing' only when eligible.
+    const { data: claim, error: claimErr } = await supabase.rpc('claim_split_settlement', {
+      _split_request_id: split_request_id,
+    });
 
-    if (splitErr || !splitReq) {
-      throw new Error('Split request not found');
+    if (claimErr) {
+      throw new Error(`Failed to claim settlement: ${claimErr.message}`);
     }
 
-    if (splitReq.status !== 'completed') {
-      throw new Error(`Split request is not completed (status: ${splitReq.status})`);
-    }
-
-    if (splitReq.settlement_status === 'completed') {
-      console.log(`[SPLIT SETTLEMENT] Already settled for ${split_request_id}, skipping`);
-      return new Response(JSON.stringify({ success: true, skipped: true, reason: 'Already settled' }), {
+    if (!claim?.claimed) {
+      console.log(`[SPLIT SETTLEMENT] Skipped ${split_request_id}: ${claim?.reason} (status=${claim?.status}, settlement=${claim?.settlement_status})`);
+      return new Response(JSON.stringify({
+        success: true,
+        skipped: true,
+        reason: claim?.reason || 'not_eligible',
+        status: claim?.status,
+        settlement_status: claim?.settlement_status,
+      }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
