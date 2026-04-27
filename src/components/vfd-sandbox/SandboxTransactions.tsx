@@ -29,6 +29,7 @@ function getTxIcon(type: string) {
     case "credit": return { icon: ArrowDownLeft, bg: "bg-success/10", color: "text-success" };
     case "debit": return { icon: ArrowUpRight, bg: "bg-destructive/10", color: "text-destructive" };
     case "lock": return { icon: Lock, bg: "bg-warning/10", color: "text-warning" };
+    case "unlock": return { icon: ArrowDownLeft, bg: "bg-success/10", color: "text-success" };
     case "savings": return { icon: Users, bg: "bg-primary/10", color: "text-primary" };
     default: return { icon: CreditCard, bg: "bg-muted", color: "text-muted-foreground" };
   }
