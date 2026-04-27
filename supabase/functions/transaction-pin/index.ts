@@ -110,7 +110,7 @@ serve(async (req) => {
           }, 400);
         }
 
-        const hash = await bcrypt.hash(pin);
+        const hash = bcrypt.hashSync(pin, bcrypt.genSaltSync(10));
         const { error: insertError } = await supabase
           .from("transaction_pins")
           .insert({
