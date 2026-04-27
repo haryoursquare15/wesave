@@ -43,6 +43,7 @@ import AppHome from "./pages/AppHome";
 import VfdSandbox from "./pages/VfdSandbox";
 import SandboxAuth from "./pages/SandboxAuth";
 import SandboxInvite from "./pages/SandboxInvite";
+import SandboxHealth from "./pages/SandboxHealth";
 import { SandboxAuthProvider } from "./contexts/SandboxAuthContext";
 import NotFound from "./pages/NotFound";
 
