@@ -120,7 +120,9 @@ function getTxMeta(type: string) {
     case "credit": return { icon: ArrowDownLeft, bg: "bg-success/10", color: "text-success", sign: "+" };
     case "debit": return { icon: ArrowUpRight, bg: "bg-destructive/10", color: "text-destructive", sign: "-" };
     case "lock": return { icon: Lock, bg: "bg-warning/10", color: "text-warning", sign: "-" };
+    case "unlock": return { icon: ArrowDownLeft, bg: "bg-success/10", color: "text-success", sign: "+" };
     case "savings": return { icon: PiggyBank, bg: "bg-primary/10", color: "text-primary", sign: "-" };
+    case "interest": return { icon: TrendingUp, bg: "bg-success/10", color: "text-success", sign: "+" };
     default: return { icon: CreditCard, bg: "bg-muted", color: "text-muted-foreground", sign: "" };
   }
 }
