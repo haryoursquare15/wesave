@@ -159,7 +159,7 @@ serve(async (req) => {
           return jsonResponse({ success: false, error: "Current PIN is incorrect" }, 400);
         }
 
-        const newHash = await bcrypt.hash(new_pin);
+        const newHash = bcrypt.hashSync(new_pin, bcrypt.genSaltSync(10));
         await supabase
           .from("transaction_pins")
           .update({
