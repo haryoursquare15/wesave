@@ -153,7 +153,7 @@ serve(async (req) => {
           }, 423);
         }
 
-        const valid = await bcrypt.compare(current_pin, row.pin_hash);
+        const valid = bcrypt.compareSync(current_pin, row.pin_hash);
         if (!valid) {
           await audit("verify_failed", { reason: "change_pin_wrong_current" });
           return jsonResponse({ success: false, error: "Current PIN is incorrect" }, 400);
