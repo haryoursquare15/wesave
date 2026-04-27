@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
-import { Shield, Loader2, Lock, AlertTriangle, KeyRound } from "lucide-react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { Shield, Loader2, Lock, AlertTriangle, KeyRound, XCircle, Timer } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -27,14 +27,20 @@ interface TransactionPinGateProps {
   onCancel?: () => void;
 }
 
+type Phase =
+  | "loading"
+  | "setup_new"
+  | "setup_confirm"
+  | "verify"
+  | "locked"
+  | "error";
+
 /**
  * Reusable transaction PIN gate.
  *
- * - On open it checks `get_status`.
- * - If no PIN exists, the user is walked through Set → Confirm.
- *   After a successful set, `onVerified` is fired (no second prompt for the same action).
- * - If a PIN exists, the user enters it once. On success → onVerified.
- * - Lockouts are surfaced clearly.
+ * - Inline setup if no PIN exists, single verify if it does.
+ * - Errors surface in a dedicated in-dialog error screen (with attempts remaining).
+ * - Lockouts show a live mm:ss countdown until expiry, then auto-recover to verify.
  */
 export function TransactionPinGate({
   open,
@@ -47,16 +53,29 @@ export function TransactionPinGate({
   const { toast } = useToast();
   const { loading, getStatus, setPin, verifyPin } = useTransactionPin();
 
-  const [phase, setPhase] = useState<"loading" | "setup_new" | "setup_confirm" | "verify" | "locked">("loading");
+  const [phase, setPhase] = useState<Phase>("loading");
   const [pin, setPin1] = useState("");
   const [pinConfirm, setPinConfirm] = useState("");
   const [lockedUntil, setLockedUntil] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  // Error screen state
+  const [errorTitle, setErrorTitle] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [attemptsRemaining, setAttemptsRemaining] = useState<number | null>(null);
+  const [returnPhase, setReturnPhase] = useState<Phase>("verify");
+
+  // Countdown
+  const [countdown, setCountdown] = useState("15:00");
+  const initRef = useRef<() => void>(() => {});
+
   const reset = useCallback(() => {
     setPin1("");
     setPinConfirm("");
     setLockedUntil(null);
+    setErrorTitle("");
+    setErrorMessage("");
+    setAttemptsRemaining(null);
   }, []);
 
   const initialize = useCallback(async () => {
@@ -64,8 +83,10 @@ export function TransactionPinGate({
     reset();
     const status = await getStatus();
     if (!status) {
-      toast({ title: "Could not check security status", variant: "destructive" });
-      onOpenChange(false);
+      setErrorTitle("Could not check security");
+      setErrorMessage("We couldn't verify your security status. Please try again in a moment.");
+      setReturnPhase("verify");
+      setPhase("error");
       return;
     }
     if (status.is_locked) {
@@ -74,12 +95,35 @@ export function TransactionPinGate({
       return;
     }
     setPhase(status.has_pin ? "verify" : "setup_new");
-  }, [getStatus, onOpenChange, reset, toast]);
+  }, [getStatus, reset]);
+
+  initRef.current = initialize;
 
   useEffect(() => {
     if (open) initialize();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  // Live lockout countdown
+  useEffect(() => {
+    if (phase !== "locked" || !lockedUntil) return;
+    const tick = () => {
+      const ms = new Date(lockedUntil).getTime() - Date.now();
+      if (ms <= 0) {
+        setCountdown("0:00");
+        // Auto-recover when timer ends
+        initRef.current();
+        return;
+      }
+      const total = Math.floor(ms / 1000);
+      const m = Math.floor(total / 60);
+      const s = total % 60;
+      setCountdown(`${m}:${s.toString().padStart(2, "0")}`);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [phase, lockedUntil]);
 
   const handleCancel = () => {
     onOpenChange(false);
@@ -95,22 +139,26 @@ export function TransactionPinGate({
   const handleSetupConfirm = async () => {
     if (pinConfirm.length !== 4) return;
     if (pin !== pinConfirm) {
-      toast({ title: "PINs do not match", description: "Please re-enter your PIN.", variant: "destructive" });
-      setPinConfirm("");
+      setErrorTitle("PINs don't match");
+      setErrorMessage("The two PINs you entered are different. Please set your PIN again.");
+      setReturnPhase("setup_new");
+      setPhase("error");
       return;
     }
     setSubmitting(true);
     const res = await setPin(pin);
     setSubmitting(false);
     if (!res?.success) {
-      toast({ title: "Could not set PIN", description: res?.error || "Try a different PIN.", variant: "destructive" });
-      setPin1("");
-      setPinConfirm("");
-      setPhase("setup_new");
+      setErrorTitle("Couldn't set PIN");
+      setErrorMessage(
+        res?.error ||
+          "Try a different 4-digit PIN. Avoid sequential (1234), repeated (1111) or obvious (0000) digits."
+      );
+      setReturnPhase("setup_new");
+      setPhase("error");
       return;
     }
     toast({ title: "Transaction PIN set", description: "You can now authorize this transaction." });
-    // After setting, immediately authorize this action — no need to re-prompt.
     onOpenChange(false);
     reset();
     onVerified();
@@ -122,14 +170,23 @@ export function TransactionPinGate({
     const res = await verifyPin(pin, purpose);
     setSubmitting(false);
     if (res?.is_locked) {
-      setLockedUntil(res.locked_until);
-      setPhase("locked");
+      setLockedUntil(res.locked_until || new Date(Date.now() + 15 * 60_000).toISOString());
       setPin1("");
+      setPhase("locked");
       return;
     }
     if (!res?.success) {
-      toast({ title: "Incorrect PIN", description: res?.error || "Try again.", variant: "destructive" });
+      setAttemptsRemaining(
+        typeof res?.attempts_remaining === "number" ? res.attempts_remaining : null
+      );
+      setErrorTitle("Incorrect PIN");
+      setErrorMessage(
+        res?.error?.replace(/\.\s*\d+\s*attempts?\s*remaining\.?/i, "").trim() ||
+          "The PIN you entered doesn't match our records."
+      );
+      setReturnPhase("verify");
       setPin1("");
+      setPhase("error");
       return;
     }
     onOpenChange(false);
@@ -137,13 +194,34 @@ export function TransactionPinGate({
     onVerified();
   };
 
+  const handleErrorTryAgain = () => {
+    setErrorTitle("");
+    setErrorMessage("");
+    setAttemptsRemaining(null);
+    setPin1("");
+    setPinConfirm("");
+    if (returnPhase === "setup_new") setPhase("setup_new");
+    else if (returnPhase === "setup_confirm") setPhase("setup_confirm");
+    else setPhase("verify");
+  };
+
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) handleCancel(); }}>
       <DialogContent className="sm:max-w-md" onInteractOutside={(e) => e.preventDefault()}>
         <DialogHeader>
-          <div className="mx-auto h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center mb-2">
+          <div
+            className={`mx-auto h-14 w-14 rounded-full flex items-center justify-center mb-2 ${
+              phase === "locked"
+                ? "bg-destructive/10"
+                : phase === "error"
+                ? "bg-destructive/10"
+                : "bg-primary/10"
+            }`}
+          >
             {phase === "locked" ? (
               <Lock className="h-7 w-7 text-destructive" />
+            ) : phase === "error" ? (
+              <XCircle className="h-7 w-7 text-destructive" />
             ) : phase === "setup_new" || phase === "setup_confirm" ? (
               <KeyRound className="h-7 w-7 text-primary" />
             ) : (
@@ -156,6 +234,7 @@ export function TransactionPinGate({
             {phase === "setup_confirm" && "Confirm Your PIN"}
             {phase === "verify" && "Enter Transaction PIN"}
             {phase === "locked" && "PIN Temporarily Locked"}
+            {phase === "error" && errorTitle}
           </DialogTitle>
           <DialogDescription className="text-center">
             {phase === "setup_new" &&
@@ -163,13 +242,12 @@ export function TransactionPinGate({
             {phase === "setup_confirm" && "Re-enter the PIN to confirm."}
             {phase === "verify" && `Authorize: ${purpose}`}
             {phase === "locked" &&
-              `Too many failed attempts. Try again after ${
-                lockedUntil ? new Date(lockedUntil).toLocaleTimeString() : "15 minutes"
-              }.`}
+              "Too many failed attempts. For your security, PIN entry is paused."}
+            {phase === "error" && errorMessage}
           </DialogDescription>
         </DialogHeader>
 
-        {description && phase !== "locked" && phase !== "loading" && (
+        {description && phase === "verify" && (
           <div className="text-center text-sm text-muted-foreground bg-muted/50 rounded-lg py-2 px-3">
             {description}
           </div>
@@ -183,12 +261,7 @@ export function TransactionPinGate({
 
         {(phase === "setup_new" || phase === "verify") && (
           <div className="flex flex-col items-center gap-4 py-2">
-            <InputOTP
-              maxLength={4}
-              value={pin}
-              onChange={setPin1}
-              autoFocus
-            >
+            <InputOTP maxLength={4} value={pin} onChange={setPin1} autoFocus>
               <InputOTPGroup>
                 <InputOTPSlot index={0} className="h-14 w-14 text-xl" />
                 <InputOTPSlot index={1} className="h-14 w-14 text-xl" />
@@ -207,12 +280,7 @@ export function TransactionPinGate({
 
         {phase === "setup_confirm" && (
           <div className="flex justify-center py-2">
-            <InputOTP
-              maxLength={4}
-              value={pinConfirm}
-              onChange={setPinConfirm}
-              autoFocus
-            >
+            <InputOTP maxLength={4} value={pinConfirm} onChange={setPinConfirm} autoFocus>
               <InputOTPGroup>
                 <InputOTPSlot index={0} className="h-14 w-14 text-xl" />
                 <InputOTPSlot index={1} className="h-14 w-14 text-xl" />
@@ -223,7 +291,48 @@ export function TransactionPinGate({
           </div>
         )}
 
-        {phase !== "loading" && phase !== "locked" && (
+        {phase === "error" && (
+          <div className="flex flex-col items-center gap-3 py-2">
+            {attemptsRemaining !== null && (
+              <div
+                className={`w-full rounded-lg border px-3 py-2 text-center text-sm ${
+                  attemptsRemaining <= 2
+                    ? "bg-destructive/5 border-destructive/30 text-destructive"
+                    : "bg-warning/5 border-warning/30 text-foreground"
+                }`}
+              >
+                <span className="font-semibold">
+                  {attemptsRemaining} {attemptsRemaining === 1 ? "attempt" : "attempts"} remaining
+                </span>
+                <p className="text-xs mt-0.5 text-muted-foreground">
+                  After 5 failed attempts, PIN entry is locked for 15 minutes.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {phase === "locked" && (
+          <div className="flex flex-col items-center gap-3 py-2">
+            <div className="w-full rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-4 flex flex-col items-center gap-2">
+              <Timer className="h-6 w-6 text-destructive" />
+              <div className="text-3xl font-mono font-bold tabular-nums text-destructive">
+                {countdown}
+              </div>
+              <p className="text-xs text-muted-foreground text-center">
+                Try again at{" "}
+                <span className="font-medium text-foreground">
+                  {lockedUntil ? new Date(lockedUntil).toLocaleTimeString() : "—"}
+                </span>
+              </p>
+            </div>
+            <p className="text-xs text-muted-foreground text-center">
+              Forgot your PIN? Contact support to reset it after the lockout.
+            </p>
+          </div>
+        )}
+
+        {phase !== "loading" && phase !== "locked" && phase !== "error" && (
           <div className="flex gap-2">
             <Button variant="outline" className="flex-1" onClick={handleCancel} disabled={submitting || loading}>
               Cancel
@@ -243,6 +352,17 @@ export function TransactionPinGate({
                 {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Authorize"}
               </Button>
             )}
+          </div>
+        )}
+
+        {phase === "error" && (
+          <div className="flex gap-2">
+            <Button variant="outline" className="flex-1" onClick={handleCancel}>
+              Cancel
+            </Button>
+            <Button className="flex-1" onClick={handleErrorTryAgain}>
+              Try Again
+            </Button>
           </div>
         )}
 
