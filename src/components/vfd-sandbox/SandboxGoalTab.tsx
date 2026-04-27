@@ -68,16 +68,24 @@ export function SandboxGoalTab() {
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    // Reset input so re-selecting the same file still triggers onChange
+    e.target.value = "";
     if (!file || !userId) return;
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Invalid file", description: "Please choose an image", variant: "destructive" });
+      return;
+    }
     if (file.size > 5 * 1024 * 1024) {
       toast({ title: "Image too large", description: "Max 5MB", variant: "destructive" });
       return;
     }
     setUploadingImage(true);
     try {
-      const ext = file.name.split(".").pop() || "jpg";
+      const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
       const path = `${userId}/${Date.now()}.${ext}`;
-      const { error } = await client.storage.from("sandbox-campaign-images").upload(path, file, { upsert: false });
+      const { error } = await client.storage
+        .from("sandbox-campaign-images")
+        .upload(path, file, { upsert: false, contentType: file.type });
       if (error) {
         toast({ title: "Upload failed", description: error.message, variant: "destructive" });
         return;
@@ -85,6 +93,9 @@ export function SandboxGoalTab() {
       const { data } = client.storage.from("sandbox-campaign-images").getPublicUrl(path);
       setForm(p => ({ ...p, campaign_image: data.publicUrl }));
       toast({ title: "Image uploaded" });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      toast({ title: "Upload failed", description: msg, variant: "destructive" });
     } finally {
       setUploadingImage(false);
     }
@@ -93,22 +104,31 @@ export function SandboxGoalTab() {
   const handleCreate = async () => {
     if (!form.title.trim()) return;
     const goalAmount = parseFloat(form.goal_amount);
-    if (isNaN(goalAmount) || goalAmount < 1000) { toast({ title: "Goal must be at least ₦1,000", variant: "destructive" }); return; }
+    if (isNaN(goalAmount) || goalAmount < 1000) {
+      toast({ title: "Goal must be at least ₦1,000", variant: "destructive" });
+      return;
+    }
 
-    const slug = generateSlug(form.title) + "-" + Date.now().toString(36);
-    const result = await products.createCampaign({
-      title: form.title, description: form.description,
-      goal_amount: goalAmount,
-      deadline: form.deadline ? new Date(form.deadline).toISOString() : null,
-      contribution_visibility: form.contribution_visibility,
-      campaign_image: form.campaign_image || null,
-      campaign_slug: slug,
-    });
-    if (result?.data) {
-      toast({ title: "Campaign Created!" });
-      setForm({ title: "", description: "", goal_amount: "", deadline: "", contribution_visibility: "public", campaign_image: "" });
-      setShowCreate(false);
-      await loadCampaigns();
+    try {
+      const slug = generateSlug(form.title) + "-" + Date.now().toString(36);
+      const result = await products.createCampaign({
+        title: form.title,
+        description: form.description,
+        goal_amount: goalAmount,
+        deadline: form.deadline ? new Date(form.deadline).toISOString() : null,
+        contribution_visibility: form.contribution_visibility,
+        campaign_image: form.campaign_image || null,
+        campaign_slug: slug,
+      });
+      if (result?.data) {
+        toast({ title: "Campaign Created!" });
+        setForm({ title: "", description: "", goal_amount: "", deadline: "", contribution_visibility: "public", campaign_image: "" });
+        setShowCreate(false);
+        await loadCampaigns();
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Could not create campaign";
+      toast({ title: "Create failed", description: msg, variant: "destructive" });
     }
   };
 

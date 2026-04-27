@@ -1127,35 +1127,26 @@ async function handleCreateCampaign(userId: string, body: Record<string, unknown
   const description = (body.description as string)?.trim() || null;
   const deadline = body.deadline as string || null;
   const contributionVisibility = (body.contribution_visibility as string) || "public";
-  const beneficiaryAccountName = (body.beneficiary_account_name as string)?.trim() || null;
-  const beneficiaryBankName = (body.beneficiary_bank_name as string)?.trim() || null;
-  const beneficiaryAccountNumber = (body.beneficiary_account_number as string)?.trim() || null;
-  const campaignImage = body.campaign_image as string || null;
+  const campaignImage = (body.campaign_image as string) || null;
+  const providedSlug = (body.campaign_slug as string)?.trim() || null;
 
-  // Parity with main app validation
   if (!title) return jsonResponse({ error: "Campaign title is required" }, 400);
   if (!goalAmount || isNaN(goalAmount) || goalAmount < 1000) {
     return jsonResponse({ error: "Goal amount must be at least ₦1,000" }, 400);
-  }
-  if (!beneficiaryBankName || !beneficiaryAccountNumber || !beneficiaryAccountName) {
-    return jsonResponse({ error: "Beneficiary bank details are required" }, 400);
-  }
-  if (!/^\d{10}$/.test(beneficiaryAccountNumber)) {
-    return jsonResponse({ error: "Account number must be 10 digits" }, 400);
   }
   if (!["public", "anonymous"].includes(contributionVisibility)) {
     return jsonResponse({ error: "Invalid contribution visibility" }, 400);
   }
 
-  const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') + '-' + Date.now().toString(36);
+  // Wallet-credit/escrow model — funds credit to creator's wallet on withdrawal.
+  // No beneficiary bank account required.
+  const slug = providedSlug ||
+    (title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') + '-' + Date.now().toString(36));
 
   const { data, error } = await db.from("vfd_sandbox_campaigns").insert({
     title, creator_id: userId, goal_amount: goalAmount, description,
     deadline: deadline ? new Date(deadline).toISOString() : null,
     contribution_visibility: contributionVisibility,
-    beneficiary_account_name: beneficiaryAccountName,
-    beneficiary_bank_name: beneficiaryBankName,
-    beneficiary_account_number: beneficiaryAccountNumber,
     campaign_image: campaignImage,
     campaign_slug: slug,
   }).select().single();
