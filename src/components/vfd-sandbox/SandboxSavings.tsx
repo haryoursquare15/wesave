@@ -10,12 +10,12 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import {
   useVestaraLedger, VestaraProduct, VestaraSavings as VS, VestaraProductCode,
 } from "@/hooks/useVestaraLedger";
 import { TransactionPinGate } from "@/components/security/TransactionPinGate";
+import { TransactionSuccessModal, TransactionSuccessPayload } from "@/components/feedback/TransactionSuccessModal";
 
 interface UserBalance {
   total_balance: number; locked_balance: number; savings_balance: number; available_balance: number;
@@ -59,7 +59,7 @@ export function SandboxSavings({ userBalance, onRefresh, onBack }: Props) {
 
   // PIN gate + success modal state
   const [pinGate, setPinGate] = useState<null | { purpose: string; description: string; onAuthorized: () => void }>(null);
-  const [successModal, setSuccessModal] = useState<null | { title: string; description: string }>(null);
+  const [successPayload, setSuccessPayload] = useState<TransactionSuccessPayload | null>(null);
 
   const availableBalance = Number(userBalance?.available_balance || 0);
 
@@ -156,11 +156,36 @@ export function SandboxSavings({ userBalance, onRefresh, onBack }: Props) {
       purpose: `Create ${selectedProduct.name}`,
       description: `Lock ₦${amtNum.toLocaleString()} for ${tenor} days`,
       onAuthorized: async () => {
+        const productName = selectedProduct.name;
+        const productTenor = tenor;
+        const productAmount = amtNum;
+        const previewSnapshot = preview;
         const result = await vestara.createSavings(selectedProduct.code, amtNum, tenor);
         if (result?.success) {
-          setSuccessModal({
-            title: "Savings created successfully",
-            description: `₦${amtNum.toLocaleString()} locked in ${selectedProduct.name} for ${tenor} days. You'll see it in "My Savings" below.`,
+          const details: { label: string; value: string; highlight?: boolean }[] = [
+            { label: "Product", value: productName, highlight: true },
+            { label: "Principal", value: `₦${productAmount.toLocaleString()}`, highlight: true },
+            { label: "Tenor", value: `${productTenor} days` },
+          ];
+          if (previewSnapshot) {
+            details.push({ label: "Rate", value: `${previewSnapshot.rate.toFixed(2)}% p.a.` });
+            if (previewSnapshot.upfront) {
+              details.push({ label: "Upfront Interest", value: `+₦${(previewSnapshot.discountedInterest ?? 0).toLocaleString()}` });
+              details.push({ label: "Net Wallet Debit", value: `₦${(previewSnapshot.netDebit ?? 0).toLocaleString()}`, highlight: true });
+            } else {
+              details.push({ label: "Interest at Maturity", value: `+₦${(previewSnapshot.interest ?? 0).toLocaleString()}` });
+              details.push({ label: "Total at Maturity", value: `₦${(previewSnapshot.total ?? 0).toLocaleString()}`, highlight: true });
+            }
+            details.push({
+              label: "Matures On",
+              value: previewSnapshot.maturityDate.toLocaleDateString("en-NG", { year: "numeric", month: "long", day: "numeric" }),
+            });
+          }
+          setSuccessPayload({
+            title: "Savings Created Successfully",
+            description: `Your ${productName} plan is now active and earning.`,
+            details,
+            reference: (result as { savings_id?: string })?.savings_id,
           });
           resetFlow();
           await loadAll();
@@ -177,9 +202,17 @@ export function SandboxSavings({ userBalance, onRefresh, onBack }: Props) {
       onAuthorized: async () => {
         const result = await vestara.matureSavings(s.id);
         if (result?.success) {
-          setSuccessModal({
-            title: "Savings matured",
+          const interest = Number(s.accrued_interest || 0);
+          const total = Number(s.principal) + interest;
+          setSuccessPayload({
+            title: "Savings Matured",
             description: "Principal and interest have been credited to your wallet.",
+            details: [
+              { label: "Principal", value: `₦${Number(s.principal).toLocaleString()}` },
+              { label: "Interest Earned", value: `+₦${interest.toLocaleString(undefined, { maximumFractionDigits: 2 })}` },
+              { label: "Total Credited", value: `₦${total.toLocaleString(undefined, { maximumFractionDigits: 2 })}`, highlight: true },
+              { label: "Date", value: new Date().toLocaleString("en-NG") },
+            ],
           });
           await loadAll();
           onRefresh();
@@ -196,11 +229,18 @@ export function SandboxSavings({ userBalance, onRefresh, onBack }: Props) {
         const result = await vestara.earlyWithdrawSavings(s.id);
         if (result?.success) {
           const penalty = Number(result.penalty || 0);
-          setSuccessModal({
-            title: "Early withdrawal complete",
+          const principal = Number(s.principal);
+          setSuccessPayload({
+            title: "Early Withdrawal Complete",
             description: penalty > 0
-              ? `Funds returned to wallet. Penalty deducted: ₦${penalty.toLocaleString()}.`
+              ? "Funds returned to wallet. A penalty was deducted."
               : "Funds returned to your wallet. No penalty applied.",
+            details: [
+              { label: "Principal", value: `₦${principal.toLocaleString()}`, highlight: true },
+              ...(penalty > 0 ? [{ label: "Penalty Deducted", value: `−₦${penalty.toLocaleString()}` }] : []),
+              { label: "Status", value: "Credited to wallet" },
+              { label: "Date", value: new Date().toLocaleString("en-NG") },
+            ],
           });
           await loadAll();
           onRefresh();
@@ -604,22 +644,11 @@ export function SandboxSavings({ userBalance, onRefresh, onBack }: Props) {
       />
 
       {/* Success modal */}
-      <Dialog open={!!successModal} onOpenChange={(o) => { if (!o) setSuccessModal(null); }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <div className="mx-auto h-14 w-14 rounded-full bg-success/10 flex items-center justify-center mb-2">
-              <CheckCircle2 className="h-8 w-8 text-success" />
-            </div>
-            <DialogTitle className="text-center">{successModal?.title}</DialogTitle>
-            <DialogDescription className="text-center">
-              {successModal?.description}
-            </DialogDescription>
-          </DialogHeader>
-          <Button onClick={() => setSuccessModal(null)} className="w-full" variant="hero">
-            Done
-          </Button>
-        </DialogContent>
-      </Dialog>
+      <TransactionSuccessModal
+        open={!!successPayload}
+        onOpenChange={(o) => { if (!o) setSuccessPayload(null); }}
+        payload={successPayload}
+      />
     </div>
   );
 }
