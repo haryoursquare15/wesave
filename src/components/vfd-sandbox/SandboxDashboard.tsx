@@ -322,7 +322,7 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [] 
         transition={{ delay: 0.2 }}
       >
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-bold text-foreground">Explore Products</h3>
+          <h3 className="text-sm font-bold text-foreground">Lock Funds & Earn</h3>
           <div className="flex gap-1">
             {productBanners.map((_, i) => (
               <button
