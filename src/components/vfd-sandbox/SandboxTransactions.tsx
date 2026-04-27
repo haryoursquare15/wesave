@@ -77,7 +77,8 @@ export function SandboxTransactions({ transactions, loading, onRefresh, onBack }
         <div className="space-y-2">
           {transactions.map((tx, i) => {
             const { icon: Icon, bg, color } = getTxIcon(tx.transaction_type);
-            const isCredit = tx.transaction_type === "credit";
+            const isCredit = tx.transaction_type === "credit" || tx.transaction_type === "unlock" || tx.transaction_type === "interest";
+            const displayLabel = tx.transaction_type === "unlock" ? "Unlock to wallet" : tx.transaction_type;
 
             return (
               <motion.div
