@@ -27,6 +27,8 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
   const [form, setForm] = useState({
     toAccount: "", bankCode: "", amount: "", narration: "", beneficiaryName: "",
   });
+  const [pinOpen, setPinOpen] = useState(false);
+  const [successModal, setSuccessModal] = useState<null | { title: string; description: string }>(null);
 
   const handleValidate = async () => {
     const name = await onValidate(form.toAccount, form.bankCode);
@@ -36,9 +38,14 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
     }
   };
 
-  const handleTransfer = async () => {
+  const handleTransferRequest = () => {
     const amount = parseFloat(form.amount);
     if (isNaN(amount) || amount <= 0) return;
+    setPinOpen(true);
+  };
+
+  const executeTransfer = async () => {
+    const amount = parseFloat(form.amount);
     const result = await onTransfer({
       fromAccount: accountNumber, toAccount: form.toAccount,
       bankCode: form.bankCode, amount,
@@ -46,8 +53,11 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
       beneficiaryName: form.beneficiaryName,
     });
     if (result) {
+      setSuccessModal({
+        title: "Transfer initiated",
+        description: `₦${amount.toLocaleString()} sent to ${form.beneficiaryName || form.toAccount}.`,
+      });
       setForm({ toAccount: "", bankCode: "", amount: "", narration: "", beneficiaryName: "" });
-      toast({ title: "Transfer initiated!" });
     }
   };
 
