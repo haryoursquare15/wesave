@@ -93,15 +93,21 @@ export function SandboxLockFunds({
             { label: "Duration", value: `${selectedDuration} months` },
             { label: "Interest Rate", value: `${cfg?.interest_rate}% p.a.` },
             { label: "Expected Interest", value: `+₦${interest.toLocaleString()}` },
+            { label: "Early Withdrawal Penalty", value: `${cfg?.early_withdrawal_penalty}% of interest` },
             { label: "Total at Maturity", value: `₦${total.toLocaleString()}`, highlight: true },
             ...(maturityDate ? [{ label: "Matures On", value: maturityDate.toLocaleDateString("en-NG", { year: "numeric", month: "long", day: "numeric" }) }] : []),
+            { label: "Date", value: new Date().toLocaleString("en-NG") },
           ],
+          reference: `LOCK-${Date.now().toString(36).toUpperCase()}`,
         });
       },
     });
   };
 
   const requestUnlock = (lockId: string, principal: number) => {
+    const lock = lockedFunds.find(l => l.id === lockId);
+    const interest = Number(lock?.expected_interest || 0);
+    const total = Number(lock?.total_payout || principal);
     setPinGate({
       purpose: "Unlock Funds",
       description: `Unlock and credit ₦${Number(principal).toLocaleString()} to wallet`,
@@ -111,16 +117,23 @@ export function SandboxLockFunds({
           title: "Unlocked Successfully",
           description: "Funds and earned interest have been credited to your wallet.",
           details: [
-            { label: "Principal Returned", value: `₦${Number(principal).toLocaleString()}`, highlight: true },
+            { label: "Principal", value: `₦${Number(principal).toLocaleString()}` },
+            { label: "Interest Earned", value: `+₦${interest.toLocaleString(undefined, { maximumFractionDigits: 2 })}` },
+            { label: "Total Credited", value: `₦${total.toLocaleString(undefined, { maximumFractionDigits: 2 })}`, highlight: true },
             { label: "Credited To", value: "Wallet (Available)" },
             { label: "Date", value: new Date().toLocaleString("en-NG") },
           ],
+          reference: `UNLOCK-${lockId.slice(0, 8).toUpperCase()}`,
         });
       },
     });
   };
 
   const requestBreak = (lockId: string, principal: number) => {
+    const lock = lockedFunds.find(l => l.id === lockId);
+    const accrued = Number(lock?.expected_interest || 0);
+    const penaltyPct = lockConfigs.find(c => c.duration_months === lock?.duration_months)?.early_withdrawal_penalty || 0;
+    const estPenalty = Math.round(accrued * (penaltyPct / 100) * 100) / 100;
     setPinGate({
       purpose: "Break Lock (early withdrawal)",
       description: `Break lock of ₦${Number(principal).toLocaleString()} early`,
@@ -131,9 +144,11 @@ export function SandboxLockFunds({
           description: "Funds returned to wallet. Any applicable penalty has been deducted.",
           details: [
             { label: "Principal", value: `₦${Number(principal).toLocaleString()}`, highlight: true },
+            ...(estPenalty > 0 ? [{ label: "Penalty Applied", value: `−₦${estPenalty.toLocaleString(undefined, { maximumFractionDigits: 2 })} (${penaltyPct}% of interest)` }] : []),
             { label: "Status", value: "Returned to wallet" },
             { label: "Date", value: new Date().toLocaleString("en-NG") },
           ],
+          reference: `BREAK-${lockId.slice(0, 8).toUpperCase()}`,
         });
       },
     });

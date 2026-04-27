@@ -211,8 +211,10 @@ export function SandboxSavings({ userBalance, onRefresh, onBack }: Props) {
               { label: "Principal", value: `₦${Number(s.principal).toLocaleString()}` },
               { label: "Interest Earned", value: `+₦${interest.toLocaleString(undefined, { maximumFractionDigits: 2 })}` },
               { label: "Total Credited", value: `₦${total.toLocaleString(undefined, { maximumFractionDigits: 2 })}`, highlight: true },
+              { label: "Maturity Date", value: new Date().toLocaleDateString("en-NG", { year: "numeric", month: "long", day: "numeric" }) },
               { label: "Date", value: new Date().toLocaleString("en-NG") },
             ],
+            reference: `MAT-${s.id.slice(0, 8).toUpperCase()}`,
           });
           await loadAll();
           onRefresh();
@@ -230,17 +232,20 @@ export function SandboxSavings({ userBalance, onRefresh, onBack }: Props) {
         if (result?.success) {
           const penalty = Number(result.penalty || 0);
           const principal = Number(s.principal);
+          const credited = principal - penalty;
           setSuccessPayload({
             title: "Early Withdrawal Complete",
             description: penalty > 0
               ? "Funds returned to wallet. A penalty was deducted."
               : "Funds returned to your wallet. No penalty applied.",
             details: [
-              { label: "Principal", value: `₦${principal.toLocaleString()}`, highlight: true },
-              ...(penalty > 0 ? [{ label: "Penalty Deducted", value: `−₦${penalty.toLocaleString()}` }] : []),
+              { label: "Principal", value: `₦${principal.toLocaleString()}` },
+              ...(penalty > 0 ? [{ label: "Penalty Deducted", value: `−₦${penalty.toLocaleString(undefined, { maximumFractionDigits: 2 })}` }] : [{ label: "Penalty", value: "₦0.00" }]),
+              { label: "Net Credited", value: `₦${credited.toLocaleString(undefined, { maximumFractionDigits: 2 })}`, highlight: true },
               { label: "Status", value: "Credited to wallet" },
               { label: "Date", value: new Date().toLocaleString("en-NG") },
             ],
+            reference: `EW-${s.id.slice(0, 8).toUpperCase()}`,
           });
           await loadAll();
           onRefresh();

@@ -62,6 +62,7 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
         description: `Your transfer of ₦${amount.toLocaleString()} has been sent.`,
         details: [
           { label: "Amount", value: `₦${amount.toLocaleString()}`, highlight: true },
+          { label: "Fee", value: "₦0.00" },
           { label: "Recipient", value: form.beneficiaryName || form.toAccount },
           { label: "Bank", value: bankName },
           { label: "Account", value: form.toAccount },
