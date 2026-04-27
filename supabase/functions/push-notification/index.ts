@@ -158,6 +158,7 @@ Deno.serve(async (req) => {
 
       let sent = 0;
       const expired: string[] = [];
+      const dlqRows: Array<Record<string, unknown>> = [];
 
       for (const sub of subscriptions) {
         try {
@@ -175,10 +176,28 @@ Deno.serve(async (req) => {
             // Subscription expired, clean up
             expired.push(sub.id);
           } else {
+            // Persist failure to DLQ for retry instead of silently dropping
             console.error(`Push failed for ${sub.endpoint}: ${response.status}`);
+            dlqRows.push({
+              user_id,
+              notification_id: notification_id ?? null,
+              subscription_endpoint: sub.endpoint,
+              payload: { title, body, url, tag, notification_id },
+              failure_status: response.status,
+              failure_reason: `HTTP ${response.status}`,
+            });
           }
         } catch (err) {
-          console.error(`Push error for ${sub.endpoint}:`, err);
+          const reason = err instanceof Error ? err.message : String(err);
+          console.error(`Push error for ${sub.endpoint}:`, reason);
+          dlqRows.push({
+            user_id,
+            notification_id: notification_id ?? null,
+            subscription_endpoint: sub.endpoint,
+            payload: { title, body, url, tag, notification_id },
+            failure_status: 0,
+            failure_reason: reason,
+          });
         }
       }
 
@@ -188,6 +207,14 @@ Deno.serve(async (req) => {
           .from("push_subscriptions")
           .delete()
           .in("id", expired);
+      }
+
+      // Persist failures (best-effort; never block push response)
+      if (dlqRows.length > 0) {
+        const { error: dlqErr } = await supabaseAdmin
+          .from("notification_dlq")
+          .insert(dlqRows);
+        if (dlqErr) console.error("DLQ insert failed:", dlqErr.message);
       }
 
       return new Response(
