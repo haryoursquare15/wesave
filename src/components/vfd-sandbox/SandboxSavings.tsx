@@ -589,6 +589,37 @@ export function SandboxSavings({ userBalance, onRefresh, onBack }: Props) {
           </div>
         )}
       </div>
+
+      {/* Transaction PIN gate */}
+      <TransactionPinGate
+        open={!!pinGate}
+        onOpenChange={(o) => { if (!o) setPinGate(null); }}
+        purpose={pinGate?.purpose || ""}
+        description={pinGate?.description}
+        onVerified={() => {
+          const cb = pinGate?.onAuthorized;
+          setPinGate(null);
+          cb?.();
+        }}
+      />
+
+      {/* Success modal */}
+      <Dialog open={!!successModal} onOpenChange={(o) => { if (!o) setSuccessModal(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="mx-auto h-14 w-14 rounded-full bg-success/10 flex items-center justify-center mb-2">
+              <CheckCircle2 className="h-8 w-8 text-success" />
+            </div>
+            <DialogTitle className="text-center">{successModal?.title}</DialogTitle>
+            <DialogDescription className="text-center">
+              {successModal?.description}
+            </DialogDescription>
+          </DialogHeader>
+          <Button onClick={() => setSuccessModal(null)} className="w-full" variant="hero">
+            Done
+          </Button>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
