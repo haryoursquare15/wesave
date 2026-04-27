@@ -92,7 +92,7 @@ export function SandboxTransactions({ transactions, loading, onRefresh, onBack }
                   <Icon className={`h-4 w-4 ${color}`} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium capitalize truncate">{tx.transaction_type}</p>
+                  <p className="text-sm font-medium capitalize truncate">{displayLabel}</p>
                   <p className="text-[10px] text-muted-foreground truncate">
                     {tx.description || tx.reference || "—"}
                   </p>
