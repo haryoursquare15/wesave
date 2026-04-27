@@ -3,16 +3,19 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Lock, Unlock, TrendingUp, ArrowLeft, RefreshCw,
   Percent, ArrowRight, AlertTriangle, Sparkles, Target, Vault as VaultIcon, Zap, Gift,
+  CheckCircle2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import {
   useVestaraLedger, VestaraProduct, VestaraSavings as VS, VestaraProductCode,
 } from "@/hooks/useVestaraLedger";
+import { TransactionPinGate } from "@/components/security/TransactionPinGate";
 
 interface UserBalance {
   total_balance: number; locked_balance: number; savings_balance: number; available_balance: number;
@@ -53,6 +56,10 @@ export function SandboxSavings({ userBalance, onRefresh, onBack }: Props) {
   const [selectedProduct, setSelectedProduct] = useState<VestaraProduct | null>(null);
   const [amount, setAmount] = useState("");
   const [tenor, setTenor] = useState<number | null>(null);
+
+  // PIN gate + success modal state
+  const [pinGate, setPinGate] = useState<null | { purpose: string; description: string; onAuthorized: () => void }>(null);
+  const [successModal, setSuccessModal] = useState<null | { title: string; description: string }>(null);
 
   const availableBalance = Number(userBalance?.available_balance || 0);
 
@@ -135,7 +142,7 @@ export function SandboxSavings({ userBalance, onRefresh, onBack }: Props) {
     setTenor(null);
   };
 
-  const handleConfirm = async () => {
+  const handleConfirm = () => {
     if (!selectedProduct || !tenor || isNaN(amtNum)) return;
     if (amtNum > availableBalance) {
       toast({
@@ -145,38 +152,61 @@ export function SandboxSavings({ userBalance, onRefresh, onBack }: Props) {
       });
       return;
     }
-    const result = await vestara.createSavings(selectedProduct.code, amtNum, tenor);
-    if (result?.success) {
-      toast({
-        title: "Savings created",
-        description: `${selectedProduct.name} • ₦${amtNum.toLocaleString()} for ${tenor} days`,
-      });
-      resetFlow();
-      await loadAll();
-      onRefresh();
-    }
+    setPinGate({
+      purpose: `Create ${selectedProduct.name}`,
+      description: `Lock ₦${amtNum.toLocaleString()} for ${tenor} days`,
+      onAuthorized: async () => {
+        const result = await vestara.createSavings(selectedProduct.code, amtNum, tenor);
+        if (result?.success) {
+          setSuccessModal({
+            title: "Savings created successfully",
+            description: `₦${amtNum.toLocaleString()} locked in ${selectedProduct.name} for ${tenor} days. You'll see it in "My Savings" below.`,
+          });
+          resetFlow();
+          await loadAll();
+          onRefresh();
+        }
+      },
+    });
   };
 
-  const handleMature = async (s: VS) => {
-    const result = await vestara.matureSavings(s.id);
-    if (result?.success) {
-      toast({ title: "Savings matured", description: "Funds returned to your wallet with interest." });
-      await loadAll();
-      onRefresh();
-    }
+  const handleMature = (s: VS) => {
+    setPinGate({
+      purpose: "Mature savings",
+      description: `Withdraw ₦${Number(s.principal).toLocaleString()} + interest to wallet`,
+      onAuthorized: async () => {
+        const result = await vestara.matureSavings(s.id);
+        if (result?.success) {
+          setSuccessModal({
+            title: "Savings matured",
+            description: "Principal and interest have been credited to your wallet.",
+          });
+          await loadAll();
+          onRefresh();
+        }
+      },
+    });
   };
 
-  const handleEarlyWithdraw = async (s: VS) => {
-    const result = await vestara.earlyWithdrawSavings(s.id);
-    if (result?.success) {
-      const penalty = Number(result.penalty || 0);
-      toast({
-        title: "Early withdrawal complete",
-        description: penalty > 0 ? `Penalty deducted: ₦${penalty.toLocaleString()}` : "No penalty applied.",
-      });
-      await loadAll();
-      onRefresh();
-    }
+  const handleEarlyWithdraw = (s: VS) => {
+    setPinGate({
+      purpose: "Early withdrawal",
+      description: `Withdraw ₦${Number(s.principal).toLocaleString()} early`,
+      onAuthorized: async () => {
+        const result = await vestara.earlyWithdrawSavings(s.id);
+        if (result?.success) {
+          const penalty = Number(result.penalty || 0);
+          setSuccessModal({
+            title: "Early withdrawal complete",
+            description: penalty > 0
+              ? `Funds returned to wallet. Penalty deducted: ₦${penalty.toLocaleString()}.`
+              : "Funds returned to your wallet. No penalty applied.",
+          });
+          await loadAll();
+          onRefresh();
+        }
+      },
+    });
   };
 
   const activeSavings = savings.filter(s => s.status === "active");
@@ -559,6 +589,37 @@ export function SandboxSavings({ userBalance, onRefresh, onBack }: Props) {
           </div>
         )}
       </div>
+
+      {/* Transaction PIN gate */}
+      <TransactionPinGate
+        open={!!pinGate}
+        onOpenChange={(o) => { if (!o) setPinGate(null); }}
+        purpose={pinGate?.purpose || ""}
+        description={pinGate?.description}
+        onVerified={() => {
+          const cb = pinGate?.onAuthorized;
+          setPinGate(null);
+          cb?.();
+        }}
+      />
+
+      {/* Success modal */}
+      <Dialog open={!!successModal} onOpenChange={(o) => { if (!o) setSuccessModal(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="mx-auto h-14 w-14 rounded-full bg-success/10 flex items-center justify-center mb-2">
+              <CheckCircle2 className="h-8 w-8 text-success" />
+            </div>
+            <DialogTitle className="text-center">{successModal?.title}</DialogTitle>
+            <DialogDescription className="text-center">
+              {successModal?.description}
+            </DialogDescription>
+          </DialogHeader>
+          <Button onClick={() => setSuccessModal(null)} className="w-full" variant="hero">
+            Done
+          </Button>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

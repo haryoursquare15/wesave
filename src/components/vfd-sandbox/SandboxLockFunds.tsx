@@ -2,14 +2,16 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Lock, Unlock, TrendingUp, ArrowLeft,
-  RefreshCw, Percent, ArrowRight, AlertTriangle,
+  RefreshCw, Percent, ArrowRight, AlertTriangle, CheckCircle2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { TransactionPinGate } from "@/components/security/TransactionPinGate";
 
 interface LockConfig {
   id: string; duration_months: number; interest_rate: number; early_withdrawal_penalty: number;
@@ -46,6 +48,8 @@ export function SandboxLockFunds({
   const [amount, setAmount] = useState("");
   const [selectedDuration, setSelectedDuration] = useState<number | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [pinGate, setPinGate] = useState<null | { purpose: string; description: string; onAuthorized: () => Promise<void> | void }>(null);
+  const [successModal, setSuccessModal] = useState<null | { title: string; description: string }>(null);
 
   const selectedConfig = lockConfigs.find(c => c.duration_months === selectedDuration);
   const amtNum = parseFloat(amount);
@@ -58,7 +62,7 @@ export function SandboxLockFunds({
     return { interest: Math.round(interest * 100) / 100, total: Math.round((amtNum + interest) * 100) / 100, maturityDate: maturity };
   })() : null;
 
-  const handleConfirm = async () => {
+  const handleConfirm = () => {
     if (!selectedDuration || isNaN(amtNum)) return;
     if (amtNum > availableBalance) {
       toast({
@@ -68,11 +72,49 @@ export function SandboxLockFunds({
       });
       return;
     }
-    await onCreateLock(amtNum, selectedDuration);
-    setStep("amount");
-    setAmount("");
-    setSelectedDuration(null);
-    setShowCreate(false);
+    setPinGate({
+      purpose: "Lock Funds",
+      description: `Lock ₦${amtNum.toLocaleString()} for ${selectedDuration} months`,
+      onAuthorized: async () => {
+        await onCreateLock(amtNum, selectedDuration);
+        setStep("amount");
+        setAmount("");
+        setSelectedDuration(null);
+        setShowCreate(false);
+        setSuccessModal({
+          title: "Funds locked successfully",
+          description: `₦${amtNum.toLocaleString()} locked for ${selectedDuration} months. View it under "My Locks" below.`,
+        });
+      },
+    });
+  };
+
+  const requestUnlock = (lockId: string, principal: number) => {
+    setPinGate({
+      purpose: "Unlock Funds",
+      description: `Unlock and credit ₦${Number(principal).toLocaleString()} to wallet`,
+      onAuthorized: async () => {
+        await onUnlock(lockId);
+        setSuccessModal({
+          title: "Unlocked successfully",
+          description: "Funds and earned interest have been credited to your wallet.",
+        });
+      },
+    });
+  };
+
+  const requestBreak = (lockId: string, principal: number) => {
+    setPinGate({
+      purpose: "Break Lock (early withdrawal)",
+      description: `Break lock of ₦${Number(principal).toLocaleString()} early`,
+      onAuthorized: async () => {
+        await onBreakLock(lockId);
+        setSuccessModal({
+          title: "Lock broken",
+          description: "Funds returned to wallet (penalty applied if applicable).",
+        });
+      },
+    });
   };
 
   return (
@@ -348,11 +390,11 @@ export function SandboxLockFunds({
                   {lock.status === "active" && (
                     <div className="flex gap-2">
                       {isMatured ? (
-                        <Button size="sm" className="flex-1 bg-success hover:bg-success/90 text-success-foreground" onClick={() => onUnlock(lock.id)} disabled={loading}>
+                        <Button size="sm" className="flex-1 bg-success hover:bg-success/90 text-success-foreground" onClick={() => requestUnlock(lock.id, lock.principal_amount)} disabled={loading}>
                           <Unlock className="h-3.5 w-3.5 mr-1.5" /> Unlock & Earn
                         </Button>
                       ) : (
-                        <Button size="sm" variant="outline" className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/5" onClick={() => onBreakLock(lock.id)} disabled={loading}>
+                        <Button size="sm" variant="outline" className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/5" onClick={() => requestBreak(lock.id, lock.principal_amount)} disabled={loading}>
                           <AlertTriangle className="h-3.5 w-3.5 mr-1.5" /> Break Lock
                         </Button>
                       )}
@@ -370,6 +412,33 @@ export function SandboxLockFunds({
           </div>
         )}
       </div>
+
+      <TransactionPinGate
+        open={!!pinGate}
+        onOpenChange={(o) => { if (!o) setPinGate(null); }}
+        purpose={pinGate?.purpose || ""}
+        description={pinGate?.description}
+        onVerified={() => {
+          const cb = pinGate?.onAuthorized;
+          setPinGate(null);
+          cb?.();
+        }}
+      />
+
+      <Dialog open={!!successModal} onOpenChange={(o) => { if (!o) setSuccessModal(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="mx-auto h-14 w-14 rounded-full bg-success/10 flex items-center justify-center mb-2">
+              <CheckCircle2 className="h-8 w-8 text-success" />
+            </div>
+            <DialogTitle className="text-center">{successModal?.title}</DialogTitle>
+            <DialogDescription className="text-center">{successModal?.description}</DialogDescription>
+          </DialogHeader>
+          <Button onClick={() => setSuccessModal(null)} className="w-full" variant="hero">
+            Done
+          </Button>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

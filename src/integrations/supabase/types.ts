@@ -1563,6 +1563,39 @@ export type Database = {
           },
         ]
       }
+      pin_audit_log: {
+        Row: {
+          created_at: string
+          event_type: string
+          id: string
+          ip_address: string | null
+          metadata: Json
+          purpose: string | null
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          event_type: string
+          id?: string
+          ip_address?: string | null
+          metadata?: Json
+          purpose?: string | null
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          event_type?: string
+          id?: string
+          ip_address?: string | null
+          metadata?: Json
+          purpose?: string | null
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       platform_expenses: {
         Row: {
           amount: number
@@ -2733,6 +2766,42 @@ export type Database = {
           rating?: number | null
           status?: Database["public"]["Enums"]["group_status"]
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      transaction_pins: {
+        Row: {
+          created_at: string
+          failed_attempts: number
+          id: string
+          last_used_at: string | null
+          locked_until: string | null
+          pin_hash: string
+          pin_set_at: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          failed_attempts?: number
+          id?: string
+          last_used_at?: string | null
+          locked_until?: string | null
+          pin_hash: string
+          pin_set_at?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          failed_attempts?: number
+          id?: string
+          last_used_at?: string | null
+          locked_until?: string | null
+          pin_hash?: string
+          pin_set_at?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
