@@ -90,15 +90,16 @@ export function SplitInviteDialog({ open, onOpenChange, splitRequestId, amountPe
     }
   }, [open, fetchFriends]);
 
-  // Search users
+  // Search users (supports @username, username, or full name)
   useEffect(() => {
-    if (!debouncedSearch || debouncedSearch.length < 2) {
+    const term = debouncedSearch.trim().replace(/^@/, "");
+    if (!term || term.length < 2) {
       setResults([]);
       return;
     }
     const doSearch = async () => {
       setSearching(true);
-      const { data } = await supabase.rpc("search_users", { search_term: debouncedSearch });
+      const { data } = await supabase.rpc("search_users", { search_term: term });
       setResults((data as UserResult[]) || []);
       setSearching(false);
     };
@@ -251,12 +252,15 @@ export function SplitInviteDialog({ open, onOpenChange, splitRequestId, amountPe
             <div className="relative pt-3">
               <Search className="absolute left-3 top-[calc(0.75rem+50%)] -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search by name or username..."
+                placeholder="Enter @username or name..."
                 className="pl-10"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 autoFocus
               />
+              <p className="text-[11px] text-muted-foreground mt-1.5 px-1">
+                Tip: type a friend's @username to add them instantly to this split.
+              </p>
             </div>
             <div className="max-h-60 overflow-y-auto space-y-2 mt-3">
               {searching && (
