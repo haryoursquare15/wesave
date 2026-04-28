@@ -80,6 +80,7 @@ export function useVfdSandboxProducts() {
   const getTargetDetail = useCallback((target_id: string) => invoke("get_target_detail", { target_id }), [invoke]);
   const inviteTargetMember = useCallback((target_id: string, invitee_id: string) => invoke("invite_target_member", { target_id, invitee_id }), [invoke]);
   const respondTargetInvite = useCallback((invite_id: string, accept: boolean) => invoke("respond_target_invite", { invite_id, accept }), [invoke]);
+  const listPendingTargetInvites = useCallback(() => invoke("list_pending_target_invites"), [invoke]);
   const requestTargetWithdrawal = useCallback((target_id: string, amount: number, reason?: string) =>
     invoke("request_target_withdrawal", { target_id, amount, reason }), [invoke]);
   const voteTargetWithdrawal = useCallback((request_id: string, vote: string) =>
