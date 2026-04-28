@@ -20,6 +20,7 @@ import { SandboxSplitTab } from "@/components/vfd-sandbox/SandboxSplitTab";
 import { SandboxAssociationTab } from "@/components/vfd-sandbox/SandboxAssociationTab";
 import { SandboxBillsTab } from "@/components/vfd-sandbox/SandboxBillsTab";
 import { SandboxCardTab } from "@/components/vfd-sandbox/SandboxCardTab";
+import { SandboxGroupInviteModal } from "@/components/vfd-sandbox/SandboxGroupInviteModal";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 
