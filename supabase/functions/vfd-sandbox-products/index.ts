@@ -2739,6 +2739,62 @@ async function handleMarkAllNotificationsRead(userId: string) {
 }
 
 // =============================================
+// AUTO-START GROUPS WHOSE SWAP WINDOW HAS ELAPSED
+// Called from the UI on detail-view poll, and idempotent.
+// =============================================
+async function handleAutoStartPendingGroups(_userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const groupId = body.group_id as string | undefined;
+
+  let query = db.from("vfd_sandbox_groups")
+    .select("*")
+    .eq("status", "swap_window")
+    .lte("swap_window_ends_at", new Date().toISOString());
+  if (groupId) query = db.from("vfd_sandbox_groups")
+    .select("*")
+    .eq("id", groupId)
+    .eq("status", "swap_window")
+    .lte("swap_window_ends_at", new Date().toISOString());
+
+  const { data: due } = await query;
+  const started: string[] = [];
+
+  for (const group of (due || [])) {
+    const payoutOrder = (group.payout_order || []) as string[];
+    if (!payoutOrder.length) continue;
+
+    // Create cycle 1 for the (now-final) payout order
+    const { data: cycle } = await db.from("vfd_sandbox_contribution_cycles").insert({
+      group_id: group.id, cycle_number: 1, status: "active",
+      payout_recipient_id: payoutOrder[0],
+    }).select().single();
+
+    await db.from("vfd_sandbox_groups").update({
+      status: "active",
+      current_cycle: 1,
+      current_payout_position: 1,
+      total_cycles: payoutOrder.length,
+      commenced_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }).eq("id", group.id);
+
+    await postChatMessage(group.id, group.admin_id,
+      `🚀 Swap window closed. Thrift has commenced! Cycle 1 is now active — recipient has been notified.`,
+      "system");
+
+    for (let i = 0; i < payoutOrder.length; i++) {
+      await sendNotification(payoutOrder[i], "Thrift Started",
+        `${group.name} has started. Your final payout position is #${i + 1}. ${i === 0 ? "You are first in line — payout will be sent once all members contribute." : "Please contribute on your scheduled date."}`,
+        "group_started", group.id);
+    }
+    started.push(group.id);
+    void cycle;
+  }
+
+  return jsonResponse({ data: { started_count: started.length, started } });
+}
+
+// =============================================
 // MAIN HANDLER
 // =============================================
 
