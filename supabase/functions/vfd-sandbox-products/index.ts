@@ -2831,6 +2831,7 @@ Deno.serve(async (req) => {
       case "join_group_via_link": return await handleJoinGroupViaLink(userId, body);
       case "list_group_invites": return await handleListGroupInvites(userId);
       case "list_pending_group_invitees": return await handleListPendingGroupInvitees(body);
+      case "auto_start_pending_groups": return await handleAutoStartPendingGroups(userId, body);
 
       // In-app notifications
       case "list_notifications": return await handleListNotifications(userId);
