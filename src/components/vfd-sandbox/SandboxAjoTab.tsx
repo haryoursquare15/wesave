@@ -287,21 +287,66 @@ export function SandboxAjoTab() {
             <TabsTrigger value="payout"><ListOrdered className="h-3 w-3 mr-1" /> Payout Order</TabsTrigger>
           </TabsList>
           <TabsContent value="members" className="space-y-2 mt-3">
-            {members.length === 0 ? (
-              <p className="text-center text-sm text-muted-foreground py-4">No members yet</p>
-            ) : members.map((m: any, i: number) => (
-              <div key={i} className="flex items-center justify-between text-xs p-2 rounded-lg bg-muted/50">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium truncate max-w-[180px]">{m.display_name || `User ${m.user_id?.slice(0, 6)}`}</span>
-                  {m.user_id === g.admin_id && <Crown className="h-3 w-3 text-warning" />}
-                </div>
-                <div className="flex items-center gap-2">
-                  {m.has_contributed_current && <Badge variant="secondary" className="text-[10px]">Contributed</Badge>}
-                  {m.has_received_payout && <Badge className="text-[10px]">Received</Badge>}
-                  {m.payout_position != null && <span className="text-muted-foreground">#{m.payout_position}</span>}
+            {/* Pending incoming swap requests for the current user */}
+            {(detailData.swaps || []).filter((s: any) => s.status === "pending" && s.target_id === currentUserId).map((s: any) => (
+              <div key={s.id} className="p-3 rounded-xl bg-card border-2 border-warning/40 space-y-2">
+                <p className="text-xs font-semibold">Swap request</p>
+                <p className="text-[11px] text-muted-foreground">
+                  A member wants to swap their position #{s.requester_position} with your position #{s.target_position}.
+                </p>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" className="flex-1" disabled={products.loading}
+                    onClick={async () => {
+                      const r = await products.respondSwap(s.id, false);
+                      if (r?.data) { toast({ title: "Swap declined" }); loadDetail(g.id); }
+                    }}>Decline</Button>
+                  <Button size="sm" className="flex-1" disabled={products.loading}
+                    onClick={async () => {
+                      const r = await products.respondSwap(s.id, true);
+                      if (r?.data) { toast({ title: "Swap accepted! Positions updated." }); loadDetail(g.id); }
+                    }}>Accept</Button>
                 </div>
               </div>
             ))}
+
+            {members.length === 0 ? (
+              <p className="text-center text-sm text-muted-foreground py-4">No members yet</p>
+            ) : members.map((m: any, i: number) => {
+              const isMe = m.user_id === currentUserId;
+              const myMembership = members.find((mm: any) => mm.user_id === currentUserId);
+              const canRequestSwap =
+                !isMe &&
+                (g.status === "swap_window" || g.status === "active") &&
+                myMembership &&
+                !myMembership.has_used_swap &&
+                !myMembership.has_received_payout &&
+                !m.has_received_payout &&
+                (g.status === "swap_window" ||
+                  !(detailData.contributions || []).some((c: any) => c.cycle_number === g.current_cycle));
+              return (
+                <div key={i} className="flex items-center justify-between text-xs p-2 rounded-lg bg-muted/50">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium truncate max-w-[140px]">{m.display_name || `User ${m.user_id?.slice(0, 6)}`}{isMe ? " (you)" : ""}</span>
+                    {m.user_id === g.admin_id && <Crown className="h-3 w-3 text-warning" />}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {m.has_contributed_current && <Badge variant="secondary" className="text-[10px]">Contributed</Badge>}
+                    {m.has_received_payout && <Badge className="text-[10px]">Received</Badge>}
+                    {m.payout_position != null && <span className="text-muted-foreground">#{m.payout_position}</span>}
+                    {canRequestSwap && (
+                      <Button size="sm" variant="ghost" className="h-7 px-2 text-[11px]"
+                        disabled={products.loading}
+                        onClick={async () => {
+                          const r = await products.requestSwap(g.id, m.user_id);
+                          if (r?.data) { toast({ title: "Swap requested", description: `Waiting for ${m.display_name || "member"} to respond.` }); loadDetail(g.id); }
+                        }}>
+                        <ArrowLeftRight className="h-3 w-3 mr-1" /> Swap
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </TabsContent>
           <TabsContent value="payout" className="space-y-2 mt-3">
             {payoutOrder.length === 0 ? (
