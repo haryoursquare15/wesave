@@ -2710,6 +2710,7 @@ Deno.serve(async (req) => {
       case "get_target_detail": return await handleGetTargetDetail(body);
       case "invite_target_member": return await handleInviteTargetMember(userId, body);
       case "respond_target_invite": return await handleRespondTargetInvite(userId, body);
+      case "list_pending_target_invites": return await handleListPendingTargetInvites(userId);
       case "request_target_withdrawal": return await handleRequestTargetWithdrawal(userId, body);
       case "vote_target_withdrawal": return await handleVoteTargetWithdrawal(userId, body);
       case "independent_withdrawal": return await handleIndependentWithdrawal(userId, body);
