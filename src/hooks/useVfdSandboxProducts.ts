@@ -149,7 +149,7 @@ export function useVfdSandboxProducts() {
     listNotifications, markNotificationRead, markAllNotificationsRead,
     // Target Ajo
     createTarget, listTargets, contributeTarget, getTargetDetail,
-    inviteTargetMember, respondTargetInvite,
+    inviteTargetMember, respondTargetInvite, listPendingTargetInvites,
     requestTargetWithdrawal, voteTargetWithdrawal, independentWithdrawal,
     // Goal Funding
     createCampaign, listCampaigns, contributeCampaign, getCampaignDetail, postCampaignUpdate, withdrawCampaignEscrow,
