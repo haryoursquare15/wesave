@@ -104,6 +104,29 @@ function UserActionsDialog({ user, onClose, onAction }: UserActionsDialogProps) 
           }).eq("id", user.id);
           toast({ title: "User Suspended", description: `${user.full_name || user.email}'s account has been suspended.` });
           break;
+        case "set_temp_password": {
+          if (!tempPassword || tempPassword.length < 8) {
+            toast({ title: "Invalid password", description: "Min 8 characters.", variant: "destructive" });
+            setLoading(false);
+            return;
+          }
+          const { data, error } = await supabase.functions.invoke("admin-reset-user-password", {
+            body: { target_user_id: user.id, mode: "set_temp_password", new_password: tempPassword },
+          });
+          if (error || (data as any)?.error) throw new Error((data as any)?.error || error?.message);
+          toast({ title: "Password Reset", description: `Temporary password set for ${user.email}. Share it securely.` });
+          break;
+        }
+        case "send_recovery_link": {
+          const { data, error } = await supabase.functions.invoke("admin-reset-user-password", {
+            body: { target_user_id: user.id, mode: "send_recovery_link" },
+          });
+          if (error || (data as any)?.error) throw new Error((data as any)?.error || error?.message);
+          setRecoveryLink((data as any)?.action_link || null);
+          toast({ title: "Recovery link generated", description: "Copy and share it with the user." });
+          setLoading(false);
+          return;
+        }
         default:
           break;
       }
