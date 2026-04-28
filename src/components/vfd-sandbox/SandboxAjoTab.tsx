@@ -108,6 +108,8 @@ function SwapWindowBanner({ endsAt, onElapsed }: { endsAt?: string | null; onEla
 export function SandboxAjoTab() {
   const { toast } = useToast();
   const products = useVfdSandboxProducts();
+  const { session } = useSandboxAwareAuth();
+  const currentUserId = session?.user?.id;
   const [groups, setGroups] = useState<Group[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [detailGroup, setDetailGroup] = useState<string | null>(null);
