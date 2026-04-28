@@ -143,8 +143,13 @@ export function SandboxAjoTab() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className={g.status === "active" ? "text-green-600 border-green-500" : g.status === "completed" ? "text-primary border-primary" : "text-muted-foreground"}>
-                  {g.status}
+                <Badge variant="outline" className={
+                  g.status === "active" ? "text-green-600 border-green-500"
+                  : g.status === "completed" ? "text-primary border-primary"
+                  : g.status === "swap_window" ? "text-warning border-warning"
+                  : "text-muted-foreground"
+                }>
+                  {g.status === "swap_window" ? "swap window" : g.status}
                 </Badge>
                 {g.status === "pending" && g.member_count < g.max_members && (
                   <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowInviteDialog(true)}>
@@ -164,16 +169,19 @@ export function SandboxAjoTab() {
               </div>
             )}
 
+            {/* Swap window banner with countdown + auto-start trigger */}
+            {g.status === "swap_window" && (
+              <SwapWindowBanner
+                endsAt={g.swap_window_ends_at}
+                onElapsed={async () => {
+                  await products.autoStartPendingGroups(g.id);
+                  await loadDetail(g.id);
+                }}
+              />
+            )}
+
             {/* Action buttons */}
             <div className="flex flex-wrap gap-2">
-              {g.status === "pending" && isAdmin && g.member_count >= g.max_members && (
-                <Button size="sm" onClick={async () => {
-                  const r = await products.commenceGroup(g.id);
-                  if (r?.data) { toast({ title: "Thrift commenced! Payout order randomized." }); loadDetail(g.id); }
-                }} disabled={products.loading}>
-                  <Play className="h-3 w-3 mr-1" /> Commence
-                </Button>
-              )}
               {g.status === "active" && (
                 <Button size="sm" onClick={async () => {
                   const r = await products.contributeGroup(g.id);
