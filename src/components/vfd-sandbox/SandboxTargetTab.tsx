@@ -38,6 +38,8 @@ export function SandboxTargetTab() {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detailData, setDetailData] = useState<any>(null);
   const [showInviteDialog, setShowInviteDialog] = useState(false);
+  const [pendingInvites, setPendingInvites] = useState<any[]>([]);
+  const [respondingId, setRespondingId] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     name: "", description: "", reason: "", goal_amount: "",
