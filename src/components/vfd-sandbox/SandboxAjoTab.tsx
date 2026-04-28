@@ -26,6 +26,8 @@ interface Group {
   contribution_hour?: number; contribution_minute?: number;
   contribution_day_of_week?: number; contribution_day_of_month?: number;
   commenced_at?: string;
+  swap_window_ends_at?: string | null;
+  is_full_at?: string | null;
   vfd_sandbox_group_members?: { user_id: string; payout_position?: number; has_contributed_current?: boolean; has_received_payout?: boolean }[];
 }
 
