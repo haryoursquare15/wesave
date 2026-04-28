@@ -4597,6 +4597,7 @@ export type Database = {
           description: string | null
           id: string
           invite_code: string | null
+          is_full_at: string | null
           max_members: number
           member_count: number
           name: string
@@ -4605,6 +4606,7 @@ export type Database = {
           payout_order: string[] | null
           period: string
           status: string
+          swap_window_ends_at: string | null
           total_cycles: number
           updated_at: string
         }
@@ -4623,6 +4625,7 @@ export type Database = {
           description?: string | null
           id?: string
           invite_code?: string | null
+          is_full_at?: string | null
           max_members?: number
           member_count?: number
           name: string
@@ -4631,6 +4634,7 @@ export type Database = {
           payout_order?: string[] | null
           period?: string
           status?: string
+          swap_window_ends_at?: string | null
           total_cycles?: number
           updated_at?: string
         }
@@ -4649,6 +4653,7 @@ export type Database = {
           description?: string | null
           id?: string
           invite_code?: string | null
+          is_full_at?: string | null
           max_members?: number
           member_count?: number
           name?: string
@@ -4657,6 +4662,7 @@ export type Database = {
           payout_order?: string[] | null
           period?: string
           status?: string
+          swap_window_ends_at?: string | null
           total_cycles?: number
           updated_at?: string
         }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useVfdSandboxProducts } from "@/hooks/useVfdSandboxProducts";
+import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
 import {
   Users, Plus, RefreshCw, ArrowRight, ArrowLeft, Play, Crown,
   ListOrdered, Coins, Calendar, Info, LogOut, AlertCircle, ArrowLeftRight, Share2,
@@ -26,6 +27,8 @@ interface Group {
   contribution_hour?: number; contribution_minute?: number;
   contribution_day_of_week?: number; contribution_day_of_month?: number;
   commenced_at?: string;
+  swap_window_ends_at?: string | null;
+  is_full_at?: string | null;
   vfd_sandbox_group_members?: { user_id: string; payout_position?: number; has_contributed_current?: boolean; has_received_payout?: boolean }[];
 }
 
@@ -54,9 +57,60 @@ function calculatePlatformFee(pool: number) {
 
 const fmt = (n: number) => new Intl.NumberFormat("en-NG").format(n);
 
+/** Live 3-minute countdown shown while the group is in `swap_window`.
+ * When the countdown reaches zero the parent's `onElapsed` is called once
+ * (idempotent) so the backend can promote the group to `active`. */
+function SwapWindowBanner({ endsAt, onElapsed }: { endsAt?: string | null; onElapsed: () => void | Promise<void> }) {
+  const [remaining, setRemaining] = useState<number>(() => {
+    if (!endsAt) return 0;
+    return Math.max(0, new Date(endsAt).getTime() - Date.now());
+  });
+  const triggeredRef = useRef(false);
+
+  useEffect(() => {
+    if (!endsAt) return;
+    const tick = () => {
+      const ms = Math.max(0, new Date(endsAt).getTime() - Date.now());
+      setRemaining(ms);
+      if (ms === 0 && !triggeredRef.current) {
+        triggeredRef.current = true;
+        void onElapsed();
+      }
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [endsAt, onElapsed]);
+
+  const mm = Math.floor(remaining / 60000);
+  const ss = Math.floor((remaining % 60000) / 1000);
+  const pct = endsAt ? Math.max(0, Math.min(100, (remaining / (3 * 60 * 1000)) * 100)) : 0;
+
+  return (
+    <div className="p-3 rounded-xl bg-warning/10 border border-warning/30 space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold text-warning-foreground">
+          🎲 Group is full — payout positions randomized
+        </p>
+        <span className="text-sm font-mono font-bold tabular-nums">
+          {String(mm).padStart(2, "0")}:{String(ss).padStart(2, "0")}
+        </span>
+      </div>
+      <Progress value={pct} className="h-1.5" />
+      <p className="text-[11px] text-muted-foreground">
+        You have until the timer ends to request a position swap. Each member can swap once.
+        The thrift will start automatically when this window closes.
+      </p>
+    </div>
+  );
+}
+
+
 export function SandboxAjoTab() {
   const { toast } = useToast();
   const products = useVfdSandboxProducts();
+  const { session } = useSandboxAwareAuth();
+  const currentUserId = session?.user?.id;
   const [groups, setGroups] = useState<Group[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [detailGroup, setDetailGroup] = useState<string | null>(null);
@@ -75,6 +129,8 @@ export function SandboxAjoTab() {
   });
 
   const loadGroups = async () => {
+    // Promote any swap-window groups whose 3-min timer elapsed before refreshing
+    await products.autoStartPendingGroups();
     const result = await products.listGroups();
     if (result?.data) setGroups(result.data);
   };
@@ -107,6 +163,10 @@ export function SandboxAjoTab() {
   };
 
   const loadDetail = async (groupId: string) => {
+    // If this group's swap window has already elapsed in the background,
+    // promote it to active before fetching detail so the UI shows the
+    // correct cycle/state on first paint.
+    await products.autoStartPendingGroups(groupId);
     const result = await products.getGroupDetail(groupId);
     if (result?.data) {
       setDetailData(result.data);
@@ -141,8 +201,13 @@ export function SandboxAjoTab() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className={g.status === "active" ? "text-green-600 border-green-500" : g.status === "completed" ? "text-primary border-primary" : "text-muted-foreground"}>
-                  {g.status}
+                <Badge variant="outline" className={
+                  g.status === "active" ? "text-green-600 border-green-500"
+                  : g.status === "completed" ? "text-primary border-primary"
+                  : g.status === "swap_window" ? "text-warning border-warning"
+                  : "text-muted-foreground"
+                }>
+                  {g.status === "swap_window" ? "swap window" : g.status}
                 </Badge>
                 {g.status === "pending" && g.member_count < g.max_members && (
                   <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowInviteDialog(true)}>
@@ -162,16 +227,19 @@ export function SandboxAjoTab() {
               </div>
             )}
 
+            {/* Swap window banner with countdown + auto-start trigger */}
+            {g.status === "swap_window" && (
+              <SwapWindowBanner
+                endsAt={g.swap_window_ends_at}
+                onElapsed={async () => {
+                  await products.autoStartPendingGroups(g.id);
+                  await loadDetail(g.id);
+                }}
+              />
+            )}
+
             {/* Action buttons */}
             <div className="flex flex-wrap gap-2">
-              {g.status === "pending" && isAdmin && g.member_count >= g.max_members && (
-                <Button size="sm" onClick={async () => {
-                  const r = await products.commenceGroup(g.id);
-                  if (r?.data) { toast({ title: "Thrift commenced! Payout order randomized." }); loadDetail(g.id); }
-                }} disabled={products.loading}>
-                  <Play className="h-3 w-3 mr-1" /> Commence
-                </Button>
-              )}
               {g.status === "active" && (
                 <Button size="sm" onClick={async () => {
                   const r = await products.contributeGroup(g.id);
@@ -219,21 +287,66 @@ export function SandboxAjoTab() {
             <TabsTrigger value="payout"><ListOrdered className="h-3 w-3 mr-1" /> Payout Order</TabsTrigger>
           </TabsList>
           <TabsContent value="members" className="space-y-2 mt-3">
-            {members.length === 0 ? (
-              <p className="text-center text-sm text-muted-foreground py-4">No members yet</p>
-            ) : members.map((m: any, i: number) => (
-              <div key={i} className="flex items-center justify-between text-xs p-2 rounded-lg bg-muted/50">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium truncate max-w-[180px]">{m.display_name || `User ${m.user_id?.slice(0, 6)}`}</span>
-                  {m.user_id === g.admin_id && <Crown className="h-3 w-3 text-warning" />}
-                </div>
-                <div className="flex items-center gap-2">
-                  {m.has_contributed_current && <Badge variant="secondary" className="text-[10px]">Contributed</Badge>}
-                  {m.has_received_payout && <Badge className="text-[10px]">Received</Badge>}
-                  {m.payout_position != null && <span className="text-muted-foreground">#{m.payout_position}</span>}
+            {/* Pending incoming swap requests for the current user */}
+            {(detailData.swaps || []).filter((s: any) => s.status === "pending" && s.target_id === currentUserId).map((s: any) => (
+              <div key={s.id} className="p-3 rounded-xl bg-card border-2 border-warning/40 space-y-2">
+                <p className="text-xs font-semibold">Swap request</p>
+                <p className="text-[11px] text-muted-foreground">
+                  A member wants to swap their position #{s.requester_position} with your position #{s.target_position}.
+                </p>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" className="flex-1" disabled={products.loading}
+                    onClick={async () => {
+                      const r = await products.respondSwap(s.id, false);
+                      if (r?.data) { toast({ title: "Swap declined" }); loadDetail(g.id); }
+                    }}>Decline</Button>
+                  <Button size="sm" className="flex-1" disabled={products.loading}
+                    onClick={async () => {
+                      const r = await products.respondSwap(s.id, true);
+                      if (r?.data) { toast({ title: "Swap accepted! Positions updated." }); loadDetail(g.id); }
+                    }}>Accept</Button>
                 </div>
               </div>
             ))}
+
+            {members.length === 0 ? (
+              <p className="text-center text-sm text-muted-foreground py-4">No members yet</p>
+            ) : members.map((m: any, i: number) => {
+              const isMe = m.user_id === currentUserId;
+              const myMembership = members.find((mm: any) => mm.user_id === currentUserId);
+              const canRequestSwap =
+                !isMe &&
+                (g.status === "swap_window" || g.status === "active") &&
+                myMembership &&
+                !myMembership.has_used_swap &&
+                !myMembership.has_received_payout &&
+                !m.has_received_payout &&
+                (g.status === "swap_window" ||
+                  !(detailData.contributions || []).some((c: any) => c.cycle_number === g.current_cycle));
+              return (
+                <div key={i} className="flex items-center justify-between text-xs p-2 rounded-lg bg-muted/50">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium truncate max-w-[140px]">{m.display_name || `User ${m.user_id?.slice(0, 6)}`}{isMe ? " (you)" : ""}</span>
+                    {m.user_id === g.admin_id && <Crown className="h-3 w-3 text-warning" />}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {m.has_contributed_current && <Badge variant="secondary" className="text-[10px]">Contributed</Badge>}
+                    {m.has_received_payout && <Badge className="text-[10px]">Received</Badge>}
+                    {m.payout_position != null && <span className="text-muted-foreground">#{m.payout_position}</span>}
+                    {canRequestSwap && (
+                      <Button size="sm" variant="ghost" className="h-7 px-2 text-[11px]"
+                        disabled={products.loading}
+                        onClick={async () => {
+                          const r = await products.requestSwap(g.id, m.user_id);
+                          if (r?.data) { toast({ title: "Swap requested", description: `Waiting for ${m.display_name || "member"} to respond.` }); loadDetail(g.id); }
+                        }}>
+                        <ArrowLeftRight className="h-3 w-3 mr-1" /> Swap
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </TabsContent>
           <TabsContent value="payout" className="space-y-2 mt-3">
             {payoutOrder.length === 0 ? (

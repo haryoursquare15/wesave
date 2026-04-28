@@ -67,6 +67,7 @@ export function useVfdSandboxProducts() {
   const joinGroupViaLink = useCallback((token: string) => invoke("join_group_via_link", { token }), [invoke]);
   const listGroupInvites = useCallback(() => invoke("list_group_invites"), [invoke]);
   const listPendingGroupInvitees = useCallback((group_id: string) => invoke("list_pending_group_invitees", { group_id }), [invoke]);
+  const autoStartPendingGroups = useCallback((group_id?: string) => invoke("auto_start_pending_groups", group_id ? { group_id } : {}), [invoke]);
 
   // In-app Notifications
   const listNotifications = useCallback(() => invoke("list_notifications"), [invoke]);
@@ -145,6 +146,7 @@ export function useVfdSandboxProducts() {
     createGroup, listGroups, joinGroup, commenceGroup, contributeGroup, getGroupDetail,
     requestSwap, respondSwap, exitGroup, confirmContinue, restartGroup,
     searchUsers, inviteGroupMember, respondGroupInvite, createGroupInviteLink, validateGroupInviteLink, joinGroupViaLink, listGroupInvites, listPendingGroupInvitees,
+    autoStartPendingGroups,
     // Notifications
     listNotifications, markNotificationRead, markAllNotificationsRead,
     // Target Ajo

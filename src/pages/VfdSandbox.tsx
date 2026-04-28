@@ -20,6 +20,7 @@ import { SandboxSplitTab } from "@/components/vfd-sandbox/SandboxSplitTab";
 import { SandboxAssociationTab } from "@/components/vfd-sandbox/SandboxAssociationTab";
 import { SandboxBillsTab } from "@/components/vfd-sandbox/SandboxBillsTab";
 import { SandboxCardTab } from "@/components/vfd-sandbox/SandboxCardTab";
+import { SandboxGroupInviteModal } from "@/components/vfd-sandbox/SandboxGroupInviteModal";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 
@@ -338,6 +339,7 @@ function VfdSandboxInner() {
   return (
     <div className="min-h-screen bg-background">
       <SandboxHeader />
+      {kycDone && <SandboxGroupInviteModal onAccepted={() => { /* downstream UIs poll on their own */ }} />}
       <div className="max-w-lg mx-auto px-4 pt-3 flex items-center justify-between">
         <span className="text-xs text-muted-foreground truncate">
           Sandbox: <span className="font-medium text-foreground">{user?.email}</span>

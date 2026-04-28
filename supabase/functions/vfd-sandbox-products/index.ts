@@ -269,6 +269,67 @@ async function handleListGroups(userId: string) {
   return jsonResponse({ data });
 }
 
+// SWAP_WINDOW_MS: time members have to swap positions after the group fills
+// up but before contributions automatically begin.
+const SWAP_WINDOW_MS = 3 * 60 * 1000;
+
+// Internal helper used both when a member joins normally AND after they accept
+// an invite. When the group reaches max_members it:
+//  1. Randomizes payout positions (Fisher-Yates)
+//  2. Saves payout_order on the group
+//  3. Sets status="swap_window" with swap_window_ends_at = now + 3 min
+//  4. Notifies every member of their assigned position
+// The cycle itself is NOT created yet — that happens when the swap window
+// elapses (handleAutoStartPendingGroups) so swaps remain valid until then.
+async function maybeEnterSwapWindow(
+  db: ReturnType<typeof createClient>,
+  groupId: string,
+) {
+  const { data: group } = await db.from("vfd_sandbox_groups")
+    .select("*").eq("id", groupId).single();
+  if (!group) return;
+  if (group.status !== "pending") return;
+  if (group.member_count < group.max_members) return;
+
+  const { data: members } = await db.from("vfd_sandbox_group_members")
+    .select("user_id").eq("group_id", groupId).eq("status", "active");
+  if (!members || members.length !== group.max_members) return;
+
+  const memberIds = members.map((m: { user_id: string }) => m.user_id);
+  const payoutOrder = fisherYatesShuffle(memberIds);
+
+  for (let i = 0; i < payoutOrder.length; i++) {
+    await db.from("vfd_sandbox_group_members").update({
+      payout_position: i + 1,
+      has_used_swap: false,
+      has_contributed_current: false,
+      has_received_payout: false,
+    }).eq("group_id", groupId).eq("user_id", payoutOrder[i]);
+  }
+
+  const now = new Date();
+  const windowEnd = new Date(now.getTime() + SWAP_WINDOW_MS);
+
+  await db.from("vfd_sandbox_groups").update({
+    status: "swap_window",
+    payout_order: payoutOrder,
+    is_full_at: now.toISOString(),
+    swap_window_ends_at: windowEnd.toISOString(),
+    current_payout_position: 1,
+    updated_at: now.toISOString(),
+  }).eq("id", groupId);
+
+  await postChatMessage(groupId, group.admin_id,
+    `🎲 Group is full! Payout positions randomized. You have 3 minutes to request a position swap before the thrift starts.`,
+    "system");
+
+  for (let i = 0; i < payoutOrder.length; i++) {
+    await sendNotification(payoutOrder[i], "Group is Full!",
+      `${group.name} is full. Your payout position is #${i + 1} of ${group.max_members}. You have 3 minutes to swap with another member.`,
+      "swap_window_open", groupId);
+  }
+}
+
 async function handleJoinGroup(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const groupId = body.group_id as string;
@@ -281,9 +342,10 @@ async function handleJoinGroup(userId: string, body: Record<string, unknown>) {
 
   const { data: group } = await db.from("vfd_sandbox_groups").select("*").eq("id", groupId).single();
   if (!group) return jsonResponse({ error: "Group not found" }, 404);
-  // Allow joining groups that are still pending OR active-but-not-full.
-  // Reject only if the group has completed or is already full.
+  // Reject if group is past the joining phase
   if (group.status === "completed") return jsonResponse({ error: "Group has already completed" }, 400);
+  if (group.status === "active") return jsonResponse({ error: "Group has already started" }, 400);
+  if (group.status === "swap_window") return jsonResponse({ error: "Group is full and waiting to start" }, 400);
   if (group.member_count >= group.max_members) return jsonResponse({ error: "Group is full" }, 400);
 
   // Prevent duplicate membership
@@ -306,7 +368,13 @@ async function handleJoinGroup(userId: string, body: Record<string, unknown>) {
   await postChatMessage(groupId, userId, "has joined the group", "member_join");
   await sendNotification(group.admin_id, "New Member", `A new member has joined ${group.name} (${newCount}/${group.max_members})`, "member_joined", groupId);
 
-  return jsonResponse({ data: { joined: true, member_count: newCount, max_members: group.max_members } });
+  // If this join filled the group, automatically randomize payout positions
+  // and start the 3-minute swap window. No admin action required.
+  if (newCount >= group.max_members) {
+    await maybeEnterSwapWindow(db, groupId);
+  }
+
+  return jsonResponse({ data: { joined: true, member_count: newCount, max_members: group.max_members, is_full: newCount >= group.max_members } });
 }
 
 async function handleCommenceGroup(userId: string, body: Record<string, unknown>) {
@@ -365,7 +433,14 @@ async function handleRequestSwap(userId: string, body: Record<string, unknown>) 
   const targetId = body.target_id as string;
 
   const { data: group } = await db.from("vfd_sandbox_groups").select("*").eq("id", groupId).single();
-  if (!group || group.status !== "active") return jsonResponse({ error: "Group is not active" }, 400);
+  if (!group) return jsonResponse({ error: "Group not found" }, 404);
+  if (group.status !== "active" && group.status !== "swap_window") {
+    return jsonResponse({ error: "Group is not in a swap-eligible state" }, 400);
+  }
+  // If we're past the swap window, no more swap requests allowed
+  if (group.status === "swap_window" && group.swap_window_ends_at && new Date(group.swap_window_ends_at) <= new Date()) {
+    return jsonResponse({ error: "Swap window has closed" }, 400);
+  }
 
   const { data: requester } = await db.from("vfd_sandbox_group_members")
     .select("*").eq("group_id", groupId).eq("user_id", userId).maybeSingle();
@@ -373,10 +448,13 @@ async function handleRequestSwap(userId: string, body: Record<string, unknown>) 
   if (requester.has_used_swap) return jsonResponse({ error: "You have already used your swap for this group" }, 400);
   if (requester.has_received_payout) return jsonResponse({ error: "Cannot swap after receiving payout" }, 400);
 
-  const { count: contribCount } = await db.from("vfd_sandbox_group_contributions")
-    .select("*", { count: "exact", head: true })
-    .eq("group_id", groupId).eq("cycle_number", group.current_cycle);
-  if (contribCount && contribCount > 0) return jsonResponse({ error: "Cannot swap after contributions have started for this cycle" }, 400);
+  // Only check contributions when an actual cycle is running.
+  if (group.status === "active") {
+    const { count: contribCount } = await db.from("vfd_sandbox_group_contributions")
+      .select("*", { count: "exact", head: true })
+      .eq("group_id", groupId).eq("cycle_number", group.current_cycle);
+    if (contribCount && contribCount > 0) return jsonResponse({ error: "Cannot swap after contributions have started for this cycle" }, 400);
+  }
 
   const { data: target } = await db.from("vfd_sandbox_group_members")
     .select("*").eq("group_id", groupId).eq("user_id", targetId).maybeSingle();
@@ -2661,6 +2739,62 @@ async function handleMarkAllNotificationsRead(userId: string) {
 }
 
 // =============================================
+// AUTO-START GROUPS WHOSE SWAP WINDOW HAS ELAPSED
+// Called from the UI on detail-view poll, and idempotent.
+// =============================================
+async function handleAutoStartPendingGroups(_userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const groupId = body.group_id as string | undefined;
+
+  let query = db.from("vfd_sandbox_groups")
+    .select("*")
+    .eq("status", "swap_window")
+    .lte("swap_window_ends_at", new Date().toISOString());
+  if (groupId) query = db.from("vfd_sandbox_groups")
+    .select("*")
+    .eq("id", groupId)
+    .eq("status", "swap_window")
+    .lte("swap_window_ends_at", new Date().toISOString());
+
+  const { data: due } = await query;
+  const started: string[] = [];
+
+  for (const group of (due || [])) {
+    const payoutOrder = (group.payout_order || []) as string[];
+    if (!payoutOrder.length) continue;
+
+    // Create cycle 1 for the (now-final) payout order
+    const { data: cycle } = await db.from("vfd_sandbox_contribution_cycles").insert({
+      group_id: group.id, cycle_number: 1, status: "active",
+      payout_recipient_id: payoutOrder[0],
+    }).select().single();
+
+    await db.from("vfd_sandbox_groups").update({
+      status: "active",
+      current_cycle: 1,
+      current_payout_position: 1,
+      total_cycles: payoutOrder.length,
+      commenced_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }).eq("id", group.id);
+
+    await postChatMessage(group.id, group.admin_id,
+      `🚀 Swap window closed. Thrift has commenced! Cycle 1 is now active — recipient has been notified.`,
+      "system");
+
+    for (let i = 0; i < payoutOrder.length; i++) {
+      await sendNotification(payoutOrder[i], "Thrift Started",
+        `${group.name} has started. Your final payout position is #${i + 1}. ${i === 0 ? "You are first in line — payout will be sent once all members contribute." : "Please contribute on your scheduled date."}`,
+        "group_started", group.id);
+    }
+    started.push(group.id);
+    void cycle;
+  }
+
+  return jsonResponse({ data: { started_count: started.length, started } });
+}
+
+// =============================================
 // MAIN HANDLER
 // =============================================
 
@@ -2697,6 +2831,7 @@ Deno.serve(async (req) => {
       case "join_group_via_link": return await handleJoinGroupViaLink(userId, body);
       case "list_group_invites": return await handleListGroupInvites(userId);
       case "list_pending_group_invitees": return await handleListPendingGroupInvitees(body);
+      case "auto_start_pending_groups": return await handleAutoStartPendingGroups(userId, body);
 
       // In-app notifications
       case "list_notifications": return await handleListNotifications(userId);
