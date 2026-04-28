@@ -34,6 +34,8 @@ function UserActionsDialog({ user, onClose, onAction }: UserActionsDialogProps) 
   const [loading, setLoading] = useState(false);
   const [action, setAction] = useState<string | null>(null);
   const [reason, setReason] = useState("");
+  const [tempPassword, setTempPassword] = useState("");
+  const [recoveryLink, setRecoveryLink] = useState<string | null>(null);
   const { toast } = useToast();
   const { hasPermission } = useAdminPermissions();
 
