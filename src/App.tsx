@@ -42,6 +42,8 @@ import DeleteAccount from "./pages/DeleteAccount";
 import AppHome from "./pages/AppHome";
 import VfdSandbox from "./pages/VfdSandbox";
 import SandboxAuth from "./pages/SandboxAuth";
+import SandboxForgotPassword from "./pages/SandboxForgotPassword";
+import SandboxResetPassword from "./pages/SandboxResetPassword";
 import SandboxInvite from "./pages/SandboxInvite";
 import SandboxHealth from "./pages/SandboxHealth";
 import { SandboxAuthProvider } from "./contexts/SandboxAuthContext";
@@ -156,6 +158,8 @@ const App = () => {
                     <SandboxAuth />
                   </SandboxAuthProvider>
                 } />
+                <Route path="/vfd-sandbox/forgot-password" element={<SandboxForgotPassword />} />
+                <Route path="/vfd-sandbox/reset-password" element={<SandboxResetPassword />} />
                 <Route path="/vfd-sandbox/invite/:token" element={<SandboxInvite />} />
                 <Route path="/vfd-sandbox" element={<VfdSandbox />} />
                 <Route path="/sandbox-health" element={<SandboxHealth />} />

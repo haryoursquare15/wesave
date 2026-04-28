@@ -150,6 +150,17 @@ export default function SandboxAuth() {
               </div>
             </div>
 
+            {!isSignUp && (
+              <div className="flex justify-end -mt-2">
+                <Link
+                  to="/vfd-sandbox/forgot-password"
+                  className="text-xs text-primary hover:underline"
+                >
+                  Forgot password?
+                </Link>
+              </div>
+            )}
+
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading ? "Please wait..." : isSignUp ? "Create sandbox account" : "Sign in to sandbox"}
               <ArrowRight className="w-4 h-4 ml-2" />
