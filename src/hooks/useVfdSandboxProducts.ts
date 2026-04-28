@@ -146,6 +146,7 @@ export function useVfdSandboxProducts() {
     createGroup, listGroups, joinGroup, commenceGroup, contributeGroup, getGroupDetail,
     requestSwap, respondSwap, exitGroup, confirmContinue, restartGroup,
     searchUsers, inviteGroupMember, respondGroupInvite, createGroupInviteLink, validateGroupInviteLink, joinGroupViaLink, listGroupInvites, listPendingGroupInvitees,
+    autoStartPendingGroups,
     // Notifications
     listNotifications, markNotificationRead, markAllNotificationsRead,
     // Target Ajo
