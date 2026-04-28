@@ -113,7 +113,12 @@ function UserActionsDialog({ user, onClose, onAction }: UserActionsDialogProps) 
           const { data, error } = await supabase.functions.invoke("admin-reset-user-password", {
             body: { target_user_id: user.id, mode: "set_temp_password", new_password: tempPassword },
           });
-          if (error || (data as any)?.error) throw new Error((data as any)?.error || error?.message);
+          const errMsg = (data as any)?.error || error?.message;
+          if (errMsg) {
+            toast({ title: "Password rejected", description: errMsg, variant: "destructive" });
+            setLoading(false);
+            return;
+          }
           toast({ title: "Password Reset", description: `Temporary password set for ${user.email}. Share it securely.` });
           break;
         }
