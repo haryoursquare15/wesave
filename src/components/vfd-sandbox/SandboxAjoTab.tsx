@@ -12,6 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useVfdSandboxProducts } from "@/hooks/useVfdSandboxProducts";
+import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
 import {
   Users, Plus, RefreshCw, ArrowRight, ArrowLeft, Play, Crown,
   ListOrdered, Coins, Calendar, Info, LogOut, AlertCircle, ArrowLeftRight, Share2,
