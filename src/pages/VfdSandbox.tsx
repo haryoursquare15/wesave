@@ -339,6 +339,7 @@ function VfdSandboxInner() {
   return (
     <div className="min-h-screen bg-background">
       <SandboxHeader />
+      {kycDone && <SandboxGroupInviteModal onAccepted={() => { /* downstream UIs poll on their own */ }} />}
       <div className="max-w-lg mx-auto px-4 pt-3 flex items-center justify-between">
         <span className="text-xs text-muted-foreground truncate">
           Sandbox: <span className="font-medium text-foreground">{user?.email}</span>
