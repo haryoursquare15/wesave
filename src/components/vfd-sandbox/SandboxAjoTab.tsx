@@ -56,6 +56,55 @@ function calculatePlatformFee(pool: number) {
 
 const fmt = (n: number) => new Intl.NumberFormat("en-NG").format(n);
 
+/** Live 3-minute countdown shown while the group is in `swap_window`.
+ * When the countdown reaches zero the parent's `onElapsed` is called once
+ * (idempotent) so the backend can promote the group to `active`. */
+function SwapWindowBanner({ endsAt, onElapsed }: { endsAt?: string | null; onElapsed: () => void | Promise<void> }) {
+  const [remaining, setRemaining] = useState<number>(() => {
+    if (!endsAt) return 0;
+    return Math.max(0, new Date(endsAt).getTime() - Date.now());
+  });
+  const triggeredRef = useRef(false);
+
+  useEffect(() => {
+    if (!endsAt) return;
+    const tick = () => {
+      const ms = Math.max(0, new Date(endsAt).getTime() - Date.now());
+      setRemaining(ms);
+      if (ms === 0 && !triggeredRef.current) {
+        triggeredRef.current = true;
+        void onElapsed();
+      }
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [endsAt, onElapsed]);
+
+  const mm = Math.floor(remaining / 60000);
+  const ss = Math.floor((remaining % 60000) / 1000);
+  const pct = endsAt ? Math.max(0, Math.min(100, (remaining / (3 * 60 * 1000)) * 100)) : 0;
+
+  return (
+    <div className="p-3 rounded-xl bg-warning/10 border border-warning/30 space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold text-warning-foreground">
+          🎲 Group is full — payout positions randomized
+        </p>
+        <span className="text-sm font-mono font-bold tabular-nums">
+          {String(mm).padStart(2, "0")}:{String(ss).padStart(2, "0")}
+        </span>
+      </div>
+      <Progress value={pct} className="h-1.5" />
+      <p className="text-[11px] text-muted-foreground">
+        You have until the timer ends to request a position swap. Each member can swap once.
+        The thrift will start automatically when this window closes.
+      </p>
+    </div>
+  );
+}
+
+
 export function SandboxAjoTab() {
   const { toast } = useToast();
   const products = useVfdSandboxProducts();
