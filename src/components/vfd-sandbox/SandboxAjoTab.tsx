@@ -158,6 +158,10 @@ export function SandboxAjoTab() {
   };
 
   const loadDetail = async (groupId: string) => {
+    // If this group's swap window has already elapsed in the background,
+    // promote it to active before fetching detail so the UI shows the
+    // correct cycle/state on first paint.
+    await products.autoStartPendingGroups(groupId);
     const result = await products.getGroupDetail(groupId);
     if (result?.data) {
       setDetailData(result.data);
