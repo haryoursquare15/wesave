@@ -126,6 +126,8 @@ export function SandboxAjoTab() {
   });
 
   const loadGroups = async () => {
+    // Promote any swap-window groups whose 3-min timer elapsed before refreshing
+    await products.autoStartPendingGroups();
     const result = await products.listGroups();
     if (result?.data) setGroups(result.data);
   };
