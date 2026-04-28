@@ -72,7 +72,30 @@ export function SandboxTargetTab() {
     if (result?.data) setTargets(result.data);
   };
 
-  useEffect(() => { loadTargets(); }, []); // eslint-disable-line
+  const loadPendingInvites = async () => {
+    const result = await products.listPendingTargetInvites();
+    if (result?.data) setPendingInvites(result.data);
+  };
+
+  useEffect(() => { loadTargets(); loadPendingInvites(); }, []); // eslint-disable-line
+
+  const handleRespondInvite = async (inviteId: string, accept: boolean) => {
+    setRespondingId(inviteId);
+    try {
+      const res = await products.respondTargetInvite(inviteId, accept);
+      if (res?.data) {
+        toast({
+          title: accept ? "Joined Target Ajo!" : "Invite declined",
+          description: accept ? "You're now a member of the group." : undefined,
+        });
+        await Promise.all([loadPendingInvites(), loadTargets()]);
+      } else {
+        toast({ title: "Could not respond to invite", variant: "destructive" });
+      }
+    } finally {
+      setRespondingId(null);
+    }
+  };
 
   const handleCreate = async () => {
     if (!form.name.trim()) return;
