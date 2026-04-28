@@ -13,7 +13,7 @@ import { Database } from "@/integrations/supabase/types";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
-import { Search, Snowflake, AlertTriangle, Shield, ChevronDown, ChevronRight, Wallet, Users, Trash2, UserX, Download } from "lucide-react";
+import { Search, Snowflake, AlertTriangle, Shield, ChevronDown, ChevronRight, Wallet, Users, Trash2, UserX, Download, KeyRound, Copy } from "lucide-react";
 import { exportToCSV } from "@/lib/exportUtils";
 import { adminActionReasonSchema, validateInput } from "@/lib/validation";
 
@@ -34,6 +34,8 @@ function UserActionsDialog({ user, onClose, onAction }: UserActionsDialogProps) 
   const [loading, setLoading] = useState(false);
   const [action, setAction] = useState<string | null>(null);
   const [reason, setReason] = useState("");
+  const [tempPassword, setTempPassword] = useState("");
+  const [recoveryLink, setRecoveryLink] = useState<string | null>(null);
   const { toast } = useToast();
   const { hasPermission } = useAdminPermissions();
 
@@ -102,6 +104,29 @@ function UserActionsDialog({ user, onClose, onAction }: UserActionsDialogProps) 
           }).eq("id", user.id);
           toast({ title: "User Suspended", description: `${user.full_name || user.email}'s account has been suspended.` });
           break;
+        case "set_temp_password": {
+          if (!tempPassword || tempPassword.length < 8) {
+            toast({ title: "Invalid password", description: "Min 8 characters.", variant: "destructive" });
+            setLoading(false);
+            return;
+          }
+          const { data, error } = await supabase.functions.invoke("admin-reset-user-password", {
+            body: { target_user_id: user.id, mode: "set_temp_password", new_password: tempPassword },
+          });
+          if (error || (data as any)?.error) throw new Error((data as any)?.error || error?.message);
+          toast({ title: "Password Reset", description: `Temporary password set for ${user.email}. Share it securely.` });
+          break;
+        }
+        case "send_recovery_link": {
+          const { data, error } = await supabase.functions.invoke("admin-reset-user-password", {
+            body: { target_user_id: user.id, mode: "send_recovery_link" },
+          });
+          if (error || (data as any)?.error) throw new Error((data as any)?.error || error?.message);
+          setRecoveryLink((data as any)?.action_link || null);
+          toast({ title: "Recovery link generated", description: "Copy and share it with the user." });
+          setLoading(false);
+          return;
+        }
         default:
           break;
       }
@@ -157,9 +182,35 @@ function UserActionsDialog({ user, onClose, onAction }: UserActionsDialogProps) 
               <Trash2 className="h-4 w-4" /> Remove from All Groups
             </Button>
           )}
+          <Button variant={action === "set_temp_password" ? "default" : "outline"} size="sm" onClick={() => { setAction("set_temp_password"); setRecoveryLink(null); }} className="flex items-center gap-2">
+            <KeyRound className="h-4 w-4" /> Set Temp Password
+          </Button>
+          <Button variant={action === "send_recovery_link" ? "default" : "outline"} size="sm" onClick={() => { setAction("send_recovery_link"); setRecoveryLink(null); }} className="flex items-center gap-2">
+            <KeyRound className="h-4 w-4" /> Generate Recovery Link
+          </Button>
         </div>
 
-        {action && (
+        {action === "set_temp_password" && (
+          <div className="space-y-2">
+            <label className="text-sm font-medium">New temporary password (min 8 chars)</label>
+            <Input type="text" placeholder="e.g. WeSave#2026" value={tempPassword} onChange={(e) => setTempPassword(e.target.value)} />
+            <p className="text-xs text-muted-foreground">Share this with the user securely. They should change it after sign-in.</p>
+          </div>
+        )}
+
+        {recoveryLink && (
+          <div className="space-y-2 p-3 rounded bg-muted">
+            <label className="text-sm font-medium">Recovery link (single-use)</label>
+            <div className="flex gap-2">
+              <Input readOnly value={recoveryLink} className="text-xs" />
+              <Button size="sm" variant="outline" onClick={() => { navigator.clipboard.writeText(recoveryLink); toast({ title: "Copied" }); }}>
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {action && action !== "set_temp_password" && action !== "send_recovery_link" && (
           <div className="space-y-2">
             <label className="text-sm font-medium">Reason</label>
             <Input placeholder="Enter reason for this action..." value={reason} onChange={(e) => setReason(e.target.value)} />
