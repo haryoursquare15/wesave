@@ -433,7 +433,14 @@ async function handleRequestSwap(userId: string, body: Record<string, unknown>) 
   const targetId = body.target_id as string;
 
   const { data: group } = await db.from("vfd_sandbox_groups").select("*").eq("id", groupId).single();
-  if (!group || group.status !== "active") return jsonResponse({ error: "Group is not active" }, 400);
+  if (!group) return jsonResponse({ error: "Group not found" }, 404);
+  if (group.status !== "active" && group.status !== "swap_window") {
+    return jsonResponse({ error: "Group is not in a swap-eligible state" }, 400);
+  }
+  // If we're past the swap window, no more swap requests allowed
+  if (group.status === "swap_window" && group.swap_window_ends_at && new Date(group.swap_window_ends_at) <= new Date()) {
+    return jsonResponse({ error: "Swap window has closed" }, 400);
+  }
 
   const { data: requester } = await db.from("vfd_sandbox_group_members")
     .select("*").eq("group_id", groupId).eq("user_id", userId).maybeSingle();
@@ -441,10 +448,13 @@ async function handleRequestSwap(userId: string, body: Record<string, unknown>) 
   if (requester.has_used_swap) return jsonResponse({ error: "You have already used your swap for this group" }, 400);
   if (requester.has_received_payout) return jsonResponse({ error: "Cannot swap after receiving payout" }, 400);
 
-  const { count: contribCount } = await db.from("vfd_sandbox_group_contributions")
-    .select("*", { count: "exact", head: true })
-    .eq("group_id", groupId).eq("cycle_number", group.current_cycle);
-  if (contribCount && contribCount > 0) return jsonResponse({ error: "Cannot swap after contributions have started for this cycle" }, 400);
+  // Only check contributions when an actual cycle is running.
+  if (group.status === "active") {
+    const { count: contribCount } = await db.from("vfd_sandbox_group_contributions")
+      .select("*", { count: "exact", head: true })
+      .eq("group_id", groupId).eq("cycle_number", group.current_cycle);
+    if (contribCount && contribCount > 0) return jsonResponse({ error: "Cannot swap after contributions have started for this cycle" }, 400);
+  }
 
   const { data: target } = await db.from("vfd_sandbox_group_members")
     .select("*").eq("group_id", groupId).eq("user_id", targetId).maybeSingle();
