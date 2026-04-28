@@ -197,9 +197,35 @@ function UserActionsDialog({ user, onClose, onAction }: UserActionsDialogProps) 
 
         {action === "set_temp_password" && (
           <div className="space-y-2">
-            <label className="text-sm font-medium">New temporary password (min 8 chars)</label>
-            <Input type="text" placeholder="e.g. WeSave#2026" value={tempPassword} onChange={(e) => setTempPassword(e.target.value)} />
-            <p className="text-xs text-muted-foreground">Share this with the user securely. They should change it after sign-in.</p>
+            <label className="text-sm font-medium">New temporary password (min 8 chars, not common)</label>
+            <div className="flex gap-2">
+              <Input type="text" placeholder="Click Generate for a strong password" value={tempPassword} onChange={(e) => setTempPassword(e.target.value)} />
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+                  const symbols = "!@#$%&*";
+                  let pwd = "";
+                  const arr = new Uint32Array(14);
+                  crypto.getRandomValues(arr);
+                  for (let i = 0; i < 14; i++) pwd += chars[arr[i] % chars.length];
+                  pwd += symbols[Math.floor(Math.random() * symbols.length)];
+                  setTempPassword(pwd);
+                }}
+              >
+                Generate
+              </Button>
+              {tempPassword && (
+                <Button type="button" size="sm" variant="outline" onClick={() => { navigator.clipboard.writeText(tempPassword); toast({ title: "Copied" }); }}>
+                  <Copy className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Avoid common words/dates (e.g. "password123", "WeSave2024"). The system rejects leaked or weak passwords. Share securely; user should change after sign-in.
+            </p>
           </div>
         )}
 
