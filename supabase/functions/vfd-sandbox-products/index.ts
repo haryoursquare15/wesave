@@ -913,6 +913,35 @@ async function handleGetTargetDetail(body: Record<string, unknown>) {
   });
 }
 
+// Target Ajo: List pending invites for the current user (with target name)
+async function handleListPendingTargetInvites(userId: string) {
+  const db = getSupabaseAdmin();
+  const { data: invites } = await db.from("vfd_sandbox_target_invites")
+    .select("*")
+    .eq("invitee_id", userId)
+    .eq("status", "pending")
+    .order("created_at", { ascending: false });
+
+  if (!invites || invites.length === 0) return jsonResponse({ data: [] });
+
+  const targetIds = Array.from(new Set(invites.map((i: { target_id: string }) => i.target_id)));
+  const { data: targets } = await db.from("vfd_sandbox_targets")
+    .select("id, name, goal_amount, contribution_amount, frequency, savings_type, admin_id")
+    .in("id", targetIds);
+  const tMap = new Map((targets || []).map((t: { id: string }) => [t.id, t]));
+
+  const inviterIds = Array.from(new Set(invites.map((i: { inviter_id: string }) => i.inviter_id)));
+  const inviterNames = await fetchProfileNames(inviterIds);
+
+  const enriched = invites.map((inv: any) => ({
+    ...inv,
+    target: tMap.get(inv.target_id) || null,
+    inviter_name: inviterNames[inv.inviter_id] || `User ${String(inv.inviter_id).slice(0, 6)}`,
+  }));
+
+  return jsonResponse({ data: enriched });
+}
+
 // Target Ajo: Invite member
 async function handleInviteTargetMember(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
@@ -2681,6 +2710,7 @@ Deno.serve(async (req) => {
       case "get_target_detail": return await handleGetTargetDetail(body);
       case "invite_target_member": return await handleInviteTargetMember(userId, body);
       case "respond_target_invite": return await handleRespondTargetInvite(userId, body);
+      case "list_pending_target_invites": return await handleListPendingTargetInvites(userId);
       case "request_target_withdrawal": return await handleRequestTargetWithdrawal(userId, body);
       case "vote_target_withdrawal": return await handleVoteTargetWithdrawal(userId, body);
       case "independent_withdrawal": return await handleIndependentWithdrawal(userId, body);

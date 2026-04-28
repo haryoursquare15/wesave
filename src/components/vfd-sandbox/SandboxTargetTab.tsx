@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useVfdSandboxProducts } from "@/hooks/useVfdSandboxProducts";
 import {
   Target, Plus, RefreshCw, ArrowRight, ArrowLeft, Users, User,
-  CalendarDays, AlertTriangle, Wallet, Vote, ArrowDownToLine, UserPlus,
+  CalendarDays, AlertTriangle, Wallet, Vote, ArrowDownToLine, UserPlus, Mail, Check, X,
 } from "lucide-react";
 import { addDays, addWeeks, addMonths, format } from "date-fns";
 import { SandboxTargetInviteDialog } from "./SandboxTargetInviteDialog";
@@ -38,6 +38,8 @@ export function SandboxTargetTab() {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detailData, setDetailData] = useState<any>(null);
   const [showInviteDialog, setShowInviteDialog] = useState(false);
+  const [pendingInvites, setPendingInvites] = useState<any[]>([]);
+  const [respondingId, setRespondingId] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     name: "", description: "", reason: "", goal_amount: "",
@@ -70,7 +72,30 @@ export function SandboxTargetTab() {
     if (result?.data) setTargets(result.data);
   };
 
-  useEffect(() => { loadTargets(); }, []); // eslint-disable-line
+  const loadPendingInvites = async () => {
+    const result = await products.listPendingTargetInvites();
+    if (result?.data) setPendingInvites(result.data);
+  };
+
+  useEffect(() => { loadTargets(); loadPendingInvites(); }, []); // eslint-disable-line
+
+  const handleRespondInvite = async (inviteId: string, accept: boolean) => {
+    setRespondingId(inviteId);
+    try {
+      const res = await products.respondTargetInvite(inviteId, accept);
+      if (res?.data) {
+        toast({
+          title: accept ? "Joined Target Ajo!" : "Invite declined",
+          description: accept ? "You're now a member of the group." : undefined,
+        });
+        await Promise.all([loadPendingInvites(), loadTargets()]);
+      } else {
+        toast({ title: "Could not respond to invite", variant: "destructive" });
+      }
+    } finally {
+      setRespondingId(null);
+    }
+  };
 
   const handleCreate = async () => {
     if (!form.name.trim()) return;
@@ -272,10 +297,54 @@ export function SandboxTargetTab() {
           <Target className="h-4 w-4 text-primary" /> Target Ajo
         </h3>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={loadTargets}><RefreshCw className="h-3 w-3" /></Button>
+          <Button variant="outline" size="sm" onClick={() => { loadTargets(); loadPendingInvites(); }}><RefreshCw className="h-3 w-3" /></Button>
           <Button size="sm" onClick={() => setShowCreate(!showCreate)}><Plus className="h-3 w-3 mr-1" /> New Target</Button>
         </div>
       </div>
+
+      {/* Pending Invites */}
+      {pendingInvites.length > 0 && (
+        <div className="space-y-2">
+          <h4 className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+            <Mail className="h-3.5 w-3.5 text-primary" />
+            Pending Invites ({pendingInvites.length})
+          </h4>
+          {pendingInvites.map((inv) => (
+            <div key={inv.id} className="p-3 rounded-xl bg-card border-2 border-primary/30 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold truncate">
+                    {inv.target?.name || "Target Ajo Group"}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Invited by {inv.inviter_name}
+                    {inv.target?.contribution_amount ? ` • ₦${fmt(Number(inv.target.contribution_amount))} / ${inv.target.frequency}` : ""}
+                  </p>
+                </div>
+                <div className="flex gap-1.5 shrink-0">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-destructive border-destructive/30 h-7 px-2"
+                    disabled={respondingId === inv.id || products.loading}
+                    onClick={() => handleRespondInvite(inv.id, false)}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="h-7 px-2"
+                    disabled={respondingId === inv.id || products.loading}
+                    onClick={() => handleRespondInvite(inv.id, true)}
+                  >
+                    <Check className="h-3 w-3 mr-1" /> Accept
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Info banner */}
       <div className="p-3 rounded-xl bg-primary/5 border border-primary/20">
