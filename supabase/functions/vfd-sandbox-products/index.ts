@@ -269,6 +269,67 @@ async function handleListGroups(userId: string) {
   return jsonResponse({ data });
 }
 
+// SWAP_WINDOW_MS: time members have to swap positions after the group fills
+// up but before contributions automatically begin.
+const SWAP_WINDOW_MS = 3 * 60 * 1000;
+
+// Internal helper used both when a member joins normally AND after they accept
+// an invite. When the group reaches max_members it:
+//  1. Randomizes payout positions (Fisher-Yates)
+//  2. Saves payout_order on the group
+//  3. Sets status="swap_window" with swap_window_ends_at = now + 3 min
+//  4. Notifies every member of their assigned position
+// The cycle itself is NOT created yet — that happens when the swap window
+// elapses (handleAutoStartPendingGroups) so swaps remain valid until then.
+async function maybeEnterSwapWindow(
+  db: ReturnType<typeof createClient>,
+  groupId: string,
+) {
+  const { data: group } = await db.from("vfd_sandbox_groups")
+    .select("*").eq("id", groupId).single();
+  if (!group) return;
+  if (group.status !== "pending") return;
+  if (group.member_count < group.max_members) return;
+
+  const { data: members } = await db.from("vfd_sandbox_group_members")
+    .select("user_id").eq("group_id", groupId).eq("status", "active");
+  if (!members || members.length !== group.max_members) return;
+
+  const memberIds = members.map((m: { user_id: string }) => m.user_id);
+  const payoutOrder = fisherYatesShuffle(memberIds);
+
+  for (let i = 0; i < payoutOrder.length; i++) {
+    await db.from("vfd_sandbox_group_members").update({
+      payout_position: i + 1,
+      has_used_swap: false,
+      has_contributed_current: false,
+      has_received_payout: false,
+    }).eq("group_id", groupId).eq("user_id", payoutOrder[i]);
+  }
+
+  const now = new Date();
+  const windowEnd = new Date(now.getTime() + SWAP_WINDOW_MS);
+
+  await db.from("vfd_sandbox_groups").update({
+    status: "swap_window",
+    payout_order: payoutOrder,
+    is_full_at: now.toISOString(),
+    swap_window_ends_at: windowEnd.toISOString(),
+    current_payout_position: 1,
+    updated_at: now.toISOString(),
+  }).eq("id", groupId);
+
+  await postChatMessage(groupId, group.admin_id,
+    `🎲 Group is full! Payout positions randomized. You have 3 minutes to request a position swap before the thrift starts.`,
+    "system");
+
+  for (let i = 0; i < payoutOrder.length; i++) {
+    await sendNotification(payoutOrder[i], "Group is Full!",
+      `${group.name} is full. Your payout position is #${i + 1} of ${group.max_members}. You have 3 minutes to swap with another member.`,
+      "swap_window_open", groupId);
+  }
+}
+
 async function handleJoinGroup(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const groupId = body.group_id as string;
@@ -281,9 +342,10 @@ async function handleJoinGroup(userId: string, body: Record<string, unknown>) {
 
   const { data: group } = await db.from("vfd_sandbox_groups").select("*").eq("id", groupId).single();
   if (!group) return jsonResponse({ error: "Group not found" }, 404);
-  // Allow joining groups that are still pending OR active-but-not-full.
-  // Reject only if the group has completed or is already full.
+  // Reject if group is past the joining phase
   if (group.status === "completed") return jsonResponse({ error: "Group has already completed" }, 400);
+  if (group.status === "active") return jsonResponse({ error: "Group has already started" }, 400);
+  if (group.status === "swap_window") return jsonResponse({ error: "Group is full and waiting to start" }, 400);
   if (group.member_count >= group.max_members) return jsonResponse({ error: "Group is full" }, 400);
 
   // Prevent duplicate membership
@@ -306,7 +368,13 @@ async function handleJoinGroup(userId: string, body: Record<string, unknown>) {
   await postChatMessage(groupId, userId, "has joined the group", "member_join");
   await sendNotification(group.admin_id, "New Member", `A new member has joined ${group.name} (${newCount}/${group.max_members})`, "member_joined", groupId);
 
-  return jsonResponse({ data: { joined: true, member_count: newCount, max_members: group.max_members } });
+  // If this join filled the group, automatically randomize payout positions
+  // and start the 3-minute swap window. No admin action required.
+  if (newCount >= group.max_members) {
+    await maybeEnterSwapWindow(db, groupId);
+  }
+
+  return jsonResponse({ data: { joined: true, member_count: newCount, max_members: group.max_members, is_full: newCount >= group.max_members } });
 }
 
 async function handleCommenceGroup(userId: string, body: Record<string, unknown>) {
