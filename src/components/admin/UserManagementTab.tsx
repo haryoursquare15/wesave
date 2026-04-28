@@ -182,9 +182,35 @@ function UserActionsDialog({ user, onClose, onAction }: UserActionsDialogProps) 
               <Trash2 className="h-4 w-4" /> Remove from All Groups
             </Button>
           )}
+          <Button variant={action === "set_temp_password" ? "default" : "outline"} size="sm" onClick={() => { setAction("set_temp_password"); setRecoveryLink(null); }} className="flex items-center gap-2">
+            <KeyRound className="h-4 w-4" /> Set Temp Password
+          </Button>
+          <Button variant={action === "send_recovery_link" ? "default" : "outline"} size="sm" onClick={() => { setAction("send_recovery_link"); setRecoveryLink(null); }} className="flex items-center gap-2">
+            <KeyRound className="h-4 w-4" /> Generate Recovery Link
+          </Button>
         </div>
 
-        {action && (
+        {action === "set_temp_password" && (
+          <div className="space-y-2">
+            <label className="text-sm font-medium">New temporary password (min 8 chars)</label>
+            <Input type="text" placeholder="e.g. WeSave#2026" value={tempPassword} onChange={(e) => setTempPassword(e.target.value)} />
+            <p className="text-xs text-muted-foreground">Share this with the user securely. They should change it after sign-in.</p>
+          </div>
+        )}
+
+        {recoveryLink && (
+          <div className="space-y-2 p-3 rounded bg-muted">
+            <label className="text-sm font-medium">Recovery link (single-use)</label>
+            <div className="flex gap-2">
+              <Input readOnly value={recoveryLink} className="text-xs" />
+              <Button size="sm" variant="outline" onClick={() => { navigator.clipboard.writeText(recoveryLink); toast({ title: "Copied" }); }}>
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {action && action !== "set_temp_password" && action !== "send_recovery_link" && (
           <div className="space-y-2">
             <label className="text-sm font-medium">Reason</label>
             <Input placeholder="Enter reason for this action..." value={reason} onChange={(e) => setReason(e.target.value)} />
