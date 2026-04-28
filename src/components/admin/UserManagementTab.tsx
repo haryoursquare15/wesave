@@ -13,7 +13,7 @@ import { Database } from "@/integrations/supabase/types";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
-import { Search, Snowflake, AlertTriangle, Shield, ChevronDown, ChevronRight, Wallet, Users, Trash2, UserX, Download } from "lucide-react";
+import { Search, Snowflake, AlertTriangle, Shield, ChevronDown, ChevronRight, Wallet, Users, Trash2, UserX, Download, KeyRound, Copy } from "lucide-react";
 import { exportToCSV } from "@/lib/exportUtils";
 import { adminActionReasonSchema, validateInput } from "@/lib/validation";
 
