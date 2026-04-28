@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useVfdSandboxProducts } from "@/hooks/useVfdSandboxProducts";
 import {
   Target, Plus, RefreshCw, ArrowRight, ArrowLeft, Users, User,
-  CalendarDays, AlertTriangle, Wallet, Vote, ArrowDownToLine, UserPlus,
+  CalendarDays, AlertTriangle, Wallet, Vote, ArrowDownToLine, UserPlus, Mail, Check, X,
 } from "lucide-react";
 import { addDays, addWeeks, addMonths, format } from "date-fns";
 import { SandboxTargetInviteDialog } from "./SandboxTargetInviteDialog";
