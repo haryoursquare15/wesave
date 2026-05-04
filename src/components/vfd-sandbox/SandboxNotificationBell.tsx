@@ -18,6 +18,7 @@ interface Notification {
   notification_type?: string;
   group_id?: string | null;
   invite_id?: string | null;
+  invite_status?: string | null;
   inviter_name?: string | null;
   vfd_sandbox_groups?: PendingInvite["vfd_sandbox_groups"];
 }
@@ -105,7 +106,7 @@ export function SandboxNotificationBell() {
   const pendingInviteByGroup = new Map(invites.map((invite) => [invite.group_id, invite]));
 
   const notificationInvites = items
-    .filter((n) => n.notification_type === "group_invite")
+    .filter((n) => n.notification_type === "group_invite" && n.invite_status !== "stale")
     .map((n) => {
       const pending = n.group_id ? pendingInviteByGroup.get(n.group_id) : undefined;
       if (!n.group_id) return null;
