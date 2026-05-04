@@ -2967,13 +2967,26 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
       .select("user_id").eq("group_id", group.id).eq("status", "active")
       .eq("has_contributed_current", false);
 
-    let succeeded = 0, failed = 0;
+    const MAX_RETRIES = 3;
+    const RETRY_INTERVAL_MS = 30 * 60 * 1000;
+    let succeeded = 0, failed = 0, deferred = 0, penalized = 0;
+
     for (const m of (pending || [])) {
-      // Idempotency: skip if already audited for this cycle
-      const { data: existingAudit } = await db.from("vfd_sandbox_contribution_audit")
+      const { data: successAudit } = await db.from("vfd_sandbox_contribution_audit")
         .select("id").eq("user_id", m.user_id).eq("cycle_id", activeCycle.id)
         .eq("status", "success").maybeSingle();
-      if (existingAudit) continue;
+      if (successAudit) continue;
+
+      const { data: existingFailed } = await db.from("vfd_sandbox_contribution_audit")
+        .select("id, retry_count, next_retry_at, penalty_served")
+        .eq("user_id", m.user_id).eq("cycle_id", activeCycle.id)
+        .eq("status", "failed").maybeSingle();
+
+      if (existingFailed?.penalty_served) continue;
+      if (!forceGroupId && existingFailed?.next_retry_at && new Date(existingFailed.next_retry_at) > now) {
+        deferred++;
+        continue;
+      }
 
       const amount = Number(group.contribution_amount);
       const debited = await debitForSavings(m.user_id, amount);
@@ -2982,6 +2995,11 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
         await db.from("vfd_sandbox_group_contributions").insert({
           group_id: group.id, user_id: m.user_id, cycle_number: group.current_cycle, amount,
         });
+        if (existingFailed) {
+          await db.from("vfd_sandbox_contribution_audit").update({
+            error_message: null, next_retry_at: null,
+          }).eq("id", existingFailed.id);
+        }
         await db.from("vfd_sandbox_contribution_audit").insert({
           user_id: m.user_id, group_id: group.id, cycle_id: activeCycle.id,
           amount, contribution_type: "auto", status: "success",
@@ -2995,16 +3013,45 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
           "contribution_success", group.id);
         succeeded++;
       } else {
-        await db.from("vfd_sandbox_contribution_audit").insert({
-          user_id: m.user_id, group_id: group.id, cycle_id: activeCycle.id,
-          amount, contribution_type: "auto", status: "failed",
-        });
-        await postChatMessage(group.id, m.user_id,
-          `⚠️ Auto-contribution failed — insufficient wallet balance.`, "contribution_failed");
-        await sendNotification(m.user_id, "Auto-contribution Failed",
-          `Auto-contribution for ${group.name} failed (insufficient wallet). Please fund your wallet and contribute manually.`,
-          "contribution_failed", group.id);
-        failed++;
+        const prevCount = existingFailed?.retry_count ?? 0;
+        const newCount = prevCount + 1;
+        const reachedLimit = newCount >= MAX_RETRIES;
+        const nextRetry = reachedLimit ? null : new Date(Date.now() + RETRY_INTERVAL_MS).toISOString();
+        const errMsg = "Insufficient wallet balance";
+
+        if (existingFailed) {
+          await db.from("vfd_sandbox_contribution_audit").update({
+            retry_count: newCount, next_retry_at: nextRetry,
+            error_message: errMsg, penalty_served: reachedLimit,
+          }).eq("id", existingFailed.id);
+        } else {
+          await db.from("vfd_sandbox_contribution_audit").insert({
+            user_id: m.user_id, group_id: group.id, cycle_id: activeCycle.id,
+            amount, contribution_type: "auto", status: "failed",
+            retry_count: newCount, next_retry_at: nextRetry,
+            error_message: errMsg, penalty_served: reachedLimit,
+          });
+        }
+
+        if (reachedLimit) {
+          await db.from("vfd_sandbox_penalties").insert({
+            user_id: m.user_id, group_id: group.id, cycle_id: activeCycle.id,
+            amount, reason: `Failed ${MAX_RETRIES} auto-debit attempts (insufficient wallet)`,
+          });
+          await postChatMessage(group.id, m.user_id,
+            `🚫 Auto-contribution failed after ${MAX_RETRIES} attempts — penalty served.`, "contribution_failed");
+          await sendNotification(m.user_id, "Penalty Served",
+            `Your auto-contribution for ${group.name} failed after ${MAX_RETRIES} attempts. A penalty has been recorded.`,
+            "contribution_failed", group.id);
+          penalized++;
+        } else {
+          await postChatMessage(group.id, m.user_id,
+            `⚠️ Auto-contribution failed (attempt ${newCount}/${MAX_RETRIES}) — retrying in 30 minutes.`, "contribution_failed");
+          await sendNotification(m.user_id, "Auto-contribution Failed — Retrying",
+            `Attempt ${newCount} of ${MAX_RETRIES} failed (insufficient wallet). We'll retry in 30 minutes — please fund your wallet.`,
+            "contribution_failed", group.id);
+          failed++;
+        }
       }
     }
 
