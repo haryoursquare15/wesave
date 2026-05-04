@@ -283,11 +283,16 @@ export function SandboxAjoTab() {
           </CardContent>
         </Card>
 
-        <Tabs defaultValue="members">
-          <TabsList className="grid w-full grid-cols-2">
+        <Tabs defaultValue="chat">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="chat"><MessageSquare className="h-3 w-3 mr-1" /> Chat</TabsTrigger>
             <TabsTrigger value="members">Members</TabsTrigger>
-            <TabsTrigger value="payout"><ListOrdered className="h-3 w-3 mr-1" /> Payout Order</TabsTrigger>
+            <TabsTrigger value="payout"><ListOrdered className="h-3 w-3 mr-1" /> Payout</TabsTrigger>
+            <TabsTrigger value="settings"><SettingsIcon className="h-3 w-3 mr-1" /> Settings</TabsTrigger>
           </TabsList>
+          <TabsContent value="chat" className="mt-3">
+            <SandboxGroupChat groupId={g.id} currentUserId={currentUserId} />
+          </TabsContent>
           <TabsContent value="members" className="space-y-2 mt-3">
             {/* Pending incoming swap requests for the current user */}
             {(detailData.swaps || []).filter((s: any) => s.status === "pending" && s.target_id === currentUserId).map((s: any) => (
