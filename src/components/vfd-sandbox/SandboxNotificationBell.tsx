@@ -84,14 +84,24 @@ export function SandboxNotificationBell() {
     setItems(prev => prev.map(n => ({ ...n, is_read: true })));
   };
 
-  const handleRespond = async (inviteId: string, accept: boolean, groupId?: string) => {
+  const handleRespond = async (inviteId: string, accept: boolean, groupId?: string, notificationId?: string) => {
     setRespondingId(inviteId);
     try {
       const res = inviteId.startsWith("group:") && groupId
         ? await respondGroupInviteByGroup(groupId, accept)
         : await respondGroupInvite(inviteId, accept);
       if (res?.error) {
-        toast.error(res.error);
+        // Stale notification (group/invite deleted) — clear it from the bell
+        if (/not found/i.test(res.error)) {
+          if (notificationId) {
+            await markNotificationRead(notificationId);
+          }
+          setItems(prev => prev.filter(n => n.id !== notificationId));
+          toast.message("This invite is no longer available");
+          await refresh();
+        } else {
+          toast.error(res.error);
+        }
       } else {
         toast.success(accept ? "Joined group!" : "Invite declined");
         await refresh();
