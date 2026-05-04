@@ -3080,6 +3080,10 @@ Deno.serve(async (req) => {
       case "list_group_invites": return await handleListGroupInvites(userId);
       case "list_pending_group_invitees": return await handleListPendingGroupInvitees(body);
       case "auto_start_pending_groups": return await handleAutoStartPendingGroups(userId, body);
+      case "post_group_chat": return await handlePostGroupChat(userId, body);
+      case "list_group_chat": return await handleListGroupChat(userId, body);
+      case "update_group_settings": return await handleUpdateGroupSettings(userId, body);
+      case "sandbox_auto_contribute": return await handleSandboxAutoContribute(userId, body);
 
       // In-app notifications
       case "list_notifications": return await handleListNotifications(userId);
