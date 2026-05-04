@@ -3053,10 +3053,16 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const user = await getUserFromRequest(req);
-    const userId = user.id;
     const body: Record<string, unknown> = req.method === "POST" ? await req.json() : {};
     const action = body.action as string;
+
+    // Cron-callable actions don't need a user JWT
+    if (action === "sandbox_auto_contribute") {
+      return await handleSandboxAutoContribute("system", body);
+    }
+
+    const user = await getUserFromRequest(req);
+    const userId = user.id;
 
     switch (action) {
       // Thrift Groups (full parity)
