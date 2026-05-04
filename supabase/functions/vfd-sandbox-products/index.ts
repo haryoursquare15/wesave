@@ -2612,11 +2612,10 @@ async function handleRespondGroupInvite(userId: string, body: Record<string, unk
   let inviteQuery = db.from("vfd_sandbox_group_invites")
     .select("*")
     .eq("invitee_id", userId)
-    .eq("status", "pending")
-    .order("created_at", { ascending: false })
-    .limit(1);
+    .eq("status", "pending");
 
   inviteQuery = inviteId ? inviteQuery.eq("id", inviteId) : inviteQuery.eq("group_id", groupId);
+  inviteQuery = inviteQuery.order("created_at", { ascending: false }).limit(1);
   const { data: invites } = await inviteQuery;
   const invite = invites?.[0];
   if (!invite) return jsonResponse({ error: "Invite not found" }, 404);
