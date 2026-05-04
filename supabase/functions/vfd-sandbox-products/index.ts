@@ -179,6 +179,32 @@ async function creditWallet(userId: string, amount: number): Promise<void> {
   await applyBalanceDelta(userId, { total: amount });
 }
 
+async function getVestaraWalletBalance(userId: string): Promise<number> {
+  const db = getSupabaseAdmin();
+  const { data } = await db.from("vestara_accounts")
+    .select("balance")
+    .eq("user_id", userId)
+    .eq("account_type", "wallet")
+    .maybeSingle();
+  return Number(data?.balance || 0);
+}
+
+async function debitVestaraForThrift(userId: string, groupId: string, amount: number, reference: string, metadata: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const { data, error } = await db.rpc("vestara_thrift_contribute", {
+    _user_id: userId,
+    _group_id: groupId,
+    _amount: amount,
+    _reference: reference,
+    _metadata: metadata,
+  });
+  if (error) {
+    console.error("[vestara_thrift_contribute]", error);
+    return { success: false, error: error.message };
+  }
+  return (data || { success: false, error: "Contribution debit failed" }) as { success?: boolean; error?: string };
+}
+
 // =============================================
 // HELPER: Chat & Notifications
 // =============================================
