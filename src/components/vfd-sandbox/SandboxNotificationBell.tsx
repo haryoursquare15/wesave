@@ -37,7 +37,13 @@ interface PendingInvite {
 }
 
 export function SandboxNotificationBell() {
-  const products = useVfdSandboxProducts();
+  const {
+    listNotifications,
+    listGroupInvites,
+    markNotificationRead,
+    markAllNotificationsRead,
+    respondGroupInvite,
+  } = useVfdSandboxProducts();
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<Notification[]>([]);
   const [invites, setInvites] = useState<PendingInvite[]>([]);
@@ -47,13 +53,13 @@ export function SandboxNotificationBell() {
   const refresh = useCallback(async () => {
     setLoading(true);
     const [notifRes, invitesRes] = await Promise.all([
-      products.listNotifications(),
-      products.listGroupInvites(),
+      listNotifications(),
+      listGroupInvites(),
     ]);
     setLoading(false);
     if (notifRes?.data) setItems(notifRes.data as Notification[]);
     if (invitesRes?.data) setInvites(invitesRes.data as PendingInvite[]);
-  }, [products]);
+  }, [listNotifications, listGroupInvites]);
 
   useEffect(() => {
     refresh();
@@ -67,19 +73,19 @@ export function SandboxNotificationBell() {
   }, [open, refresh]);
 
   const handleMarkRead = async (id: string) => {
-    await products.markNotificationRead(id);
+    await markNotificationRead(id);
     setItems(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
   };
 
   const handleMarkAll = async () => {
-    await products.markAllNotificationsRead();
+    await markAllNotificationsRead();
     setItems(prev => prev.map(n => ({ ...n, is_read: true })));
   };
 
   const handleRespond = async (inviteId: string, accept: boolean) => {
     setRespondingId(inviteId);
     try {
-      const res = await products.respondGroupInvite(inviteId, accept);
+      const res = await respondGroupInvite(inviteId, accept);
       if (res?.error) {
         toast.error(res.error);
       } else {
