@@ -2568,6 +2568,8 @@ async function handleInviteGroupMember(userId: string, body: Record<string, unkn
 
   const { data: group } = await db.from("vfd_sandbox_groups").select("*").eq("id", groupId).single();
   if (!group) return jsonResponse({ error: "Group not found" }, 404);
+  // Only the group admin can invite members (mirrors WeSave thrift group rules)
+  if (group.admin_id !== userId) return jsonResponse({ error: "Only the group admin can invite members" }, 403);
   // Allow inviting while group is pending OR active-but-not-full
   if (group.status === "completed") return jsonResponse({ error: "Group has already completed" }, 400);
   if (group.member_count >= group.max_members) return jsonResponse({ error: "Group is full" }, 400);
@@ -2630,6 +2632,7 @@ async function handleCreateGroupInviteLink(userId: string, body: Record<string, 
 
   const { data: group } = await db.from("vfd_sandbox_groups").select("admin_id, status").eq("id", groupId).single();
   if (!group) return jsonResponse({ error: "Group not found" }, 404);
+  if (group.admin_id !== userId) return jsonResponse({ error: "Only the group admin can create invite links" }, 403);
   if (group.status !== "pending") return jsonResponse({ error: "Group is no longer accepting members" }, 400);
 
   const { data: link, error } = await db.from("vfd_sandbox_group_invite_links").insert({
@@ -2702,10 +2705,16 @@ async function handleListPendingGroupInvitees(body: Record<string, unknown>) {
   const { data: members } = await db.from("vfd_sandbox_group_members")
     .select("user_id").eq("group_id", groupId);
 
+  const inviteeIds = (invites || []).map((i: { invitee_id: string }) => i.invitee_id);
+  const memberIds = (members || []).map((m: { user_id: string }) => m.user_id);
   return jsonResponse({
     data: {
-      invited_user_ids: (invites || []).map((i: { invitee_id: string }) => i.invitee_id),
-      member_user_ids: (members || []).map((m: { user_id: string }) => m.user_id),
+      // New canonical names used by the dialog
+      invitee_ids: inviteeIds,
+      member_ids: memberIds,
+      // Legacy aliases retained for backwards compatibility
+      invited_user_ids: inviteeIds,
+      member_user_ids: memberIds,
     },
   });
 }
