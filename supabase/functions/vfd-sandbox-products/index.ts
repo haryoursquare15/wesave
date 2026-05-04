@@ -555,7 +555,21 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
 
   const amount = Number(group.contribution_amount);
   const debited = await debitForSavings(userId, amount);
-  if (!debited) return jsonResponse({ error: "Insufficient wallet balance. Please fund your wallet first." }, 400);
+  if (!debited) {
+    const { data: bal } = await db.from("vfd_sandbox_balances")
+      .select("total_balance, savings_balance").eq("user_id", userId).maybeSingle();
+    const total = Number(bal?.total_balance || 0);
+    const savings = Number(bal?.savings_balance || 0);
+    const available = Math.max(0, total - savings);
+    const shortfall = Math.max(0, amount - available);
+    return jsonResponse({
+      error: `Insufficient wallet balance. You need ₦${amount.toLocaleString()} but have ₦${available.toLocaleString()} available. Please fund your wallet with at least ₦${shortfall.toLocaleString()}.`,
+      code: "INSUFFICIENT_BALANCE",
+      required: amount,
+      available,
+      shortfall,
+    }, 400);
+  }
 
   await db.from("vfd_sandbox_group_contributions").insert({
     group_id: groupId, user_id: userId, cycle_number: group.current_cycle, amount,
