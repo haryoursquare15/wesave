@@ -542,8 +542,10 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
     });
   }
 
-  const { data: activeCycle } = await db.from("vfd_sandbox_contribution_cycles")
-    .select("*").eq("group_id", groupId).eq("status", "active").single();
+  const { data: activeCycles } = await db.from("vfd_sandbox_contribution_cycles")
+    .select("*").eq("group_id", groupId).eq("status", "active")
+    .order("created_at", { ascending: true }).limit(1);
+  const activeCycle = activeCycles?.[0];
   if (!activeCycle) return jsonResponse({ error: "No active contribution cycle" }, 400);
 
   // Idempotency
