@@ -103,6 +103,10 @@ export function useVfdSandboxProducts() {
   const listGroupInvites = useCallback(() => invoke("list_group_invites"), [invoke]);
   const listPendingGroupInvitees = useCallback((group_id: string) => invoke("list_pending_group_invitees", { group_id }), [invoke]);
   const autoStartPendingGroups = useCallback((group_id?: string) => invoke("auto_start_pending_groups", group_id ? { group_id } : {}), [invoke]);
+  const postGroupChat = useCallback((group_id: string, message: string) => invoke("post_group_chat", { group_id, message }), [invoke]);
+  const listGroupChat = useCallback((group_id: string) => invoke("list_group_chat", { group_id }), [invoke]);
+  const updateGroupSettings = useCallback((body: Record<string, unknown>) => invoke("update_group_settings", body), [invoke]);
+  const sandboxAutoContribute = useCallback((force_group_id?: string) => invoke("sandbox_auto_contribute", force_group_id ? { force_group_id } : {}), [invoke]);
 
   // In-app Notifications
   const listNotifications = useCallback(() => invoke("list_notifications"), [invoke]);
@@ -182,6 +186,7 @@ export function useVfdSandboxProducts() {
     requestSwap, respondSwap, exitGroup, confirmContinue, restartGroup,
     searchUsers, inviteGroupMember, respondGroupInvite, respondGroupInviteByGroup, createGroupInviteLink, validateGroupInviteLink, joinGroupViaLink, listGroupInvites, listPendingGroupInvitees,
     autoStartPendingGroups,
+    postGroupChat, listGroupChat, updateGroupSettings, sandboxAutoContribute,
     // Notifications
     listNotifications, markNotificationRead, markAllNotificationsRead,
     // Target Ajo

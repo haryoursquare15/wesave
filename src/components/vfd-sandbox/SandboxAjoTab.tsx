@@ -18,6 +18,8 @@ import {
   ListOrdered, Coins, Calendar, Info, LogOut, AlertCircle, ArrowLeftRight, Share2,
 } from "lucide-react";
 import { SandboxGroupInviteDialog } from "./SandboxGroupInviteDialog";
+import { SandboxGroupChat } from "./SandboxGroupChat";
+import { Settings as SettingsIcon, MessageSquare } from "lucide-react";
 
 interface Group {
   id: string; name: string; contribution_amount: number; period: string;
@@ -281,11 +283,16 @@ export function SandboxAjoTab() {
           </CardContent>
         </Card>
 
-        <Tabs defaultValue="members">
-          <TabsList className="grid w-full grid-cols-2">
+        <Tabs defaultValue="chat">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="chat"><MessageSquare className="h-3 w-3 mr-1" /> Chat</TabsTrigger>
             <TabsTrigger value="members">Members</TabsTrigger>
-            <TabsTrigger value="payout"><ListOrdered className="h-3 w-3 mr-1" /> Payout Order</TabsTrigger>
+            <TabsTrigger value="payout"><ListOrdered className="h-3 w-3 mr-1" /> Payout</TabsTrigger>
+            <TabsTrigger value="settings"><SettingsIcon className="h-3 w-3 mr-1" /> Settings</TabsTrigger>
           </TabsList>
+          <TabsContent value="chat" className="mt-3">
+            <SandboxGroupChat groupId={g.id} currentUserId={currentUserId} />
+          </TabsContent>
           <TabsContent value="members" className="space-y-2 mt-3">
             {/* Pending incoming swap requests for the current user */}
             {(detailData.swaps || []).filter((s: any) => s.status === "pending" && s.target_id === currentUserId).map((s: any) => (
@@ -357,6 +364,38 @@ export function SandboxAjoTab() {
                 <span className="font-medium truncate max-w-[180px]">{payoutOrderNames[i] || memberNameMap[userId] || `User ${userId.slice(0, 6)}`}</span>
               </div>
             ))}
+          </TabsContent>
+          <TabsContent value="settings" className="space-y-3 mt-3 text-xs">
+            <div className="rounded-xl border bg-muted/20 p-3 space-y-2">
+              <div className="flex justify-between"><span className="text-muted-foreground">Contribution amount</span><span className="font-medium">₦{fmt(Number(g.contribution_amount))}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Frequency</span><span className="font-medium capitalize">{g.period}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Members</span><span className="font-medium">{g.member_count} / {g.max_members}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Cycles</span><span className="font-medium">{g.current_cycle} / {g.total_cycles}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Charge time (WAT)</span><span className="font-medium">{String(g.contribution_hour ?? 16).padStart(2,"0")}:{String(g.contribution_minute ?? 0).padStart(2,"0")}</span></div>
+              {g.period === "weekly" && (
+                <div className="flex justify-between"><span className="text-muted-foreground">Day of week</span><span className="font-medium">{daysOfWeek.find(d => d.value === g.contribution_day_of_week)?.label || "—"}</span></div>
+              )}
+              {g.period === "monthly" && (
+                <div className="flex justify-between"><span className="text-muted-foreground">Day of month</span><span className="font-medium">{g.contribution_day_of_month ?? "—"}</span></div>
+              )}
+              <div className="flex justify-between"><span className="text-muted-foreground">Auto-debit (wallet)</span><span className="font-medium">{g.auto_debit ? "On" : "Off"}</span></div>
+            </div>
+            {isAdmin && g.status === "active" && (
+              <div className="rounded-xl border bg-card p-3 space-y-2">
+                <p className="font-semibold text-foreground">Admin actions</p>
+                <Button size="sm" variant="outline" disabled={products.loading} onClick={async () => {
+                  const r = await products.updateGroupSettings({ group_id: g.id, auto_debit: !g.auto_debit });
+                  if (r?.data) { toast({ title: `Auto-debit ${!g.auto_debit ? "enabled" : "disabled"}` }); loadDetail(g.id); }
+                }}>Toggle auto-debit</Button>
+                <Button size="sm" variant="outline" disabled={products.loading} onClick={async () => {
+                  const r = await products.sandboxAutoContribute(g.id);
+                  if (r?.data) { toast({ title: "Auto-sweep triggered", description: `Processed ${r.data.processed_count} group(s)` }); loadDetail(g.id); }
+                }}>Run auto-sweep now</Button>
+              </div>
+            )}
+            <p className="text-[10px] text-muted-foreground">
+              Auto-sweep runs every 30 minutes (WAT) and debits each member's sandbox wallet at the scheduled time. No card retries — if a wallet is short, the member is notified to fund and contribute manually.
+            </p>
           </TabsContent>
         </Tabs>
 
