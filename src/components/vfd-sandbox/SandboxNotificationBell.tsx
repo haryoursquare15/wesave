@@ -17,6 +17,9 @@ interface Notification {
   created_at: string;
   notification_type?: string;
   group_id?: string | null;
+  invite_id?: string | null;
+  inviter_name?: string | null;
+  vfd_sandbox_groups?: PendingInvite["vfd_sandbox_groups"];
 }
 
 interface PendingInvite {
@@ -92,13 +95,37 @@ export function SandboxNotificationBell() {
     }
   };
 
+  const pendingInviteByGroup = new Map(invites.map((invite) => [invite.group_id, invite]));
+
+  const notificationInvites = items
+    .filter((n) => n.notification_type === "group_invite")
+    .map((n) => {
+      const pending = n.group_id ? pendingInviteByGroup.get(n.group_id) : undefined;
+      const inviteId = pending?.id || n.invite_id;
+      if (!inviteId || !n.group_id) return null;
+      return {
+        id: inviteId,
+        group_id: n.group_id,
+        inviter_id: pending?.inviter_id || "",
+        inviter_name: pending?.inviter_name || n.inviter_name || "Someone",
+        created_at: pending?.created_at || n.created_at,
+        vfd_sandbox_groups: pending?.vfd_sandbox_groups || n.vfd_sandbox_groups,
+      } as PendingInvite;
+    })
+    .filter((invite): invite is PendingInvite => Boolean(invite));
+
+  const actionableInvites = [
+    ...invites,
+    ...notificationInvites.filter((invite) => !invites.some((i) => i.id === invite.id)),
+  ];
+
   // Hide stale group_invite notifications without a corresponding pending invite
-  const inviteGroupIds = new Set(invites.map(i => i.group_id));
+  const inviteGroupIds = new Set(actionableInvites.map(i => i.group_id));
   const visibleNotifs = items.filter(n =>
     n.notification_type !== "group_invite" || (n.group_id && inviteGroupIds.has(n.group_id))
   );
 
-  const isEmpty = visibleNotifs.length === 0 && invites.length === 0;
+  const isEmpty = visibleNotifs.length === 0 && actionableInvites.length === 0;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -128,7 +155,7 @@ export function SandboxNotificationBell() {
             <div className="text-center text-xs text-muted-foreground py-6">No notifications</div>
           ) : (
             <ul className="divide-y divide-border">
-              {invites.map((inv) => {
+              {actionableInvites.map((inv) => {
                 const g = inv.vfd_sandbox_groups;
                 return (
                   <li key={`inv-${inv.id}`} className="p-3 bg-primary/5">
@@ -175,7 +202,7 @@ export function SandboxNotificationBell() {
                   </li>
                 );
               })}
-              {visibleNotifs.map((n) => (
+              {visibleNotifs.filter((n) => n.notification_type !== "group_invite").map((n) => (
                 <li key={n.id} className={`p-3 ${!n.is_read ? "bg-primary/5" : ""}`}>
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
