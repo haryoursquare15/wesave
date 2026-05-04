@@ -84,14 +84,24 @@ export function SandboxNotificationBell() {
     setItems(prev => prev.map(n => ({ ...n, is_read: true })));
   };
 
-  const handleRespond = async (inviteId: string, accept: boolean, groupId?: string) => {
+  const handleRespond = async (inviteId: string, accept: boolean, groupId?: string, notificationId?: string) => {
     setRespondingId(inviteId);
     try {
       const res = inviteId.startsWith("group:") && groupId
         ? await respondGroupInviteByGroup(groupId, accept)
         : await respondGroupInvite(inviteId, accept);
       if (res?.error) {
-        toast.error(res.error);
+        // Stale notification (group/invite deleted) — clear it from the bell
+        if (/not found/i.test(res.error)) {
+          if (notificationId) {
+            await markNotificationRead(notificationId);
+          }
+          setItems(prev => prev.filter(n => n.id !== notificationId));
+          toast.message("This invite is no longer available");
+          await refresh();
+        } else {
+          toast.error(res.error);
+        }
       } else {
         toast.success(accept ? "Joined group!" : "Invite declined");
         await refresh();
@@ -190,7 +200,7 @@ export function SandboxNotificationBell() {
                       <Button
                         size="sm"
                         className="flex-1 h-7 text-xs"
-                        onClick={() => handleRespond(inv.id, true, inv.group_id)}
+                        onClick={() => handleRespond(inv.id, true, inv.group_id, items.find(n => n.notification_type === "group_invite" && n.group_id === inv.group_id)?.id)}
                         disabled={respondingId === inv.id}
                       >
                         {respondingId === inv.id ? (
@@ -203,7 +213,7 @@ export function SandboxNotificationBell() {
                         size="sm"
                         variant="outline"
                         className="flex-1 h-7 text-xs"
-                        onClick={() => handleRespond(inv.id, false, inv.group_id)}
+                        onClick={() => handleRespond(inv.id, false, inv.group_id, items.find(n => n.notification_type === "group_invite" && n.group_id === inv.group_id)?.id)}
                         disabled={respondingId === inv.id}
                       >
                         <X className="h-3.5 w-3.5 mr-1" />Decline
