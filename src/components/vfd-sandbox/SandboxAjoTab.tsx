@@ -242,17 +242,22 @@ export function SandboxAjoTab() {
 
             {/* Action buttons */}
             <div className="flex flex-wrap gap-2">
-              {g.status === "active" && (
-                <Button size="sm" onClick={async () => {
-                  const r = await products.contributeGroup(g.id);
-                  if (r?.data) {
-                    toast({ title: "Contributed!", description: `₦${fmt(Number(g.contribution_amount))} for cycle ${g.current_cycle}` });
-                    loadDetail(g.id);
-                  }
-                }} disabled={products.loading}>
-                  <ArrowRight className="h-3 w-3 mr-1" /> Contribute ₦{fmt(Number(g.contribution_amount))}
-                </Button>
-              )}
+              {g.status === "active" && (() => {
+                const myM = (g.vfd_sandbox_group_members || []).find((m: any) => m.user_id === currentUserId);
+                const contributed = !!myM?.has_contributed_current;
+                return (
+                  <Button size="sm" onClick={async () => {
+                    const r = await products.contributeGroup(g.id);
+                    if (r?.data) {
+                      toast({ title: "Contributed!", description: `₦${fmt(Number(g.contribution_amount))} for cycle ${g.current_cycle}` });
+                      loadDetail(g.id);
+                    }
+                  }} disabled={products.loading || contributed} variant={contributed ? "secondary" : "default"}>
+                    <ArrowRight className="h-3 w-3 mr-1" />
+                    {contributed ? `Contributed for cycle ${g.current_cycle}` : `Contribute ₦${fmt(Number(g.contribution_amount))}`}
+                  </Button>
+                );
+              })()}
               {g.status === "completed" && (
                 <>
                   <Button size="sm" variant="outline" onClick={async () => {
