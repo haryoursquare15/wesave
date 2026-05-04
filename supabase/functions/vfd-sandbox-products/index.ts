@@ -2603,24 +2603,51 @@ async function handleInviteGroupMember(userId: string, body: Record<string, unkn
 
 async function handleRespondGroupInvite(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
-  const inviteId = body.invite_id as string;
+  const inviteId = body.invite_id as string | undefined;
+  const groupId = body.group_id as string | undefined;
   const accept = body.accept as boolean;
 
-  const { data: invite } = await db.from("vfd_sandbox_group_invites").select("*").eq("id", inviteId).single();
+  if (!inviteId && !groupId) return jsonResponse({ error: "invite_id or group_id required" }, 400);
+
+  let inviteQuery = db.from("vfd_sandbox_group_invites")
+    .select("*")
+    .eq("invitee_id", userId)
+    .eq("status", "pending")
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  inviteQuery = inviteId ? inviteQuery.eq("id", inviteId) : inviteQuery.eq("group_id", groupId);
+  const { data: invites } = await inviteQuery;
+  const invite = invites?.[0];
   if (!invite) return jsonResponse({ error: "Invite not found" }, 404);
   if (invite.invitee_id !== userId) return jsonResponse({ error: "Not authorized" }, 403);
   if (invite.status !== "pending") return jsonResponse({ error: "Invite is no longer pending" }, 400);
 
-  await db.from("vfd_sandbox_group_invites").update({
-    status: accept ? "accepted" : "declined",
-    responded_at: new Date().toISOString(),
-  }).eq("id", inviteId);
-
   if (accept) {
-    // Join the group (reuse join logic)
+    // Join first, then mark the invite accepted. This prevents a failed join
+    // (full/started group, duplicate membership, etc.) from burning the invite.
     const joinResult = await handleJoinGroup(userId, { group_id: invite.group_id });
-    return joinResult;
+    const joinPayload = await joinResult.json().catch(() => ({ error: "Failed to join group" }));
+    if (joinResult.status >= 400 || joinPayload?.error) {
+      return jsonResponse(joinPayload, joinResult.status);
+    }
+
+    await db.from("vfd_sandbox_group_invites").update({
+      status: "accepted",
+      responded_at: new Date().toISOString(),
+    }).eq("id", invite.id);
+    await db.from("vfd_sandbox_notifications").update({ is_read: true })
+      .eq("user_id", userId).eq("group_id", invite.group_id).eq("notification_type", "group_invite");
+
+    return jsonResponse(joinPayload, joinResult.status);
   }
+
+  await db.from("vfd_sandbox_group_invites").update({
+    status: "declined",
+    responded_at: new Date().toISOString(),
+  }).eq("id", invite.id);
+  await db.from("vfd_sandbox_notifications").update({ is_read: true })
+    .eq("user_id", userId).eq("group_id", invite.group_id).eq("notification_type", "group_invite");
 
   return jsonResponse({ data: { success: true, status: "declined" } });
 }
