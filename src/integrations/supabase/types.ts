@@ -4275,8 +4275,12 @@ export type Database = {
           contribution_type: string
           created_at: string
           cycle_id: string
+          error_message: string | null
           group_id: string
           id: string
+          next_retry_at: string | null
+          penalty_served: boolean
+          retry_count: number
           status: string
           user_id: string
         }
@@ -4285,8 +4289,12 @@ export type Database = {
           contribution_type?: string
           created_at?: string
           cycle_id: string
+          error_message?: string | null
           group_id: string
           id?: string
+          next_retry_at?: string | null
+          penalty_served?: boolean
+          retry_count?: number
           status?: string
           user_id: string
         }
@@ -4295,8 +4303,12 @@ export type Database = {
           contribution_type?: string
           created_at?: string
           cycle_id?: string
+          error_message?: string | null
           group_id?: string
           id?: string
+          next_retry_at?: string | null
+          penalty_served?: boolean
+          retry_count?: number
           status?: string
           user_id?: string
         }
@@ -4742,6 +4754,36 @@ export type Database = {
           message?: string
           notification_type?: string
           title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      vfd_sandbox_penalties: {
+        Row: {
+          amount: number
+          created_at: string
+          cycle_id: string
+          group_id: string
+          id: string
+          reason: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          cycle_id: string
+          group_id: string
+          id?: string
+          reason: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          cycle_id?: string
+          group_id?: string
+          id?: string
+          reason?: string
           user_id?: string
         }
         Relationships: []
