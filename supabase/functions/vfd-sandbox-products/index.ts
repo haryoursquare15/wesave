@@ -2786,9 +2786,10 @@ async function handleListNotifications(userId: string) {
   const enriched = rows.map((n: Record<string, unknown>) => {
     if (n.notification_type !== "group_invite" || !n.group_id) return n;
     const invite = pendingInviteByGroup.get(n.group_id as string);
-    if (!invite) return n;
+    if (!invite) return { ...n, invite_status: "stale" };
     return {
       ...n,
+      invite_status: "pending",
       invite_id: invite.id,
       inviter_name: invite.inviter_name,
       vfd_sandbox_groups: invite.vfd_sandbox_groups,
