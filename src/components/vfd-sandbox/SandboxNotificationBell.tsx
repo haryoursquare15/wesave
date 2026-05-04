@@ -200,7 +200,7 @@ export function SandboxNotificationBell() {
                       <Button
                         size="sm"
                         className="flex-1 h-7 text-xs"
-                        onClick={() => handleRespond(inv.id, true, inv.group_id)}
+                        onClick={() => handleRespond(inv.id, true, inv.group_id, items.find(n => n.notification_type === "group_invite" && n.group_id === inv.group_id)?.id)}
                         disabled={respondingId === inv.id}
                       >
                         {respondingId === inv.id ? (
@@ -213,7 +213,7 @@ export function SandboxNotificationBell() {
                         size="sm"
                         variant="outline"
                         className="flex-1 h-7 text-xs"
-                        onClick={() => handleRespond(inv.id, false, inv.group_id)}
+                        onClick={() => handleRespond(inv.id, false, inv.group_id, items.find(n => n.notification_type === "group_invite" && n.group_id === inv.group_id)?.id)}
                         disabled={respondingId === inv.id}
                       >
                         <X className="h-3.5 w-3.5 mr-1" />Decline
