@@ -123,7 +123,7 @@ export function SandboxNotificationBell() {
     n.notification_type !== "group_invite" || (n.group_id && inviteGroupIds.has(n.group_id))
   );
 
-  const unreadCount = items.filter(n => !n.is_read).length + actionableInvites.length;
+  const unreadCount = items.filter(n => n.notification_type !== "group_invite" && !n.is_read).length + actionableInvites.length;
   const isEmpty = visibleNotifs.length === 0 && actionableInvites.length === 0;
 
   return (
