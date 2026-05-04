@@ -615,18 +615,23 @@ export function SandboxAjoTab() {
                   <div className="flex gap-2">
                     {/* Joining is invite-only — admins invite via the group detail page,
                         invitees accept from the notification bell. No open "Join" button. */}
-                    {g.status === "active" && (g.vfd_sandbox_group_members || []).some((m: any) => m.user_id === currentUserId) && (
-                      <Button size="sm" onClick={async (e) => {
-                        e.stopPropagation();
-                        const result = await products.contributeGroup(g.id);
-                        if (result?.data) {
-                          toast({ title: "Contributed!", description: `₦${fmt(Number(g.contribution_amount))} for cycle ${g.current_cycle}` });
-                          loadGroups();
-                        }
-                      }} disabled={products.loading}>
-                        <ArrowRight className="h-3 w-3 mr-1" /> Contribute
-                      </Button>
-                    )}
+                    {g.status === "active" && (g.vfd_sandbox_group_members || []).some((m: any) => m.user_id === currentUserId) && (() => {
+                      const myM = (g.vfd_sandbox_group_members || []).find((m: any) => m.user_id === currentUserId);
+                      const contributed = !!myM?.has_contributed_current;
+                      return (
+                        <Button size="sm" onClick={async (e) => {
+                          e.stopPropagation();
+                          const result = await products.contributeGroup(g.id);
+                          if (result?.data) {
+                            toast({ title: "Contributed!", description: `₦${fmt(Number(g.contribution_amount))} for cycle ${g.current_cycle}` });
+                            loadGroups();
+                          }
+                        }} disabled={products.loading || contributed} variant={contributed ? "secondary" : "default"}>
+                          <ArrowRight className="h-3 w-3 mr-1" />
+                          {contributed ? "Contributed" : "Contribute"}
+                        </Button>
+                      );
+                    })()}
                   </div>
                 </CardContent>
               </Card>
