@@ -597,13 +597,14 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
   if (existingContrib) return jsonResponse({ error: "Already contributed this cycle" }, 400);
 
   const amount = Number(group.contribution_amount);
-  const debited = await debitForSavings(userId, amount);
-  if (!debited) {
-    const { data: bal } = await db.from("vfd_sandbox_balances")
-      .select("total_balance, savings_balance").eq("user_id", userId).maybeSingle();
-    const total = Number(bal?.total_balance || 0);
-    const savings = Number(bal?.savings_balance || 0);
-    const available = Math.max(0, total - savings);
+  const reference = `ajo-manual-${groupId}-${activeCycle.id}-${userId}`;
+  const debit = await debitVestaraForThrift(userId, groupId, amount, reference, {
+    cycle_id: activeCycle.id,
+    cycle_number: group.current_cycle,
+    source: "vfd_sandbox_ajo",
+  });
+  if (!debit.success) {
+    const available = await getVestaraWalletBalance(userId);
     const shortfall = Math.max(0, amount - available);
     return jsonResponse({
       error: `Insufficient wallet balance. You need ₦${amount.toLocaleString()} but have ₦${available.toLocaleString()} available. Please fund your wallet with at least ₦${shortfall.toLocaleString()}.`,
