@@ -43,6 +43,7 @@ export function SandboxNotificationBell() {
     markNotificationRead,
     markAllNotificationsRead,
     respondGroupInvite,
+    respondGroupInviteByGroup,
   } = useVfdSandboxProducts();
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<Notification[]>([]);
@@ -82,10 +83,12 @@ export function SandboxNotificationBell() {
     setItems(prev => prev.map(n => ({ ...n, is_read: true })));
   };
 
-  const handleRespond = async (inviteId: string, accept: boolean) => {
+  const handleRespond = async (inviteId: string, accept: boolean, groupId?: string) => {
     setRespondingId(inviteId);
     try {
-      const res = await respondGroupInvite(inviteId, accept);
+      const res = inviteId.startsWith("group:") && groupId
+        ? await respondGroupInviteByGroup(groupId, accept)
+        : await respondGroupInvite(inviteId, accept);
       if (res?.error) {
         toast.error(res.error);
       } else {
@@ -105,8 +108,8 @@ export function SandboxNotificationBell() {
     .filter((n) => n.notification_type === "group_invite")
     .map((n) => {
       const pending = n.group_id ? pendingInviteByGroup.get(n.group_id) : undefined;
-      const inviteId = pending?.id || n.invite_id;
-      if (!inviteId || !n.group_id) return null;
+      if (!n.group_id) return null;
+      const inviteId = pending?.id || n.invite_id || `group:${n.group_id}`;
       return {
         id: inviteId,
         group_id: n.group_id,
@@ -123,7 +126,8 @@ export function SandboxNotificationBell() {
     ...notificationInvites.filter((invite) => !invites.some((i) => i.id === invite.id)),
   ];
 
-  // Hide stale group_invite notifications without a corresponding pending invite
+  // Render every group invite notification as actionable; if invite_id is absent,
+  // the backend resolves the pending invite by group_id for the signed-in invitee.
   const inviteGroupIds = new Set(actionableInvites.map(i => i.group_id));
   const visibleNotifs = items.filter(n =>
     n.notification_type !== "group_invite" || (n.group_id && inviteGroupIds.has(n.group_id))
@@ -185,7 +189,7 @@ export function SandboxNotificationBell() {
                       <Button
                         size="sm"
                         className="flex-1 h-7 text-xs"
-                        onClick={() => handleRespond(inv.id, true)}
+                        onClick={() => handleRespond(inv.id, true, inv.group_id)}
                         disabled={respondingId === inv.id}
                       >
                         {respondingId === inv.id ? (
@@ -198,7 +202,7 @@ export function SandboxNotificationBell() {
                         size="sm"
                         variant="outline"
                         className="flex-1 h-7 text-xs"
-                        onClick={() => handleRespond(inv.id, false)}
+                        onClick={() => handleRespond(inv.id, false, inv.group_id)}
                         disabled={respondingId === inv.id}
                       >
                         <X className="h-3.5 w-3.5 mr-1" />Decline
