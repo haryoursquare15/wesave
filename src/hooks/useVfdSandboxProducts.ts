@@ -59,21 +59,21 @@ export function useVfdSandboxProducts() {
         }
 
         if (!resp.ok) {
-          const msg = data?.error || `Request failed (${resp.status})`;
+          const msg = data?.error || data?.message || `Request failed (${resp.status})`;
           toast({ title: "Error", description: msg, variant: "destructive" });
-          return null;
+          return { error: msg, status: resp.status };
         }
 
         if (data?.error) {
           toast({ title: "Error", description: data.error, variant: "destructive" });
-          return null;
+          return data;
         }
 
         return data;
       } catch (err) {
         const message = err instanceof Error ? err.message : "Unknown error";
         toast({ title: "Request failed", description: message, variant: "destructive" });
-        return null;
+        return { error: message };
       } finally {
         setLoading(false);
       }
