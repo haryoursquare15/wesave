@@ -675,20 +675,12 @@ async function processAutoPayout(
   const platformFee = calculatePlatformFee(grossAmount);
   const netAmount = grossAmount - platformFee;
 
-  // CRITICAL FIX: Release ALL contributors' savings_balance for this cycle
-  // (previously only the recipient's was released, causing the other members'
-  // contributions to remain frozen in their savings_balance forever).
-  const { data: cycleContribs } = await db.from("vfd_sandbox_group_contributions")
-    .select("user_id, amount")
-    .eq("group_id", groupId)
-    .eq("cycle_number", currentCycle);
-  for (const c of (cycleContribs as { user_id: string; amount: number }[] | null) || []) {
-    await creditFromSavings(c.user_id, Number(c.amount));
-  }
-
-  // Credit net payout to the recipient's wallet (their own contribution
-  // already returned via creditFromSavings above, so credit the full net).
-  await creditWallet(recipientId, netAmount);
+  const payout = await creditVestaraThriftPayout(recipientId, groupId, grossAmount, platformFee, `ajo-payout-${groupId}-${activeCycle.id}`, {
+    cycle_id: activeCycle.id,
+    cycle_number: currentCycle,
+    source: "vfd_sandbox_ajo",
+  });
+  if (!payout.success) return { success: false, error: payout.error || "Payout failed" };
 
   await db.from("vfd_sandbox_group_payouts").insert({
     group_id: groupId, recipient_id: recipientId,
@@ -3033,9 +3025,13 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
       }
 
       const amount = Number(group.contribution_amount);
-      const debited = await debitForSavings(m.user_id, amount);
+      const debit = await debitVestaraForThrift(m.user_id, group.id, amount, `ajo-auto-${group.id}-${activeCycle.id}-${m.user_id}`, {
+        cycle_id: activeCycle.id,
+        cycle_number: group.current_cycle,
+        source: "vfd_sandbox_auto_sweep",
+      });
 
-      if (debited) {
+      if (debit.success) {
         await db.from("vfd_sandbox_group_contributions").insert({
           group_id: group.id, user_id: m.user_id, cycle_number: group.current_cycle, amount,
         });
