@@ -2718,8 +2718,49 @@ async function handleListNotifications(userId: string) {
   const { data } = await db.from("vfd_sandbox_notifications")
     .select("*").eq("user_id", userId)
     .order("created_at", { ascending: false }).limit(50);
-  const unreadCount = (data || []).filter((n: { is_read: boolean | null }) => !n.is_read).length;
-  return jsonResponse({ data: data || [], unread_count: unreadCount });
+
+  const rows = data || [];
+  const inviteGroupIds = rows
+    .filter((n: { notification_type?: string | null; group_id?: string | null }) => n.notification_type === "group_invite" && n.group_id)
+    .map((n: { group_id: string }) => n.group_id);
+
+  let pendingInviteByGroup = new Map<string, Record<string, unknown>>();
+  if (inviteGroupIds.length > 0) {
+    const { data: pendingInvites } = await db.from("vfd_sandbox_group_invites")
+      .select("*, vfd_sandbox_groups(id, name, contribution_amount, period, max_members, member_count)")
+      .eq("invitee_id", userId)
+      .eq("status", "pending")
+      .in("group_id", [...new Set(inviteGroupIds)]);
+
+    if (pendingInvites && pendingInvites.length > 0) {
+      const inviterIds = [...new Set(pendingInvites.map((i: { inviter_id: string }) => i.inviter_id))];
+      const { data: profiles } = await db.from("profiles").select("id, full_name, username").in("id", inviterIds);
+      const profileMap = new Map((profiles || []).map((p: { id: string }) => [p.id, p]));
+
+      pendingInviteByGroup = new Map(pendingInvites.map((invite: Record<string, unknown>) => {
+        const inviter = profileMap.get(invite.inviter_id as string) as { full_name?: string | null; username?: string | null } | undefined;
+        return [invite.group_id as string, {
+          ...invite,
+          inviter_name: inviter?.username ? `@${inviter.username}` : inviter?.full_name || "Someone",
+        }];
+      }));
+    }
+  }
+
+  const enriched = rows.map((n: Record<string, unknown>) => {
+    if (n.notification_type !== "group_invite" || !n.group_id) return n;
+    const invite = pendingInviteByGroup.get(n.group_id as string);
+    if (!invite) return n;
+    return {
+      ...n,
+      invite_id: invite.id,
+      inviter_name: invite.inviter_name,
+      vfd_sandbox_groups: invite.vfd_sandbox_groups,
+    };
+  });
+
+  const unreadCount = enriched.filter((n: { is_read: boolean | null }) => !n.is_read).length;
+  return jsonResponse({ data: enriched, unread_count: unreadCount });
 }
 
 async function handleMarkNotificationRead(userId: string, body: Record<string, unknown>) {
