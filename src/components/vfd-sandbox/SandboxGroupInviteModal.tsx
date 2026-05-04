@@ -27,19 +27,19 @@ interface PendingInvite {
  * accept, and the modal automatically advances to the next pending invite.
  */
 export function SandboxGroupInviteModal({ onAccepted }: { onAccepted?: () => void }) {
-  const products = useVfdSandboxProducts();
+  const { listGroupInvites, respondGroupInvite } = useVfdSandboxProducts();
   const { toast } = useToast();
   const [invites, setInvites] = useState<PendingInvite[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
 
   const refresh = useCallback(async () => {
-    const res = await products.listGroupInvites();
+    const res = await listGroupInvites();
     if (res?.data) {
       setInvites(res.data as PendingInvite[]);
       if ((res.data as PendingInvite[]).length > 0) setOpen(true);
     }
-  }, [products]);
+  }, [listGroupInvites]);
 
   useEffect(() => {
     refresh();
@@ -50,9 +50,11 @@ export function SandboxGroupInviteModal({ onAccepted }: { onAccepted?: () => voi
 
   const respond = async (invite: PendingInvite, accept: boolean) => {
     setBusyId(invite.id);
-    const res = await products.respondGroupInvite(invite.id, accept);
+    const res = await respondGroupInvite(invite.id, accept);
     setBusyId(null);
-    if (res?.data) {
+    if (res?.error) {
+      toast({ title: "Invite action failed", description: res.error, variant: "destructive" });
+    } else if (res?.data) {
       if (accept) {
         toast({
           title: "Invite accepted!",
