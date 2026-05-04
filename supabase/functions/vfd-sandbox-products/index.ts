@@ -205,6 +205,23 @@ async function debitVestaraForThrift(userId: string, groupId: string, amount: nu
   return (data || { success: false, error: "Contribution debit failed" }) as { success?: boolean; error?: string };
 }
 
+async function creditVestaraThriftPayout(recipientId: string, groupId: string, grossAmount: number, fee: number, reference: string, metadata: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const { data, error } = await db.rpc("vestara_thrift_payout", {
+    _beneficiary_id: recipientId,
+    _group_id: groupId,
+    _gross_amount: grossAmount,
+    _fee: fee,
+    _reference: reference,
+    _metadata: metadata,
+  });
+  if (error) {
+    console.error("[vestara_thrift_payout]", error);
+    return { success: false, error: error.message };
+  }
+  return (data || { success: false, error: "Payout credit failed" }) as { success?: boolean; error?: string };
+}
+
 // =============================================
 // HELPER: Chat & Notifications
 // =============================================
