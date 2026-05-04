@@ -96,6 +96,7 @@ export function useVfdSandboxProducts() {
   const searchUsers = useCallback((query: string) => invoke("search_users", { query }), [invoke]);
   const inviteGroupMember = useCallback((group_id: string, invitee_id: string) => invoke("invite_group_member", { group_id, invitee_id }), [invoke]);
   const respondGroupInvite = useCallback((invite_id: string, accept: boolean) => invoke("respond_group_invite", { invite_id, accept }), [invoke]);
+  const respondGroupInviteByGroup = useCallback((group_id: string, accept: boolean) => invoke("respond_group_invite", { group_id, accept }), [invoke]);
   const createGroupInviteLink = useCallback((group_id: string) => invoke("create_group_invite_link", { group_id }), [invoke]);
   const validateGroupInviteLink = useCallback((token: string) => invoke("validate_group_invite_link", { token }), [invoke]);
   const joinGroupViaLink = useCallback((token: string) => invoke("join_group_via_link", { token }), [invoke]);
@@ -179,7 +180,7 @@ export function useVfdSandboxProducts() {
     // Thrift Groups
     createGroup, listGroups, joinGroup, commenceGroup, contributeGroup, getGroupDetail,
     requestSwap, respondSwap, exitGroup, confirmContinue, restartGroup,
-    searchUsers, inviteGroupMember, respondGroupInvite, createGroupInviteLink, validateGroupInviteLink, joinGroupViaLink, listGroupInvites, listPendingGroupInvitees,
+    searchUsers, inviteGroupMember, respondGroupInvite, respondGroupInviteByGroup, createGroupInviteLink, validateGroupInviteLink, joinGroupViaLink, listGroupInvites, listPendingGroupInvitees,
     autoStartPendingGroups,
     // Notifications
     listNotifications, markNotificationRead, markAllNotificationsRead,
