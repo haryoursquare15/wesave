@@ -3063,7 +3063,7 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
       await processAutoPayout(db, group, activeCycle);
     }
 
-    processed.push({ group_id: group.id, name: group.name, succeeded, failed });
+    processed.push({ group_id: group.id, name: group.name, succeeded, failed, deferred, penalized });
   }
 
   return jsonResponse({ data: { processed_count: processed.length, processed } });
