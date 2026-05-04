@@ -179,6 +179,49 @@ async function creditWallet(userId: string, amount: number): Promise<void> {
   await applyBalanceDelta(userId, { total: amount });
 }
 
+async function getVestaraWalletBalance(userId: string): Promise<number> {
+  const db = getSupabaseAdmin();
+  const { data } = await db.from("vestara_accounts")
+    .select("balance")
+    .eq("user_id", userId)
+    .eq("account_type", "wallet")
+    .maybeSingle();
+  return Number(data?.balance || 0);
+}
+
+async function debitVestaraForThrift(userId: string, groupId: string, amount: number, reference: string, metadata: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const { data, error } = await db.rpc("vestara_thrift_contribute", {
+    _user_id: userId,
+    _group_id: groupId,
+    _amount: amount,
+    _reference: reference,
+    _metadata: metadata,
+  });
+  if (error) {
+    console.error("[vestara_thrift_contribute]", error);
+    return { success: false, error: error.message };
+  }
+  return (data || { success: false, error: "Contribution debit failed" }) as { success?: boolean; error?: string };
+}
+
+async function creditVestaraThriftPayout(recipientId: string, groupId: string, grossAmount: number, fee: number, reference: string, metadata: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const { data, error } = await db.rpc("vestara_thrift_payout", {
+    _beneficiary_id: recipientId,
+    _group_id: groupId,
+    _gross_amount: grossAmount,
+    _fee: fee,
+    _reference: reference,
+    _metadata: metadata,
+  });
+  if (error) {
+    console.error("[vestara_thrift_payout]", error);
+    return { success: false, error: error.message };
+  }
+  return (data || { success: false, error: "Payout credit failed" }) as { success?: boolean; error?: string };
+}
+
 // =============================================
 // HELPER: Chat & Notifications
 // =============================================
@@ -554,13 +597,14 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
   if (existingContrib) return jsonResponse({ error: "Already contributed this cycle" }, 400);
 
   const amount = Number(group.contribution_amount);
-  const debited = await debitForSavings(userId, amount);
-  if (!debited) {
-    const { data: bal } = await db.from("vfd_sandbox_balances")
-      .select("total_balance, savings_balance").eq("user_id", userId).maybeSingle();
-    const total = Number(bal?.total_balance || 0);
-    const savings = Number(bal?.savings_balance || 0);
-    const available = Math.max(0, total - savings);
+  const reference = `ajo-manual-${groupId}-${activeCycle.id}-${userId}`;
+  const debit = await debitVestaraForThrift(userId, groupId, amount, reference, {
+    cycle_id: activeCycle.id,
+    cycle_number: group.current_cycle,
+    source: "vfd_sandbox_ajo",
+  });
+  if (!debit.success) {
+    const available = await getVestaraWalletBalance(userId);
     const shortfall = Math.max(0, amount - available);
     return jsonResponse({
       error: `Insufficient wallet balance. You need ₦${amount.toLocaleString()} but have ₦${available.toLocaleString()} available. Please fund your wallet with at least ₦${shortfall.toLocaleString()}.`,
@@ -631,20 +675,12 @@ async function processAutoPayout(
   const platformFee = calculatePlatformFee(grossAmount);
   const netAmount = grossAmount - platformFee;
 
-  // CRITICAL FIX: Release ALL contributors' savings_balance for this cycle
-  // (previously only the recipient's was released, causing the other members'
-  // contributions to remain frozen in their savings_balance forever).
-  const { data: cycleContribs } = await db.from("vfd_sandbox_group_contributions")
-    .select("user_id, amount")
-    .eq("group_id", groupId)
-    .eq("cycle_number", currentCycle);
-  for (const c of (cycleContribs as { user_id: string; amount: number }[] | null) || []) {
-    await creditFromSavings(c.user_id, Number(c.amount));
-  }
-
-  // Credit net payout to the recipient's wallet (their own contribution
-  // already returned via creditFromSavings above, so credit the full net).
-  await creditWallet(recipientId, netAmount);
+  const payout = await creditVestaraThriftPayout(recipientId, groupId, grossAmount, platformFee, `ajo-payout-${groupId}-${activeCycle.id}`, {
+    cycle_id: activeCycle.id,
+    cycle_number: currentCycle,
+    source: "vfd_sandbox_ajo",
+  });
+  if (!payout.success) return { success: false, error: payout.error || "Payout failed" };
 
   await db.from("vfd_sandbox_group_payouts").insert({
     group_id: groupId, recipient_id: recipientId,
@@ -2989,9 +3025,13 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
       }
 
       const amount = Number(group.contribution_amount);
-      const debited = await debitForSavings(m.user_id, amount);
+      const debit = await debitVestaraForThrift(m.user_id, group.id, amount, `ajo-auto-${group.id}-${activeCycle.id}-${m.user_id}`, {
+        cycle_id: activeCycle.id,
+        cycle_number: group.current_cycle,
+        source: "vfd_sandbox_auto_sweep",
+      });
 
-      if (debited) {
+      if (debit.success) {
         await db.from("vfd_sandbox_group_contributions").insert({
           group_id: group.id, user_id: m.user_id, cycle_number: group.current_cycle, amount,
         });
