@@ -18,6 +18,8 @@ import {
   ListOrdered, Coins, Calendar, Info, LogOut, AlertCircle, ArrowLeftRight, Share2,
 } from "lucide-react";
 import { SandboxGroupInviteDialog } from "./SandboxGroupInviteDialog";
+import { SandboxGroupChat } from "./SandboxGroupChat";
+import { Settings as SettingsIcon, MessageSquare } from "lucide-react";
 
 interface Group {
   id: string; name: string; contribution_amount: number; period: string;
