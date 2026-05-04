@@ -18,15 +18,49 @@ export function useVfdSandboxProducts() {
         return null;
       }
 
+      const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL as string;
+      const anonKey = (import.meta as any).env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+      const url = `${supabaseUrl}/functions/v1/vfd-sandbox-products`;
+
+      // Use direct fetch instead of supabase-js client.functions.invoke().
+      // The SDK attaches an internal AbortSignal that can be aborted by
+      // unrelated session refreshes / GoTrue events, surfacing as
+      // "Failed to send a request to the Edge Function" / AbortError.
+      // A direct fetch with one retry on transient network/abort errors
+      // is significantly more reliable for click-driven actions like
+      // accepting a group invite.
+      const doFetch = async () => {
+        return await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: anonKey,
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({ action, ...body }),
+        });
+      };
+
       setLoading(true);
       try {
-        const { data, error } = await client.functions.invoke("vfd-sandbox-products", {
-          body: { action, ...body },
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
+        let resp: Response;
+        try {
+          resp = await doFetch();
+        } catch (netErr) {
+          // One automatic retry on transient network failure / abort.
+          await new Promise((r) => setTimeout(r, 250));
+          resp = await doFetch();
+        }
 
-        if (error) {
-          toast({ title: "Error", description: error.message, variant: "destructive" });
+        let data: any = null;
+        const text = await resp.text();
+        if (text) {
+          try { data = JSON.parse(text); } catch { data = { error: text }; }
+        }
+
+        if (!resp.ok) {
+          const msg = data?.error || `Request failed (${resp.status})`;
+          toast({ title: "Error", description: msg, variant: "destructive" });
           return null;
         }
 
