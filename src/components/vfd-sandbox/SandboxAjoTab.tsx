@@ -182,7 +182,7 @@ export function SandboxAjoTab() {
     const payoutOrderNames: string[] = detailData.payout_order_names || [];
     const memberNameMap: Record<string, string> = {};
     members.forEach((m: any) => { if (m.user_id && m.display_name) memberNameMap[m.user_id] = m.display_name; });
-    const isAdmin = true; // sandbox user is always creator
+    const isAdmin = !!currentUserId && g.admin_id === currentUserId;
     const progress = g.total_cycles > 0 ? ((g.current_cycle - 1) / g.total_cycles) * 100 : 0;
 
     return (
@@ -209,8 +209,8 @@ export function SandboxAjoTab() {
                 }>
                   {g.status === "swap_window" ? "swap window" : g.status}
                 </Badge>
-                {g.status === "pending" && g.member_count < g.max_members && (
-                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowInviteDialog(true)}>
+                {isAdmin && g.status === "pending" && g.member_count < g.max_members && (
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowInviteDialog(true)} title="Invite members">
                     <Share2 className="h-4 w-4" />
                   </Button>
                 )}
@@ -569,19 +569,9 @@ export function SandboxAjoTab() {
                   )}
 
                   <div className="flex gap-2">
-                    {g.status === "active" && g.member_count < g.max_members && (
-                      <Button size="sm" variant="outline" onClick={async (e) => {
-                        e.stopPropagation();
-                        const r = await products.joinGroup(g.id);
-                        if (r?.data) {
-                          toast({ title: "Joined group!" });
-                          loadGroups();
-                        }
-                      }} disabled={products.loading}>
-                        Join
-                      </Button>
-                    )}
-                    {g.status === "active" && (
+                    {/* Joining is invite-only — admins invite via the group detail page,
+                        invitees accept from the notification bell. No open "Join" button. */}
+                    {g.status === "active" && (g.vfd_sandbox_group_members || []).some((m: any) => m.user_id === currentUserId) && (
                       <Button size="sm" onClick={async (e) => {
                         e.stopPropagation();
                         const result = await products.contributeGroup(g.id);
