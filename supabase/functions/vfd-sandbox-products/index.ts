@@ -2888,6 +2888,161 @@ async function handleAutoStartPendingGroups(_userId: string, body: Record<string
 }
 
 // =============================================
+// GROUP CHAT (post + list)
+// =============================================
+async function handlePostGroupChat(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const groupId = body.group_id as string;
+  const message = (body.message as string || "").trim();
+  if (!groupId || !message) return jsonResponse({ error: "group_id and message required" }, 400);
+  if (message.length > 1000) return jsonResponse({ error: "Message too long (max 1000 chars)" }, 400);
+
+  const { data: member } = await db.from("vfd_sandbox_group_members")
+    .select("id").eq("group_id", groupId).eq("user_id", userId).eq("status", "active").maybeSingle();
+  if (!member) return jsonResponse({ error: "Not a member of this group" }, 403);
+
+  const { data, error } = await db.from("vfd_sandbox_chat_messages")
+    .insert({ group_id: groupId, user_id: userId, message, message_type: "member" })
+    .select().single();
+  if (error) return jsonResponse({ error: error.message }, 500);
+  return jsonResponse({ data });
+}
+
+async function handleListGroupChat(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const groupId = body.group_id as string;
+  if (!groupId) return jsonResponse({ error: "group_id required" }, 400);
+
+  const { data: member } = await db.from("vfd_sandbox_group_members")
+    .select("id").eq("group_id", groupId).eq("user_id", userId).maybeSingle();
+  if (!member) return jsonResponse({ error: "Not a member" }, 403);
+
+  const { data: chat } = await db.from("vfd_sandbox_chat_messages")
+    .select("*").eq("group_id", groupId).order("created_at", { ascending: true }).limit(200);
+  const names = await fetchProfileNames((chat || []).map((c: { user_id: string }) => c.user_id));
+  return jsonResponse({ data: attachNames(chat, names) });
+}
+
+// =============================================
+// AUTO-CONTRIBUTION SWEEP (cron-driven, wallet-only)
+// Mirrors production: daily/weekly/monthly at scheduled WAT hour:minute,
+// no card retries, cycle_id idempotency via contribution_audit.
+// =============================================
+async function handleSandboxAutoContribute(_userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const forceGroupId = body.force_group_id as string | undefined;
+
+  // WAT = UTC+1
+  const now = new Date();
+  const watMs = now.getTime() + 60 * 60 * 1000;
+  const wat = new Date(watMs);
+  const watHour = wat.getUTCHours();
+  const watMinute = wat.getUTCMinutes();
+  const minuteSlot = watMinute < 30 ? 0 : 30;
+  const dayOfWeek = wat.getUTCDay();
+  const dayOfMonth = wat.getUTCDate();
+
+  let q = db.from("vfd_sandbox_groups").select("*").eq("status", "active").eq("auto_debit", true);
+  if (forceGroupId) q = q.eq("id", forceGroupId);
+  else q = q.eq("contribution_hour", watHour);
+
+  const { data: groups } = await q;
+  const processed: Array<Record<string, unknown>> = [];
+
+  for (const group of (groups || [])) {
+    if (!forceGroupId) {
+      // Filter by minute slot + period day match
+      if ((group.contribution_minute ?? 0) !== minuteSlot) continue;
+      if (group.period === "weekly" && (group.contribution_day_of_week ?? 1) !== dayOfWeek) continue;
+      if (group.period === "monthly" && (group.contribution_day_of_month ?? 1) !== dayOfMonth) continue;
+    }
+
+    const { data: cycles } = await db.from("vfd_sandbox_contribution_cycles")
+      .select("*").eq("group_id", group.id).eq("status", "active")
+      .order("created_at", { ascending: true }).limit(1);
+    const activeCycle = cycles?.[0];
+    if (!activeCycle) continue;
+
+    const { data: pending } = await db.from("vfd_sandbox_group_members")
+      .select("user_id").eq("group_id", group.id).eq("status", "active")
+      .eq("has_contributed_current", false);
+
+    let succeeded = 0, failed = 0;
+    for (const m of (pending || [])) {
+      // Idempotency: skip if already audited for this cycle
+      const { data: existingAudit } = await db.from("vfd_sandbox_contribution_audit")
+        .select("id").eq("user_id", m.user_id).eq("cycle_id", activeCycle.id)
+        .eq("status", "success").maybeSingle();
+      if (existingAudit) continue;
+
+      const amount = Number(group.contribution_amount);
+      const debited = await debitForSavings(m.user_id, amount);
+
+      if (debited) {
+        await db.from("vfd_sandbox_group_contributions").insert({
+          group_id: group.id, user_id: m.user_id, cycle_number: group.current_cycle, amount,
+        });
+        await db.from("vfd_sandbox_contribution_audit").insert({
+          user_id: m.user_id, group_id: group.id, cycle_id: activeCycle.id,
+          amount, contribution_type: "auto", status: "success",
+        });
+        await db.from("vfd_sandbox_group_members").update({ has_contributed_current: true })
+          .eq("group_id", group.id).eq("user_id", m.user_id);
+        await postChatMessage(group.id, m.user_id,
+          `Auto-contribution of ₦${amount.toLocaleString()} processed`, "auto_contribution");
+        await sendNotification(m.user_id, "Auto-contribution Successful",
+          `Your auto-contribution of ₦${amount.toLocaleString()} for ${group.name} was processed.`,
+          "contribution_success", group.id);
+        succeeded++;
+      } else {
+        await db.from("vfd_sandbox_contribution_audit").insert({
+          user_id: m.user_id, group_id: group.id, cycle_id: activeCycle.id,
+          amount, contribution_type: "auto", status: "failed",
+        });
+        await postChatMessage(group.id, m.user_id,
+          `⚠️ Auto-contribution failed — insufficient wallet balance.`, "contribution_failed");
+        await sendNotification(m.user_id, "Auto-contribution Failed",
+          `Auto-contribution for ${group.name} failed (insufficient wallet). Please fund your wallet and contribute manually.`,
+          "contribution_failed", group.id);
+        failed++;
+      }
+    }
+
+    // After sweep, see if cycle should auto-payout
+    const { count } = await db.from("vfd_sandbox_group_contributions")
+      .select("*", { count: "exact", head: true })
+      .eq("group_id", group.id).eq("cycle_number", group.current_cycle);
+    if (count && count >= group.member_count) {
+      await processAutoPayout(db, group, activeCycle);
+    }
+
+    processed.push({ group_id: group.id, name: group.name, succeeded, failed });
+  }
+
+  return jsonResponse({ data: { processed_count: processed.length, processed } });
+}
+
+// =============================================
+// UPDATE GROUP SETTINGS (admin only)
+// =============================================
+async function handleUpdateGroupSettings(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const groupId = body.group_id as string;
+  const { data: group } = await db.from("vfd_sandbox_groups").select("admin_id, status").eq("id", groupId).maybeSingle();
+  if (!group) return jsonResponse({ error: "Group not found" }, 404);
+  if (group.admin_id !== userId) return jsonResponse({ error: "Only the admin can update settings" }, 403);
+
+  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  const allowed = ["auto_debit", "contribution_hour", "contribution_minute", "contribution_day_of_week", "contribution_day_of_month", "description"] as const;
+  for (const k of allowed) if (body[k] !== undefined) updates[k] = body[k];
+
+  const { error } = await db.from("vfd_sandbox_groups").update(updates).eq("id", groupId);
+  if (error) return jsonResponse({ error: error.message }, 500);
+  await postChatMessage(groupId, userId, "Admin updated group settings", "system");
+  return jsonResponse({ data: { success: true } });
+}
+
+// =============================================
 // MAIN HANDLER
 // =============================================
 
