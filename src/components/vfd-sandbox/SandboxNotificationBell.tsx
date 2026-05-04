@@ -66,8 +66,6 @@ export function SandboxNotificationBell() {
     if (open) refresh();
   }, [open, refresh]);
 
-  const unreadCount = items.filter(n => !n.is_read).length + invites.length;
-
   const handleMarkRead = async (id: string) => {
     await products.markNotificationRead(id);
     setItems(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
@@ -125,6 +123,7 @@ export function SandboxNotificationBell() {
     n.notification_type !== "group_invite" || (n.group_id && inviteGroupIds.has(n.group_id))
   );
 
+  const unreadCount = items.filter(n => !n.is_read).length + actionableInvites.length;
   const isEmpty = visibleNotifs.length === 0 && actionableInvites.length === 0;
 
   return (
