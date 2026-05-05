@@ -229,6 +229,37 @@ export function SandboxAjoTab() {
               </div>
             )}
 
+            {/* Cycle summary: contribution meter + recipient + payouts so far */}
+            {g.status === "active" && (() => {
+              const contributedCount = members.filter((m: any) => m.has_contributed_current).length;
+              const totalMembers = members.length || g.member_count || 0;
+              const meterPct = totalMembers > 0 ? (contributedCount / totalMembers) * 100 : 0;
+              const currentRecipientId = (payoutOrder || [])[g.current_cycle - 1];
+              const currentRecipientName = payoutOrderNames[g.current_cycle - 1] || memberNameMap[currentRecipientId] || (currentRecipientId ? `User ${currentRecipientId.slice(0, 6)}` : "—");
+              const paidMembers = members.filter((m: any) => m.has_received_payout);
+              return (
+                <div className="rounded-xl border bg-muted/20 p-3 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold">Cycle {g.current_cycle} contribution meter</span>
+                    <span className="text-muted-foreground">{contributedCount}/{totalMembers}</span>
+                  </div>
+                  <Progress value={meterPct} className="h-2" />
+                  <div className="flex justify-between text-[11px] pt-1">
+                    <span className="text-muted-foreground">This cycle's recipient</span>
+                    <span className="font-medium truncate max-w-[180px]">{currentRecipientName}</span>
+                  </div>
+                  <div className="text-[11px]">
+                    <span className="text-muted-foreground">Paid out so far: </span>
+                    {paidMembers.length === 0 ? (
+                      <span className="text-muted-foreground">None yet</span>
+                    ) : (
+                      <span className="font-medium">{paidMembers.map((m: any) => m.display_name || `User ${m.user_id?.slice(0,6)}`).join(", ")}</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Swap window banner with countdown + auto-start trigger */}
             {g.status === "swap_window" && (
               <SwapWindowBanner
@@ -243,7 +274,7 @@ export function SandboxAjoTab() {
             {/* Action buttons */}
             <div className="flex flex-wrap gap-2">
               {g.status === "active" && (() => {
-                const myM = (g.vfd_sandbox_group_members || []).find((m: any) => m.user_id === currentUserId);
+                const myM = members.find((m: any) => m.user_id === currentUserId);
                 const contributed = !!myM?.has_contributed_current;
                 return (
                   <Button size="sm" onClick={async () => {
