@@ -680,7 +680,16 @@ async function processAutoPayout(
     cycle_number: currentCycle,
     source: "vfd_sandbox_ajo",
   });
-  if (!payout.success) return { success: false, error: payout.error || "Payout failed" };
+  if (!payout.success) {
+    const err = payout.error || "Payout failed";
+    console.error(`[processAutoPayout] group=${groupId} cycle=${currentCycle} failed:`, err);
+    await postChatMessage(groupId, recipientId,
+      `⚠️ Auto-payout for cycle ${currentCycle} failed: ${err}. Admin will retry.`, "contribution_failed");
+    await sendNotification(recipientId, "Payout Pending",
+      `Your payout for ${group.name} cycle ${currentCycle} could not be processed (${err}). Our team has been alerted.`,
+      "payout_notification", groupId);
+    return { success: false, error: err };
+  }
 
   await db.from("vfd_sandbox_group_payouts").insert({
     group_id: groupId, recipient_id: recipientId,
