@@ -155,6 +155,8 @@ export function useVfdSandboxProducts() {
   const removeSplitParticipant = useCallback((split_id: string, participant_user_id: string) =>
     invoke("remove_split_participant", { split_id, participant_user_id }), [invoke]);
   const getSplitDetail = useCallback((split_id: string) => invoke("get_split_detail", { split_id }), [invoke]);
+  const inviteSplitMember = useCallback((split_id: string, invitee_id: string) =>
+    invoke("invite_split_member", { split_id, invitee_id }), [invoke]);
 
   // Associations (full parity)
   const createAssociation = useCallback((body: Record<string, unknown>) => invoke("create_association", body), [invoke]);
@@ -204,7 +206,7 @@ export function useVfdSandboxProducts() {
     createCampaign, listCampaigns, contributeCampaign, getCampaignDetail, postCampaignUpdate, withdrawCampaignEscrow,
     // SplitPay
     createSplit, listSplits, joinSplit, paySplit,
-    declineSplit, cancelSplit, removeSplitParticipant, getSplitDetail,
+    declineSplit, cancelSplit, removeSplitParticipant, getSplitDetail, inviteSplitMember,
     // Associations
     createAssociation, listAssociations, joinAssociation, getAssociationDetail, contributeAssociation,
     inviteAssocMember, respondAssocInvite, listAssocChat, postAssocChat,
