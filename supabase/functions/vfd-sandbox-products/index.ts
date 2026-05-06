@@ -1768,6 +1768,41 @@ async function handleRemoveSplitParticipant(userId: string, body: Record<string,
   return jsonResponse({ data: { removed: true } });
 }
 
+// SplitPay: Invite a specific user (creator only) — pre-adds them as a pending participant
+async function handleInviteSplitMember(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const splitId = body.split_id as string;
+  const inviteeId = body.invitee_id as string;
+  if (!splitId || !inviteeId) return jsonResponse({ error: "split_id and invitee_id required" }, 400);
+
+  const { data: split } = await db.from("vfd_sandbox_splits").select("*").eq("id", splitId).single();
+  if (!split) return jsonResponse({ error: "Split not found" }, 404);
+  if (split.creator_id !== userId) return jsonResponse({ error: "Only the creator can invite participants" }, 403);
+  if (split.status !== "active") return jsonResponse({ error: "Split is not active" }, 400);
+  if (inviteeId === userId) return jsonResponse({ error: "You're already in this split" }, 400);
+
+  const { data: existing } = await db.from("vfd_sandbox_split_participants")
+    .select("id, status").eq("split_id", splitId).eq("user_id", inviteeId).maybeSingle();
+  if (existing) return jsonResponse({ data: { already_invited: true } });
+
+  const { count } = await db.from("vfd_sandbox_split_participants")
+    .select("*", { count: "exact", head: true }).eq("split_id", splitId).in("status", ["pending", "paid"]);
+  if (count && count >= split.split_count) return jsonResponse({ error: "Split is full" }, 400);
+
+  const { error } = await db.from("vfd_sandbox_split_participants").insert({
+    split_id: splitId, user_id: inviteeId, amount: Number(split.per_person_amount), status: "pending",
+  });
+  if (error) return jsonResponse({ error: error.message }, 500);
+
+  const { data: inviter } = await db.from("profiles").select("full_name, username").eq("id", userId).maybeSingle();
+  const inviterName = inviter?.username ? `@${inviter.username}` : inviter?.full_name || "Someone";
+  await sendNotification(inviteeId, "SplitPay Invite",
+    `${inviterName} invited you to split "${split.title}" — your share is ₦${Number(split.per_person_amount).toLocaleString()}.`,
+    "split_invite", splitId);
+
+  return jsonResponse({ data: { invited: true } });
+}
+
 // SplitPay: Get detail
 async function handleGetSplitDetail(body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
