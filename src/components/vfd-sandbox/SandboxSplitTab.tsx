@@ -190,9 +190,14 @@ export function SandboxSplitTab() {
           </div>
         )}
 
-        {/* Invite participants — share link */}
+        {/* Invite participants — search & share */}
         {s.status === "active" && slotsRemaining > 0 && isCreator && (
-          <SplitInviteBlock splitId={s.id} title={s.title || s.purpose} />
+          <SplitInviteBlock
+            splitId={s.id}
+            title={s.title || s.purpose}
+            slotsRemaining={slotsRemaining}
+            onInvited={() => loadDetail(s.id)}
+          />
         )}
 
         {/* Action buttons (WeSave parity: only when I'm a pending participant) */}
