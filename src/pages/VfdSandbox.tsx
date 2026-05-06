@@ -110,24 +110,50 @@ function VfdSandboxInner() {
     await vestara.fetchTransactions();
   }, [vestara]);
 
-  // Map vestara transactions — use tx.amount directly (FIX: was using max of entries)
-  const mappedTransactions = vestara.transactions.map((tx) => ({
-    id: tx.id,
-    transaction_type: tx.type.includes("deposit") ? "credit"
-      : tx.type.includes("withdraw") ? "debit"
-      : tx.type === "thrift_payout" ? "credit"
-      : tx.type === "thrift_contribution" ? "debit"
-      : tx.type.includes("lock") ? "lock"
-      : tx.type.includes("unlock") ? "credit"
-      : tx.type.includes("interest") ? "credit"
-      : tx.type.includes("reversal") ? "credit"
-      : "debit",
-    amount: Number(tx.amount),
-    description: tx.type.replace(/_/g, " "),
-    reference: tx.reference,
-    status: tx.status,
-    created_at: tx.created_at,
-  }));
+  // Map vestara transactions — show net amount and platform fee for payouts
+  const mappedTransactions = vestara.transactions.flatMap((tx) => {
+    const fee = Number((tx.metadata as Record<string, unknown>)?.fee || 0);
+    const gross = Number(tx.amount);
+    const isPayout = tx.type === "thrift_payout";
+    const net = isPayout && fee > 0 ? gross - fee : gross;
+
+    const base = {
+      id: tx.id,
+      transaction_type: tx.type.includes("deposit") ? "credit"
+        : tx.type.includes("withdraw") ? "debit"
+        : tx.type === "thrift_payout" ? "credit"
+        : tx.type === "thrift_contribution" ? "debit"
+        : tx.type.includes("lock") ? "lock"
+        : tx.type.includes("unlock") ? "credit"
+        : tx.type.includes("interest") ? "credit"
+        : tx.type.includes("reversal") ? "credit"
+        : "debit",
+      amount: net,
+      description: isPayout && fee > 0
+        ? `thrift payout (₦${gross.toLocaleString()} − ₦${fee.toLocaleString()} fee)`
+        : tx.type.replace(/_/g, " "),
+      reference: tx.reference,
+      status: tx.status,
+      created_at: tx.created_at,
+    };
+
+    // Surface the platform fee as its own debit row in history
+    if (isPayout && fee > 0) {
+      return [
+        base,
+        {
+          id: `${tx.id}-fee`,
+          transaction_type: "debit",
+          amount: fee,
+          description: "Platform fee (thrift payout)",
+          reference: `${tx.reference}-fee`,
+          status: tx.status,
+          created_at: tx.created_at,
+        },
+      ];
+    }
+    return [base];
+  });
 
   /* ─── Fund via Vestara Deposit ONLY (no dual-write) ─── */
   const handleFund = async (amount: number) => {
