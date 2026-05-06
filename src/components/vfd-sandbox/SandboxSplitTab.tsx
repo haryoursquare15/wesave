@@ -37,10 +37,14 @@ const fmt = (n: number) => new Intl.NumberFormat("en-NG").format(n);
 export function SandboxSplitTab() {
   const { toast } = useToast();
   const products = useVfdSandboxProducts();
+  const { getBalanceSummary } = useVestaraLedger();
+  const { session } = useSandboxAwareAuth();
+  const currentUserId = session?.user?.id;
   const [splits, setSplits] = useState<Split[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detailData, setDetailData] = useState<any>(null);
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
 
   const [form, setForm] = useState({
     purpose: "", total_amount: "", split_count: "2",
@@ -59,7 +63,12 @@ export function SandboxSplitTab() {
     if (result?.data) setSplits(result.data);
   };
 
-  useEffect(() => { loadSplits(); }, []); // eslint-disable-line
+  const refreshWallet = async () => {
+    const summary = await getBalanceSummary();
+    if (summary) setWalletBalance(summary.wallet);
+  };
+
+  useEffect(() => { loadSplits(); refreshWallet(); }, []); // eslint-disable-line
 
   const handleCreate = async () => {
     if (!form.purpose.trim()) { toast({ title: "Purpose is required", variant: "destructive" }); return; }
