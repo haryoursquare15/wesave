@@ -115,6 +115,8 @@ function VfdSandboxInner() {
     id: tx.id,
     transaction_type: tx.type.includes("deposit") ? "credit"
       : tx.type.includes("withdraw") ? "debit"
+      : tx.type === "thrift_payout" ? "credit"
+      : tx.type === "thrift_contribution" ? "debit"
       : tx.type.includes("lock") ? "lock"
       : tx.type.includes("unlock") ? "credit"
       : tx.type.includes("interest") ? "credit"
