@@ -445,11 +445,36 @@ export function SandboxSplitTab() {
 }
 
 /* ─── Inline share/invite block for a split ─── */
-function SplitInviteBlock({ splitId, title }: { splitId: string; title: string }) {
+function SplitInviteBlock({ splitId, title, slotsRemaining, onInvited }: { splitId: string; title: string; slotsRemaining: number; onInvited: () => void }) {
   const { toast } = useToast();
+  const products = useVfdSandboxProducts();
   const [copied, setCopied] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [results, setResults] = useState<any[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [invited, setInvited] = useState<Set<string>>(new Set());
   const link = `${window.location.origin}/vfd-sandbox?split=${splitId}`;
   const text = `Join me to split the bill for "${title}" on Vestara: ${link}`;
+
+  useEffect(() => {
+    if (searchTerm.trim().length < 2) { setResults([]); return; }
+    let cancelled = false;
+    setSearching(true);
+    const t = setTimeout(async () => {
+      const r = await products.searchUsers(searchTerm.trim());
+      if (!cancelled) { setResults(r?.data || []); setSearching(false); }
+    }, 300);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [searchTerm]); // eslint-disable-line
+
+  const invite = async (userId: string) => {
+    const r = await products.inviteSplitMember(splitId, userId);
+    if (r?.data?.invited || r?.data?.already_invited) {
+      setInvited(prev => new Set(prev).add(userId));
+      toast({ title: r.data.already_invited ? "Already invited" : "Invite sent!" });
+      onInvited();
+    }
+  };
 
   const copy = async () => {
     await navigator.clipboard.writeText(link);
