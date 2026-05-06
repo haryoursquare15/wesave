@@ -227,7 +227,7 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [] 
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-2">
               <Wallet className="h-4 w-4 opacity-70" />
-              <span className="text-xs font-medium opacity-70 tracking-wide uppercase">Total Balance</span>
+              <span className="text-xs font-medium opacity-70 tracking-wide uppercase">Available Balance</span>
             </div>
             <button
               onClick={() => setShowBalance(!showBalance)}
@@ -247,7 +247,7 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [] 
               exit={{ opacity: 0, y: -4 }}
               className="text-[2rem] font-extrabold tracking-tight mb-2 leading-none"
             >
-              {showBalance ? <AnimatedNumber value={balance.totalBalance} /> : "₦ ••••••"}
+              {showBalance ? <AnimatedNumber value={balance.availableBalance} /> : "₦ ••••••"}
             </motion.h2>
           </AnimatePresence>
 
@@ -269,7 +269,7 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [] 
           {/* Sub-balances */}
           <div className="grid grid-cols-3 gap-2">
             {[
-              { label: "Available", value: balance.availableBalance, icon: Banknote },
+              { label: "Total", value: balance.totalBalance, icon: Banknote },
               { label: "Locked", value: balance.lockedBalance, icon: Lock },
               { label: "Savings", value: balance.savingsBalance, icon: PiggyBank },
             ].map((item) => (
