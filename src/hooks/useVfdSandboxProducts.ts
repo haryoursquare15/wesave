@@ -10,12 +10,19 @@ export function useVfdSandboxProducts() {
   const invoke = useCallback(
     async (action: string, body: Record<string, unknown> = {}) => {
       // Always fetch a fresh session so we never send an expired JWT.
-      // supabase-js auto-refreshes the token if it's expired.
-      const { data: sessionData } = await client.auth.getSession();
-      const accessToken = sessionData?.session?.access_token;
-      if (!accessToken) {
-        toast({ title: "Not authenticated", description: "Please sign in again.", variant: "destructive" });
-        return null;
+      // Proactively refresh if the token is within 60s of expiry (or already expired)
+      // because supabase-js's lazy refresh can lag behind click-driven actions.
+      let { data: sessionData } = await client.auth.getSession();
+      let accessToken = sessionData?.session?.access_token;
+      const expiresAt = sessionData?.session?.expires_at ?? 0; // unix seconds
+      const nowSec = Math.floor(Date.now() / 1000);
+      if (!accessToken || expiresAt - nowSec < 60) {
+        const { data: refreshed, error: refreshErr } = await client.auth.refreshSession();
+        if (refreshErr || !refreshed?.session?.access_token) {
+          toast({ title: "Session expired", description: "Please sign in again.", variant: "destructive" });
+          return null;
+        }
+        accessToken = refreshed.session.access_token;
       }
 
       const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL as string;
