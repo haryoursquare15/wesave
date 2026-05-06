@@ -501,10 +501,53 @@ function SplitInviteBlock({ splitId, title, slotsRemaining, onInvited }: { split
   return (
     <Card>
       <CardContent className="p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <UserPlus className="h-4 w-4 text-primary" />
-          <p className="text-sm font-semibold">Invite participants</p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <UserPlus className="h-4 w-4 text-primary" />
+            <p className="text-sm font-semibold">Invite participants</p>
+          </div>
+          <Badge variant="outline" className="text-[10px]">{slotsRemaining} slot{slotsRemaining !== 1 ? "s" : ""} left</Badge>
         </div>
+
+        {/* Search WeSave users to invite directly */}
+        <div className="space-y-2">
+          <Label className="text-xs">Search by username or name</Label>
+          <Input
+            placeholder="e.g. @ada or Adaobi"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="text-sm"
+          />
+          {searchTerm.length >= 2 && (
+            <div className="max-h-48 overflow-y-auto space-y-1 rounded-lg border border-border p-1">
+              {searching ? (
+                <p className="text-xs text-muted-foreground text-center py-3">Searching…</p>
+              ) : results.length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-3">No users found</p>
+              ) : results.map((u: any) => (
+                <div key={u.id} className="flex items-center justify-between p-2 rounded hover:bg-accent/50">
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium truncate">{u.full_name || u.username || "User"}</p>
+                    {u.username && <p className="text-[10px] text-muted-foreground truncate">@{u.username}</p>}
+                  </div>
+                  {invited.has(u.id) ? (
+                    <Badge variant="outline" className="text-[10px] gap-1 border-green-500/40 text-green-600">
+                      <Check className="h-3 w-3" /> Invited
+                    </Badge>
+                  ) : (
+                    <Button size="sm" variant="ghost" className="h-7 px-2" disabled={products.loading || slotsRemaining <= 0}
+                      onClick={() => invite(u.id)}>
+                      <UserPlus className="h-3 w-3" />
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="border-t border-border pt-3">
+          <p className="text-[11px] text-muted-foreground mb-2">Or share a link</p>
         <div className="flex gap-2">
           <Input value={link} readOnly className="text-xs" />
           <Button variant="outline" size="icon" onClick={copy} title="Copy link">
