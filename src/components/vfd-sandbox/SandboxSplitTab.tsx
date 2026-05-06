@@ -7,12 +7,13 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useVfdSandboxProducts } from "@/hooks/useVfdSandboxProducts";
+import { useVestaraLedger } from "@/hooks/useVestaraLedger";
+import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
 import {
   Receipt, Plus, RefreshCw, CreditCard, ArrowLeft, CheckCircle,
-  XCircle, Ban, Info, AlertTriangle, UserPlus, Share2, Copy, Check,
+  XCircle, Ban, Info, AlertTriangle, UserPlus, Share2, Copy, Check, Wallet,
 } from "lucide-react";
 import { format } from "date-fns";
-import { SandboxGroupInviteDialog } from "./SandboxGroupInviteDialog";
 
 const NIGERIAN_BANKS = [
   "Access Bank", "Citibank", "Ecobank", "Fidelity Bank", "First Bank",
@@ -36,10 +37,14 @@ const fmt = (n: number) => new Intl.NumberFormat("en-NG").format(n);
 export function SandboxSplitTab() {
   const { toast } = useToast();
   const products = useVfdSandboxProducts();
+  const { getBalanceSummary } = useVestaraLedger();
+  const { session } = useSandboxAwareAuth();
+  const currentUserId = session?.user?.id;
   const [splits, setSplits] = useState<Split[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detailData, setDetailData] = useState<any>(null);
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
 
   const [form, setForm] = useState({
     purpose: "", total_amount: "", split_count: "2",
@@ -58,7 +63,12 @@ export function SandboxSplitTab() {
     if (result?.data) setSplits(result.data);
   };
 
-  useEffect(() => { loadSplits(); }, []); // eslint-disable-line
+  const refreshWallet = async () => {
+    const summary = await getBalanceSummary();
+    if (summary) setWalletBalance(summary.wallet);
+  };
+
+  useEffect(() => { loadSplits(); refreshWallet(); }, []); // eslint-disable-line
 
   const handleCreate = async () => {
     if (!form.purpose.trim()) { toast({ title: "Purpose is required", variant: "destructive" }); return; }
@@ -92,7 +102,7 @@ export function SandboxSplitTab() {
 
   const loadDetail = async (id: string) => {
     const result = await products.getSplitDetail(id);
-    if (result?.data) { setDetailData(result.data); setDetailId(id); }
+    if (result?.data) { setDetailData(result.data); setDetailId(id); refreshWallet(); }
   };
 
   // Detail view
@@ -105,7 +115,11 @@ export function SandboxSplitTab() {
     const perPerson = Number(s.per_person_amount);
     const fee = Number(s.fee_per_person || 0);
     const totalDue = perPerson + fee;
-    const isCreator = true; // sandbox
+    const isCreator = currentUserId === s.creator_id;
+    const myParticipation = participants.find((p: any) => p.user_id === currentUserId);
+    const hasEnoughBalance = walletBalance === null || walletBalance >= totalDue;
+    const payBlockedReason = !hasEnoughBalance ? "Insufficient balance" : null;
+    const remainingPayments = Math.max(Number(s.split_count) - paidCount, 0);
 
     return (
       <div className="space-y-4">
@@ -138,14 +152,32 @@ export function SandboxSplitTab() {
               <span>Bill share: ₦{fmt(perPerson)}</span>
               <span>Platform fee: ₦{fmt(fee)}</span>
             </div>
-            {s.merchant_name && (
+            {s.merchant_account_name && (
               <div className="text-xs text-muted-foreground border-t border-border pt-2">
-                <p className="font-semibold text-foreground">Merchant: {s.merchant_name}</p>
+                <p className="font-semibold text-foreground">Merchant: {s.merchant_account_name}</p>
                 {s.merchant_bank_name && <p>{s.merchant_bank_name} — {s.merchant_account_number}</p>}
               </div>
             )}
           </CardContent>
         </Card>
+
+        {/* Wallet balance check (WeSave parity) */}
+        {s.status === "active" && myParticipation?.status === "pending" && walletBalance !== null && (
+          <div className={`rounded-xl p-3 border ${hasEnoughBalance ? "bg-secondary/10 border-secondary/20" : "bg-destructive/10 border-destructive/20"}`}>
+            <p className="text-sm font-semibold flex items-center gap-1">
+              <Wallet className="h-4 w-4" />
+              {hasEnoughBalance ? "Ready to pay" : "Insufficient balance"}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Wallet: ₦{fmt(walletBalance)} · Required: ₦{fmt(totalDue)} (₦{fmt(perPerson)} + ₦{fmt(fee)} fee)
+            </p>
+            {!hasEnoughBalance && (
+              <p className="text-xs text-destructive mt-1">
+                Fund your wallet from the Fund tab to pay your share.
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Group progress */}
         {s.status === "active" && slotsRemaining > 0 && (
@@ -163,22 +195,65 @@ export function SandboxSplitTab() {
           <SplitInviteBlock splitId={s.id} title={s.title || s.purpose} />
         )}
 
-        {/* Action buttons */}
-        {s.status === "active" && (
+        {/* Action buttons (WeSave parity: only when I'm a pending participant) */}
+        {s.status === "active" && myParticipation?.status === "pending" && (
           <div className="flex gap-2">
-            <Button className="flex-1" onClick={async () => {
+            <Button className="flex-1" disabled={products.loading || Boolean(payBlockedReason)} onClick={async () => {
               const r = await products.paySplit(s.id);
-              if (r?.data) { toast({ title: "Paid!", description: `₦${fmt(totalDue)}` }); loadDetail(s.id); }
-            }} disabled={products.loading}>
-              <CreditCard className="h-4 w-4 mr-1" /> Accept & Pay ₦{fmt(totalDue)}
+              if (r?.data) {
+                const allPaid = r.data.all_paid;
+                toast({
+                  title: "Payment successful!",
+                  description: allPaid
+                    ? "All participants paid — merchant settlement processing."
+                    : `Your share of ₦${fmt(totalDue)} was paid.`,
+                });
+                await Promise.all([loadDetail(s.id), refreshWallet()]);
+              }
+            }}>
+              <CreditCard className="h-4 w-4 mr-1" />
+              {payBlockedReason || `Accept & Pay ₦${fmt(totalDue)}`}
             </Button>
             <Button variant="outline" className="flex-1" onClick={async () => {
               await products.declineSplit(s.id);
-              toast({ title: "Declined" });
+              toast({ title: "Declined", description: "You have declined this split." });
               loadDetail(s.id);
             }} disabled={products.loading}>
               Decline
             </Button>
+          </div>
+        )}
+
+        {/* Paid confirmation */}
+        {myParticipation?.status === "paid" && (
+          <div className="bg-secondary/10 border border-secondary/20 rounded-xl p-4 text-center">
+            <CheckCircle className="h-6 w-6 text-secondary mx-auto mb-1" />
+            <p className="font-semibold">You've paid your share</p>
+            <p className="text-xs text-muted-foreground">
+              ₦{fmt(totalDue)}{myParticipation.paid_at ? ` on ${format(new Date(myParticipation.paid_at), "MMM d, HH:mm")}` : ""}
+            </p>
+            {s.status === "active" && remainingPayments > 0 && (
+              <p className="text-xs text-muted-foreground mt-2">
+                Waiting for {remainingPayments} more payment{remainingPayments > 1 ? "s" : ""} before merchant settlement.
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Declined confirmation */}
+        {myParticipation?.status === "declined" && (
+          <div className="bg-destructive/10 border border-destructive/20 rounded-xl p-4 text-center">
+            <XCircle className="h-6 w-6 text-destructive mx-auto mb-1" />
+            <p className="font-semibold">You declined this split</p>
+          </div>
+        )}
+
+        {/* Settlement complete */}
+        {s.status === "completed" && s.settlement_status === "completed" && (
+          <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4 text-center">
+            <CheckCircle className="h-6 w-6 text-green-600 mx-auto mb-1" />
+            <p className="font-semibold">Settlement complete</p>
+            <p className="text-xs text-muted-foreground">Funds transferred to {s.merchant_account_name}.</p>
           </div>
         )}
 
@@ -188,7 +263,11 @@ export function SandboxSplitTab() {
           <div className="space-y-2">
             {participants.map((p: any, i: number) => (
               <div key={i} className="flex items-center justify-between text-xs p-2 rounded-lg bg-muted/50">
-                <span className="font-medium truncate max-w-[160px]">{p.display_name || `User ${p.user_id?.slice(0, 6)}`}</span>
+                <span className="font-medium truncate max-w-[160px]">
+                  {p.display_name || `User ${p.user_id?.slice(0, 6)}`}
+                  {p.user_id === s.creator_id && <span className="ml-1 text-[10px] text-primary">(creator)</span>}
+                  {p.user_id === currentUserId && <span className="ml-1 text-[10px] text-muted-foreground">(you)</span>}
+                </span>
                 <div className="flex items-center gap-2">
                   {p.status === "paid" && (
                     <>
@@ -235,7 +314,7 @@ export function SandboxSplitTab() {
             )}
             <Button variant="destructive" className="w-full" onClick={async () => {
               const r = await products.cancelSplit(s.id);
-              if (r?.data) { toast({ title: "Split cancelled" }); setDetailId(null); setDetailData(null); loadSplits(); }
+              if (r?.data) { toast({ title: "Split cancelled" }); setDetailId(null); setDetailData(null); loadSplits(); refreshWallet(); }
             }} disabled={products.loading}>
               <Ban className="h-4 w-4 mr-1" /> Cancel Split Request
             </Button>
