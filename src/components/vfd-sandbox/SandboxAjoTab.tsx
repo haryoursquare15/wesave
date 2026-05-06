@@ -394,12 +394,29 @@ export function SandboxAjoTab() {
           <TabsContent value="payout" className="space-y-2 mt-3">
             {payoutOrder.length === 0 ? (
               <p className="text-center text-sm text-muted-foreground py-4">Payout order is assigned when the thrift commences (Fisher-Yates shuffle).</p>
-            ) : payoutOrder.map((userId: string, i: number) => (
-              <div key={i} className="flex items-center justify-between text-xs p-2 rounded-lg bg-muted/50">
-                <span>Position #{i + 1}</span>
-                <span className="font-medium truncate max-w-[180px]">{payoutOrderNames[i] || memberNameMap[userId] || `User ${userId.slice(0, 6)}`}</span>
-              </div>
-            ))}
+            ) : payoutOrder.map((userId: string, i: number) => {
+              const cycleNum = i + 1;
+              const isPaid = cycleNum < g.current_cycle;
+              const isNext = cycleNum === g.current_cycle && g.status === "active";
+              const isFuture = cycleNum > g.current_cycle;
+              const name = payoutOrderNames[i] || memberNameMap[userId] || `User ${userId.slice(0, 6)}`;
+              return (
+                <div
+                  key={i}
+                  className={`flex items-center justify-between text-xs p-2 rounded-lg border ${
+                    isNext ? "bg-primary/10 border-primary/40" : isPaid ? "bg-success/5 border-success/20" : "bg-muted/50 border-transparent"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">#{cycleNum}</span>
+                    <span className="font-medium truncate max-w-[140px]">{name}</span>
+                  </div>
+                  {isPaid && <Badge variant="outline" className="text-[10px] text-success border-success/40">Paid</Badge>}
+                  {isNext && <Badge className="text-[10px]">Next</Badge>}
+                  {isFuture && <span className="text-[10px] text-muted-foreground">Upcoming</span>}
+                </div>
+              );
+            })}
           </TabsContent>
           <TabsContent value="settings" className="space-y-3 mt-3 text-xs">
             <div className="rounded-xl border bg-muted/20 p-3 space-y-2">
