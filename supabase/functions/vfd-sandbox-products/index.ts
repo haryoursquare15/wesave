@@ -3268,6 +3268,7 @@ Deno.serve(async (req) => {
       case "cancel_split": return await handleCancelSplit(userId, body);
       case "remove_split_participant": return await handleRemoveSplitParticipant(userId, body);
       case "get_split_detail": return await handleGetSplitDetail(body);
+      case "invite_split_member": return await handleInviteSplitMember(userId, body);
 
       // Associations (full parity)
       case "create_association": return await handleCreateAssociation(userId, body);
