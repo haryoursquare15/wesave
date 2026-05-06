@@ -605,13 +605,25 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
   });
   if (!debit.success) {
     const available = await getVestaraWalletBalance(userId);
-    const shortfall = Math.max(0, amount - available);
+    const rawErr = (debit.error || "").toString();
+    const isInsufficient = available < amount || /insufficient/i.test(rawErr);
+    if (isInsufficient) {
+      const shortfall = Math.max(0, amount - available);
+      return jsonResponse({
+        error: `Insufficient wallet balance. You need ₦${amount.toLocaleString()} but have ₦${available.toLocaleString()} available. Please fund your wallet with at least ₦${shortfall.toLocaleString()}.`,
+        code: "INSUFFICIENT_BALANCE",
+        required: amount,
+        available,
+        shortfall,
+      }, 400);
+    }
+    // Surface the real underlying error instead of masking it as "insufficient"
+    console.error(`[handleContributeGroup] debit failed group=${groupId} user=${userId} amount=${amount} available=${available} err=${rawErr}`);
     return jsonResponse({
-      error: `Insufficient wallet balance. You need ₦${amount.toLocaleString()} but have ₦${available.toLocaleString()} available. Please fund your wallet with at least ₦${shortfall.toLocaleString()}.`,
-      code: "INSUFFICIENT_BALANCE",
+      error: rawErr || "Contribution failed. Please try again.",
+      code: "CONTRIBUTION_FAILED",
       required: amount,
       available,
-      shortfall,
     }, 400);
   }
 
