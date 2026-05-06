@@ -118,9 +118,12 @@ export function useVestaraLedger() {
 
   const invoke = useCallback(
     async (action: string, body: Record<string, unknown> = {}) => {
-      const accessToken = session?.access_token;
+      // Always pull a fresh session so we don't send an expired access_token.
+      // The cached `session` from context can lag behind autoRefreshToken.
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token ?? session?.access_token;
       if (!accessToken) {
-        toast({ title: "Not authenticated", variant: "destructive" });
+        toast({ title: "Not authenticated", description: "Please sign in again.", variant: "destructive" });
         return null;
       }
 
