@@ -206,7 +206,7 @@ export function useVfdSandboxProducts() {
     createCampaign, listCampaigns, contributeCampaign, getCampaignDetail, postCampaignUpdate, withdrawCampaignEscrow,
     // SplitPay
     createSplit, listSplits, joinSplit, paySplit,
-    declineSplit, cancelSplit, removeSplitParticipant, getSplitDetail,
+    declineSplit, cancelSplit, removeSplitParticipant, getSplitDetail, inviteSplitMember,
     // Associations
     createAssociation, listAssociations, joinAssociation, getAssociationDetail, contributeAssociation,
     inviteAssocMember, respondAssocInvite, listAssocChat, postAssocChat,
