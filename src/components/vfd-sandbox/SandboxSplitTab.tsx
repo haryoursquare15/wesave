@@ -102,7 +102,7 @@ export function SandboxSplitTab() {
 
   const loadDetail = async (id: string) => {
     const result = await products.getSplitDetail(id);
-    if (result?.data) { setDetailData(result.data); setDetailId(id); }
+    if (result?.data) { setDetailData(result.data); setDetailId(id); refreshWallet(); }
   };
 
   // Detail view
