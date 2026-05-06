@@ -7,12 +7,13 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useVfdSandboxProducts } from "@/hooks/useVfdSandboxProducts";
+import { useVestaraLedger } from "@/hooks/useVestaraLedger";
+import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
 import {
   Receipt, Plus, RefreshCw, CreditCard, ArrowLeft, CheckCircle,
-  XCircle, Ban, Info, AlertTriangle, UserPlus, Share2, Copy, Check,
+  XCircle, Ban, Info, AlertTriangle, UserPlus, Share2, Copy, Check, Wallet,
 } from "lucide-react";
 import { format } from "date-fns";
-import { SandboxGroupInviteDialog } from "./SandboxGroupInviteDialog";
 
 const NIGERIAN_BANKS = [
   "Access Bank", "Citibank", "Ecobank", "Fidelity Bank", "First Bank",
