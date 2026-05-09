@@ -845,8 +845,8 @@ async function handleRestartGroup(userId: string, body: Record<string, unknown>)
   const { data: activeMembers } = await db.from("vfd_sandbox_group_members")
     .select("user_id").eq("group_id", groupId).eq("status", "active");
 
-  if (!activeMembers || activeMembers.length < group.max_members) {
-    return jsonResponse({ error: `Need ${group.max_members} active members to restart (currently ${activeMembers?.length || 0})` }, 400);
+  if (!activeMembers || activeMembers.length < 2) {
+    return jsonResponse({ error: `Need at least 2 active members to restart (currently ${activeMembers?.length || 0}). Invite new members first.` }, 400);
   }
 
   const memberIds = activeMembers.map(m => m.user_id);
@@ -867,6 +867,7 @@ async function handleRestartGroup(userId: string, body: Record<string, unknown>)
   await db.from("vfd_sandbox_groups").update({
     status: "active", current_cycle: 1, payout_order: newPayoutOrder,
     current_payout_position: 1, total_cycles: activeMembers.length,
+    member_count: activeMembers.length, max_members: activeMembers.length,
     updated_at: new Date().toISOString(),
   }).eq("id", groupId);
 
