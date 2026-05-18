@@ -75,6 +75,16 @@ export default function SandboxAuth() {
 
   return (
     <div className="min-h-[100dvh] bg-gradient-to-br from-background via-background to-primary/5 flex items-center justify-center p-4">
+      <AnimatePresence>
+        {showSplash && (
+          <SandboxSplash
+            onDone={() => {
+              sessionStorage.setItem("vestara_splash_seen", "1");
+              setShowSplash(false);
+            }}
+          />
+        )}
+      </AnimatePresence>
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
