@@ -21,8 +21,10 @@ import { SandboxAssociationTab } from "@/components/vfd-sandbox/SandboxAssociati
 import { SandboxBillsTab } from "@/components/vfd-sandbox/SandboxBillsTab";
 import { SandboxCardTab } from "@/components/vfd-sandbox/SandboxCardTab";
 import { SandboxGroupInviteModal } from "@/components/vfd-sandbox/SandboxGroupInviteModal";
+import { SandboxSplash } from "@/components/vfd-sandbox/SandboxSplash";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
+import { AnimatePresence } from "framer-motion";
 
 interface LockConfig { id: string; duration_months: number; interest_rate: number; early_withdrawal_penalty: number; }
 interface UserBalance {
@@ -42,6 +44,10 @@ function VfdSandboxInner() {
   const [clientChecked, setClientChecked] = useState(false);
   const [currentView, setCurrentView] = useState<View>("dashboard");
   const [banks, setBanks] = useState<Array<{ code: string; name: string }>>([]);
+  const [showSplash, setShowSplash] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return !sessionStorage.getItem("vestara_splash_seen");
+  });
 
   // Vestara-driven balance (single source of truth)
   const [vestaraBalance, setVestaraBalance] = useState<UserBalance | null>(null);
@@ -303,6 +309,16 @@ function VfdSandboxInner() {
   if (authLoading || (user && !clientChecked)) {
     return (
       <div className="flex items-center justify-center min-h-screen">
+        <AnimatePresence>
+          {showSplash && (
+            <SandboxSplash
+              onDone={() => {
+                sessionStorage.setItem("vestara_splash_seen", "1");
+                setShowSplash(false);
+              }}
+            />
+          )}
+        </AnimatePresence>
         <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
@@ -366,6 +382,16 @@ function VfdSandboxInner() {
 
   return (
     <div className="min-h-screen bg-background">
+      <AnimatePresence>
+        {showSplash && (
+          <SandboxSplash
+            onDone={() => {
+              sessionStorage.setItem("vestara_splash_seen", "1");
+              setShowSplash(false);
+            }}
+          />
+        )}
+      </AnimatePresence>
       <SandboxHeader />
       {kycDone && <SandboxGroupInviteModal onAccepted={() => { /* downstream UIs poll on their own */ }} />}
       <div className="max-w-lg mx-auto px-4 pt-3 flex items-center justify-between">
