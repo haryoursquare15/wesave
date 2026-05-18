@@ -798,6 +798,23 @@ async function handleTransfer(
       accountNo: fromAccount,
       preserveExisting: false,
     });
+    try {
+      await supabaseAdmin.from("vfd_sandbox_notifications").insert({
+        user_id: userId,
+        title: "Transfer sent",
+        message: `₦${Number(body.amount).toLocaleString()} sent to ${body.beneficiaryName || toAccount}. Ref: ${reference}`,
+        notification_type: "transfer_sent",
+      });
+    } catch (_) { /* best-effort */ }
+  } else {
+    try {
+      await supabaseAdmin.from("vfd_sandbox_notifications").insert({
+        user_id: userId,
+        title: "Transfer failed",
+        message: `Transfer of ₦${Number(body.amount).toLocaleString()} to ${body.beneficiaryName || toAccount} could not be processed.`,
+        notification_type: "transfer_failed",
+      });
+    } catch (_) { /* best-effort */ }
   }
 
   return jsonResponse({ data, vfd_status: status, reference });
