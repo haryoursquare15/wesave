@@ -229,7 +229,7 @@ export function SandboxSavings({ userBalance, onRefresh, onBack }: Props) {
       description: `Withdraw ₦${Number(s.principal).toLocaleString()} early`,
       onAuthorized: async () => {
         const result = await vestara.earlyWithdrawSavings(s.id);
-        if (result?.success) {
+        if (result && !result.error) {
           const penalty = Number(result.penalty || 0);
           const principal = Number(s.principal);
           const credited = principal - penalty;
