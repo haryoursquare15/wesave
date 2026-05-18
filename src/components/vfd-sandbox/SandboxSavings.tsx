@@ -161,7 +161,7 @@ export function SandboxSavings({ userBalance, onRefresh, onBack }: Props) {
         const productAmount = amtNum;
         const previewSnapshot = preview;
         const result = await vestara.createSavings(selectedProduct.code, amtNum, tenor);
-        if (result?.success) {
+        if (result && !result.error) {
           const details: { label: string; value: string; highlight?: boolean }[] = [
             { label: "Product", value: productName, highlight: true },
             { label: "Principal", value: `₦${productAmount.toLocaleString()}`, highlight: true },
