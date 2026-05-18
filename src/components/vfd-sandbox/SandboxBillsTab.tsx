@@ -52,6 +52,7 @@ type Step = "categories" | "billers" | "items" | "payment" | "success";
 
 export function SandboxBillsTab() {
   const { toast } = useToast();
+  const { client } = useSandboxAwareAuth();
   const [step, setStep] = useState<Step>("categories");
   const [loading, setLoading] = useState(false);
 
@@ -78,14 +79,22 @@ export function SandboxBillsTab() {
   const [billerSearch, setBillerSearch] = useState("");
 
   const callProducts = useCallback(async (action: string, body: Record<string, unknown> = {}) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) throw new Error("Not authenticated");
-    const resp = await supabase.functions.invoke("vfd-sandbox-products", {
+    let { data: sessionData } = await client.auth.getSession();
+    let accessToken = sessionData?.session?.access_token;
+    const expiresAt = sessionData?.session?.expires_at ?? 0;
+    const nowSec = Math.floor(Date.now() / 1000);
+    if (!accessToken || expiresAt - nowSec < 60) {
+      const { data: refreshed } = await client.auth.refreshSession();
+      accessToken = refreshed?.session?.access_token;
+    }
+    if (!accessToken) throw new Error("Not authenticated");
+    const resp = await client.functions.invoke("vfd-sandbox-products", {
       body: { action, ...body },
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (resp.error) throw new Error(resp.error.message);
     return resp.data;
-  }, []);
+  }, [client]);
 
   /* ─── Step 1: Load Categories ─── */
   const loadCategories = useCallback(async () => {
