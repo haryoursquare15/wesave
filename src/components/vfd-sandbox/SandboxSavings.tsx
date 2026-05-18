@@ -73,6 +73,7 @@ export function SandboxSavings({ userBalance, onRefresh, onBack }: Props) {
 
   useEffect(() => {
     loadAll();
+    onRefresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
