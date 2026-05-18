@@ -3,12 +3,14 @@ import { useNavigate } from "react-router-dom";
 import { sandboxSupabase } from "@/integrations/supabase/sandboxClient";
 import { toast } from "sonner";
 
-const BACKGROUND_TIMEOUT = 5 * 60 * 1000; // 5 minutes in background
-const INACTIVITY_TIMEOUT = 2 * 60 * 1000; // 2 minutes no interaction
+// Banking-app realistic timeouts. Short windows (2m) kicked users out
+// mid-form while filling SplitPay / Goal / Target / Transfer flows.
+const BACKGROUND_TIMEOUT = 30 * 60 * 1000; // 30 minutes in background
+const INACTIVITY_TIMEOUT = 15 * 60 * 1000; // 15 minutes no interaction
 
 const ACTIVITY_EVENTS: (keyof DocumentEventMap)[] = [
   "touchstart", "touchmove", "mousedown", "mousemove",
-  "keydown", "scroll", "click",
+  "keydown", "keyup", "input", "change", "scroll", "click", "focus",
 ];
 
 /**
@@ -47,7 +49,7 @@ export function useSandboxSessionEnforcement({ enabled = true }: { enabled?: boo
 
     const handleActivity = () => resetInactivityTimer();
     ACTIVITY_EVENTS.forEach((evt) =>
-      document.addEventListener(evt, handleActivity, { passive: true })
+      document.addEventListener(evt, handleActivity, { passive: true, capture: true })
     );
 
     const handleVisibilityChange = () => {
@@ -72,7 +74,9 @@ export function useSandboxSessionEnforcement({ enabled = true }: { enabled?: boo
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      ACTIVITY_EVENTS.forEach((evt) => document.removeEventListener(evt, handleActivity));
+      ACTIVITY_EVENTS.forEach((evt) =>
+        document.removeEventListener(evt, handleActivity, { capture: true } as EventListenerOptions)
+      );
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       if (backgroundTimerRef.current) clearTimeout(backgroundTimerRef.current);
       if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);

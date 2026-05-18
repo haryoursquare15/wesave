@@ -60,6 +60,9 @@ function VfdSandboxInner() {
 
   // Splash must never auto-log-in. If the user lands here without explicitly
   // signing in this browser session, force them through the auth page.
+  // NOTE: deps intentionally exclude `signOut`/`navigate` to avoid re-firing
+  // on every auth-state re-render (which was resetting `currentView` back to
+  // "dashboard" mid-flow while users were filling product forms).
   useEffect(() => {
     if (authLoading) return;
     if (!user) {
@@ -69,7 +72,8 @@ function VfdSandboxInner() {
     if (!sessionStorage.getItem("vestara_sandbox_signed_in")) {
       void signOut().finally(() => navigate("/vfd-sandbox/auth"));
     }
-  }, [user, authLoading, navigate, signOut]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, authLoading]);
 
   const initRef = useRef(false);
   useEffect(() => {
