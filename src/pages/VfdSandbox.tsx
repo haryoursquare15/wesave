@@ -44,6 +44,10 @@ function VfdSandboxInner() {
   const [clientChecked, setClientChecked] = useState(false);
   const [currentView, setCurrentView] = useState<View>("dashboard");
   const [banks, setBanks] = useState<Array<{ code: string; name: string }>>([]);
+  const [showSplash, setShowSplash] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return !sessionStorage.getItem("vestara_splash_seen");
+  });
 
   // Vestara-driven balance (single source of truth)
   const [vestaraBalance, setVestaraBalance] = useState<UserBalance | null>(null);
