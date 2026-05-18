@@ -49,7 +49,7 @@ export function useSandboxSessionEnforcement({ enabled = true }: { enabled?: boo
 
     const handleActivity = () => resetInactivityTimer();
     ACTIVITY_EVENTS.forEach((evt) =>
-      document.addEventListener(evt, handleActivity, { passive: true })
+      document.addEventListener(evt, handleActivity, { passive: true, capture: true })
     );
 
     const handleVisibilityChange = () => {
