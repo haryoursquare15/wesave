@@ -2461,6 +2461,13 @@ async function handleCreateVirtualCard(userId: string, _body: Record<string, unk
     };
     await db.from("vfd_sandbox_virtual_cards").insert(cardRecord);
 
+    await sendNotification(
+      userId,
+      "Virtual card issued",
+      `Your virtual card ${cardData.maskedPan || ""} was created. Issuance fee: ₦${CARD_ISSUANCE_FEE.toLocaleString()}.`,
+      "card_issued",
+    );
+
     return jsonResponse({
       data: {
         card_id: cardData.cardId,
