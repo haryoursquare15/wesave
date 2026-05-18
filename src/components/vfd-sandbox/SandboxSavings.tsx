@@ -201,7 +201,7 @@ export function SandboxSavings({ userBalance, onRefresh, onBack }: Props) {
       description: `Withdraw ₦${Number(s.principal).toLocaleString()} + interest to wallet`,
       onAuthorized: async () => {
         const result = await vestara.matureSavings(s.id);
-        if (result?.success) {
+        if (result && !result.error) {
           const interest = Number(s.accrued_interest || 0);
           const total = Number(s.principal) + interest;
           setSuccessPayload({
