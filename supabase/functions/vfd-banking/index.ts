@@ -1179,6 +1179,8 @@ async function handleUnlockFunds(userId: string, lockId: string) {
 
   // Ledger
   const availBefore = Number(balance.total_balance) - Number(balance.locked_balance) - Number(balance.savings_balance);
+  const productName = `Locked Savings · ${lock.duration_months}mo @ ${lock.interest_rate}% p.a.`;
+  const matureDesc = `${productName} matured: ₦${Number(lock.principal_amount).toLocaleString()} principal + ₦${Number(lock.expected_interest).toLocaleString()} interest`;
   await supabaseAdmin.from("vfd_lock_ledger").insert({
     user_id: userId,
     lock_id: lockId,
@@ -1188,10 +1190,29 @@ async function handleUnlockFunds(userId: string, lockId: string) {
     balance_after: availBefore + creditAmount,
     locked_before: Number(balance.locked_balance),
     locked_after: Math.max(0, newLocked),
-    description: `Matured: ₦${Number(lock.principal_amount).toLocaleString()} + ₦${Number(lock.expected_interest).toLocaleString()} interest`,
+    description: matureDesc,
   });
 
-  return jsonResponse({ data: { unlocked: creditAmount, interest_earned: Number(lock.expected_interest) } });
+  // Mirror to sandbox history + notify (so it shows up in transaction history with
+  // product name attached, and the user sees an in-app notification for every txn)
+  try {
+    await supabaseAdmin.from("vfd_sandbox_transactions").insert({
+      user_id: userId,
+      transaction_type: "credit",
+      amount: creditAmount,
+      description: matureDesc,
+      reference: `lock-mature-${lockId}`,
+      status: "completed",
+    });
+    await supabaseAdmin.from("vfd_sandbox_notifications").insert({
+      user_id: userId,
+      title: "Interest credited",
+      message: `${productName}: ₦${Number(lock.expected_interest).toLocaleString()} interest credited along with ₦${Number(lock.principal_amount).toLocaleString()} principal.`,
+      notification_type: "interest_accrued",
+    });
+  } catch (_) { /* notifications are best-effort */ }
+
+  return jsonResponse({ data: { unlocked: creditAmount, interest_earned: Number(lock.expected_interest), product: productName } });
 }
 
 // Break lock (early withdrawal)
