@@ -23,7 +23,8 @@ import { WithdrawalsTab } from "@/components/admin/WithdrawalsTab";
 import { SupportTab } from "@/components/admin/SupportTab";
 import { AdminEmailTab } from "@/components/admin/AdminEmailTab";
 import { VestaraRateConfigTab } from "@/components/admin/VestaraRateConfigTab";
-import { Percent } from "lucide-react";
+import { VestaraInvestmentsTab } from "@/components/admin/VestaraInvestmentsTab";
+import { Percent, PiggyBank } from "lucide-react";
 
 export default function Admin() {
   const navigate = useNavigate();
