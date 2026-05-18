@@ -1,20 +1,23 @@
 import { motion } from "framer-motion";
+import { useEffect } from "react";
 import vestaraLogo from "@/assets/vestara-logo.jpg";
 
 interface SandboxSplashProps {
   onDone?: () => void;
+  duration?: number;
 }
 
-export function SandboxSplash({ onDone }: SandboxSplashProps) {
+export function SandboxSplash({ onDone, duration = 2600 }: SandboxSplashProps) {
+  useEffect(() => {
+    const t = setTimeout(() => onDone?.(), duration);
+    return () => clearTimeout(t);
+  }, [onDone, duration]);
+
   return (
     <motion.div
       initial={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.6, ease: "easeInOut" }}
-      onAnimationComplete={() => {
-        // trigger done after the full intro sequence
-        setTimeout(() => onDone?.(), 2400);
-      }}
       className="fixed inset-0 z-[100] overflow-hidden flex items-center justify-center"
       style={{
         background:
