@@ -380,16 +380,6 @@ function VfdSandboxInner() {
 
   return (
     <div className="min-h-screen bg-background">
-      <AnimatePresence>
-        {showSplash && (
-          <SandboxSplash
-            onDone={() => {
-              sessionStorage.setItem("vestara_splash_seen", "1");
-              setShowSplash(false);
-            }}
-          />
-        )}
-      </AnimatePresence>
       <SandboxHeader />
       {kycDone && <SandboxGroupInviteModal onAccepted={() => { /* downstream UIs poll on their own */ }} />}
       <div className="max-w-lg mx-auto px-4 pt-3 flex items-center justify-between">
