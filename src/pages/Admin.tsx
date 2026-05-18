@@ -214,6 +214,10 @@ export default function Admin() {
           <TabsContent value="vestara-rates">
             <VestaraRateConfigTab />
           </TabsContent>
+
+          <TabsContent value="vestara-investments">
+            <VestaraInvestmentsTab />
+          </TabsContent>
         </Tabs>
       </div>
     </div>
