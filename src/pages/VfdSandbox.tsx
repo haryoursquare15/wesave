@@ -309,6 +309,16 @@ function VfdSandboxInner() {
   if (authLoading || (user && !clientChecked)) {
     return (
       <div className="flex items-center justify-center min-h-screen">
+        <AnimatePresence>
+          {showSplash && (
+            <SandboxSplash
+              onDone={() => {
+                sessionStorage.setItem("vestara_splash_seen", "1");
+                setShowSplash(false);
+              }}
+            />
+          )}
+        </AnimatePresence>
         <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
