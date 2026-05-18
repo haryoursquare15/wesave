@@ -798,6 +798,23 @@ async function handleTransfer(
       accountNo: fromAccount,
       preserveExisting: false,
     });
+    try {
+      await supabaseAdmin.from("vfd_sandbox_notifications").insert({
+        user_id: userId,
+        title: "Transfer sent",
+        message: `₦${Number(body.amount).toLocaleString()} sent to ${body.beneficiaryName || toAccount}. Ref: ${reference}`,
+        notification_type: "transfer_sent",
+      });
+    } catch (_) { /* best-effort */ }
+  } else {
+    try {
+      await supabaseAdmin.from("vfd_sandbox_notifications").insert({
+        user_id: userId,
+        title: "Transfer failed",
+        message: `Transfer of ₦${Number(body.amount).toLocaleString()} to ${body.beneficiaryName || toAccount} could not be processed.`,
+        notification_type: "transfer_failed",
+      });
+    } catch (_) { /* best-effort */ }
   }
 
   return jsonResponse({ data, vfd_status: status, reference });
@@ -876,6 +893,14 @@ async function handleSandboxCredit(userId: string, accountNo: string, amount: nu
       accountNo,
       preserveExisting: true,
     });
+    try {
+      await supabaseAdmin.from("vfd_sandbox_notifications").insert({
+        user_id: userId,
+        title: "Wallet funded",
+        message: `₦${Number(amount).toLocaleString()} credited to your sandbox wallet. Ref: ${reference}`,
+        notification_type: "wallet_credit",
+      });
+    } catch (_) { /* best-effort */ }
   }
 
   return jsonResponse({ data, vfd_status: status, reference });
@@ -1096,6 +1121,8 @@ async function handleCreateLock(userId: string, body: Record<string, unknown>) {
     .eq("user_id", userId);
 
   // Ledger entry
+  const productName = `Locked Savings · ${durationMonths}mo @ ${interestRate}% p.a.`;
+  const lockDesc = `${productName}: locked ₦${amount.toLocaleString()}`;
   await supabaseAdmin.from("vfd_lock_ledger").insert({
     user_id: userId,
     lock_id: lock.id,
@@ -1105,10 +1132,23 @@ async function handleCreateLock(userId: string, body: Record<string, unknown>) {
     balance_after: availableBalance - amount,
     locked_before: Number(balance.locked_balance),
     locked_after: newLocked,
-    description: `Locked ₦${amount.toLocaleString()} for ${durationMonths} months at ${interestRate}%`,
+    description: lockDesc,
   });
 
-  return jsonResponse({ data: lock });
+  try {
+    await supabaseAdmin.from("vfd_sandbox_transactions").insert({
+      user_id: userId, transaction_type: "debit", amount,
+      description: lockDesc, reference: `lock-${lock.id}`, status: "completed",
+    });
+    await supabaseAdmin.from("vfd_sandbox_notifications").insert({
+      user_id: userId,
+      title: "Funds locked",
+      message: `${productName}: ₦${amount.toLocaleString()} locked. Expected interest at maturity: ₦${Math.round(expectedInterest * 100) / 100}.`,
+      notification_type: "lock_created",
+    });
+  } catch (_) { /* best-effort */ }
+
+  return jsonResponse({ data: { ...lock, product: productName } });
 }
 
 // Get user's locked funds
@@ -1179,6 +1219,8 @@ async function handleUnlockFunds(userId: string, lockId: string) {
 
   // Ledger
   const availBefore = Number(balance.total_balance) - Number(balance.locked_balance) - Number(balance.savings_balance);
+  const productName = `Locked Savings · ${lock.duration_months}mo @ ${lock.interest_rate}% p.a.`;
+  const matureDesc = `${productName} matured: ₦${Number(lock.principal_amount).toLocaleString()} principal + ₦${Number(lock.expected_interest).toLocaleString()} interest`;
   await supabaseAdmin.from("vfd_lock_ledger").insert({
     user_id: userId,
     lock_id: lockId,
@@ -1188,10 +1230,29 @@ async function handleUnlockFunds(userId: string, lockId: string) {
     balance_after: availBefore + creditAmount,
     locked_before: Number(balance.locked_balance),
     locked_after: Math.max(0, newLocked),
-    description: `Matured: ₦${Number(lock.principal_amount).toLocaleString()} + ₦${Number(lock.expected_interest).toLocaleString()} interest`,
+    description: matureDesc,
   });
 
-  return jsonResponse({ data: { unlocked: creditAmount, interest_earned: Number(lock.expected_interest) } });
+  // Mirror to sandbox history + notify (so it shows up in transaction history with
+  // product name attached, and the user sees an in-app notification for every txn)
+  try {
+    await supabaseAdmin.from("vfd_sandbox_transactions").insert({
+      user_id: userId,
+      transaction_type: "credit",
+      amount: creditAmount,
+      description: matureDesc,
+      reference: `lock-mature-${lockId}`,
+      status: "completed",
+    });
+    await supabaseAdmin.from("vfd_sandbox_notifications").insert({
+      user_id: userId,
+      title: "Interest credited",
+      message: `${productName}: ₦${Number(lock.expected_interest).toLocaleString()} interest credited along with ₦${Number(lock.principal_amount).toLocaleString()} principal.`,
+      notification_type: "interest_accrued",
+    });
+  } catch (_) { /* notifications are best-effort */ }
+
+  return jsonResponse({ data: { unlocked: creditAmount, interest_earned: Number(lock.expected_interest), product: productName } });
 }
 
 // Break lock (early withdrawal)
@@ -1252,6 +1313,8 @@ async function handleBreakLock(userId: string, lockId: string) {
     .eq("id", lockId);
 
   const availBefore = Number(balance.total_balance) - Number(balance.locked_balance) - Number(balance.savings_balance);
+  const productName = `Locked Savings · ${lock.duration_months}mo @ ${lock.interest_rate}% p.a.`;
+  const breakDesc = `${productName} early withdrawal: ₦${Number(lock.principal_amount).toLocaleString()} principal, penalty ₦${penaltyAmount.toLocaleString()}, net interest ₦${Math.max(0, netInterest).toLocaleString()}`;
   await supabaseAdmin.from("vfd_lock_ledger").insert({
     user_id: userId,
     lock_id: lockId,
@@ -1261,8 +1324,21 @@ async function handleBreakLock(userId: string, lockId: string) {
     balance_after: availBefore + creditAmount,
     locked_before: Number(balance.locked_balance),
     locked_after: Math.max(0, newLocked),
-    description: `Early withdrawal: ₦${Number(lock.principal_amount).toLocaleString()} principal, penalty: ₦${penaltyAmount.toLocaleString()}`,
+    description: breakDesc,
   });
+
+  try {
+    await supabaseAdmin.from("vfd_sandbox_transactions").insert({
+      user_id: userId, transaction_type: "credit", amount: creditAmount,
+      description: breakDesc, reference: `lock-break-${lockId}`, status: "completed",
+    });
+    await supabaseAdmin.from("vfd_sandbox_notifications").insert({
+      user_id: userId,
+      title: "Early withdrawal processed",
+      message: `${productName}: ₦${creditAmount.toLocaleString()} credited. Penalty: ₦${penaltyAmount.toLocaleString()}.`,
+      notification_type: "lock_broken",
+    });
+  } catch (_) { /* best-effort */ }
 
   return jsonResponse({
     data: {
