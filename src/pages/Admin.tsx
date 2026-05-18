@@ -161,6 +161,10 @@ export default function Admin() {
               <Percent className="h-4 w-4" />
               Vestara Rates
             </TabsTrigger>
+            <TabsTrigger value="vestara-investments" className="flex items-center gap-1">
+              <PiggyBank className="h-4 w-4" />
+              Investments
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview">
