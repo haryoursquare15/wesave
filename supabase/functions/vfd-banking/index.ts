@@ -893,6 +893,14 @@ async function handleSandboxCredit(userId: string, accountNo: string, amount: nu
       accountNo,
       preserveExisting: true,
     });
+    try {
+      await supabaseAdmin.from("vfd_sandbox_notifications").insert({
+        user_id: userId,
+        title: "Wallet funded",
+        message: `₦${Number(amount).toLocaleString()} credited to your sandbox wallet. Ref: ${reference}`,
+        notification_type: "wallet_credit",
+      });
+    } catch (_) { /* best-effort */ }
   }
 
   return jsonResponse({ data, vfd_status: status, reference });
