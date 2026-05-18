@@ -56,6 +56,7 @@ export default function SandboxAuth() {
           return;
         }
         toast.success("Sandbox account ready. Welcome!");
+        sessionStorage.setItem("vestara_sandbox_signed_in", "1");
         navigate("/vfd-sandbox");
       } else {
         const { error } = await signIn(form.email, form.password);
