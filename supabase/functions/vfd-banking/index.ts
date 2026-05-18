@@ -1096,6 +1096,8 @@ async function handleCreateLock(userId: string, body: Record<string, unknown>) {
     .eq("user_id", userId);
 
   // Ledger entry
+  const productName = `Locked Savings · ${durationMonths}mo @ ${interestRate}% p.a.`;
+  const lockDesc = `${productName}: locked ₦${amount.toLocaleString()}`;
   await supabaseAdmin.from("vfd_lock_ledger").insert({
     user_id: userId,
     lock_id: lock.id,
@@ -1105,10 +1107,23 @@ async function handleCreateLock(userId: string, body: Record<string, unknown>) {
     balance_after: availableBalance - amount,
     locked_before: Number(balance.locked_balance),
     locked_after: newLocked,
-    description: `Locked ₦${amount.toLocaleString()} for ${durationMonths} months at ${interestRate}%`,
+    description: lockDesc,
   });
 
-  return jsonResponse({ data: lock });
+  try {
+    await supabaseAdmin.from("vfd_sandbox_transactions").insert({
+      user_id: userId, transaction_type: "debit", amount,
+      description: lockDesc, reference: `lock-${lock.id}`, status: "completed",
+    });
+    await supabaseAdmin.from("vfd_sandbox_notifications").insert({
+      user_id: userId,
+      title: "Funds locked",
+      message: `${productName}: ₦${amount.toLocaleString()} locked. Expected interest at maturity: ₦${Math.round(expectedInterest * 100) / 100}.`,
+      notification_type: "lock_created",
+    });
+  } catch (_) { /* best-effort */ }
+
+  return jsonResponse({ data: { ...lock, product: productName } });
 }
 
 // Get user's locked funds
