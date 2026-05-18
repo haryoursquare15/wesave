@@ -161,7 +161,7 @@ export function SandboxSavings({ userBalance, onRefresh, onBack }: Props) {
         const productAmount = amtNum;
         const previewSnapshot = preview;
         const result = await vestara.createSavings(selectedProduct.code, amtNum, tenor);
-        if (result?.success) {
+        if (result && !result.error) {
           const details: { label: string; value: string; highlight?: boolean }[] = [
             { label: "Product", value: productName, highlight: true },
             { label: "Principal", value: `₦${productAmount.toLocaleString()}`, highlight: true },
@@ -201,7 +201,7 @@ export function SandboxSavings({ userBalance, onRefresh, onBack }: Props) {
       description: `Withdraw ₦${Number(s.principal).toLocaleString()} + interest to wallet`,
       onAuthorized: async () => {
         const result = await vestara.matureSavings(s.id);
-        if (result?.success) {
+        if (result && !result.error) {
           const interest = Number(s.accrued_interest || 0);
           const total = Number(s.principal) + interest;
           setSuccessPayload({
@@ -229,7 +229,7 @@ export function SandboxSavings({ userBalance, onRefresh, onBack }: Props) {
       description: `Withdraw ₦${Number(s.principal).toLocaleString()} early`,
       onAuthorized: async () => {
         const result = await vestara.earlyWithdrawSavings(s.id);
-        if (result?.success) {
+        if (result && !result.error) {
           const penalty = Number(result.penalty || 0);
           const principal = Number(s.principal);
           const credited = principal - penalty;
