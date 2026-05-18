@@ -74,7 +74,9 @@ export function useSandboxSessionEnforcement({ enabled = true }: { enabled?: boo
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      ACTIVITY_EVENTS.forEach((evt) => document.removeEventListener(evt, handleActivity));
+      ACTIVITY_EVENTS.forEach((evt) =>
+        document.removeEventListener(evt, handleActivity, { capture: true } as EventListenerOptions)
+      );
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       if (backgroundTimerRef.current) clearTimeout(backgroundTimerRef.current);
       if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
