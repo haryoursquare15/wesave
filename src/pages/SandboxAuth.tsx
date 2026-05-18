@@ -65,6 +65,7 @@ export default function SandboxAuth() {
           return;
         }
         toast.success("Welcome to the VFD Sandbox");
+        sessionStorage.setItem("vestara_sandbox_signed_in", "1");
         navigate("/vfd-sandbox");
       }
     } finally {
