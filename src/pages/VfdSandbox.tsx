@@ -21,8 +21,10 @@ import { SandboxAssociationTab } from "@/components/vfd-sandbox/SandboxAssociati
 import { SandboxBillsTab } from "@/components/vfd-sandbox/SandboxBillsTab";
 import { SandboxCardTab } from "@/components/vfd-sandbox/SandboxCardTab";
 import { SandboxGroupInviteModal } from "@/components/vfd-sandbox/SandboxGroupInviteModal";
+import { SandboxSplash } from "@/components/vfd-sandbox/SandboxSplash";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
+import { AnimatePresence } from "framer-motion";
 
 interface LockConfig { id: string; duration_months: number; interest_rate: number; early_withdrawal_penalty: number; }
 interface UserBalance {
