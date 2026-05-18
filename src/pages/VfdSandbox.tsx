@@ -22,6 +22,7 @@ import { SandboxBillsTab } from "@/components/vfd-sandbox/SandboxBillsTab";
 import { SandboxCardTab } from "@/components/vfd-sandbox/SandboxCardTab";
 import { SandboxGroupInviteModal } from "@/components/vfd-sandbox/SandboxGroupInviteModal";
 import { SandboxSplash } from "@/components/vfd-sandbox/SandboxSplash";
+import { useSandboxSessionEnforcement } from "@/hooks/useSandboxSessionEnforcement";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { AnimatePresence } from "framer-motion";
@@ -44,10 +45,9 @@ function VfdSandboxInner() {
   const [clientChecked, setClientChecked] = useState(false);
   const [currentView, setCurrentView] = useState<View>("dashboard");
   const [banks, setBanks] = useState<Array<{ code: string; name: string }>>([]);
-  const [showSplash, setShowSplash] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return !sessionStorage.getItem("vestara_splash_seen");
-  });
+
+  // Inactivity sign-out (2m foreground / 5m background) → /vfd-sandbox/auth
+  useSandboxSessionEnforcement({ enabled: !!user });
 
   // Vestara-driven balance (single source of truth)
   const [vestaraBalance, setVestaraBalance] = useState<UserBalance | null>(null);
@@ -58,9 +58,18 @@ function VfdSandboxInner() {
   // Lock configs from vfd-banking (read-only config data)
   const [lockConfigs, setLockConfigs] = useState<LockConfig[]>([]);
 
+  // Splash must never auto-log-in. If the user lands here without explicitly
+  // signing in this browser session, force them through the auth page.
   useEffect(() => {
-    if (!authLoading && !user) navigate("/vfd-sandbox/auth");
-  }, [user, authLoading, navigate]);
+    if (authLoading) return;
+    if (!user) {
+      navigate("/vfd-sandbox/auth");
+      return;
+    }
+    if (!sessionStorage.getItem("vestara_sandbox_signed_in")) {
+      void signOut().finally(() => navigate("/vfd-sandbox/auth"));
+    }
+  }, [user, authLoading, navigate, signOut]);
 
   const initRef = useRef(false);
   useEffect(() => {
@@ -309,16 +318,6 @@ function VfdSandboxInner() {
   if (authLoading || (user && !clientChecked)) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <AnimatePresence>
-          {showSplash && (
-            <SandboxSplash
-              onDone={() => {
-                sessionStorage.setItem("vestara_splash_seen", "1");
-                setShowSplash(false);
-              }}
-            />
-          )}
-        </AnimatePresence>
         <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
@@ -382,16 +381,6 @@ function VfdSandboxInner() {
 
   return (
     <div className="min-h-screen bg-background">
-      <AnimatePresence>
-        {showSplash && (
-          <SandboxSplash
-            onDone={() => {
-              sessionStorage.setItem("vestara_splash_seen", "1");
-              setShowSplash(false);
-            }}
-          />
-        )}
-      </AnimatePresence>
       <SandboxHeader />
       {kycDone && <SandboxGroupInviteModal onAccepted={() => { /* downstream UIs poll on their own */ }} />}
       <div className="max-w-lg mx-auto px-4 pt-3 flex items-center justify-between">

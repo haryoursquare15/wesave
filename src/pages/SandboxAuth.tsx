@@ -1,11 +1,13 @@
-import { useState, FormEvent } from "react";
+import { useState, FormEvent, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Mail, Lock, User, Eye, EyeOff, ArrowRight, FlaskConical, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useSandboxAuth } from "@/contexts/SandboxAuthContext";
+import { SandboxSplash } from "@/components/vfd-sandbox/SandboxSplash";
+import { sandboxSupabase } from "@/integrations/supabase/sandboxClient";
 import { toast } from "sonner";
 
 export default function SandboxAuth() {
@@ -15,6 +17,18 @@ export default function SandboxAuth() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [showSplash, setShowSplash] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return !sessionStorage.getItem("vestara_splash_seen");
+  });
+
+  // Splash should never auto-log-in: when the auth page loads, drop any
+  // lingering sandbox session so the user always has to sign in fresh.
+  useEffect(() => {
+    sessionStorage.removeItem("vestara_sandbox_signed_in");
+    void sandboxSupabase.auth.signOut();
+  }, []);
+
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -42,6 +56,7 @@ export default function SandboxAuth() {
           return;
         }
         toast.success("Sandbox account ready. Welcome!");
+        sessionStorage.setItem("vestara_sandbox_signed_in", "1");
         navigate("/vfd-sandbox");
       } else {
         const { error } = await signIn(form.email, form.password);
@@ -50,6 +65,7 @@ export default function SandboxAuth() {
           return;
         }
         toast.success("Welcome to the VFD Sandbox");
+        sessionStorage.setItem("vestara_sandbox_signed_in", "1");
         navigate("/vfd-sandbox");
       }
     } finally {
@@ -59,6 +75,16 @@ export default function SandboxAuth() {
 
   return (
     <div className="min-h-[100dvh] bg-gradient-to-br from-background via-background to-primary/5 flex items-center justify-center p-4">
+      <AnimatePresence>
+        {showSplash && (
+          <SandboxSplash
+            onDone={() => {
+              sessionStorage.setItem("vestara_splash_seen", "1");
+              setShowSplash(false);
+            }}
+          />
+        )}
+      </AnimatePresence>
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
