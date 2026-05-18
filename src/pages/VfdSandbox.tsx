@@ -22,6 +22,7 @@ import { SandboxBillsTab } from "@/components/vfd-sandbox/SandboxBillsTab";
 import { SandboxCardTab } from "@/components/vfd-sandbox/SandboxCardTab";
 import { SandboxGroupInviteModal } from "@/components/vfd-sandbox/SandboxGroupInviteModal";
 import { SandboxSplash } from "@/components/vfd-sandbox/SandboxSplash";
+import { useSandboxSessionEnforcement } from "@/hooks/useSandboxSessionEnforcement";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { AnimatePresence } from "framer-motion";
