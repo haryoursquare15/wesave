@@ -23,7 +23,8 @@ import { WithdrawalsTab } from "@/components/admin/WithdrawalsTab";
 import { SupportTab } from "@/components/admin/SupportTab";
 import { AdminEmailTab } from "@/components/admin/AdminEmailTab";
 import { VestaraRateConfigTab } from "@/components/admin/VestaraRateConfigTab";
-import { Percent } from "lucide-react";
+import { VestaraInvestmentsTab } from "@/components/admin/VestaraInvestmentsTab";
+import { Percent, PiggyBank } from "lucide-react";
 
 export default function Admin() {
   const navigate = useNavigate();
@@ -160,6 +161,10 @@ export default function Admin() {
               <Percent className="h-4 w-4" />
               Vestara Rates
             </TabsTrigger>
+            <TabsTrigger value="vestara-investments" className="flex items-center gap-1">
+              <PiggyBank className="h-4 w-4" />
+              Investments
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview">
@@ -208,6 +213,10 @@ export default function Admin() {
 
           <TabsContent value="vestara-rates">
             <VestaraRateConfigTab />
+          </TabsContent>
+
+          <TabsContent value="vestara-investments">
+            <VestaraInvestmentsTab />
           </TabsContent>
         </Tabs>
       </div>
