@@ -44,10 +44,9 @@ function VfdSandboxInner() {
   const [clientChecked, setClientChecked] = useState(false);
   const [currentView, setCurrentView] = useState<View>("dashboard");
   const [banks, setBanks] = useState<Array<{ code: string; name: string }>>([]);
-  const [showSplash, setShowSplash] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return !sessionStorage.getItem("vestara_splash_seen");
-  });
+
+  // Inactivity sign-out (2m foreground / 5m background) → /vfd-sandbox/auth
+  useSandboxSessionEnforcement({ enabled: !!user });
 
   // Vestara-driven balance (single source of truth)
   const [vestaraBalance, setVestaraBalance] = useState<UserBalance | null>(null);
@@ -58,9 +57,18 @@ function VfdSandboxInner() {
   // Lock configs from vfd-banking (read-only config data)
   const [lockConfigs, setLockConfigs] = useState<LockConfig[]>([]);
 
+  // Splash must never auto-log-in. If the user lands here without explicitly
+  // signing in this browser session, force them through the auth page.
   useEffect(() => {
-    if (!authLoading && !user) navigate("/vfd-sandbox/auth");
-  }, [user, authLoading, navigate]);
+    if (authLoading) return;
+    if (!user) {
+      navigate("/vfd-sandbox/auth");
+      return;
+    }
+    if (!sessionStorage.getItem("vestara_sandbox_signed_in")) {
+      void signOut().finally(() => navigate("/vfd-sandbox/auth"));
+    }
+  }, [user, authLoading, navigate, signOut]);
 
   const initRef = useRef(false);
   useEffect(() => {
