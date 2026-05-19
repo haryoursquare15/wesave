@@ -3030,7 +3030,9 @@ async function handleListGroupChat(userId: string, body: Record<string, unknown>
 
   const { data: member } = await db.from("vfd_sandbox_group_members")
     .select("id").eq("group_id", groupId).eq("user_id", userId).maybeSingle();
-  if (!member) return jsonResponse({ error: "Not a member" }, 403);
+  // Non-members (e.g. browsing a pending/discoverable group) get an empty chat
+  // instead of a 403, so the detail screen doesn't blank out.
+  if (!member) return jsonResponse({ data: [] });
 
   const { data: chat } = await db.from("vfd_sandbox_chat_messages")
     .select("*").eq("group_id", groupId).order("created_at", { ascending: true }).limit(200);
