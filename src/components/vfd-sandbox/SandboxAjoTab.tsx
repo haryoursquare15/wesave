@@ -687,6 +687,9 @@ export function SandboxAjoTab() {
         <div className="space-y-3">
           {groups.map((g) => {
             const progress = g.total_cycles > 0 ? ((g.current_cycle - 1) / g.total_cycles) * 100 : 0;
+            const isMember = !!currentUserId && (g.vfd_sandbox_group_members || [])
+              .some((m: any) => m.user_id === currentUserId && (m.status ?? "active") === "active");
+            const hasInvite = !isMember && pendingInvites.some((i: any) => i.group_id === g.id);
             return (
               <Card key={g.id} className="cursor-pointer hover:border-primary/30 transition-colors" onClick={() => handleCardClick(g)}>
                 <CardContent className="p-4 space-y-3">
@@ -697,10 +700,16 @@ export function SandboxAjoTab() {
                         ₦{fmt(Number(g.contribution_amount))} / {g.period} • {g.member_count}/{g.max_members} members
                       </p>
                     </div>
-                    <Badge variant="outline" className={g.status === "active" ? "text-green-600 border-green-500" : g.status === "completed" ? "text-primary border-primary" : "text-muted-foreground"}>
-                      {g.status}
-                    </Badge>
+                    <div className="flex flex-col items-end gap-1">
+                      {hasInvite && (
+                        <Badge className="bg-primary/15 text-primary border-primary/30">Invite pending</Badge>
+                      )}
+                      <Badge variant="outline" className={g.status === "active" ? "text-green-600 border-green-500" : g.status === "completed" ? "text-primary border-primary" : "text-muted-foreground"}>
+                        {g.status}
+                      </Badge>
+                    </div>
                   </div>
+
 
                   {g.total_cycles > 0 && (
                     <div>
