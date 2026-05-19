@@ -66,6 +66,10 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
   const [recurringFreq, setRecurringFreq] = useState<"daily" | "weekly" | "monthly">("monthly");
   const [creatingRecurring, setCreatingRecurring] = useState(false);
   const [creatingSplit, setCreatingSplit] = useState(false);
+  const [showSplitDialog, setShowSplitDialog] = useState(false);
+  const [splitMyShare, setSplitMyShare] = useState("");
+  const [splitOthers, setSplitOthers] = useState(1);
+
 
   // Data
   const [categories, setCategories] = useState<string[]>([]);
@@ -333,17 +337,34 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
 
   const splitThisBill = async () => {
     if (!selectedBiller || !amount) return;
+    const total = Number(amount);
+    const myShare = Number(splitMyShare);
+    const others = Math.max(1, Math.min(9, Math.floor(splitOthers || 1)));
+    if (total < 1000) {
+      toast({ title: "Minimum ₦1,000", description: "Split Pay requires a total of at least ₦1,000.", variant: "destructive" });
+      return;
+    }
+    if (!myShare || myShare <= 0 || myShare >= total) {
+      toast({ title: "Invalid contribution", description: `Enter an amount between ₦1 and ₦${(total - 1).toLocaleString()}.`, variant: "destructive" });
+      return;
+    }
     setCreatingSplit(true);
     try {
       const r = await callProducts("create_split", {
         title: `${selectedBiller.name} — ${customerId}`,
-        total_amount: Number(amount),
-        split_count: 2,
+        total_amount: total,
+        split_count: others + 1,
+        creator_amount: myShare,
         purpose: `Bill: ${selectedBiller.name} (${customerId})`,
         expiry_days: 7,
       });
       if (r?.error) throw new Error(r.error);
-      toast({ title: "Split created", description: "Invite flatmates from the SplitPay tab." });
+      const perOther = Math.ceil(((total - myShare) / others) * 100) / 100;
+      toast({
+        title: "Split created",
+        description: `You owe ₦${myShare.toLocaleString()}. ${others} other${others > 1 ? "s" : ""} owe ₦${perOther.toLocaleString()} each. Invite them from SplitPay.`,
+      });
+      setShowSplitDialog(false);
       onOpenSplit?.();
     } catch (e) {
       toast({ title: "Failed", description: e instanceof Error ? e.message : "Could not create split", variant: "destructive" });
@@ -351,6 +372,7 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
       setCreatingSplit(false);
     }
   };
+
 
   // Auto-load categories on first render
   if (categories.length === 0 && !loading) {
@@ -676,21 +698,43 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
               </div>
             )}
 
-            {/* Pay Button */}
-            <Button
-              onClick={handlePay}
-              disabled={paying || !customerId || !amount || Number(amount) <= 0 || (needsValidation && validationResult !== "valid")}
-              className="w-full h-12 text-base font-bold"
-            >
-              {paying ? (
-                <>
-                  <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                  Processing...
-                </>
-              ) : (
-                `Pay ₦${Number(amount || 0).toLocaleString()}`
-              )}
-            </Button>
+            {/* Pay + Split Pay */}
+            <div className="grid grid-cols-2 gap-3">
+              <Button
+                onClick={handlePay}
+                disabled={paying || !customerId || !amount || Number(amount) <= 0 || (needsValidation && validationResult !== "valid")}
+                className="h-12 text-base font-bold"
+              >
+                {paying ? (
+                  <>
+                    <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                    Processing...
+                  </>
+                ) : (
+                  `Pay ₦${Number(amount || 0).toLocaleString()}`
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  const total = Number(amount || 0);
+                  if (!total || total < 1000) {
+                    toast({ title: "Minimum ₦1,000", description: "Split Pay needs a total of at least ₦1,000.", variant: "destructive" });
+                    return;
+                  }
+                  setSplitMyShare(String(Math.max(1, Math.floor(total / 2))));
+                  setSplitOthers(1);
+                  setShowSplitDialog(true);
+                }}
+                disabled={paying || !customerId || !amount || Number(amount) < 1000 || (needsValidation && validationResult !== "valid")}
+                className="h-12 text-base font-bold"
+              >
+                <Split className="h-4 w-4 mr-2" />
+                Split Pay
+              </Button>
+            </div>
+
           </motion.div>
         )}
 
@@ -734,6 +778,98 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ═══ SPLIT PAY DIALOG ═══ */}
+      <Dialog open={showSplitDialog} onOpenChange={setShowSplitDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Split this bill</DialogTitle>
+          </DialogHeader>
+          {(() => {
+            const total = Number(amount || 0);
+            const myShare = Number(splitMyShare || 0);
+            const remainder = Math.max(0, total - myShare);
+            const others = Math.max(1, Math.min(9, Math.floor(splitOthers || 1)));
+            const perOther = others > 0 ? Math.ceil((remainder / others) * 100) / 100 : 0;
+            const valid = myShare > 0 && myShare < total;
+            return (
+              <div className="space-y-4 py-2">
+                <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                  <span className="text-sm text-muted-foreground">Total bill</span>
+                  <span className="text-base font-bold text-foreground">₦{total.toLocaleString()}</span>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="my-share">How much can you cover?</Label>
+                  <Input
+                    id="my-share"
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={total - 1}
+                    value={splitMyShare}
+                    onChange={(e) => setSplitMyShare(e.target.value)}
+                    placeholder="e.g. 2000"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Split the remaining ₦{remainder.toLocaleString()} with</Label>
+                  <div className="flex items-center gap-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setSplitOthers(Math.max(1, others - 1))}
+                    >
+                      −
+                    </Button>
+                    <div className="flex-1 text-center">
+                      <div className="text-2xl font-bold text-foreground">{others}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {others === 1 ? "other person" : "other people"}
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setSplitOthers(Math.min(9, others + 1))}
+                    >
+                      +
+                    </Button>
+                  </div>
+                </div>
+
+                {valid && (
+                  <div className="rounded-lg border border-border/50 p-3 space-y-1.5 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">You pay</span>
+                      <span className="font-semibold text-foreground">₦{myShare.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Each of {others} other{others > 1 ? "s" : ""}</span>
+                      <span className="font-semibold text-foreground">₦{perOther.toLocaleString()}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground pt-1">
+                      A ₦100 service fee is split equally across all {others + 1} participants.
+                    </p>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="ghost" onClick={() => setShowSplitDialog(false)} disabled={creatingSplit}>
+              Cancel
+            </Button>
+            <Button onClick={splitThisBill} disabled={creatingSplit}>
+              {creatingSplit ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Creating…</> : "Create split & invite"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+
