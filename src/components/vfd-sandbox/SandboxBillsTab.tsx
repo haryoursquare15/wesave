@@ -390,10 +390,31 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
       )}
 
       {step === "categories" && (
-        <div>
-          <h2 className="text-lg font-bold text-foreground mb-1">Pay Bills</h2>
-          <p className="text-sm text-muted-foreground mb-5">Buy airtime, data, pay for cable TV, electricity & more</p>
-        </div>
+        <>
+          <div>
+            <h2 className="text-lg font-bold text-foreground mb-1">Pay Bills</h2>
+            <p className="text-sm text-muted-foreground mb-3">Buy airtime, data, pay for cable TV, electricity & more</p>
+          </div>
+          <div className="flex gap-1.5 p-1 bg-muted/40 rounded-xl mb-3">
+            {([
+              { k: "pay", label: "Pay" },
+              { k: "receipts", label: "Receipts" },
+              { k: "recurring", label: "Recurring" },
+              { k: "beneficiaries", label: "Saved" },
+            ] as const).map(t => (
+              <button
+                key={t.k}
+                onClick={() => setTopTab(t.k)}
+                className={`flex-1 text-xs font-semibold py-2 rounded-lg transition-all ${topTab === t.k ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          {topTab === "receipts" && <SandboxBillReceipts />}
+          {topTab === "recurring" && <SandboxRecurringBills />}
+          {topTab === "beneficiaries" && <SandboxBillBeneficiaries />}
+        </>
       )}
 
       <AnimatePresence mode="wait">
