@@ -358,8 +358,9 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
     }
     setCreatingSplit(true);
     try {
+      const title = `${selectedBiller.name} — ${customerId}`;
       const r = await callProducts("create_split", {
-        title: `${selectedBiller.name} — ${customerId}`,
+        title,
         total_amount: total,
         split_count: others + 1,
         creator_amount: myShare,
@@ -368,18 +369,93 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
       });
       if (r?.error) throw new Error(r.error);
       const perOther = Math.ceil(((total - myShare) / others) * 100) / 100;
-      toast({
-        title: "Split created",
-        description: `You owe ₦${myShare.toLocaleString()}. ${others} other${others > 1 ? "s" : ""} owe ₦${perOther.toLocaleString()} each. Invite them from SplitPay.`,
+      const splitId = r?.data?.id;
+      if (!splitId) throw new Error("Split was created but no ID returned");
+      setCreatedSplit({
+        id: splitId,
+        title,
+        per_other: perOther,
+        my_share: myShare,
+        service_fee: 100, // creator absorbs full fee
+        others,
       });
-      setShowSplitDialog(false);
-      onOpenSplit?.();
+      setSplitInvited(new Set());
+      setSplitSearch("");
+      setSplitSearchResults([]);
+      setSplitPaid(false);
+      setSplitStage("invite");
     } catch (e) {
       toast({ title: "Failed", description: e instanceof Error ? e.message : "Could not create split", variant: "destructive" });
     } finally {
       setCreatingSplit(false);
     }
   };
+
+  /* ─── Split: search WeSave users for invite ─── */
+  useEffect(() => {
+    if (splitStage !== "invite") return;
+    const q = splitSearch.trim();
+    if (q.length < 2) { setSplitSearchResults([]); return; }
+    let cancelled = false;
+    setSplitSearching(true);
+    const t = setTimeout(async () => {
+      try {
+        const r = await callProducts("search_users", { query: q });
+        if (!cancelled) setSplitSearchResults(r?.data || []);
+      } catch {
+        if (!cancelled) setSplitSearchResults([]);
+      } finally {
+        if (!cancelled) setSplitSearching(false);
+      }
+    }, 300);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [splitSearch, splitStage, callProducts]);
+
+  const inviteToSplit = async (inviteeId: string) => {
+    if (!createdSplit) return;
+    try {
+      const r = await callProducts("invite_split_member", {
+        split_id: createdSplit.id,
+        invitee_id: inviteeId,
+      });
+      if (r?.error) throw new Error(r.error);
+      if (r?.data?.invited || r?.data?.already_invited) {
+        setSplitInvited(prev => new Set(prev).add(inviteeId));
+        toast({ title: r.data.already_invited ? "Already invited" : "Invite sent!" });
+      }
+    } catch (e) {
+      toast({ title: "Invite failed", description: e instanceof Error ? e.message : "Could not invite user", variant: "destructive" });
+    }
+  };
+
+  const payMySplitShare = async () => {
+    if (!createdSplit) return;
+    setSplitPaying(true);
+    try {
+      const r = await callProducts("pay_split", { split_id: createdSplit.id });
+      if (r?.error) throw new Error(r.error);
+      setSplitPaid(true);
+      toast({ title: "Your share paid", description: `₦${(createdSplit.my_share + createdSplit.service_fee).toLocaleString()} debited from your wallet.` });
+    } catch (e) {
+      toast({ title: "Payment failed", description: e instanceof Error ? e.message : "Could not pay your share", variant: "destructive" });
+    } finally {
+      setSplitPaying(false);
+    }
+  };
+
+  const closeSplitDialog = () => {
+    setShowSplitDialog(false);
+    // reset on close for next time
+    setTimeout(() => {
+      setSplitStage("setup");
+      setCreatedSplit(null);
+      setSplitInvited(new Set());
+      setSplitSearch("");
+      setSplitSearchResults([]);
+      setSplitPaid(false);
+    }, 200);
+  };
+
 
 
   // Auto-load categories on first render
