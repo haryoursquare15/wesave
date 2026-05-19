@@ -143,21 +143,33 @@ export function VestaraInvestmentsTab() {
   }, []);
 
   const filtered = useMemo(() => {
+    const fromMs = startFrom ? new Date(startFrom).setHours(0, 0, 0, 0) : null;
+    const toMs = endTo ? new Date(endTo).setHours(23, 59, 59, 999) : null;
     return rows.filter(r => {
       if (product !== "all" && r.product_code !== product) return false;
       if (status !== "all" && r.status !== status) return false;
+      if (fromMs !== null) {
+        const sd = r.start_date ? new Date(r.start_date).getTime() : 0;
+        if (sd < fromMs) return false;
+      }
+      if (toMs !== null) {
+        const md = r.maturity_date ? new Date(r.maturity_date).getTime() : 0;
+        if (md > toMs) return false;
+      }
       if (search) {
         const q = search.toLowerCase();
         if (
           !r.customer_name.toLowerCase().includes(q) &&
+          !r.customer_username.toLowerCase().includes(q) &&
           !r.customer_email.toLowerCase().includes(q) &&
+          !(r.customer_phone || "").toLowerCase().includes(q) &&
           !r.user_id.toLowerCase().includes(q) &&
           !r.id.toLowerCase().includes(q)
         ) return false;
       }
       return true;
     });
-  }, [rows, product, status, search]);
+  }, [rows, product, status, search, startFrom, endTo]);
 
   const totals = useMemo(() => {
     return filtered.reduce(
