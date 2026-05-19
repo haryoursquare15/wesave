@@ -69,6 +69,14 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
   const [showSplitDialog, setShowSplitDialog] = useState(false);
   const [splitMyShare, setSplitMyShare] = useState("");
   const [splitOthers, setSplitOthers] = useState(1);
+  const [splitStage, setSplitStage] = useState<"setup" | "invite">("setup");
+  const [createdSplit, setCreatedSplit] = useState<{ id: string; title: string; per_other: number; my_share: number; service_fee: number; others: number } | null>(null);
+  const [splitSearch, setSplitSearch] = useState("");
+  const [splitSearchResults, setSplitSearchResults] = useState<any[]>([]);
+  const [splitSearching, setSplitSearching] = useState(false);
+  const [splitInvited, setSplitInvited] = useState<Set<string>>(new Set());
+  const [splitPaying, setSplitPaying] = useState(false);
+  const [splitPaid, setSplitPaid] = useState(false);
 
 
   // Data
