@@ -251,11 +251,43 @@ export function VestaraInvestmentsTab() {
         <div className="flex flex-wrap gap-2 items-end">
           <div className="flex-1 min-w-[200px]">
             <Input
-              placeholder="Search by name, email, customer id, subscription id"
+              placeholder="Search by username, name, email, phone, customer/subscription id"
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
           </div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className={cn("gap-1 justify-start font-normal", !startFrom && "text-muted-foreground")}>
+                <CalendarIcon className="h-4 w-4" />
+                {startFrom ? `Start ≥ ${format(startFrom, "dd MMM yyyy")}` : "Start date from"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar mode="single" selected={startFrom} onSelect={setStartFrom} initialFocus className={cn("p-3 pointer-events-auto")} />
+              {startFrom && (
+                <div className="p-2 border-t">
+                  <Button variant="ghost" size="sm" className="w-full" onClick={() => setStartFrom(undefined)}>Clear</Button>
+                </div>
+              )}
+            </PopoverContent>
+          </Popover>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className={cn("gap-1 justify-start font-normal", !endTo && "text-muted-foreground")}>
+                <CalendarIcon className="h-4 w-4" />
+                {endTo ? `End ≤ ${format(endTo, "dd MMM yyyy")}` : "End date to"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar mode="single" selected={endTo} onSelect={setEndTo} initialFocus className={cn("p-3 pointer-events-auto")} />
+              {endTo && (
+                <div className="p-2 border-t">
+                  <Button variant="ghost" size="sm" className="w-full" onClick={() => setEndTo(undefined)}>Clear</Button>
+                </div>
+              )}
+            </PopoverContent>
+          </Popover>
           <div className="flex items-center gap-1">
             <Filter className="h-4 w-4 text-muted-foreground" />
             <Select value={product} onValueChange={setProduct}>
