@@ -1251,7 +1251,7 @@ async function handleVoteTargetWithdrawal(userId: string, body: Record<string, u
       invalid_vote: ["Invalid vote", 400],
       request_not_found: ["Request not found", 404],
       already_resolved: ["Request already resolved", 400],
-      not_a_member: ["Not a member", 400],
+      not_a_member: ["Not a member", 200],
       already_voted: ["Already voted", 400],
     };
     const [msg, code] = map[result?.reason ?? ""] ?? ["Vote rejected", 400];
