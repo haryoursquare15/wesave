@@ -21,7 +21,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Download, Filter, RefreshCw } from "lucide-react";
+import { Download, Filter, RefreshCw, CalendarIcon } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { cn } from "@/lib/utils";
 import { exportToCSV } from "@/lib/exportUtils";
 import { format } from "date-fns";
 
@@ -55,6 +58,7 @@ interface SavingsRow {
 
 interface EnrichedRow extends SavingsRow {
   customer_name: string;
+  customer_username: string;
   customer_email: string;
   customer_phone: string | null;
   projected_roi: number;
@@ -75,6 +79,8 @@ export function VestaraInvestmentsTab() {
   const [product, setProduct] = useState<string>("all");
   const [status, setStatus] = useState<string>("all");
   const [search, setSearch] = useState("");
+  const [startFrom, setStartFrom] = useState<Date | undefined>();
+  const [endTo, setEndTo] = useState<Date | undefined>();
 
   const load = async () => {
     setLoading(true);
@@ -87,15 +93,16 @@ export function VestaraInvestmentsTab() {
       if (error) throw error;
 
       const userIds = Array.from(new Set((savings || []).map(s => s.user_id)));
-      let profileMap: Record<string, { full_name: string; email: string; phone: string | null }> = {};
+      let profileMap: Record<string, { full_name: string; username: string; email: string; phone: string | null }> = {};
       if (userIds.length) {
         const { data: profiles } = await supabase
           .from("profiles")
-          .select("id, full_name, email, phone")
+          .select("id, full_name, username, email, phone")
           .in("id", userIds);
         profileMap = Object.fromEntries(
           (profiles || []).map(p => [p.id, {
             full_name: p.full_name || "—",
+            username: (p as any).username || "—",
             email: p.email || "—",
             phone: p.phone,
           }])
@@ -111,6 +118,7 @@ export function VestaraInvestmentsTab() {
         return {
           ...s,
           customer_name: p?.full_name || "—",
+          customer_username: p?.username || "—",
           customer_email: p?.email || "—",
           customer_phone: p?.phone || null,
           projected_roi,
@@ -135,21 +143,33 @@ export function VestaraInvestmentsTab() {
   }, []);
 
   const filtered = useMemo(() => {
+    const fromMs = startFrom ? new Date(startFrom).setHours(0, 0, 0, 0) : null;
+    const toMs = endTo ? new Date(endTo).setHours(23, 59, 59, 999) : null;
     return rows.filter(r => {
       if (product !== "all" && r.product_code !== product) return false;
       if (status !== "all" && r.status !== status) return false;
+      if (fromMs !== null) {
+        const sd = r.start_date ? new Date(r.start_date).getTime() : 0;
+        if (sd < fromMs) return false;
+      }
+      if (toMs !== null) {
+        const md = r.maturity_date ? new Date(r.maturity_date).getTime() : 0;
+        if (md > toMs) return false;
+      }
       if (search) {
         const q = search.toLowerCase();
         if (
           !r.customer_name.toLowerCase().includes(q) &&
+          !r.customer_username.toLowerCase().includes(q) &&
           !r.customer_email.toLowerCase().includes(q) &&
+          !(r.customer_phone || "").toLowerCase().includes(q) &&
           !r.user_id.toLowerCase().includes(q) &&
           !r.id.toLowerCase().includes(q)
         ) return false;
       }
       return true;
     });
-  }, [rows, product, status, search]);
+  }, [rows, product, status, search, startFrom, endTo]);
 
   const totals = useMemo(() => {
     return filtered.reduce(
@@ -172,6 +192,7 @@ export function VestaraInvestmentsTab() {
     const data = filtered.map(r => ({
       subscription_id: r.id,
       customer_id: r.user_id,
+      customer_username: r.customer_username,
       customer_name: r.customer_name,
       customer_email: r.customer_email,
       customer_phone: r.customer_phone || "",
@@ -230,11 +251,43 @@ export function VestaraInvestmentsTab() {
         <div className="flex flex-wrap gap-2 items-end">
           <div className="flex-1 min-w-[200px]">
             <Input
-              placeholder="Search by name, email, customer id, subscription id"
+              placeholder="Search by username, name, email, phone, customer/subscription id"
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
           </div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className={cn("gap-1 justify-start font-normal", !startFrom && "text-muted-foreground")}>
+                <CalendarIcon className="h-4 w-4" />
+                {startFrom ? `Start ≥ ${format(startFrom, "dd MMM yyyy")}` : "Start date from"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar mode="single" selected={startFrom} onSelect={setStartFrom} initialFocus className={cn("p-3 pointer-events-auto")} />
+              {startFrom && (
+                <div className="p-2 border-t">
+                  <Button variant="ghost" size="sm" className="w-full" onClick={() => setStartFrom(undefined)}>Clear</Button>
+                </div>
+              )}
+            </PopoverContent>
+          </Popover>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className={cn("gap-1 justify-start font-normal", !endTo && "text-muted-foreground")}>
+                <CalendarIcon className="h-4 w-4" />
+                {endTo ? `End ≤ ${format(endTo, "dd MMM yyyy")}` : "End date to"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar mode="single" selected={endTo} onSelect={setEndTo} initialFocus className={cn("p-3 pointer-events-auto")} />
+              {endTo && (
+                <div className="p-2 border-t">
+                  <Button variant="ghost" size="sm" className="w-full" onClick={() => setEndTo(undefined)}>Clear</Button>
+                </div>
+              )}
+            </PopoverContent>
+          </Popover>
           <div className="flex items-center gap-1">
             <Filter className="h-4 w-4 text-muted-foreground" />
             <Select value={product} onValueChange={setProduct}>
@@ -291,7 +344,9 @@ export function VestaraInvestmentsTab() {
                   <TableRow key={r.id}>
                     <TableCell>
                       <div className="font-medium text-sm">{r.customer_name}</div>
+                      <div className="text-xs text-muted-foreground">@{r.customer_username}</div>
                       <div className="text-xs text-muted-foreground">{r.customer_email}</div>
+                      <div className="text-xs text-muted-foreground">{r.customer_phone || "—"}</div>
                       <div className="text-[10px] text-muted-foreground font-mono">{r.user_id.slice(0, 8)}…</div>
                     </TableCell>
                     <TableCell>{PRODUCT_LABEL[r.product_code] || r.product_code}</TableCell>
