@@ -192,6 +192,7 @@ export function VestaraInvestmentsTab() {
     const data = filtered.map(r => ({
       subscription_id: r.id,
       customer_id: r.user_id,
+      customer_username: r.customer_username,
       customer_name: r.customer_name,
       customer_email: r.customer_email,
       customer_phone: r.customer_phone || "",
