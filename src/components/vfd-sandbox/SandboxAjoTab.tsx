@@ -137,8 +137,12 @@ export function SandboxAjoTab() {
   const loadGroups = async () => {
     // Promote any swap-window groups whose 3-min timer elapsed before refreshing
     await products.autoStartPendingGroups();
-    const result = await products.listGroups();
-    if (result?.data) setGroups(result.data);
+    const [groupsRes, invitesRes] = await Promise.all([
+      products.listGroups(),
+      products.listGroupInvites(),
+    ]);
+    if (groupsRes?.data) setGroups(groupsRes.data);
+    if (invitesRes?.data) setPendingInvites(invitesRes.data as any[]);
   };
 
   useEffect(() => { loadGroups(); }, []); // eslint-disable-line
