@@ -778,6 +778,98 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ═══ SPLIT PAY DIALOG ═══ */}
+      <Dialog open={showSplitDialog} onOpenChange={setShowSplitDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Split this bill</DialogTitle>
+          </DialogHeader>
+          {(() => {
+            const total = Number(amount || 0);
+            const myShare = Number(splitMyShare || 0);
+            const remainder = Math.max(0, total - myShare);
+            const others = Math.max(1, Math.min(9, Math.floor(splitOthers || 1)));
+            const perOther = others > 0 ? Math.ceil((remainder / others) * 100) / 100 : 0;
+            const valid = myShare > 0 && myShare < total;
+            return (
+              <div className="space-y-4 py-2">
+                <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                  <span className="text-sm text-muted-foreground">Total bill</span>
+                  <span className="text-base font-bold text-foreground">₦{total.toLocaleString()}</span>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="my-share">How much can you cover?</Label>
+                  <Input
+                    id="my-share"
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={total - 1}
+                    value={splitMyShare}
+                    onChange={(e) => setSplitMyShare(e.target.value)}
+                    placeholder="e.g. 2000"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Split the remaining ₦{remainder.toLocaleString()} with</Label>
+                  <div className="flex items-center gap-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setSplitOthers(Math.max(1, others - 1))}
+                    >
+                      −
+                    </Button>
+                    <div className="flex-1 text-center">
+                      <div className="text-2xl font-bold text-foreground">{others}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {others === 1 ? "other person" : "other people"}
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setSplitOthers(Math.min(9, others + 1))}
+                    >
+                      +
+                    </Button>
+                  </div>
+                </div>
+
+                {valid && (
+                  <div className="rounded-lg border border-border/50 p-3 space-y-1.5 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">You pay</span>
+                      <span className="font-semibold text-foreground">₦{myShare.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Each of {others} other{others > 1 ? "s" : ""}</span>
+                      <span className="font-semibold text-foreground">₦{perOther.toLocaleString()}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground pt-1">
+                      A ₦100 service fee is split equally across all {others + 1} participants.
+                    </p>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="ghost" onClick={() => setShowSplitDialog(false)} disabled={creatingSplit}>
+              Cancel
+            </Button>
+            <Button onClick={splitThisBill} disabled={creatingSplit}>
+              {creatingSplit ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Creating…</> : "Create split & invite"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+
