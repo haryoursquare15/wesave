@@ -1,16 +1,21 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Smartphone, Tv, Wifi, Zap, Globe, ArrowLeft, ChevronRight,
   Search, Loader2, CheckCircle2, AlertCircle, Receipt,
-  GraduationCap, Dices,
+  GraduationCap, Dices, Repeat, Users, Split,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
+import { SandboxBillReceipts } from "./SandboxBillReceipts";
+import { SandboxBillBeneficiaries } from "./SandboxBillBeneficiaries";
+import { SandboxRecurringBills } from "./SandboxRecurringBills";
 
 /* ─── Types ─── */
 interface Biller {
@@ -50,11 +55,17 @@ const categoryConfig: Record<string, { icon: typeof Smartphone; color: string; b
 
 type Step = "categories" | "billers" | "items" | "payment" | "success";
 
-export function SandboxBillsTab() {
+export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = {}) {
   const { toast } = useToast();
   const { client } = useSandboxAwareAuth();
+  const [topTab, setTopTab] = useState<"pay" | "receipts" | "recurring" | "beneficiaries">("pay");
   const [step, setStep] = useState<Step>("categories");
   const [loading, setLoading] = useState(false);
+  const [beneficiaries, setBeneficiaries] = useState<any[]>([]);
+  const [showRecurringDialog, setShowRecurringDialog] = useState(false);
+  const [recurringFreq, setRecurringFreq] = useState<"daily" | "weekly" | "monthly">("monthly");
+  const [creatingRecurring, setCreatingRecurring] = useState(false);
+  const [creatingSplit, setCreatingSplit] = useState(false);
 
   // Data
   const [categories, setCategories] = useState<string[]>([]);
@@ -232,6 +243,9 @@ export function SandboxBillsTab() {
         productId: selectedBiller.product,
         billerId: selectedBiller.id,
         phoneNumber: phoneNumber || undefined,
+        category: selectedCategory,
+        billerName: selectedBiller.name,
+        paymentItemName: selectedItem.paymentitemname,
       });
       const resData = result?.data;
       if (resData?.status === "00") {
@@ -269,6 +283,73 @@ export function SandboxBillsTab() {
     setPhoneNumber("");
     setValidationResult(null);
     setPaymentResult(null);
+  };
+
+  // Load beneficiaries when entering payment step
+  useEffect(() => {
+    if (step === "payment" && selectedCategory) {
+      callProducts("list_bill_beneficiaries", { category: selectedCategory })
+        .then(r => setBeneficiaries(r?.data || []))
+        .catch(() => setBeneficiaries([]));
+    }
+  }, [step, selectedCategory, callProducts]);
+
+  const pickBeneficiary = (b: any) => {
+    setCustomerId(b.customer_id);
+    setPhoneNumber(b.phone_number || "");
+    setValidationResult(null);
+  };
+
+  const createRecurring = async () => {
+    if (!paymentResult || !selectedBiller || !selectedItem) return;
+    setCreatingRecurring(true);
+    try {
+      const today = new Date();
+      const r = await callProducts("create_recurring_bill", {
+        category: selectedCategory,
+        biller_id: selectedBiller.id,
+        biller_name: selectedBiller.name,
+        division: selectedBiller.division,
+        product_id: selectedBiller.product,
+        payment_item_code: selectedItem.paymentCode,
+        payment_item_name: selectedItem.paymentitemname,
+        customer_id: customerId,
+        phone_number: phoneNumber || undefined,
+        amount: Number(amount),
+        frequency: recurringFreq,
+        day_of_week: recurringFreq === "weekly" ? today.getDay() : undefined,
+        day_of_month: recurringFreq === "monthly" ? Math.min(today.getDate(), 28) : undefined,
+        nickname: `${selectedBiller.name} • ${customerId.slice(-4)}`,
+      });
+      if (r?.error) throw new Error(r.error);
+      toast({ title: "Recurring bill set", description: `${selectedBiller.name} will auto-pay ${recurringFreq} at 4 PM WAT from your wallet.` });
+      setShowRecurringDialog(false);
+    } catch (e) {
+      toast({ title: "Failed", description: e instanceof Error ? e.message : "Could not create recurring bill", variant: "destructive" });
+    } finally {
+      setCreatingRecurring(false);
+    }
+  };
+
+  const splitThisBill = async () => {
+    if (!selectedBiller || !amount) return;
+    setCreatingSplit(true);
+    try {
+      const r = await callProducts("create_split", {
+        title: `${selectedBiller.name} — ${customerId}`,
+        total_amount: Number(amount),
+        split_count: 2,
+        purpose: `Bill: ${selectedBiller.name} (${customerId})`,
+        expiry_days: 7,
+      });
+      if (r?.error) throw new Error(r.error);
+      toast({ title: "Split created", description: "Invite flatmates from the SplitPay tab." });
+      onOpenSplit?.();
+    } catch (e) {
+      toast({ title: "Failed", description: e instanceof Error ? e.message : "Could not create split", variant: "destructive" });
+    } finally {
+      setCreatingSplit(false);
+    }
   };
 
   // Auto-load categories on first render
@@ -309,15 +390,36 @@ export function SandboxBillsTab() {
       )}
 
       {step === "categories" && (
-        <div>
-          <h2 className="text-lg font-bold text-foreground mb-1">Pay Bills</h2>
-          <p className="text-sm text-muted-foreground mb-5">Buy airtime, data, pay for cable TV, electricity & more</p>
-        </div>
+        <>
+          <div>
+            <h2 className="text-lg font-bold text-foreground mb-1">Pay Bills</h2>
+            <p className="text-sm text-muted-foreground mb-3">Buy airtime, data, pay for cable TV, electricity & more</p>
+          </div>
+          <div className="flex gap-1.5 p-1 bg-muted/40 rounded-xl mb-3">
+            {([
+              { k: "pay", label: "Pay" },
+              { k: "receipts", label: "Receipts" },
+              { k: "recurring", label: "Recurring" },
+              { k: "beneficiaries", label: "Saved" },
+            ] as const).map(t => (
+              <button
+                key={t.k}
+                onClick={() => setTopTab(t.k)}
+                className={`flex-1 text-xs font-semibold py-2 rounded-lg transition-all ${topTab === t.k ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          {topTab === "receipts" && <SandboxBillReceipts />}
+          {topTab === "recurring" && <SandboxRecurringBills />}
+          {topTab === "beneficiaries" && <SandboxBillBeneficiaries />}
+        </>
       )}
 
       <AnimatePresence mode="wait">
         {/* ═══ CATEGORIES ═══ */}
-        {step === "categories" && (
+        {step === "categories" && topTab === "pay" && (
           <motion.div
             key="categories"
             initial={{ opacity: 0, x: -20 }}

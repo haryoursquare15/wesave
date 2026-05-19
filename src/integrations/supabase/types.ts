@@ -4028,6 +4028,123 @@ export type Database = {
         }
         Relationships: []
       }
+      vfd_sandbox_bill_beneficiaries: {
+        Row: {
+          biller_id: string
+          biller_name: string
+          category: string
+          created_at: string
+          customer_id: string
+          division: string
+          id: string
+          last_used_at: string | null
+          nickname: string
+          payment_item_code: string | null
+          payment_item_name: string | null
+          phone_number: string | null
+          product_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          biller_id: string
+          biller_name: string
+          category: string
+          created_at?: string
+          customer_id: string
+          division: string
+          id?: string
+          last_used_at?: string | null
+          nickname: string
+          payment_item_code?: string | null
+          payment_item_name?: string | null
+          phone_number?: string | null
+          product_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          biller_id?: string
+          biller_name?: string
+          category?: string
+          created_at?: string
+          customer_id?: string
+          division?: string
+          id?: string
+          last_used_at?: string | null
+          nickname?: string
+          payment_item_code?: string | null
+          payment_item_name?: string | null
+          phone_number?: string | null
+          product_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      vfd_sandbox_bill_receipts: {
+        Row: {
+          amount: number
+          biller_id: string
+          biller_name: string
+          category: string
+          convenience_fee: number
+          created_at: string
+          customer_id: string
+          expires_at: string | null
+          id: string
+          paid_at: string
+          payment_item_name: string | null
+          phone_number: string | null
+          raw_response: Json | null
+          recurring_bill_id: string | null
+          reference: string
+          reminder_sent_at: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          biller_id: string
+          biller_name: string
+          category: string
+          convenience_fee?: number
+          created_at?: string
+          customer_id: string
+          expires_at?: string | null
+          id?: string
+          paid_at?: string
+          payment_item_name?: string | null
+          phone_number?: string | null
+          raw_response?: Json | null
+          recurring_bill_id?: string | null
+          reference: string
+          reminder_sent_at?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          biller_id?: string
+          biller_name?: string
+          category?: string
+          convenience_fee?: number
+          created_at?: string
+          customer_id?: string
+          expires_at?: string | null
+          id?: string
+          paid_at?: string
+          payment_item_name?: string | null
+          phone_number?: string | null
+          raw_response?: Json | null
+          recurring_bill_id?: string | null
+          reference?: string
+          reminder_sent_at?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       vfd_sandbox_campaign_contributions: {
         Row: {
           amount: number
@@ -4831,6 +4948,90 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      vfd_sandbox_recurring_bills: {
+        Row: {
+          amount: number
+          biller_id: string
+          biller_name: string
+          category: string
+          consecutive_failures: number
+          created_at: string
+          customer_id: string
+          day_of_month: number | null
+          day_of_week: number | null
+          division: string
+          frequency: string
+          hour_wat: number
+          id: string
+          last_run_at: string | null
+          last_run_reason: string | null
+          last_run_status: string | null
+          next_run_at: string
+          nickname: string | null
+          payment_item_code: string
+          payment_item_name: string | null
+          phone_number: string | null
+          product_id: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          biller_id: string
+          biller_name: string
+          category: string
+          consecutive_failures?: number
+          created_at?: string
+          customer_id: string
+          day_of_month?: number | null
+          day_of_week?: number | null
+          division: string
+          frequency: string
+          hour_wat?: number
+          id?: string
+          last_run_at?: string | null
+          last_run_reason?: string | null
+          last_run_status?: string | null
+          next_run_at: string
+          nickname?: string | null
+          payment_item_code: string
+          payment_item_name?: string | null
+          phone_number?: string | null
+          product_id: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          biller_id?: string
+          biller_name?: string
+          category?: string
+          consecutive_failures?: number
+          created_at?: string
+          customer_id?: string
+          day_of_month?: number | null
+          day_of_week?: number | null
+          division?: string
+          frequency?: string
+          hour_wat?: number
+          id?: string
+          last_run_at?: string | null
+          last_run_reason?: string | null
+          last_run_status?: string | null
+          next_run_at?: string
+          nickname?: string | null
+          payment_item_code?: string
+          payment_item_name?: string | null
+          phone_number?: string | null
+          product_id?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       vfd_sandbox_split_participants: {
         Row: {
