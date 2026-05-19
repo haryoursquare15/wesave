@@ -506,7 +506,7 @@ async function handleRequestSwap(userId: string, body: Record<string, unknown>) 
 
   const { data: existing } = await db.from("vfd_sandbox_position_swaps")
     .select("id").eq("group_id", groupId).eq("requester_id", userId).eq("status", "pending").maybeSingle();
-  if (existing) return jsonResponse({ error: "You already have a pending swap request" }, 400);
+  if (existing) return jsonResponse({ error: "You already have a pending swap request", data: null });
 
   const { data: swap, error } = await db.from("vfd_sandbox_position_swaps").insert({
     group_id: groupId, requester_id: userId, target_id: targetId,
