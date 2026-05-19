@@ -1781,9 +1781,12 @@ async function handleRemoveSplitParticipant(userId: string, body: Record<string,
     .select("*").eq("split_id", splitId).eq("user_id", participantUserId).maybeSingle();
   if (!participant) return jsonResponse({ error: "Participant not found" }, 400);
 
-  // Refund if already paid
+  // Refund if already paid (creator-absorbed-fee splits: invitee paid 0 fee)
   if (participant.status === "paid") {
-    const feeShare = Number(split.fee_per_person || (Math.ceil(100 / split.split_count * 100) / 100));
+    const storedFeePerPerson = Number(split.fee_per_person);
+    const feeShare = storedFeePerPerson === 0
+      ? (participantUserId === split.creator_id ? Number(split.platform_fee || 100) : 0)
+      : (storedFeePerPerson || (Math.ceil(100 / split.split_count * 100) / 100));
     const refundAmount = Number(participant.amount) + feeShare;
     await creditWallet(participantUserId, refundAmount);
     await db.from("vfd_sandbox_splits").update({
