@@ -1525,20 +1525,24 @@ async function handleCreateSplit(userId: string, body: Record<string, unknown>) 
 
   let creatorAmount: number;
   let perPerson: number;
+  let creatorPaysFullFee = false;
   if (creatorAmountRaw !== null && !Number.isNaN(creatorAmountRaw)) {
     if (creatorAmountRaw <= 0 || creatorAmountRaw >= totalAmount) {
       return jsonResponse({ error: "Your contribution must be greater than 0 and less than the total amount" }, 400);
     }
     creatorAmount = Math.round(creatorAmountRaw * 100) / 100;
     perPerson = Math.ceil(((totalAmount - creatorAmount) / (splitCount - 1)) * 100) / 100;
+    // Bills/custom split: creator absorbs the full platform fee, invitees pay 0 fee
+    creatorPaysFullFee = true;
   } else {
     perPerson = Math.ceil((totalAmount / splitCount) * 100) / 100;
     creatorAmount = perPerson;
   }
 
-  // PRODUCTION PARITY: ₦100 flat fee, fee-per-person rounded to 2dp
+  // PRODUCTION PARITY: ₦100 flat fee
   const platformFee = 100;
-  const feePerPerson = Math.ceil((platformFee / splitCount) * 100) / 100;
+  // When creator absorbs the fee, fee_per_person is 0 (signals handlePaySplit to charge creator the full fee)
+  const feePerPerson = creatorPaysFullFee ? 0 : Math.ceil((platformFee / splitCount) * 100) / 100;
   const expiryDate = new Date();
   expiryDate.setDate(expiryDate.getDate() + expiryDays);
 
