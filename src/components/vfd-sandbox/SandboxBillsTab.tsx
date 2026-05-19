@@ -66,6 +66,10 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
   const [recurringFreq, setRecurringFreq] = useState<"daily" | "weekly" | "monthly">("monthly");
   const [creatingRecurring, setCreatingRecurring] = useState(false);
   const [creatingSplit, setCreatingSplit] = useState(false);
+  const [showSplitDialog, setShowSplitDialog] = useState(false);
+  const [splitMyShare, setSplitMyShare] = useState("");
+  const [splitOthers, setSplitOthers] = useState(1);
+
 
   // Data
   const [categories, setCategories] = useState<string[]>([]);
