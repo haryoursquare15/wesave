@@ -64,7 +64,8 @@ function AnimatedNumber({ value, prefix = "₦" }: { value: number; prefix?: str
 /* ─── Product Banners Data ─── */
 const productBanners = [
   {
-    key: "lock",
+    key: "goalsave",
+    routeKey: "lock",
     title: "GoalSave",
     subtitle: "Flexible savings • Earn 10–16% p.a. • 90–365 days",
     cta: "Start GoalSave",
@@ -73,7 +74,8 @@ const productBanners = [
     accent: "bg-blue-400/20",
   },
   {
-    key: "lock",
+    key: "vault",
+    routeKey: "lock",
     title: "Vault",
     subtitle: "Higher yield safe • Earn 14–20.5% p.a. • 30–365 days",
     cta: "Open a Vault",
@@ -82,7 +84,8 @@ const productBanners = [
     accent: "bg-emerald-400/20",
   },
   {
-    key: "lock",
+    key: "lockmax",
+    routeKey: "lock",
     title: "LockMax",
     subtitle: "Maximum returns • Earn 18–21% p.a. • 90–365 days",
     cta: "Lock for Max",
@@ -91,7 +94,8 @@ const productBanners = [
     accent: "bg-purple-400/20",
   },
   {
-    key: "lock",
+    key: "upfront_yield",
+    routeKey: "lock",
     title: "Upfront Yield",
     subtitle: "Get your interest paid up front • 12–18% p.a.",
     cta: "Earn Upfront",
@@ -355,7 +359,7 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [] 
             <motion.div
               key={banner.key}
               whileTap={{ scale: 0.97 }}
-              onClick={() => onNavigate(banner.key)}
+              onClick={() => onNavigate(banner.routeKey)}
               className={`flex-none w-[80%] min-w-[260px] snap-center rounded-2xl bg-gradient-to-br ${banner.gradient} p-5 cursor-pointer relative overflow-hidden`}
             >
               <div className={`absolute top-3 right-3 w-16 h-16 rounded-2xl ${banner.accent} flex items-center justify-center`}>

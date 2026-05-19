@@ -34,6 +34,20 @@ interface UserBalance {
 
 type View = "dashboard" | "fund" | "transfer" | "lock" | "history" | "ajo" | "target" | "goal" | "split" | "association" | "bills" | "card";
 
+function ProductWrapper({ children, onBack }: { children: React.ReactNode; onBack: () => void }) {
+  return (
+    <div className="space-y-4">
+      <button
+        onClick={onBack}
+        className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+      >
+        <ArrowLeft className="h-3 w-3" /> Dashboard
+      </button>
+      {children}
+    </div>
+  );
+}
+
 function VfdSandboxInner() {
   const navigate = useNavigate();
   const { user, session, loading: authLoading, signOut } = useSandboxAuth();
@@ -366,23 +380,6 @@ function VfdSandboxInner() {
     };
   });
 
-  // Product tabs render their own internal back navigation (e.g. "Back to Targets"
-  // when in detail view). We only need a single, top-level back button that
-  // returns to the dashboard. To avoid the glitch where two stacked back
-  // buttons confuse users, the wrapper exposes a small "Dashboard" link
-  // instead of a duplicate ArrowLeft.
-  const ProductWrapper = ({ children }: { children: React.ReactNode }) => (
-    <div className="space-y-4">
-      <button
-        onClick={goBack}
-        className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
-      >
-        <ArrowLeft className="h-3 w-3" /> Dashboard
-      </button>
-      {children}
-    </div>
-  );
-
   return (
     <div className="min-h-screen bg-background">
       <SandboxHeader />
@@ -459,13 +456,13 @@ function VfdSandboxInner() {
                 onBack={goBack}
               />
             )}
-            {currentView === "ajo" && <ProductWrapper><SandboxAjoTab /></ProductWrapper>}
-            {currentView === "target" && <ProductWrapper><SandboxTargetTab /></ProductWrapper>}
-            {currentView === "goal" && <ProductWrapper><SandboxGoalTab /></ProductWrapper>}
-            {currentView === "split" && <ProductWrapper><SandboxSplitTab /></ProductWrapper>}
-            {currentView === "association" && <ProductWrapper><SandboxAssociationTab /></ProductWrapper>}
-            {currentView === "bills" && <ProductWrapper><SandboxBillsTab /></ProductWrapper>}
-            {currentView === "card" && <ProductWrapper><SandboxCardTab /></ProductWrapper>}
+            {currentView === "ajo" && <ProductWrapper onBack={goBack}><SandboxAjoTab /></ProductWrapper>}
+            {currentView === "target" && <ProductWrapper onBack={goBack}><SandboxTargetTab /></ProductWrapper>}
+            {currentView === "goal" && <ProductWrapper onBack={goBack}><SandboxGoalTab /></ProductWrapper>}
+            {currentView === "split" && <ProductWrapper onBack={goBack}><SandboxSplitTab /></ProductWrapper>}
+            {currentView === "association" && <ProductWrapper onBack={goBack}><SandboxAssociationTab /></ProductWrapper>}
+            {currentView === "bills" && <ProductWrapper onBack={goBack}><SandboxBillsTab /></ProductWrapper>}
+            {currentView === "card" && <ProductWrapper onBack={goBack}><SandboxCardTab /></ProductWrapper>}
           </>
         )}
       </div>
