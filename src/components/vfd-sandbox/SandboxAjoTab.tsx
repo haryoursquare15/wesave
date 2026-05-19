@@ -119,6 +119,9 @@ export function SandboxAjoTab() {
   const [detailGroup, setDetailGroup] = useState<string | null>(null);
   const [detailData, setDetailData] = useState<any>(null);
   const [showInviteDialog, setShowInviteDialog] = useState(false);
+  const [pendingInvites, setPendingInvites] = useState<any[]>([]);
+  const [inviteGate, setInviteGate] = useState<{ invite: any; group: Group } | null>(null);
+  const [inviteBusy, setInviteBusy] = useState(false);
 
   const [form, setForm] = useState({
     name: "",
