@@ -3138,7 +3138,10 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
         const newCount = prevCount + 1;
         const reachedLimit = newCount >= MAX_RETRIES;
         const nextRetry = reachedLimit ? null : new Date(Date.now() + RETRY_INTERVAL_MS).toISOString();
-        const errMsg = "Insufficient wallet balance";
+        const rawErr = (debit.error || "").toString();
+        const walletBal = await getVestaraWalletBalance(m.user_id);
+        const truelyInsufficient = walletBal < amount || /insufficient/i.test(rawErr);
+        const errMsg = truelyInsufficient ? "Insufficient wallet balance" : (rawErr || "Auto-contribution failed");
 
         if (existingFailed) {
           await db.from("vfd_sandbox_contribution_audit").update({
