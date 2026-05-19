@@ -698,21 +698,43 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
               </div>
             )}
 
-            {/* Pay Button */}
-            <Button
-              onClick={handlePay}
-              disabled={paying || !customerId || !amount || Number(amount) <= 0 || (needsValidation && validationResult !== "valid")}
-              className="w-full h-12 text-base font-bold"
-            >
-              {paying ? (
-                <>
-                  <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                  Processing...
-                </>
-              ) : (
-                `Pay ₦${Number(amount || 0).toLocaleString()}`
-              )}
-            </Button>
+            {/* Pay + Split Pay */}
+            <div className="grid grid-cols-2 gap-3">
+              <Button
+                onClick={handlePay}
+                disabled={paying || !customerId || !amount || Number(amount) <= 0 || (needsValidation && validationResult !== "valid")}
+                className="h-12 text-base font-bold"
+              >
+                {paying ? (
+                  <>
+                    <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                    Processing...
+                  </>
+                ) : (
+                  `Pay ₦${Number(amount || 0).toLocaleString()}`
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  const total = Number(amount || 0);
+                  if (!total || total < 1000) {
+                    toast({ title: "Minimum ₦1,000", description: "Split Pay needs a total of at least ₦1,000.", variant: "destructive" });
+                    return;
+                  }
+                  setSplitMyShare(String(Math.max(1, Math.floor(total / 2))));
+                  setSplitOthers(1);
+                  setShowSplitDialog(true);
+                }}
+                disabled={paying || !customerId || !amount || Number(amount) < 1000 || (needsValidation && validationResult !== "valid")}
+                className="h-12 text-base font-bold"
+              >
+                <Split className="h-4 w-4 mr-2" />
+                Split Pay
+              </Button>
+            </div>
+
           </motion.div>
         )}
 
