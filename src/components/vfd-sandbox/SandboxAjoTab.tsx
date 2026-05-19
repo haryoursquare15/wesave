@@ -688,7 +688,7 @@ export function SandboxAjoTab() {
           {groups.map((g) => {
             const progress = g.total_cycles > 0 ? ((g.current_cycle - 1) / g.total_cycles) * 100 : 0;
             return (
-              <Card key={g.id} className="cursor-pointer hover:border-primary/30 transition-colors" onClick={() => loadDetail(g.id)}>
+              <Card key={g.id} className="cursor-pointer hover:border-primary/30 transition-colors" onClick={() => handleCardClick(g)}>
                 <CardContent className="p-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <div>
