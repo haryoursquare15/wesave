@@ -19,7 +19,8 @@ import {
 } from "lucide-react";
 import { SandboxGroupInviteDialog } from "./SandboxGroupInviteDialog";
 import { SandboxGroupChat } from "./SandboxGroupChat";
-import { Settings as SettingsIcon, MessageSquare } from "lucide-react";
+import { Settings as SettingsIcon, MessageSquare, Check, X } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 interface Group {
   id: string; name: string; contribution_amount: number; period: string;
@@ -118,6 +119,9 @@ export function SandboxAjoTab() {
   const [detailGroup, setDetailGroup] = useState<string | null>(null);
   const [detailData, setDetailData] = useState<any>(null);
   const [showInviteDialog, setShowInviteDialog] = useState(false);
+  const [pendingInvites, setPendingInvites] = useState<any[]>([]);
+  const [inviteGate, setInviteGate] = useState<{ invite: any; group: Group } | null>(null);
+  const [inviteBusy, setInviteBusy] = useState(false);
 
   const [form, setForm] = useState({
     name: "",
@@ -133,8 +137,12 @@ export function SandboxAjoTab() {
   const loadGroups = async () => {
     // Promote any swap-window groups whose 3-min timer elapsed before refreshing
     await products.autoStartPendingGroups();
-    const result = await products.listGroups();
-    if (result?.data) setGroups(result.data);
+    const [groupsRes, invitesRes] = await Promise.all([
+      products.listGroups(),
+      products.listGroupInvites(),
+    ]);
+    if (groupsRes?.data) setGroups(groupsRes.data);
+    if (invitesRes?.data) setPendingInvites(invitesRes.data as any[]);
   };
 
   useEffect(() => { loadGroups(); }, []); // eslint-disable-line
@@ -173,6 +181,50 @@ export function SandboxAjoTab() {
     if (result?.data) {
       setDetailData(result.data);
       setDetailGroup(groupId);
+    }
+  };
+
+  // Gate non-members: if the user has a pending invite to this group, force
+  // an Accept/Decline modal before letting them open the group detail. If they
+  // are neither a member nor invited, deny entry.
+  const handleCardClick = (g: Group) => {
+    const isMember = !!currentUserId && (g.vfd_sandbox_group_members || [])
+      .some((m: any) => m.user_id === currentUserId && (m.status ?? "active") === "active");
+    if (isMember) {
+      loadDetail(g.id);
+      return;
+    }
+    const invite = pendingInvites.find((i: any) => i.group_id === g.id);
+    if (invite) {
+      setInviteGate({ invite, group: g });
+      return;
+    }
+    toast({
+      title: "Members only",
+      description: "You're not a member of this group.",
+      variant: "destructive",
+    });
+  };
+
+  const respondGate = async (accept: boolean) => {
+    if (!inviteGate) return;
+    setInviteBusy(true);
+    const res = await products.respondGroupInvite(inviteGate.invite.id, accept);
+    setInviteBusy(false);
+    if (res?.error) {
+      toast({ title: "Action failed", description: res.error, variant: "destructive" });
+      return;
+    }
+    if (accept) {
+      toast({ title: "Invite accepted", description: `You joined "${inviteGate.group.name}".` });
+      const gid = inviteGate.group.id;
+      setInviteGate(null);
+      await loadGroups();
+      await loadDetail(gid);
+    } else {
+      toast({ title: "Invite declined" });
+      setInviteGate(null);
+      await loadGroups();
     }
   };
 
@@ -635,8 +687,11 @@ export function SandboxAjoTab() {
         <div className="space-y-3">
           {groups.map((g) => {
             const progress = g.total_cycles > 0 ? ((g.current_cycle - 1) / g.total_cycles) * 100 : 0;
+            const isMember = !!currentUserId && (g.vfd_sandbox_group_members || [])
+              .some((m: any) => m.user_id === currentUserId && (m.status ?? "active") === "active");
+            const hasInvite = !isMember && pendingInvites.some((i: any) => i.group_id === g.id);
             return (
-              <Card key={g.id} className="cursor-pointer hover:border-primary/30 transition-colors" onClick={() => loadDetail(g.id)}>
+              <Card key={g.id} className="cursor-pointer hover:border-primary/30 transition-colors" onClick={() => handleCardClick(g)}>
                 <CardContent className="p-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <div>
@@ -645,10 +700,16 @@ export function SandboxAjoTab() {
                         ₦{fmt(Number(g.contribution_amount))} / {g.period} • {g.member_count}/{g.max_members} members
                       </p>
                     </div>
-                    <Badge variant="outline" className={g.status === "active" ? "text-green-600 border-green-500" : g.status === "completed" ? "text-primary border-primary" : "text-muted-foreground"}>
-                      {g.status}
-                    </Badge>
+                    <div className="flex flex-col items-end gap-1">
+                      {hasInvite && (
+                        <Badge className="bg-primary/15 text-primary border-primary/30">Invite pending</Badge>
+                      )}
+                      <Badge variant="outline" className={g.status === "active" ? "text-green-600 border-green-500" : g.status === "completed" ? "text-primary border-primary" : "text-muted-foreground"}>
+                        {g.status}
+                      </Badge>
+                    </div>
                   </div>
+
 
                   {g.total_cycles > 0 && (
                     <div>
@@ -687,6 +748,35 @@ export function SandboxAjoTab() {
           })}
         </div>
       )}
+
+      {/* Invite gate: non-members with a pending invite MUST accept or decline
+          before they can enter the group detail. */}
+      <Dialog open={!!inviteGate} onOpenChange={(o) => { if (!o && !inviteBusy) setInviteGate(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-base">Group Invite</DialogTitle>
+            <DialogDescription className="text-xs">
+              You were invited to <span className="font-medium">{inviteGate?.group.name}</span>. Accept or decline to continue.
+            </DialogDescription>
+          </DialogHeader>
+          {inviteGate && (
+            <div className="p-3 rounded-xl bg-muted/40 space-y-1 text-xs">
+              <p>₦{fmt(Number(inviteGate.group.contribution_amount))} / {inviteGate.group.period}</p>
+              <p className="text-muted-foreground">{inviteGate.group.member_count}/{inviteGate.group.max_members} members</p>
+              <p className="text-muted-foreground">Non-members can't view this group's details.</p>
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="outline" disabled={inviteBusy} onClick={() => respondGate(false)} className="h-11">
+              <X className="h-4 w-4 mr-1" /> Decline
+            </Button>
+            <Button disabled={inviteBusy} onClick={() => respondGate(true)} className="h-11">
+              <Check className="h-4 w-4 mr-1" /> Accept
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+
