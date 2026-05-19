@@ -21,7 +21,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Download, Filter, RefreshCw } from "lucide-react";
+import { Download, Filter, RefreshCw, CalendarIcon } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { cn } from "@/lib/utils";
 import { exportToCSV } from "@/lib/exportUtils";
 import { format } from "date-fns";
 
