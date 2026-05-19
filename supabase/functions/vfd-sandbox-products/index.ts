@@ -1745,8 +1745,11 @@ async function handleCancelSplit(userId: string, body: Record<string, unknown>) 
     .select("*").eq("split_id", splitId).eq("status", "paid");
 
   let refundedCount = 0;
-  const feeShare = Number(split.fee_per_person || (Math.ceil(100 / split.split_count * 100) / 100));
+  const storedFeePerPerson = Number(split.fee_per_person);
   for (const p of paidParticipants || []) {
+    const feeShare = storedFeePerPerson === 0
+      ? (p.user_id === split.creator_id ? Number(split.platform_fee || 100) : 0)
+      : (storedFeePerPerson || (Math.ceil(100 / split.split_count * 100) / 100));
     const refundAmount = Number(p.amount) + feeShare;
     await creditWallet(p.user_id, refundAmount);
     refundedCount++;
