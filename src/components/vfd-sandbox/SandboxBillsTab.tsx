@@ -55,11 +55,17 @@ const categoryConfig: Record<string, { icon: typeof Smartphone; color: string; b
 
 type Step = "categories" | "billers" | "items" | "payment" | "success";
 
-export function SandboxBillsTab() {
+export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = {}) {
   const { toast } = useToast();
   const { client } = useSandboxAwareAuth();
+  const [topTab, setTopTab] = useState<"pay" | "receipts" | "recurring" | "beneficiaries">("pay");
   const [step, setStep] = useState<Step>("categories");
   const [loading, setLoading] = useState(false);
+  const [beneficiaries, setBeneficiaries] = useState<any[]>([]);
+  const [showRecurringDialog, setShowRecurringDialog] = useState(false);
+  const [recurringFreq, setRecurringFreq] = useState<"daily" | "weekly" | "monthly">("monthly");
+  const [creatingRecurring, setCreatingRecurring] = useState(false);
+  const [creatingSplit, setCreatingSplit] = useState(false);
 
   // Data
   const [categories, setCategories] = useState<string[]>([]);
