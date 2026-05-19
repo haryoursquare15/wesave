@@ -1647,9 +1647,11 @@ async function handlePaySplit(userId: string, body: Record<string, unknown>) {
   if (participant.status === "paid") return jsonResponse({ error: "Already paid" }, 400);
   if (participant.status === "declined") return jsonResponse({ error: "You have declined this split" }, 400);
 
-  const amount = Number(split.per_person_amount);
+  // Use participant's own stored amount (supports unequal splits where creator covers a custom share)
+  const amount = Number(participant.amount);
   const feeShare = Number(split.fee_per_person || (Math.ceil(100 / split.split_count * 100) / 100));
   const totalDebit = amount + feeShare;
+
 
   // Production parity: debit bill share + fee share
   const debited = await debitWallet(userId, totalDebit);
