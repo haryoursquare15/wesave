@@ -69,6 +69,14 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
   const [showSplitDialog, setShowSplitDialog] = useState(false);
   const [splitMyShare, setSplitMyShare] = useState("");
   const [splitOthers, setSplitOthers] = useState(1);
+  const [splitStage, setSplitStage] = useState<"setup" | "invite">("setup");
+  const [createdSplit, setCreatedSplit] = useState<{ id: string; title: string; per_other: number; my_share: number; service_fee: number; others: number } | null>(null);
+  const [splitSearch, setSplitSearch] = useState("");
+  const [splitSearchResults, setSplitSearchResults] = useState<any[]>([]);
+  const [splitSearching, setSplitSearching] = useState(false);
+  const [splitInvited, setSplitInvited] = useState<Set<string>>(new Set());
+  const [splitPaying, setSplitPaying] = useState(false);
+  const [splitPaid, setSplitPaid] = useState(false);
 
 
   // Data
@@ -350,8 +358,9 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
     }
     setCreatingSplit(true);
     try {
+      const title = `${selectedBiller.name} — ${customerId}`;
       const r = await callProducts("create_split", {
-        title: `${selectedBiller.name} — ${customerId}`,
+        title,
         total_amount: total,
         split_count: others + 1,
         creator_amount: myShare,
@@ -360,18 +369,93 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
       });
       if (r?.error) throw new Error(r.error);
       const perOther = Math.ceil(((total - myShare) / others) * 100) / 100;
-      toast({
-        title: "Split created",
-        description: `You owe ₦${myShare.toLocaleString()}. ${others} other${others > 1 ? "s" : ""} owe ₦${perOther.toLocaleString()} each. Invite them from SplitPay.`,
+      const splitId = r?.data?.id;
+      if (!splitId) throw new Error("Split was created but no ID returned");
+      setCreatedSplit({
+        id: splitId,
+        title,
+        per_other: perOther,
+        my_share: myShare,
+        service_fee: 100, // creator absorbs full fee
+        others,
       });
-      setShowSplitDialog(false);
-      onOpenSplit?.();
+      setSplitInvited(new Set());
+      setSplitSearch("");
+      setSplitSearchResults([]);
+      setSplitPaid(false);
+      setSplitStage("invite");
     } catch (e) {
       toast({ title: "Failed", description: e instanceof Error ? e.message : "Could not create split", variant: "destructive" });
     } finally {
       setCreatingSplit(false);
     }
   };
+
+  /* ─── Split: search WeSave users for invite ─── */
+  useEffect(() => {
+    if (splitStage !== "invite") return;
+    const q = splitSearch.trim();
+    if (q.length < 2) { setSplitSearchResults([]); return; }
+    let cancelled = false;
+    setSplitSearching(true);
+    const t = setTimeout(async () => {
+      try {
+        const r = await callProducts("search_users", { query: q });
+        if (!cancelled) setSplitSearchResults(r?.data || []);
+      } catch {
+        if (!cancelled) setSplitSearchResults([]);
+      } finally {
+        if (!cancelled) setSplitSearching(false);
+      }
+    }, 300);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [splitSearch, splitStage, callProducts]);
+
+  const inviteToSplit = async (inviteeId: string) => {
+    if (!createdSplit) return;
+    try {
+      const r = await callProducts("invite_split_member", {
+        split_id: createdSplit.id,
+        invitee_id: inviteeId,
+      });
+      if (r?.error) throw new Error(r.error);
+      if (r?.data?.invited || r?.data?.already_invited) {
+        setSplitInvited(prev => new Set(prev).add(inviteeId));
+        toast({ title: r.data.already_invited ? "Already invited" : "Invite sent!" });
+      }
+    } catch (e) {
+      toast({ title: "Invite failed", description: e instanceof Error ? e.message : "Could not invite user", variant: "destructive" });
+    }
+  };
+
+  const payMySplitShare = async () => {
+    if (!createdSplit) return;
+    setSplitPaying(true);
+    try {
+      const r = await callProducts("pay_split", { split_id: createdSplit.id });
+      if (r?.error) throw new Error(r.error);
+      setSplitPaid(true);
+      toast({ title: "Your share paid", description: `₦${(createdSplit.my_share + createdSplit.service_fee).toLocaleString()} debited from your wallet.` });
+    } catch (e) {
+      toast({ title: "Payment failed", description: e instanceof Error ? e.message : "Could not pay your share", variant: "destructive" });
+    } finally {
+      setSplitPaying(false);
+    }
+  };
+
+  const closeSplitDialog = () => {
+    setShowSplitDialog(false);
+    // reset on close for next time
+    setTimeout(() => {
+      setSplitStage("setup");
+      setCreatedSplit(null);
+      setSplitInvited(new Set());
+      setSplitSearch("");
+      setSplitSearchResults([]);
+      setSplitPaid(false);
+    }, 200);
+  };
+
 
 
   // Auto-load categories on first render
@@ -780,12 +864,15 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
       </AnimatePresence>
 
       {/* ═══ SPLIT PAY DIALOG ═══ */}
-      <Dialog open={showSplitDialog} onOpenChange={setShowSplitDialog}>
-        <DialogContent className="sm:max-w-md">
+      <Dialog open={showSplitDialog} onOpenChange={(open) => { if (!open) closeSplitDialog(); else setShowSplitDialog(true); }}>
+        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Split this bill</DialogTitle>
+            <DialogTitle>
+              {splitStage === "setup" ? "Split this bill" : splitPaid ? "Share paid" : "Invite & pay your share"}
+            </DialogTitle>
           </DialogHeader>
-          {(() => {
+
+          {splitStage === "setup" && (() => {
             const total = Number(amount || 0);
             const myShare = Number(splitMyShare || 0);
             const remainder = Math.max(0, total - myShare);
@@ -809,35 +896,21 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
                     max={total - 1}
                     value={splitMyShare}
                     onChange={(e) => setSplitMyShare(e.target.value)}
-                    placeholder="e.g. 2000"
+                    placeholder="e.g. 1000"
                   />
                 </div>
 
                 <div className="space-y-2">
                   <Label>Split the remaining ₦{remainder.toLocaleString()} with</Label>
                   <div className="flex items-center gap-3">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      onClick={() => setSplitOthers(Math.max(1, others - 1))}
-                    >
-                      −
-                    </Button>
+                    <Button type="button" variant="outline" size="icon" onClick={() => setSplitOthers(Math.max(1, others - 1))}>−</Button>
                     <div className="flex-1 text-center">
                       <div className="text-2xl font-bold text-foreground">{others}</div>
                       <div className="text-xs text-muted-foreground">
                         {others === 1 ? "other person" : "other people"}
                       </div>
                     </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      onClick={() => setSplitOthers(Math.min(9, others + 1))}
-                    >
-                      +
-                    </Button>
+                    <Button type="button" variant="outline" size="icon" onClick={() => setSplitOthers(Math.min(9, others + 1))}>+</Button>
                   </div>
                 </div>
 
@@ -845,31 +918,113 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
                   <div className="rounded-lg border border-border/50 p-3 space-y-1.5 text-sm">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">You pay</span>
-                      <span className="font-semibold text-foreground">₦{myShare.toLocaleString()}</span>
+                      <span className="font-semibold text-foreground">₦{(myShare + 100).toLocaleString()}</span>
                     </div>
-                    <div className="flex justify-between">
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>↳ Your share ₦{myShare.toLocaleString()} + ₦100 service fee</span>
+                    </div>
+                    <div className="flex justify-between pt-1">
                       <span className="text-muted-foreground">Each of {others} other{others > 1 ? "s" : ""}</span>
                       <span className="font-semibold text-foreground">₦{perOther.toLocaleString()}</span>
                     </div>
-                    <p className="text-xs text-muted-foreground pt-1">
-                      A ₦100 service fee is split equally across all {others + 1} participants.
+                    <p className="text-[11px] text-muted-foreground pt-1">
+                      You absorb the ₦100 service fee — invitees pay only their bill share.
                     </p>
                   </div>
                 )}
               </div>
             );
           })()}
+
+          {splitStage === "invite" && createdSplit && (
+            <div className="space-y-4 py-2">
+              {/* Summary */}
+              <div className="rounded-lg border border-border/50 p-3 space-y-1.5 text-sm bg-muted/30">
+                <p className="text-xs text-muted-foreground">{createdSplit.title}</p>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Your share + fee</span>
+                  <span className="font-semibold text-foreground">₦{(createdSplit.my_share + createdSplit.service_fee).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Each of {createdSplit.others} other{createdSplit.others > 1 ? "s" : ""}</span>
+                  <span className="font-semibold text-foreground">₦{createdSplit.per_other.toLocaleString()}</span>
+                </div>
+              </div>
+
+              {/* Invite */}
+              <div className="space-y-2">
+                <Label className="text-xs">Invite by username or name</Label>
+                <Input
+                  placeholder="e.g. @ada or Adaobi"
+                  value={splitSearch}
+                  onChange={(e) => setSplitSearch(e.target.value)}
+                  className="text-sm"
+                />
+                {splitSearch.length >= 2 && (
+                  <div className="max-h-40 overflow-y-auto space-y-1 rounded-lg border border-border p-1">
+                    {splitSearching ? (
+                      <p className="text-xs text-muted-foreground text-center py-3">Searching…</p>
+                    ) : splitSearchResults.length === 0 ? (
+                      <p className="text-xs text-muted-foreground text-center py-3">No users found</p>
+                    ) : splitSearchResults.map((u: any) => (
+                      <div key={u.id} className="flex items-center justify-between p-2 rounded hover:bg-accent/50">
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium truncate">{u.full_name || u.username || "User"}</p>
+                          {u.username && <p className="text-[10px] text-muted-foreground truncate">@{u.username}</p>}
+                        </div>
+                        {splitInvited.has(u.id) ? (
+                          <Badge variant="outline" className="text-[10px] border-emerald-500/40 text-emerald-600">Invited</Badge>
+                        ) : (
+                          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => inviteToSplit(u.id)}>
+                            Invite
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <p className="text-[11px] text-muted-foreground">
+                  Invited {splitInvited.size}/{createdSplit.others}. You can also share later from the SplitPay tab.
+                </p>
+              </div>
+
+              {/* Pay my share */}
+              <Button
+                onClick={payMySplitShare}
+                disabled={splitPaying || splitPaid}
+                className="w-full h-11 font-bold"
+              >
+                {splitPaid ? (
+                  <><CheckCircle2 className="h-4 w-4 mr-2" />Your share paid</>
+                ) : splitPaying ? (
+                  <><Loader2 className="h-4 w-4 animate-spin mr-2" />Paying…</>
+                ) : (
+                  `Pay my share ₦${(createdSplit.my_share + createdSplit.service_fee).toLocaleString()}`
+                )}
+              </Button>
+            </div>
+          )}
+
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="ghost" onClick={() => setShowSplitDialog(false)} disabled={creatingSplit}>
-              Cancel
-            </Button>
-            <Button onClick={splitThisBill} disabled={creatingSplit}>
-              {creatingSplit ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Creating…</> : "Create split & invite"}
-            </Button>
+            {splitStage === "setup" ? (
+              <>
+                <Button variant="ghost" onClick={closeSplitDialog} disabled={creatingSplit}>
+                  Cancel
+                </Button>
+                <Button onClick={splitThisBill} disabled={creatingSplit}>
+                  {creatingSplit ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Creating…</> : "Continue"}
+                </Button>
+              </>
+            ) : (
+              <Button variant="outline" onClick={closeSplitDialog} className="w-full">
+                {splitPaid ? "Done" : "Close"}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
   );
 }
+
 

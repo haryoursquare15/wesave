@@ -1525,20 +1525,24 @@ async function handleCreateSplit(userId: string, body: Record<string, unknown>) 
 
   let creatorAmount: number;
   let perPerson: number;
+  let creatorPaysFullFee = false;
   if (creatorAmountRaw !== null && !Number.isNaN(creatorAmountRaw)) {
     if (creatorAmountRaw <= 0 || creatorAmountRaw >= totalAmount) {
       return jsonResponse({ error: "Your contribution must be greater than 0 and less than the total amount" }, 400);
     }
     creatorAmount = Math.round(creatorAmountRaw * 100) / 100;
     perPerson = Math.ceil(((totalAmount - creatorAmount) / (splitCount - 1)) * 100) / 100;
+    // Bills/custom split: creator absorbs the full platform fee, invitees pay 0 fee
+    creatorPaysFullFee = true;
   } else {
     perPerson = Math.ceil((totalAmount / splitCount) * 100) / 100;
     creatorAmount = perPerson;
   }
 
-  // PRODUCTION PARITY: ₦100 flat fee, fee-per-person rounded to 2dp
+  // PRODUCTION PARITY: ₦100 flat fee
   const platformFee = 100;
-  const feePerPerson = Math.ceil((platformFee / splitCount) * 100) / 100;
+  // When creator absorbs the fee, fee_per_person is 0 (signals handlePaySplit to charge creator the full fee)
+  const feePerPerson = creatorPaysFullFee ? 0 : Math.ceil((platformFee / splitCount) * 100) / 100;
   const expiryDate = new Date();
   expiryDate.setDate(expiryDate.getDate() + expiryDays);
 
@@ -1649,13 +1653,21 @@ async function handlePaySplit(userId: string, body: Record<string, unknown>) {
 
   // Use participant's own stored amount (supports unequal splits where creator covers a custom share)
   const amount = Number(participant.amount);
-  const feeShare = Number(split.fee_per_person || (Math.ceil(100 / split.split_count * 100) / 100));
+  const storedFeePerPerson = Number(split.fee_per_person);
+  // When fee_per_person is 0, the creator absorbs the entire platform fee (bills/custom splits).
+  // Otherwise, the legacy behaviour: each participant pays their proportional fee share.
+  let feeShare: number;
+  if (storedFeePerPerson === 0) {
+    feeShare = userId === split.creator_id ? Number(split.platform_fee || 100) : 0;
+  } else {
+    feeShare = storedFeePerPerson || (Math.ceil(100 / split.split_count * 100) / 100);
+  }
   const totalDebit = amount + feeShare;
 
 
   // Production parity: debit bill share + fee share
   const debited = await debitWallet(userId, totalDebit);
-  if (!debited) return jsonResponse({ error: `Insufficient available balance. Need ₦${totalDebit.toLocaleString()} (₦${amount.toLocaleString()} share + ₦${feeShare.toLocaleString()} fee)` }, 400);
+  if (!debited) return jsonResponse({ error: `Insufficient available balance. Need ₦${totalDebit.toLocaleString()} (₦${amount.toLocaleString()} share${feeShare > 0 ? ` + ₦${feeShare.toLocaleString()} fee` : ""})` }, 400);
 
   await db.from("vfd_sandbox_split_participants").update({
     status: "paid", paid_at: new Date().toISOString(),
@@ -1733,8 +1745,11 @@ async function handleCancelSplit(userId: string, body: Record<string, unknown>) 
     .select("*").eq("split_id", splitId).eq("status", "paid");
 
   let refundedCount = 0;
-  const feeShare = Number(split.fee_per_person || (Math.ceil(100 / split.split_count * 100) / 100));
+  const storedFeePerPerson = Number(split.fee_per_person);
   for (const p of paidParticipants || []) {
+    const feeShare = storedFeePerPerson === 0
+      ? (p.user_id === split.creator_id ? Number(split.platform_fee || 100) : 0)
+      : (storedFeePerPerson || (Math.ceil(100 / split.split_count * 100) / 100));
     const refundAmount = Number(p.amount) + feeShare;
     await creditWallet(p.user_id, refundAmount);
     refundedCount++;
@@ -1766,9 +1781,12 @@ async function handleRemoveSplitParticipant(userId: string, body: Record<string,
     .select("*").eq("split_id", splitId).eq("user_id", participantUserId).maybeSingle();
   if (!participant) return jsonResponse({ error: "Participant not found" }, 400);
 
-  // Refund if already paid
+  // Refund if already paid (creator-absorbed-fee splits: invitee paid 0 fee)
   if (participant.status === "paid") {
-    const feeShare = Number(split.fee_per_person || (Math.ceil(100 / split.split_count * 100) / 100));
+    const storedFeePerPerson = Number(split.fee_per_person);
+    const feeShare = storedFeePerPerson === 0
+      ? (participantUserId === split.creator_id ? Number(split.platform_fee || 100) : 0)
+      : (storedFeePerPerson || (Math.ceil(100 / split.split_count * 100) / 100));
     const refundAmount = Number(participant.amount) + feeShare;
     await creditWallet(participantUserId, refundAmount);
     await db.from("vfd_sandbox_splits").update({
