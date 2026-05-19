@@ -3014,7 +3014,7 @@ async function handlePostGroupChat(userId: string, body: Record<string, unknown>
 
   const { data: member } = await db.from("vfd_sandbox_group_members")
     .select("id").eq("group_id", groupId).eq("user_id", userId).eq("status", "active").maybeSingle();
-  if (!member) return jsonResponse({ error: "Not a member of this group" }, 403);
+  if (!member) return jsonResponse({ error: "Not a member of this group", data: null });
 
   const { data, error } = await db.from("vfd_sandbox_chat_messages")
     .insert({ group_id: groupId, user_id: userId, message, message_type: "member" })
