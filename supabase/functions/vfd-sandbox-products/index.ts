@@ -1653,13 +1653,21 @@ async function handlePaySplit(userId: string, body: Record<string, unknown>) {
 
   // Use participant's own stored amount (supports unequal splits where creator covers a custom share)
   const amount = Number(participant.amount);
-  const feeShare = Number(split.fee_per_person || (Math.ceil(100 / split.split_count * 100) / 100));
+  const storedFeePerPerson = Number(split.fee_per_person);
+  // When fee_per_person is 0, the creator absorbs the entire platform fee (bills/custom splits).
+  // Otherwise, the legacy behaviour: each participant pays their proportional fee share.
+  let feeShare: number;
+  if (storedFeePerPerson === 0) {
+    feeShare = userId === split.creator_id ? Number(split.platform_fee || 100) : 0;
+  } else {
+    feeShare = storedFeePerPerson || (Math.ceil(100 / split.split_count * 100) / 100);
+  }
   const totalDebit = amount + feeShare;
 
 
   // Production parity: debit bill share + fee share
   const debited = await debitWallet(userId, totalDebit);
-  if (!debited) return jsonResponse({ error: `Insufficient available balance. Need ₦${totalDebit.toLocaleString()} (₦${amount.toLocaleString()} share + ₦${feeShare.toLocaleString()} fee)` }, 400);
+  if (!debited) return jsonResponse({ error: `Insufficient available balance. Need ₦${totalDebit.toLocaleString()} (₦${amount.toLocaleString()} share${feeShare > 0 ? ` + ₦${feeShare.toLocaleString()} fee` : ""})` }, 400);
 
   await db.from("vfd_sandbox_split_participants").update({
     status: "paid", paid_at: new Date().toISOString(),
