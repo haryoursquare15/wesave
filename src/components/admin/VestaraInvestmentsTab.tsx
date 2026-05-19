@@ -344,7 +344,9 @@ export function VestaraInvestmentsTab() {
                   <TableRow key={r.id}>
                     <TableCell>
                       <div className="font-medium text-sm">{r.customer_name}</div>
+                      <div className="text-xs text-muted-foreground">@{r.customer_username}</div>
                       <div className="text-xs text-muted-foreground">{r.customer_email}</div>
+                      <div className="text-xs text-muted-foreground">{r.customer_phone || "—"}</div>
                       <div className="text-[10px] text-muted-foreground font-mono">{r.user_id.slice(0, 8)}…</div>
                     </TableCell>
                     <TableCell>{PRODUCT_LABEL[r.product_code] || r.product_code}</TableCell>
