@@ -1182,7 +1182,7 @@ async function handleRequestTargetWithdrawal(userId: string, body: Record<string
 
   const { data: membership } = await db.from("vfd_sandbox_target_members")
     .select("*").eq("target_id", targetId).eq("user_id", userId).maybeSingle();
-  if (!membership) return jsonResponse({ error: "Not a member" }, 400);
+  if (!membership) return jsonResponse({ error: "Not a member", data: null });
 
   // Block overlapping pending requests for the same group
   const { data: pendingExisting } = await db.from("vfd_sandbox_target_withdrawal_requests")
@@ -1313,7 +1313,7 @@ async function handleIndependentWithdrawal(userId: string, body: Record<string, 
 
   const { data: membership } = await db.from("vfd_sandbox_target_members")
     .select("*").eq("target_id", targetId).eq("user_id", userId).maybeSingle();
-  if (!membership) return jsonResponse({ error: "Not a member" }, 400);
+  if (!membership) return jsonResponse({ error: "Not a member", data: null });
 
   const contributed = Number(membership.contributed_amount);
   if (contributed <= 0) return jsonResponse({ error: "No contributions to withdraw" }, 400);
