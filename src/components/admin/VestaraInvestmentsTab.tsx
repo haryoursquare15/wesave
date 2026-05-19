@@ -79,6 +79,8 @@ export function VestaraInvestmentsTab() {
   const [product, setProduct] = useState<string>("all");
   const [status, setStatus] = useState<string>("all");
   const [search, setSearch] = useState("");
+  const [startFrom, setStartFrom] = useState<Date | undefined>();
+  const [endTo, setEndTo] = useState<Date | undefined>();
 
   const load = async () => {
     setLoading(true);
