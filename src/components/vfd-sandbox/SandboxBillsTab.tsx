@@ -419,7 +419,7 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
 
       <AnimatePresence mode="wait">
         {/* ═══ CATEGORIES ═══ */}
-        {step === "categories" && (
+        {step === "categories" && topTab === "pay" && (
           <motion.div
             key="categories"
             initial={{ opacity: 0, x: -20 }}
