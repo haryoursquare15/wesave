@@ -285,6 +285,73 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
     setPaymentResult(null);
   };
 
+  // Load beneficiaries when entering payment step
+  useEffect(() => {
+    if (step === "payment" && selectedCategory) {
+      callProducts("list_bill_beneficiaries", { category: selectedCategory })
+        .then(r => setBeneficiaries(r?.data || []))
+        .catch(() => setBeneficiaries([]));
+    }
+  }, [step, selectedCategory, callProducts]);
+
+  const pickBeneficiary = (b: any) => {
+    setCustomerId(b.customer_id);
+    setPhoneNumber(b.phone_number || "");
+    setValidationResult(null);
+  };
+
+  const createRecurring = async () => {
+    if (!paymentResult || !selectedBiller || !selectedItem) return;
+    setCreatingRecurring(true);
+    try {
+      const today = new Date();
+      const r = await callProducts("create_recurring_bill", {
+        category: selectedCategory,
+        biller_id: selectedBiller.id,
+        biller_name: selectedBiller.name,
+        division: selectedBiller.division,
+        product_id: selectedBiller.product,
+        payment_item_code: selectedItem.paymentCode,
+        payment_item_name: selectedItem.paymentitemname,
+        customer_id: customerId,
+        phone_number: phoneNumber || undefined,
+        amount: Number(amount),
+        frequency: recurringFreq,
+        day_of_week: recurringFreq === "weekly" ? today.getDay() : undefined,
+        day_of_month: recurringFreq === "monthly" ? Math.min(today.getDate(), 28) : undefined,
+        nickname: `${selectedBiller.name} • ${customerId.slice(-4)}`,
+      });
+      if (r?.error) throw new Error(r.error);
+      toast({ title: "Recurring bill set", description: `${selectedBiller.name} will auto-pay ${recurringFreq} at 4 PM WAT from your wallet.` });
+      setShowRecurringDialog(false);
+    } catch (e) {
+      toast({ title: "Failed", description: e instanceof Error ? e.message : "Could not create recurring bill", variant: "destructive" });
+    } finally {
+      setCreatingRecurring(false);
+    }
+  };
+
+  const splitThisBill = async () => {
+    if (!selectedBiller || !amount) return;
+    setCreatingSplit(true);
+    try {
+      const r = await callProducts("create_split", {
+        title: `${selectedBiller.name} — ${customerId}`,
+        total_amount: Number(amount),
+        split_count: 2,
+        purpose: `Bill: ${selectedBiller.name} (${customerId})`,
+        expiry_days: 7,
+      });
+      if (r?.error) throw new Error(r.error);
+      toast({ title: "Split created", description: "Invite flatmates from the SplitPay tab." });
+      onOpenSplit?.();
+    } catch (e) {
+      toast({ title: "Failed", description: e instanceof Error ? e.message : "Could not create split", variant: "destructive" });
+    } finally {
+      setCreatingSplit(false);
+    }
+  };
+
   // Auto-load categories on first render
   if (categories.length === 0 && !loading) {
     loadCategories();
