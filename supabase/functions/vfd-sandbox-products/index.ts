@@ -487,7 +487,7 @@ async function handleRequestSwap(userId: string, body: Record<string, unknown>) 
 
   const { data: requester } = await db.from("vfd_sandbox_group_members")
     .select("*").eq("group_id", groupId).eq("user_id", userId).maybeSingle();
-  if (!requester) return jsonResponse({ error: "Not a member" }, 400);
+  if (!requester) return jsonResponse({ error: "Not a member", data: null });
   if (requester.has_used_swap) return jsonResponse({ error: "You have already used your swap for this group" }, 400);
   if (requester.has_received_payout) return jsonResponse({ error: "Cannot swap after receiving payout" }, 400);
 
@@ -794,7 +794,7 @@ async function handleExitGroup(userId: string, body: Record<string, unknown>) {
 
   const { data: membership } = await db.from("vfd_sandbox_group_members")
     .select("*").eq("group_id", groupId).eq("user_id", userId).maybeSingle();
-  if (!membership) return jsonResponse({ error: "Not a member" }, 400);
+  if (!membership) return jsonResponse({ error: "Not a member", data: null });
 
   await db.from("vfd_sandbox_group_members").update({ status: "exited" })
     .eq("group_id", groupId).eq("user_id", userId);
@@ -1182,7 +1182,7 @@ async function handleRequestTargetWithdrawal(userId: string, body: Record<string
 
   const { data: membership } = await db.from("vfd_sandbox_target_members")
     .select("*").eq("target_id", targetId).eq("user_id", userId).maybeSingle();
-  if (!membership) return jsonResponse({ error: "Not a member" }, 400);
+  if (!membership) return jsonResponse({ error: "Not a member", data: null });
 
   // Block overlapping pending requests for the same group
   const { data: pendingExisting } = await db.from("vfd_sandbox_target_withdrawal_requests")
@@ -1251,7 +1251,7 @@ async function handleVoteTargetWithdrawal(userId: string, body: Record<string, u
       invalid_vote: ["Invalid vote", 400],
       request_not_found: ["Request not found", 404],
       already_resolved: ["Request already resolved", 400],
-      not_a_member: ["Not a member", 400],
+      not_a_member: ["Not a member", 200],
       already_voted: ["Already voted", 400],
     };
     const [msg, code] = map[result?.reason ?? ""] ?? ["Vote rejected", 400];
@@ -1313,7 +1313,7 @@ async function handleIndependentWithdrawal(userId: string, body: Record<string, 
 
   const { data: membership } = await db.from("vfd_sandbox_target_members")
     .select("*").eq("target_id", targetId).eq("user_id", userId).maybeSingle();
-  if (!membership) return jsonResponse({ error: "Not a member" }, 400);
+  if (!membership) return jsonResponse({ error: "Not a member", data: null });
 
   const contributed = Number(membership.contributed_amount);
   if (contributed <= 0) return jsonResponse({ error: "No contributions to withdraw" }, 400);
@@ -3014,7 +3014,7 @@ async function handlePostGroupChat(userId: string, body: Record<string, unknown>
 
   const { data: member } = await db.from("vfd_sandbox_group_members")
     .select("id").eq("group_id", groupId).eq("user_id", userId).eq("status", "active").maybeSingle();
-  if (!member) return jsonResponse({ error: "Not a member of this group" }, 403);
+  if (!member) return jsonResponse({ error: "Not a member of this group", data: null });
 
   const { data, error } = await db.from("vfd_sandbox_chat_messages")
     .insert({ group_id: groupId, user_id: userId, message, message_type: "member" })
