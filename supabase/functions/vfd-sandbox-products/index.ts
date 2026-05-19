@@ -487,7 +487,7 @@ async function handleRequestSwap(userId: string, body: Record<string, unknown>) 
 
   const { data: requester } = await db.from("vfd_sandbox_group_members")
     .select("*").eq("group_id", groupId).eq("user_id", userId).maybeSingle();
-  if (!requester) return jsonResponse({ error: "Not a member" }, 400);
+  if (!requester) return jsonResponse({ error: "Not a member", data: null });
   if (requester.has_used_swap) return jsonResponse({ error: "You have already used your swap for this group" }, 400);
   if (requester.has_received_payout) return jsonResponse({ error: "Cannot swap after receiving payout" }, 400);
 
@@ -794,7 +794,7 @@ async function handleExitGroup(userId: string, body: Record<string, unknown>) {
 
   const { data: membership } = await db.from("vfd_sandbox_group_members")
     .select("*").eq("group_id", groupId).eq("user_id", userId).maybeSingle();
-  if (!membership) return jsonResponse({ error: "Not a member" }, 400);
+  if (!membership) return jsonResponse({ error: "Not a member", data: null });
 
   await db.from("vfd_sandbox_group_members").update({ status: "exited" })
     .eq("group_id", groupId).eq("user_id", userId);
