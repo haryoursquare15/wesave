@@ -748,6 +748,35 @@ export function SandboxAjoTab() {
           })}
         </div>
       )}
+
+      {/* Invite gate: non-members with a pending invite MUST accept or decline
+          before they can enter the group detail. */}
+      <Dialog open={!!inviteGate} onOpenChange={(o) => { if (!o && !inviteBusy) setInviteGate(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-base">Group Invite</DialogTitle>
+            <DialogDescription className="text-xs">
+              You were invited to <span className="font-medium">{inviteGate?.group.name}</span>. Accept or decline to continue.
+            </DialogDescription>
+          </DialogHeader>
+          {inviteGate && (
+            <div className="p-3 rounded-xl bg-muted/40 space-y-1 text-xs">
+              <p>₦{fmt(Number(inviteGate.group.contribution_amount))} / {inviteGate.group.period}</p>
+              <p className="text-muted-foreground">{inviteGate.group.member_count}/{inviteGate.group.max_members} members</p>
+              <p className="text-muted-foreground">Non-members can't view this group's details.</p>
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="outline" disabled={inviteBusy} onClick={() => respondGate(false)} className="h-11">
+              <X className="h-4 w-4 mr-1" /> Decline
+            </Button>
+            <Button disabled={inviteBusy} onClick={() => respondGate(true)} className="h-11">
+              <Check className="h-4 w-4 mr-1" /> Accept
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+
