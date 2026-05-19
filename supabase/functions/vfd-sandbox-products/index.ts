@@ -1515,13 +1515,27 @@ async function handleCreateSplit(userId: string, body: Record<string, unknown>) 
   const merchantAccountNumber = body.merchant_account_number as string || null;
   const expiryDays = Number(body.expiry_days) || 7;
   const purpose = (body.purpose as string) || title;
+  // Optional: creator covers a custom amount, remainder is split equally across the other (splitCount - 1) participants
+  const creatorAmountRaw = body.creator_amount !== undefined ? Number(body.creator_amount) : null;
 
   // PRODUCTION PARITY: minimum ₦1,000 (not ₦100)
   if (!title || !totalAmount || totalAmount < 1000) return jsonResponse({ error: "Title and total amount (min ₦1,000) required" }, 400);
   if (splitCount < 2) return jsonResponse({ error: "Need at least 2 participants" }, 400);
   if (splitCount > 50) return jsonResponse({ error: "Maximum 50 participants allowed" }, 400);
 
-  const perPerson = Math.ceil((totalAmount / splitCount) * 100) / 100;
+  let creatorAmount: number;
+  let perPerson: number;
+  if (creatorAmountRaw !== null && !Number.isNaN(creatorAmountRaw)) {
+    if (creatorAmountRaw <= 0 || creatorAmountRaw >= totalAmount) {
+      return jsonResponse({ error: "Your contribution must be greater than 0 and less than the total amount" }, 400);
+    }
+    creatorAmount = Math.round(creatorAmountRaw * 100) / 100;
+    perPerson = Math.ceil(((totalAmount - creatorAmount) / (splitCount - 1)) * 100) / 100;
+  } else {
+    perPerson = Math.ceil((totalAmount / splitCount) * 100) / 100;
+    creatorAmount = perPerson;
+  }
+
   // PRODUCTION PARITY: ₦100 flat fee, fee-per-person rounded to 2dp
   const platformFee = 100;
   const feePerPerson = Math.ceil((platformFee / splitCount) * 100) / 100;
@@ -1542,13 +1556,14 @@ async function handleCreateSplit(userId: string, body: Record<string, unknown>) 
 
   if (error) return jsonResponse({ error: error.message }, 500);
 
-  // Creator is first participant
+  // Creator is first participant (with their custom contribution if provided)
   await db.from("vfd_sandbox_split_participants").insert({
-    split_id: split.id, user_id: userId, amount: perPerson,
+    split_id: split.id, user_id: userId, amount: creatorAmount,
   });
 
   return jsonResponse({ data: split });
 }
+
 
 async function handleListSplits(userId: string) {
   const db = getSupabaseAdmin();
