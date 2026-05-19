@@ -2364,21 +2364,329 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
       total_balance: bal.total_balance - numAmount,
       updated_at: new Date().toISOString(),
     }).eq("user_id", userId);
-    const description = `Bill Payment: ${billerId.toUpperCase()} - ${customerId}`;
+    const category = (body.category as string) || "";
+    const billerName = (body.billerName as string) || billerId.toUpperCase();
+    const paymentItemName = (body.paymentItemName as string) || null;
+    const recurringBillId = (body.recurring_bill_id as string) || null;
+    const description = `Bill Payment: ${billerName} - ${customerId}`;
     await db.from("vfd_sandbox_transactions").insert({
       user_id: userId, transaction_type: "debit", amount: numAmount,
       description, reference, status: "completed",
     });
+
+    // Receipt with expiry for subscription-based services
+    const expiresAt = computeBillExpiry(category, paymentItemName);
+    await db.from("vfd_sandbox_bill_receipts").insert({
+      user_id: userId,
+      reference,
+      category: category || "Other",
+      biller_id: billerId,
+      biller_name: billerName,
+      payment_item_name: paymentItemName,
+      customer_id: customerId,
+      phone_number: phoneNumber || null,
+      amount: numAmount,
+      convenience_fee: 0,
+      status: "completed",
+      expires_at: expiresAt,
+      raw_response: data || null,
+      recurring_bill_id: recurringBillId,
+    });
+
+    // Upsert beneficiary (auto-save) — last_used touch
+    if (category && billerId && customerId) {
+      await db.from("vfd_sandbox_bill_beneficiaries")
+        .upsert({
+          user_id: userId,
+          nickname: `${billerName} • ${customerId.slice(-4)}`,
+          category,
+          biller_id: billerId,
+          biller_name: billerName,
+          division,
+          product_id: productId,
+          payment_item_code: paymentItem,
+          payment_item_name: paymentItemName,
+          customer_id: customerId,
+          phone_number: phoneNumber || null,
+          last_used_at: new Date().toISOString(),
+        }, { onConflict: "user_id,biller_id,customer_id", ignoreDuplicates: false });
+    }
+
     await sendNotification(
       userId,
       "Bill payment successful",
-      `₦${numAmount.toLocaleString()} paid to ${billerId.toUpperCase()} (${customerId}). Ref: ${reference}`,
+      `₦${numAmount.toLocaleString()} paid to ${billerName} (${customerId}). Ref: ${reference}`,
       "bill_payment",
     );
-    return jsonResponse({ data: { status: "00", message: "Payment successful (sandbox)", reference } });
+    return jsonResponse({ data: { status: "00", message: "Payment successful (sandbox)", reference, receipt_expires_at: expiresAt } });
   }
 
   return jsonResponse({ data: { ...data, reference, status: data?.status || "99", message: data?.message || "Bill payment could not be processed" } });
+}
+
+// Subscription-style bills get an expiry → enables expiry reminders.
+function computeBillExpiry(category: string, _paymentItemName: string | null): string | null {
+  if (!category) return null;
+  const cat = category.toLowerCase();
+  if (cat.includes("cable") || cat.includes("internet") || cat === "data") {
+    const d = new Date();
+    d.setDate(d.getDate() + 30);
+    return d.toISOString();
+  }
+  return null;
+}
+
+// =============================================
+// BILLS: BENEFICIARIES, RECEIPTS, RECURRING, REMINDERS
+// =============================================
+
+async function handleListBeneficiaries(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const category = (body.category as string) || null;
+  let q = db.from("vfd_sandbox_bill_beneficiaries").select("*").eq("user_id", userId);
+  if (category) q = q.eq("category", category);
+  const { data, error } = await q.order("last_used_at", { ascending: false, nullsFirst: false });
+  if (error) return jsonResponse({ error: error.message }, 500);
+  return jsonResponse({ data: data || [] });
+}
+
+async function handleSaveBeneficiary(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const nickname = (body.nickname as string)?.trim();
+  const category = (body.category as string)?.trim();
+  const billerId = (body.biller_id as string)?.trim();
+  const billerName = (body.biller_name as string)?.trim();
+  const division = (body.division as string)?.trim();
+  const productId = (body.product_id as string)?.trim();
+  const customerId = (body.customer_id as string)?.trim();
+  if (!nickname || !category || !billerId || !customerId || !division || !productId) {
+    return jsonResponse({ error: "nickname, category, biller, customer_id, division, product_id required" }, 400);
+  }
+  const { data, error } = await db.from("vfd_sandbox_bill_beneficiaries").upsert({
+    user_id: userId,
+    nickname,
+    category,
+    biller_id: billerId,
+    biller_name: billerName || billerId,
+    division,
+    product_id: productId,
+    payment_item_code: (body.payment_item_code as string) || null,
+    payment_item_name: (body.payment_item_name as string) || null,
+    customer_id: customerId,
+    phone_number: (body.phone_number as string) || null,
+  }, { onConflict: "user_id,biller_id,customer_id" }).select().single();
+  if (error) return jsonResponse({ error: error.message }, 500);
+  return jsonResponse({ data });
+}
+
+async function handleDeleteBeneficiary(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const id = body.id as string;
+  if (!id) return jsonResponse({ error: "id required" }, 400);
+  const { error } = await db.from("vfd_sandbox_bill_beneficiaries").delete().eq("id", id).eq("user_id", userId);
+  if (error) return jsonResponse({ error: error.message }, 500);
+  return jsonResponse({ data: { deleted: true } });
+}
+
+async function handleListReceipts(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const limit = Math.min(Number(body.limit) || 50, 200);
+  const { data, error } = await db.from("vfd_sandbox_bill_receipts")
+    .select("*").eq("user_id", userId).order("paid_at", { ascending: false }).limit(limit);
+  if (error) return jsonResponse({ error: error.message }, 500);
+  return jsonResponse({ data: data || [] });
+}
+
+// Compute next run timestamp in WAT (UTC+1). Hour stored is WAT hour.
+function computeNextRunAt(frequency: string, hourWat: number, dayOfWeek: number | null, dayOfMonth: number | null, from = new Date()): string {
+  // Convert from now (UTC) by shifting to WAT, then back.
+  const watNow = new Date(from.getTime() + 60 * 60 * 1000);
+  const next = new Date(watNow);
+  next.setUTCHours(hourWat, 0, 0, 0);
+
+  if (frequency === "daily") {
+    if (next <= watNow) next.setUTCDate(next.getUTCDate() + 1);
+  } else if (frequency === "weekly") {
+    const target = dayOfWeek ?? watNow.getUTCDay();
+    const diff = (target - next.getUTCDay() + 7) % 7;
+    next.setUTCDate(next.getUTCDate() + diff);
+    if (next <= watNow) next.setUTCDate(next.getUTCDate() + 7);
+  } else if (frequency === "monthly") {
+    const target = Math.min(dayOfMonth ?? 1, 28);
+    next.setUTCDate(target);
+    if (next <= watNow) next.setUTCMonth(next.getUTCMonth() + 1);
+  }
+  // shift back from WAT → UTC
+  return new Date(next.getTime() - 60 * 60 * 1000).toISOString();
+}
+
+async function handleCreateRecurringBill(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const amount = Number(body.amount);
+  const frequency = (body.frequency as string)?.toLowerCase();
+  if (!["daily", "weekly", "monthly"].includes(frequency)) return jsonResponse({ error: "frequency must be daily, weekly or monthly" }, 400);
+  if (!amount || amount < 50) return jsonResponse({ error: "amount must be at least ₦50" }, 400);
+  const billerId = (body.biller_id as string)?.trim();
+  const customerId = (body.customer_id as string)?.trim();
+  const paymentItemCode = (body.payment_item_code as string)?.trim();
+  const division = (body.division as string)?.trim();
+  const productId = (body.product_id as string)?.trim();
+  if (!billerId || !customerId || !paymentItemCode || !division || !productId) {
+    return jsonResponse({ error: "biller_id, customer_id, payment_item_code, division, product_id required" }, 400);
+  }
+  const hour = 16; // 4PM WAT, locked to project standard
+  const dayOfWeek = body.day_of_week !== undefined ? Number(body.day_of_week) : null;
+  const dayOfMonth = body.day_of_month !== undefined ? Number(body.day_of_month) : null;
+  const nextRunAt = computeNextRunAt(frequency, hour, dayOfWeek, dayOfMonth);
+
+  const { data, error } = await db.from("vfd_sandbox_recurring_bills").insert({
+    user_id: userId,
+    nickname: (body.nickname as string) || null,
+    category: (body.category as string) || "Other",
+    biller_id: billerId,
+    biller_name: (body.biller_name as string) || billerId,
+    division,
+    product_id: productId,
+    payment_item_code: paymentItemCode,
+    payment_item_name: (body.payment_item_name as string) || null,
+    customer_id: customerId,
+    phone_number: (body.phone_number as string) || null,
+    amount,
+    frequency,
+    day_of_week: dayOfWeek,
+    day_of_month: dayOfMonth,
+    hour_wat: hour,
+    next_run_at: nextRunAt,
+  }).select().single();
+  if (error) return jsonResponse({ error: error.message }, 500);
+  return jsonResponse({ data });
+}
+
+async function handleListRecurringBills(userId: string) {
+  const db = getSupabaseAdmin();
+  const { data, error } = await db.from("vfd_sandbox_recurring_bills")
+    .select("*").eq("user_id", userId).order("created_at", { ascending: false });
+  if (error) return jsonResponse({ error: error.message }, 500);
+  return jsonResponse({ data: data || [] });
+}
+
+async function handleUpdateRecurringBill(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const id = body.id as string;
+  if (!id) return jsonResponse({ error: "id required" }, 400);
+  const updates: Record<string, unknown> = {};
+  if (body.status !== undefined) updates.status = body.status;
+  if (body.amount !== undefined) updates.amount = Number(body.amount);
+  if (body.nickname !== undefined) updates.nickname = body.nickname;
+  if (Object.keys(updates).length === 0) return jsonResponse({ error: "no fields to update" }, 400);
+  const { error } = await db.from("vfd_sandbox_recurring_bills").update(updates).eq("id", id).eq("user_id", userId);
+  if (error) return jsonResponse({ error: error.message }, 500);
+  return jsonResponse({ data: { updated: true } });
+}
+
+async function handleDeleteRecurringBill(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const id = body.id as string;
+  const { error } = await db.from("vfd_sandbox_recurring_bills").delete().eq("id", id).eq("user_id", userId);
+  if (error) return jsonResponse({ error: error.message }, 500);
+  return jsonResponse({ data: { deleted: true } });
+}
+
+// CRON: run due recurring bills (every hour). Wallet-funded only. No retries on failure.
+async function handleRunDueRecurringBills() {
+  const db = getSupabaseAdmin();
+  const { data: due } = await db.from("vfd_sandbox_recurring_bills")
+    .select("*").eq("status", "active").lte("next_run_at", new Date().toISOString()).limit(100);
+
+  const results: unknown[] = [];
+  for (const r of (due || [])) {
+    const amount = Number(r.amount);
+    let outcome: { status: string; reason?: string; reference?: string };
+    try {
+      const debited = await debitWallet(r.user_id, amount);
+      if (!debited) {
+        outcome = { status: "insufficient_funds", reason: "Wallet balance too low" };
+        await sendNotification(
+          r.user_id,
+          "Recurring bill skipped",
+          `${r.biller_name} (₦${amount.toLocaleString()}) was skipped — wallet balance too low. Fund your wallet to keep ${r.nickname || r.biller_name} active.`,
+          "bill_recurring_failed",
+        );
+      } else {
+        const reference = `wesave-rec-${r.id}-${Date.now()}`;
+        await db.from("vfd_sandbox_transactions").insert({
+          user_id: r.user_id, transaction_type: "debit", amount,
+          description: `Recurring bill: ${r.biller_name} - ${r.customer_id}`,
+          reference, status: "completed",
+        });
+        await db.from("vfd_sandbox_bill_receipts").insert({
+          user_id: r.user_id,
+          reference,
+          category: r.category,
+          biller_id: r.biller_id,
+          biller_name: r.biller_name,
+          payment_item_name: r.payment_item_name,
+          customer_id: r.customer_id,
+          phone_number: r.phone_number,
+          amount,
+          status: "completed",
+          expires_at: computeBillExpiry(r.category, r.payment_item_name),
+          recurring_bill_id: r.id,
+        });
+        await sendNotification(
+          r.user_id,
+          "Recurring bill paid",
+          `₦${amount.toLocaleString()} paid to ${r.biller_name} (${r.customer_id}) automatically.`,
+          "bill_recurring_success",
+        );
+        outcome = { status: "paid", reference };
+      }
+    } catch (e) {
+      outcome = { status: "error", reason: e instanceof Error ? e.message : String(e) };
+    }
+
+    const next = computeNextRunAt(r.frequency, r.hour_wat, r.day_of_week, r.day_of_month);
+    await db.from("vfd_sandbox_recurring_bills").update({
+      last_run_at: new Date().toISOString(),
+      last_run_status: outcome.status,
+      last_run_reason: outcome.reason || null,
+      next_run_at: next,
+      consecutive_failures: outcome.status === "paid" ? 0 : (Number(r.consecutive_failures) + 1),
+    }).eq("id", r.id);
+
+    results.push({ id: r.id, ...outcome });
+  }
+  return jsonResponse({ data: { processed: results.length, results } });
+}
+
+// CRON: send expiry reminders 3 days before subscription bill expires.
+async function handleSendBillReminders() {
+  const db = getSupabaseAdmin();
+  const now = new Date();
+  const horizon = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000).toISOString();
+  const { data: receipts } = await db.from("vfd_sandbox_bill_receipts")
+    .select("*").is("reminder_sent_at", null)
+    .not("expires_at", "is", null)
+    .lte("expires_at", horizon)
+    .gte("expires_at", now.toISOString())
+    .limit(500);
+
+  let sent = 0;
+  for (const r of (receipts || [])) {
+    const daysLeft = Math.max(1, Math.ceil((new Date(r.expires_at).getTime() - now.getTime()) / (24 * 60 * 60 * 1000)));
+    const title = `${r.biller_name} expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"}`;
+    const msg = `Your ${r.biller_name} subscription for ${r.customer_id} expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"}. Fund now to avoid disconnection.`;
+
+    // In-app sandbox bell
+    await sendNotification(r.user_id, title, msg, "bill_expiry_reminder");
+    // Also push to global user_notifications so existing triggers send push + email
+    await db.from("user_notifications").insert({
+      user_id: r.user_id, title, message: msg, notification_type: "bill_expiry_reminder",
+    });
+    await db.from("vfd_sandbox_bill_receipts").update({ reminder_sent_at: now.toISOString() }).eq("id", r.id);
+    sent++;
+  }
+  return jsonResponse({ data: { reminders_sent: sent } });
 }
 
 async function handleBillsStatus(body: Record<string, unknown>) {
