@@ -58,6 +58,7 @@ interface SavingsRow {
 
 interface EnrichedRow extends SavingsRow {
   customer_name: string;
+  customer_username: string;
   customer_email: string;
   customer_phone: string | null;
   projected_roi: number;
