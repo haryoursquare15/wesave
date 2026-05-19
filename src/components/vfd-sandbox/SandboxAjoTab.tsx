@@ -184,6 +184,50 @@ export function SandboxAjoTab() {
     }
   };
 
+  // Gate non-members: if the user has a pending invite to this group, force
+  // an Accept/Decline modal before letting them open the group detail. If they
+  // are neither a member nor invited, deny entry.
+  const handleCardClick = (g: Group) => {
+    const isMember = !!currentUserId && (g.vfd_sandbox_group_members || [])
+      .some((m: any) => m.user_id === currentUserId && (m.status ?? "active") === "active");
+    if (isMember) {
+      loadDetail(g.id);
+      return;
+    }
+    const invite = pendingInvites.find((i: any) => i.group_id === g.id);
+    if (invite) {
+      setInviteGate({ invite, group: g });
+      return;
+    }
+    toast({
+      title: "Members only",
+      description: "You're not a member of this group.",
+      variant: "destructive",
+    });
+  };
+
+  const respondGate = async (accept: boolean) => {
+    if (!inviteGate) return;
+    setInviteBusy(true);
+    const res = await products.respondGroupInvite(inviteGate.invite.id, accept);
+    setInviteBusy(false);
+    if (res?.error) {
+      toast({ title: "Action failed", description: res.error, variant: "destructive" });
+      return;
+    }
+    if (accept) {
+      toast({ title: "Invite accepted", description: `You joined "${inviteGate.group.name}".` });
+      const gid = inviteGate.group.id;
+      setInviteGate(null);
+      await loadGroups();
+      await loadDetail(gid);
+    } else {
+      toast({ title: "Invite declined" });
+      setInviteGate(null);
+      await loadGroups();
+    }
+  };
+
   // Detail view
   if (detailGroup && detailData) {
     const g = detailData.group || detailData;
