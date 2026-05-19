@@ -243,6 +243,9 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
         productId: selectedBiller.product,
         billerId: selectedBiller.id,
         phoneNumber: phoneNumber || undefined,
+        category: selectedCategory,
+        billerName: selectedBiller.name,
+        paymentItemName: selectedItem.paymentitemname,
       });
       const resData = result?.data;
       if (resData?.status === "00") {
