@@ -337,17 +337,34 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
 
   const splitThisBill = async () => {
     if (!selectedBiller || !amount) return;
+    const total = Number(amount);
+    const myShare = Number(splitMyShare);
+    const others = Math.max(1, Math.min(9, Math.floor(splitOthers || 1)));
+    if (total < 1000) {
+      toast({ title: "Minimum ₦1,000", description: "Split Pay requires a total of at least ₦1,000.", variant: "destructive" });
+      return;
+    }
+    if (!myShare || myShare <= 0 || myShare >= total) {
+      toast({ title: "Invalid contribution", description: `Enter an amount between ₦1 and ₦${(total - 1).toLocaleString()}.`, variant: "destructive" });
+      return;
+    }
     setCreatingSplit(true);
     try {
       const r = await callProducts("create_split", {
         title: `${selectedBiller.name} — ${customerId}`,
-        total_amount: Number(amount),
-        split_count: 2,
+        total_amount: total,
+        split_count: others + 1,
+        creator_amount: myShare,
         purpose: `Bill: ${selectedBiller.name} (${customerId})`,
         expiry_days: 7,
       });
       if (r?.error) throw new Error(r.error);
-      toast({ title: "Split created", description: "Invite flatmates from the SplitPay tab." });
+      const perOther = Math.ceil(((total - myShare) / others) * 100) / 100;
+      toast({
+        title: "Split created",
+        description: `You owe ₦${myShare.toLocaleString()}. ${others} other${others > 1 ? "s" : ""} owe ₦${perOther.toLocaleString()} each. Invite them from SplitPay.`,
+      });
+      setShowSplitDialog(false);
       onOpenSplit?.();
     } catch (e) {
       toast({ title: "Failed", description: e instanceof Error ? e.message : "Could not create split", variant: "destructive" });
@@ -355,6 +372,7 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
       setCreatingSplit(false);
     }
   };
+
 
   // Auto-load categories on first render
   if (categories.length === 0 && !loading) {
