@@ -3539,6 +3539,12 @@ Deno.serve(async (req) => {
     if (action === "sandbox_auto_contribute") {
       return await handleSandboxAutoContribute("system", body);
     }
+    if (action === "run_due_recurring_bills") {
+      return await handleRunDueRecurringBills();
+    }
+    if (action === "send_bill_reminders") {
+      return await handleSendBillReminders();
+    }
 
     const user = await getUserFromRequest(req);
     const userId = user.id;
@@ -3627,6 +3633,16 @@ Deno.serve(async (req) => {
       case "bills_validate": return await handleBillsValidate(body);
       case "bills_pay": return await handleBillsPay(userId, body);
       case "bills_status": return await handleBillsStatus(body);
+
+      // Bills: Beneficiaries / Receipts / Recurring
+      case "list_bill_beneficiaries": return await handleListBeneficiaries(userId, body);
+      case "save_bill_beneficiary": return await handleSaveBeneficiary(userId, body);
+      case "delete_bill_beneficiary": return await handleDeleteBeneficiary(userId, body);
+      case "list_bill_receipts": return await handleListReceipts(userId, body);
+      case "create_recurring_bill": return await handleCreateRecurringBill(userId, body);
+      case "list_recurring_bills": return await handleListRecurringBills(userId);
+      case "update_recurring_bill": return await handleUpdateRecurringBill(userId, body);
+      case "delete_recurring_bill": return await handleDeleteRecurringBill(userId, body);
 
       // Virtual Cards (VFD BaaS)
       case "create_virtual_card": return await handleCreateVirtualCard(userId, body);
