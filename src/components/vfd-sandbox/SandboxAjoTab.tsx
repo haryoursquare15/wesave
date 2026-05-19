@@ -19,7 +19,8 @@ import {
 } from "lucide-react";
 import { SandboxGroupInviteDialog } from "./SandboxGroupInviteDialog";
 import { SandboxGroupChat } from "./SandboxGroupChat";
-import { Settings as SettingsIcon, MessageSquare } from "lucide-react";
+import { Settings as SettingsIcon, MessageSquare, Check, X } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 interface Group {
   id: string; name: string; contribution_amount: number; period: string;
