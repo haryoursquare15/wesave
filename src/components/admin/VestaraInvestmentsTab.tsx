@@ -93,15 +93,16 @@ export function VestaraInvestmentsTab() {
       if (error) throw error;
 
       const userIds = Array.from(new Set((savings || []).map(s => s.user_id)));
-      let profileMap: Record<string, { full_name: string; email: string; phone: string | null }> = {};
+      let profileMap: Record<string, { full_name: string; username: string; email: string; phone: string | null }> = {};
       if (userIds.length) {
         const { data: profiles } = await supabase
           .from("profiles")
-          .select("id, full_name, email, phone")
+          .select("id, full_name, username, email, phone")
           .in("id", userIds);
         profileMap = Object.fromEntries(
           (profiles || []).map(p => [p.id, {
             full_name: p.full_name || "—",
+            username: (p as any).username || "—",
             email: p.email || "—",
             phone: p.phone,
           }])
@@ -117,6 +118,7 @@ export function VestaraInvestmentsTab() {
         return {
           ...s,
           customer_name: p?.full_name || "—",
+          customer_username: p?.username || "—",
           customer_email: p?.email || "—",
           customer_phone: p?.phone || null,
           projected_roi,
