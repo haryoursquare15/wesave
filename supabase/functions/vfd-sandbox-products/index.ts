@@ -1845,7 +1845,18 @@ async function handlePaySplit(userId: string, body: Record<string, unknown>) {
   }
 
   if (!participant) return jsonResponse({ error: "Not a participant" }, 400);
-  if (participant.status === "paid") return jsonResponse({ error: "Already paid" }, 400);
+  if (participant.status === "paid") {
+    const { data: activeParticipants } = await db.from("vfd_sandbox_split_participants")
+      .select("status").eq("split_id", splitId).in("status", ["pending", "paid"]);
+    const paidCount = (activeParticipants || []).filter(p => p.status === "paid").length;
+    const activeCount = (activeParticipants || []).length;
+    const allPaid = paidCount >= Math.min(split.split_count, activeCount);
+    if (allPaid && split.bill_metadata && !["completed", "processing"].includes(split.settlement_status || "")) {
+      const billDelivery = await queueSplitBillSettlement(split);
+      return jsonResponse({ data: { paid: true, already_paid: true, all_paid: true, bill_delivery: billDelivery } });
+    }
+    return jsonResponse({ error: "Already paid" }, 400);
+  }
   if (participant.status === "declined") return jsonResponse({ error: "You have declined this split" }, 400);
 
   // Use participant's own stored amount (supports unequal splits where creator covers a custom share)
