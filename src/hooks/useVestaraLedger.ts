@@ -119,13 +119,16 @@ export function useVestaraLedger() {
   const invoke = useCallback(
     async (action: string, body: Record<string, unknown> = {}) => {
       // Always pull a fresh session so we don't send an expired access_token.
-      // The cached `session` from context can lag behind autoRefreshToken.
+      // Do NOT fall back to the cached context token — if getSession() returns
+      // null it means the refresh failed and the cached token is stale, which
+      // would cause a 401 at the edge function.
       const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData?.session?.access_token ?? session?.access_token;
+      const accessToken = sessionData?.session?.access_token;
       if (!accessToken) {
         toast({ title: "Not authenticated", description: "Please sign in again.", variant: "destructive" });
         return null;
       }
+
 
       setLoading(true);
       try {
