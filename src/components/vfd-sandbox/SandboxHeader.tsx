@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import vestaraLogo from "@/assets/vestara-logo.jpg";
 import { SandboxNotificationBell } from "./SandboxNotificationBell";
+import { BillDeliveryPopupListener } from "./BillDeliveryPopupListener";
 
 export function SandboxHeader() {
   const navigate = useNavigate();
@@ -44,6 +45,7 @@ export function SandboxHeader() {
           <span className="text-[10px] font-medium text-warning">Sandbox</span>
         </motion.div>
       </div>
+      <BillDeliveryPopupListener />
     </div>
   );
 }
