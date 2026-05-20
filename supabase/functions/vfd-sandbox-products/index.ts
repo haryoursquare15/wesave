@@ -1630,6 +1630,11 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
   const { customerId, division, paymentItem, productId, billerId, phoneNumber, category, billerName, paymentItemName } = meta;
   if (!customerId || !division || !paymentItem || !productId || !billerId) {
     console.error("[settleSplitBill] missing bill_metadata fields", meta);
+    await db.from("vfd_sandbox_splits").update({
+      settlement_status: "failed",
+      settlement_completed_at: new Date().toISOString(),
+      settlement_failure_reason: "Bill metadata incomplete",
+    }).eq("id", split.id);
     await sendNotification(split.creator_id, "SplitPay Complete — bill needs attention",
       `All participants paid for "${split.title}" but bill details are incomplete. Please contact support.`,
       "split_completed");
@@ -1649,11 +1654,11 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
         customerId, amount: String(amount), division, paymentItem, productId, billerId, reference,
       };
       if (phoneNumber) payBody.phoneNumber = phoneNumber;
-      const resp = await fetch(`${getBillsBase()}/pay`, {
+      const resp = await fetchWithTimeout(`${getBillsBase()}/pay`, {
         method: "POST",
         headers: { AccessToken: token, "Content-Type": "application/json" },
         body: JSON.stringify(payBody),
-      });
+      }, VFD_BILLS_PAY_TIMEOUT_MS);
       vfdData = await safeJson(resp);
       vfdOk = resp.ok || vfdData?.status === "00" || vfdData?.status === "99" || !!vfdData;
     }
@@ -1715,6 +1720,38 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
   await reconcileSplitPayments(split, { reference, expectReceipt: true });
 
   return { delivered: true, reference, biller_name: displayBillerName, customer_id: customerId, amount };
+}
+
+async function queueSplitBillSettlement(split: Record<string, any>): Promise<{ queued: boolean; status: string; message: string }> {
+  const db = getSupabaseAdmin();
+  const { data: claimed, error } = await db.from("vfd_sandbox_splits")
+    .update({ settlement_status: "processing", updated_at: new Date().toISOString() })
+    .eq("id", split.id)
+    .or("settlement_status.is.null,settlement_status.in.(pending,failed)")
+    .select("*")
+    .maybeSingle();
+
+  if (error) {
+    console.error("[queueSplitBillSettlement] claim failed", error);
+    return { queued: false, status: "error", message: "Bill delivery could not be queued" };
+  }
+  if (!claimed) {
+    return { queued: false, status: split.settlement_status || "processing", message: "Bill delivery is already in progress" };
+  }
+
+  const settlementPromise = settleSplitBill(claimed).catch(async (e) => {
+    console.error("[queueSplitBillSettlement] background settlement failed", e);
+    await db.from("vfd_sandbox_splits").update({
+      settlement_status: "failed",
+      settlement_completed_at: new Date().toISOString(),
+      settlement_failure_reason: e instanceof Error ? e.message : "Background bill delivery failed",
+    }).eq("id", split.id);
+  });
+
+  const edgeRuntime = (globalThis as any).EdgeRuntime;
+  if (edgeRuntime?.waitUntil) edgeRuntime.waitUntil(settlementPromise);
+
+  return { queued: true, status: "processing", message: "Bill delivery is processing; success notification will appear when delivered." };
 }
 
 // Verify every paid participant has a vfd_sandbox_transactions row; backfill if missing.
