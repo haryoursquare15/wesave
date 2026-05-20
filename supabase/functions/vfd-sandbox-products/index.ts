@@ -1702,6 +1702,72 @@ async function settleSplitBill(split: Record<string, any>) {
   await sendNotification(split.creator_id, "Bill delivered",
     `₦${amount.toLocaleString()} ${displayBillerName} delivered to ${customerId}. Ref: ${reference}`,
     "bill_payment");
+
+  // Reconciliation: verify each paid participant has a wallet tx row, and the receipt was written.
+  await reconcileSplitPayments(split, { reference, expectReceipt: true });
+}
+
+// Verify every paid participant has a vfd_sandbox_transactions row; backfill if missing.
+// If expectReceipt, verify a bill receipt exists for the delivery reference.
+async function reconcileSplitPayments(
+  split: Record<string, any>,
+  opts: { reference?: string; expectReceipt?: boolean } = {},
+): Promise<string[]> {
+  const db = getSupabaseAdmin();
+  const splitId = split.id;
+  const issues: string[] = [];
+
+  const { data: paidParticipants } = await db
+    .from("vfd_sandbox_split_participants")
+    .select("user_id, amount, status")
+    .eq("split_id", splitId)
+    .eq("status", "paid");
+
+  const storedFeePerPerson = Number(split.fee_per_person);
+  for (const p of paidParticipants || []) {
+    const ref = `splitpay-${splitId}-${p.user_id}`;
+    const { data: existing } = await db
+      .from("vfd_sandbox_transactions")
+      .select("id")
+      .eq("reference", ref)
+      .maybeSingle();
+    if (existing) continue;
+
+    const shareAmt = Number(p.amount);
+    let feeShare = 0;
+    if (storedFeePerPerson === 0) {
+      feeShare = p.user_id === split.creator_id ? Number(split.platform_fee || 0) : 0;
+    } else {
+      feeShare = storedFeePerPerson;
+    }
+    const totalDebit = shareAmt + feeShare;
+    const payerLabel = split.bill_metadata
+      ? `SplitPay (Bill): ${split.title}`
+      : `SplitPay: ${split.title}`;
+    await db.from("vfd_sandbox_transactions").insert({
+      user_id: p.user_id,
+      transaction_type: "debit",
+      amount: totalDebit,
+      description: feeShare > 0
+        ? `${payerLabel} — share ₦${shareAmt.toLocaleString()} + fee ₦${feeShare.toLocaleString()} (reconciled)`
+        : `${payerLabel} — share ₦${shareAmt.toLocaleString()} (reconciled)`,
+      reference: ref,
+      status: "completed",
+    });
+    issues.push(`backfilled wallet tx for ${p.user_id}`);
+  }
+
+  if (opts.expectReceipt && opts.reference) {
+    const { data: receipt } = await db
+      .from("vfd_sandbox_bill_receipts")
+      .select("id")
+      .eq("reference", opts.reference)
+      .maybeSingle();
+    if (!receipt) issues.push(`missing bill receipt for ${opts.reference}`);
+  }
+
+  if (issues.length) console.warn("[reconcileSplitPayments]", splitId, issues);
+  return issues;
 }
 
 async function handlePaySplit(userId: string, body: Record<string, unknown>) {
