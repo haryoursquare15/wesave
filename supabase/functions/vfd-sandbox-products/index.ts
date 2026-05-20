@@ -1623,8 +1623,8 @@ async function handleJoinSplit(userId: string, body: Record<string, unknown>) {
   return jsonResponse({ data: { joined: true } });
 }
 
-// Finalize a bill-payment SplitPay: call VFD bills/pay, write receipt + ledger entry, notify creator
-async function settleSplitBill(split: Record<string, any>) {
+// Finalize a bill-payment SplitPay: call VFD bills/pay, write receipt + ledger entry, notify creator + all participants
+async function settleSplitBill(split: Record<string, any>): Promise<{ delivered: boolean; reference?: string; biller_name?: string; customer_id?: string; amount?: number; message?: string }> {
   const db = getSupabaseAdmin();
   const meta = split.bill_metadata || {};
   const { customerId, division, paymentItem, productId, billerId, phoneNumber, category, billerName, paymentItemName } = meta;
@@ -1633,7 +1633,7 @@ async function settleSplitBill(split: Record<string, any>) {
     await sendNotification(split.creator_id, "SplitPay Complete — bill needs attention",
       `All participants paid for "${split.title}" but bill details are incomplete. Please contact support.`,
       "split_completed");
-    return;
+    return { delivered: false, message: "Bill metadata incomplete" };
   }
 
   const amount = Number(split.total_amount);
@@ -1673,7 +1673,7 @@ async function settleSplitBill(split: Record<string, any>) {
     await sendNotification(split.creator_id, "SplitPay collected — bill delivery pending",
       `Funds for "${split.title}" were collected but the bill could not be delivered to ${customerId}. Our team will retry.`,
       "split_completed");
-    return;
+    return { delivered: false, reference, biller_name: displayBillerName, customer_id: customerId, amount, message: vfdData?.message || "Bill delivery pending" };
   }
 
   // Bill receipt (creator owns the beneficiary record)
@@ -1698,13 +1698,23 @@ async function settleSplitBill(split: Record<string, any>) {
   // for each participant (including the creator). The bill delivery itself is recorded in
   // vfd_sandbox_bill_receipts above — no extra wallet transaction needed here.
 
-
-  await sendNotification(split.creator_id, "Bill delivered",
-    `₦${amount.toLocaleString()} ${displayBillerName} delivered to ${customerId}. Ref: ${reference}`,
-    "bill_payment");
+  // Notify creator + every paid participant so each gets an in-app popup of the successful bill delivery
+  const { data: paidForNotify } = await db
+    .from("vfd_sandbox_split_participants")
+    .select("user_id")
+    .eq("split_id", split.id)
+    .eq("status", "paid");
+  const recipientIds = new Set<string>([split.creator_id, ...((paidForNotify || []).map((p: any) => p.user_id))]);
+  const deliveryTitle = "Bill delivered";
+  const deliveryMsg = `₦${amount.toLocaleString()} ${displayBillerName} delivered to ${customerId}. Ref: ${reference}`;
+  for (const rid of recipientIds) {
+    await sendNotification(rid, deliveryTitle, deliveryMsg, "bill_payment");
+  }
 
   // Reconciliation: verify each paid participant has a wallet tx row, and the receipt was written.
   await reconcileSplitPayments(split, { reference, expectReceipt: true });
+
+  return { delivered: true, reference, biller_name: displayBillerName, customer_id: customerId, amount };
 }
 
 // Verify every paid participant has a vfd_sandbox_transactions row; backfill if missing.
