@@ -45,6 +45,7 @@ export function SandboxHeader() {
           <span className="text-[10px] font-medium text-warning">Sandbox</span>
         </motion.div>
       </div>
+      <BillDeliveryPopupListener />
     </div>
   );
 }
