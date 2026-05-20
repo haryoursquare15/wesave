@@ -72,19 +72,19 @@ async function fetchVfdLiveBalance(userId: string): Promise<number> {
     const consumerSecret = Deno.env.get("VFD_CONSUMER_SECRET");
     if (!consumerKey || !consumerSecret) return 0;
 
-    const authResp = await fetch(`${vfdBase}/vfd-tech/baas-portal/v1.1/baasauth/token`, {
+    const authResp = await fetchWithTimeout(`${vfdBase}/vfd-tech/baas-portal/v1.1/baasauth/token`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "-1" }),
-    });
+    }, 10_000);
     const authRaw = await authResp.text();
     const authData = authRaw ? JSON.parse(authRaw) : {};
     const accessToken = authData?.data?.access_token;
     if (!accessToken) return 0;
 
-    const balResp = await fetch(`${vfdBase}/vtech-wallet/api/v2/wallet2/account/enquiry?accountNumber=${client.vfd_account_number}`, {
+    const balResp = await fetchWithTimeout(`${vfdBase}/vtech-wallet/api/v2/wallet2/account/enquiry?accountNumber=${client.vfd_account_number}`, {
       headers: { AccessToken: accessToken },
-    });
+    }, 10_000);
     const balData = await balResp.json();
     return Number(balData?.data?.availableBalance) || 0;
   } catch (e) {
