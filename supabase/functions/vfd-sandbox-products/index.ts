@@ -2506,11 +2506,11 @@ async function getVfdAccessToken(): Promise<string | null> {
   }
   try {
     const authUrl = `${vfdBase}/vfd-tech/baas-portal/v1.1/baasauth/token`;
-    const authResp = await fetch(authUrl, {
+    const authResp = await fetchWithTimeout(authUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "-1" }),
-    });
+    }, 10_000);
     const raw = await authResp.text();
     if (!raw) { console.error("[Bills auth] Empty response, status:", authResp.status); return null; }
     const d = JSON.parse(raw);
