@@ -1546,6 +1546,8 @@ async function handleCreateSplit(userId: string, body: Record<string, unknown>) 
   const expiryDate = new Date();
   expiryDate.setDate(expiryDate.getDate() + expiryDays);
 
+  const billMetadata = (body.bill_metadata && typeof body.bill_metadata === "object") ? body.bill_metadata : null;
+
   const { data: split, error } = await db.from("vfd_sandbox_splits").insert({
     title, creator_id: userId, total_amount: totalAmount,
     split_count: splitCount, per_person_amount: perPerson,
@@ -1556,6 +1558,7 @@ async function handleCreateSplit(userId: string, body: Record<string, unknown>) 
     fee_per_person: feePerPerson,
     purpose: purpose,
     expiry_date: expiryDate.toISOString(),
+    bill_metadata: billMetadata,
   }).select().single();
 
   if (error) return jsonResponse({ error: error.message }, 500);
@@ -1618,6 +1621,92 @@ async function handleJoinSplit(userId: string, body: Record<string, unknown>) {
   if (error) return jsonResponse({ error: error.message }, 500);
 
   return jsonResponse({ data: { joined: true } });
+}
+
+// Finalize a bill-payment SplitPay: call VFD bills/pay, write receipt + ledger entry, notify creator
+async function settleSplitBill(split: Record<string, any>) {
+  const db = getSupabaseAdmin();
+  const meta = split.bill_metadata || {};
+  const { customerId, division, paymentItem, productId, billerId, phoneNumber, category, billerName, paymentItemName } = meta;
+  if (!customerId || !division || !paymentItem || !productId || !billerId) {
+    console.error("[settleSplitBill] missing bill_metadata fields", meta);
+    await sendNotification(split.creator_id, "SplitPay Complete — bill needs attention",
+      `All participants paid for "${split.title}" but bill details are incomplete. Please contact support.`,
+      "split_completed");
+    return;
+  }
+
+  const amount = Number(split.total_amount);
+  const reference = `wesave-split-bill-${split.id.slice(0, 8)}-${Date.now()}`;
+  const displayBillerName = billerName || String(billerId).toUpperCase();
+
+  let vfdData: any = null;
+  let vfdOk = false;
+  try {
+    const token = await getVfdAccessToken();
+    if (token) {
+      const payBody: Record<string, string> = {
+        customerId, amount: String(amount), division, paymentItem, productId, billerId, reference,
+      };
+      if (phoneNumber) payBody.phoneNumber = phoneNumber;
+      const resp = await fetch(`${getBillsBase()}/pay`, {
+        method: "POST",
+        headers: { AccessToken: token, "Content-Type": "application/json" },
+        body: JSON.stringify(payBody),
+      });
+      vfdData = await safeJson(resp);
+      vfdOk = resp.ok || vfdData?.status === "00" || vfdData?.status === "99" || !!vfdData;
+    }
+  } catch (e) {
+    console.error("[settleSplitBill] vfd call failed", e);
+  }
+
+  // Mark split settlement
+  await db.from("vfd_sandbox_splits").update({
+    settlement_status: vfdOk ? "completed" : "failed",
+    settlement_reference: reference,
+    settlement_completed_at: new Date().toISOString(),
+    settlement_failure_reason: vfdOk ? null : (vfdData?.message || "VFD bill payment did not confirm"),
+  }).eq("id", split.id);
+
+  if (!vfdOk) {
+    await sendNotification(split.creator_id, "SplitPay collected — bill delivery pending",
+      `Funds for "${split.title}" were collected but the bill could not be delivered to ${customerId}. Our team will retry.`,
+      "split_completed");
+    return;
+  }
+
+  // Bill receipt (creator owns the beneficiary record)
+  const expiresAt = computeBillExpiry(category || "", paymentItemName || null);
+  await db.from("vfd_sandbox_bill_receipts").insert({
+    user_id: split.creator_id,
+    reference,
+    category: category || "Other",
+    biller_id: billerId,
+    biller_name: displayBillerName,
+    payment_item_name: paymentItemName || null,
+    customer_id: customerId,
+    phone_number: phoneNumber || null,
+    amount,
+    convenience_fee: 0,
+    status: "completed",
+    expires_at: expiresAt,
+    raw_response: { via: "splitpay", split_id: split.id, vfd: vfdData },
+  });
+
+  // Wallet transaction history entry for the creator (informational; funds already debited per-share)
+  await db.from("vfd_sandbox_transactions").insert({
+    user_id: split.creator_id,
+    transaction_type: "debit",
+    amount,
+    description: `Bill Payment via SplitPay: ${displayBillerName} - ${customerId}`,
+    reference,
+    status: "completed",
+  });
+
+  await sendNotification(split.creator_id, "Bill delivered",
+    `₦${amount.toLocaleString()} ${displayBillerName} delivered to ${customerId}. Ref: ${reference}`,
+    "bill_payment");
 }
 
 async function handlePaySplit(userId: string, body: Record<string, unknown>) {
@@ -1705,6 +1794,9 @@ async function handlePaySplit(userId: string, body: Record<string, unknown>) {
     await sendNotification(split.creator_id, "SplitPay Complete!",
       `All participants have paid for "${split.title}". Settlement sent to ${split.merchant_account_name}.`,
       "split_completed");
+  } else if (allPaid && split.bill_metadata) {
+    // Bill-payment SplitPay: actually deliver the bill (e.g. airtime) to the beneficiary
+    await settleSplitBill(split);
   } else if (split.creator_id !== userId) {
     // Notify creator of incremental payment
     await sendNotification(split.creator_id, "SplitPay Payment Received",

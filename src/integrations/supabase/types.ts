@@ -5108,6 +5108,7 @@ export type Database = {
       }
       vfd_sandbox_splits: {
         Row: {
+          bill_metadata: Json | null
           created_at: string
           creator_id: string
           expiry_date: string | null
@@ -5134,6 +5135,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          bill_metadata?: Json | null
           created_at?: string
           creator_id: string
           expiry_date?: string | null
@@ -5160,6 +5162,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          bill_metadata?: Json | null
           created_at?: string
           creator_id?: string
           expiry_date?: string | null
