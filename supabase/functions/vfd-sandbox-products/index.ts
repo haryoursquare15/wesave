@@ -1871,6 +1871,8 @@ async function handlePaySplit(userId: string, body: Record<string, unknown>) {
     await sendNotification(split.creator_id, "SplitPay Complete!",
       `All participants have paid for "${split.title}". Settlement sent to ${split.merchant_account_name}.`,
       "split_completed");
+
+    await reconcileSplitPayments(split, { expectReceipt: false });
   } else if (allPaid && split.bill_metadata) {
     // Bill-payment SplitPay: actually deliver the bill (e.g. airtime) to the beneficiary
     await settleSplitBill(split);
