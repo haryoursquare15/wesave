@@ -1766,6 +1766,22 @@ async function handlePaySplit(userId: string, body: Record<string, unknown>) {
     split_id: splitId, user_id: userId, amount: totalDebit,
   });
 
+  // Record in general wallet transaction history so the payer sees it in their feed.
+  const payerLabel = split.bill_metadata
+    ? `SplitPay (Bill): ${split.title}`
+    : `SplitPay: ${split.title}`;
+  await db.from("vfd_sandbox_transactions").insert({
+    user_id: userId,
+    transaction_type: "debit",
+    amount: totalDebit,
+    description: feeShare > 0
+      ? `${payerLabel} — share ₦${amount.toLocaleString()} + fee ₦${feeShare.toLocaleString()}`
+      : `${payerLabel} — share ₦${amount.toLocaleString()}`,
+    reference: `splitpay-${splitId}-${userId}`,
+    status: "completed",
+  });
+
+
   // Production parity: count active/pending participants (exclude declined) for completion check
   const { data: activeParticipants } = await db.from("vfd_sandbox_split_participants")
     .select("status").eq("split_id", splitId).in("status", ["pending", "paid"]);
