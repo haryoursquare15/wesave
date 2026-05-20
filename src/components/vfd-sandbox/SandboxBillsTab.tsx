@@ -369,14 +369,14 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
         bill_metadata: {
           customerId,
           amount: total,
-          division: selectedItem?.division || selectedBiller.division,
-          paymentItem: selectedItem?.paymentitemcode || selectedItem?.paymentItemCode,
-          paymentItemName: selectedItem?.paymentitemname || selectedItem?.paymentItemName || null,
-          productId: selectedItem?.productId || selectedBiller.productId,
-          billerId: selectedBiller.billerid || selectedBiller.billerId,
+          division: selectedBiller.division,
+          paymentItem: selectedItem?.paymentCode,
+          paymentItemName: selectedItem?.paymentitemname || null,
+          productId: selectedBiller.product,
+          billerId: selectedBiller.id,
           billerName: selectedBiller.name,
           phoneNumber: phoneNumber || customerId,
-          category: selectedCategory?.name || selectedCategory || "",
+          category: selectedCategory,
         },
       });
       if (r?.error) throw new Error(r.error);
