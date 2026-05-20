@@ -1924,8 +1924,8 @@ async function handlePaySplit(userId: string, body: Record<string, unknown>) {
 
   let billDelivery: any = null;
   if (allPaid && split.bill_metadata) {
-    // Bill-payment SplitPay: actually deliver the bill (e.g. airtime) to the beneficiary
-    billDelivery = await settleSplitBill(split);
+    // Bill-payment SplitPay: queue delivery so a slow VFD bills endpoint cannot hold the payer request open.
+    billDelivery = await queueSplitBillSettlement(split);
   } else if (!allPaid && split.creator_id !== userId) {
     // Notify creator of incremental payment
     await sendNotification(split.creator_id, "SplitPay Payment Received",
