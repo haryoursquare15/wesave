@@ -366,6 +366,18 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
         creator_amount: myShare,
         purpose: `Bill: ${selectedBiller.name} (${customerId})`,
         expiry_days: 7,
+        bill_metadata: {
+          customerId,
+          amount: total,
+          division: selectedItem?.division || selectedBiller.division,
+          paymentItem: selectedItem?.paymentitemcode || selectedItem?.paymentItemCode,
+          paymentItemName: selectedItem?.paymentitemname || selectedItem?.paymentItemName || null,
+          productId: selectedItem?.productId || selectedBiller.productId,
+          billerId: selectedBiller.billerid || selectedBiller.billerId,
+          billerName: selectedBiller.name,
+          phoneNumber: phoneNumber || customerId,
+          category: selectedCategory?.name || selectedCategory || "",
+        },
       });
       if (r?.error) throw new Error(r.error);
       const perOther = Math.ceil(((total - myShare) / others) * 100) / 100;
