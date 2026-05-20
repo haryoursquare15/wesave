@@ -1,0 +1,1 @@
+ALTER TABLE public.vfd_sandbox_splits ADD COLUMN IF NOT EXISTS bill_metadata jsonb;
