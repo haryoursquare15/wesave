@@ -1694,15 +1694,10 @@ async function settleSplitBill(split: Record<string, any>) {
     raw_response: { via: "splitpay", split_id: split.id, vfd: vfdData },
   });
 
-  // Wallet transaction history entry for the creator (informational; funds already debited per-share)
-  await db.from("vfd_sandbox_transactions").insert({
-    user_id: split.creator_id,
-    transaction_type: "debit",
-    amount,
-    description: `Bill Payment via SplitPay: ${displayBillerName} - ${customerId}`,
-    reference,
-    status: "completed",
-  });
+  // Note: per-share debits are already recorded in vfd_sandbox_transactions by handlePaySplit
+  // for each participant (including the creator). The bill delivery itself is recorded in
+  // vfd_sandbox_bill_receipts above — no extra wallet transaction needed here.
+
 
   await sendNotification(split.creator_id, "Bill delivered",
     `₦${amount.toLocaleString()} ${displayBillerName} delivered to ${customerId}. Ref: ${reference}`,
