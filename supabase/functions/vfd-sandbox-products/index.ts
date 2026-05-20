@@ -1883,17 +1883,20 @@ async function handlePaySplit(userId: string, body: Record<string, unknown>) {
       "split_completed");
 
     await reconcileSplitPayments(split, { expectReceipt: false });
-  } else if (allPaid && split.bill_metadata) {
+  }
+
+  let billDelivery: any = null;
+  if (allPaid && split.bill_metadata) {
     // Bill-payment SplitPay: actually deliver the bill (e.g. airtime) to the beneficiary
-    await settleSplitBill(split);
-  } else if (split.creator_id !== userId) {
+    billDelivery = await settleSplitBill(split);
+  } else if (!allPaid && split.creator_id !== userId) {
     // Notify creator of incremental payment
     await sendNotification(split.creator_id, "SplitPay Payment Received",
       `A participant just paid their share of "${split.title}" (${paidCount}/${split.split_count} paid).`,
       "split_payment");
   }
 
-  return jsonResponse({ data: { paid: true, amount: totalDebit, bill_share: amount, fee_share: feeShare, all_paid: allPaid } });
+  return jsonResponse({ data: { paid: true, amount: totalDebit, bill_share: amount, fee_share: feeShare, all_paid: allPaid, bill_delivery: billDelivery } });
 }
 
 // SplitPay: Decline
