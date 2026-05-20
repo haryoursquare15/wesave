@@ -1546,6 +1546,8 @@ async function handleCreateSplit(userId: string, body: Record<string, unknown>) 
   const expiryDate = new Date();
   expiryDate.setDate(expiryDate.getDate() + expiryDays);
 
+  const billMetadata = (body.bill_metadata && typeof body.bill_metadata === "object") ? body.bill_metadata : null;
+
   const { data: split, error } = await db.from("vfd_sandbox_splits").insert({
     title, creator_id: userId, total_amount: totalAmount,
     split_count: splitCount, per_person_amount: perPerson,
@@ -1556,6 +1558,7 @@ async function handleCreateSplit(userId: string, body: Record<string, unknown>) 
     fee_per_person: feePerPerson,
     purpose: purpose,
     expiry_date: expiryDate.toISOString(),
+    bill_metadata: billMetadata,
   }).select().single();
 
   if (error) return jsonResponse({ error: error.message }, 500);
