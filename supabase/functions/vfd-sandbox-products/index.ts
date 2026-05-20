@@ -1709,7 +1709,7 @@ async function settleSplitBill(split: Record<string, any>) {
     "bill_payment");
 }
 
-
+async function handlePaySplit(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const splitId = body.split_id as string;
 
