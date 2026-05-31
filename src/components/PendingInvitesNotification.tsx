@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 function getNotificationIcon(type: string) {
   switch (type) {
     case "contribution_success":
@@ -84,15 +85,15 @@ export function PendingInvitesNotification() {
       const msg = err?.message || "Failed to respond";
       console.error("Invite response error:", msg, err);
       if (msg.toLowerCase().includes("insufficient") || msg.toLowerCase().includes("fund your wallet")) {
-        toast.error(msg, {
+        toast.error(getUserFriendlyError(msg, {
           action: {
             label: "Fund Wallet",
             onClick: () => navigate("/wallet"),
           },
           duration: 8000,
-        });
+        }));
       } else {
-        toast.error(msg);
+        toast.error(getUserFriendlyError(msg));
       }
     } finally {
       setRespondingId(null);
@@ -186,7 +187,7 @@ export function PendingInvitesNotification() {
                         });
                         setDecliningNotifId(null);
                         if (error) {
-                          toast.error(error.message);
+                          toast.error(getUserFriendlyError(error.message));
                         } else {
                           toast.success("Split request declined");
                           refetchNotifs();
@@ -222,12 +223,12 @@ export function PendingInvitesNotification() {
                             _amount: partData.amount_due,
                           });
                           if (error) {
-                            toast.error(error.message);
+                            toast.error(getUserFriendlyError(error.message));
                             return;
                           }
                           const result = data as { success: boolean; error?: string; all_paid?: boolean };
                           if (!result.success) {
-                            toast.error(result.error || "Payment failed");
+                            toast.error(getUserFriendlyError(result.error || "Payment failed"));
                             return;
                           }
                           toast.success("Payment successful! Your share has been paid.");
@@ -240,7 +241,7 @@ export function PendingInvitesNotification() {
                           }
                           refetchNotifs();
                         } catch (err: any) {
-                          toast.error(err?.message || "Payment failed");
+                          toast.error(getUserFriendlyError(err?.message || "Payment failed"));
                         } finally {
                           setPayingSplitId(null);
                         }

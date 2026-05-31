@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 interface TermsGateProps {
   groupId: string;
   groupName: string;
@@ -47,7 +48,7 @@ export function TermsGate({
       toast.success("Terms accepted — welcome to the group!");
       setTimeout(() => onComplete(), 800);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to accept terms");
+      toast.error(getUserFriendlyError(err instanceof Error ? err.message : "Failed to accept terms"));
     } finally {
       setLoading(false);
     }

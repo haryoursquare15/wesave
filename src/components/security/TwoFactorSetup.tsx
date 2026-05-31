@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { useSecurity } from "@/hooks/useSecurity";
 import { toast } from "sonner";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 interface TwoFactorSetupProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -63,7 +64,7 @@ export function TwoFactorSetup({ open, onOpenChange, onComplete }: TwoFactorSetu
       setStep("backup");
       toast.success("2FA enabled successfully!");
     } else {
-      toast.error(result.error || "Invalid code. Please try again.");
+      toast.error(getUserFriendlyError(result.error || "Invalid code. Please try again."));
     }
   };
 

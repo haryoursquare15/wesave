@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 interface SwapRequest {
   id: string;
   group_id: string;
@@ -119,7 +120,7 @@ export function usePositionSwap(groupId: string) {
         toast.success(result.message || "Swap request sent");
         return { success: true };
       } else {
-        toast.error(result.error || "Failed to send swap request");
+        toast.error(getUserFriendlyError(result.error || "Failed to send swap request"));
         return { success: false, error: result.error };
       }
     } catch (err) {
@@ -147,7 +148,7 @@ export function usePositionSwap(groupId: string) {
         await fetchSwapData();
         return { success: true };
       } else {
-        toast.error(result.error || "Failed to respond to swap request");
+        toast.error(getUserFriendlyError(result.error || "Failed to respond to swap request"));
         return { success: false, error: result.error };
       }
     } catch (err) {

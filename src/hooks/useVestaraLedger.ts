@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
 import { useToast } from "@/hooks/use-toast";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 /* ─── Types ─── */
 export interface VestaraAccount {
   id: string;
@@ -145,12 +146,12 @@ export function useVestaraLedger() {
         });
 
         if (error) {
-          toast({ title: "Ledger Error", description: error.message, variant: "destructive" });
+          toast({ title: "Ledger Error", description: getUserFriendlyError(error.message), variant: "destructive" });
           return null;
         }
 
         if (data?.error) {
-          toast({ title: "Ledger Error", description: data.error, variant: "destructive" });
+          toast({ title: "Ledger Error", description: getUserFriendlyError(data.error), variant: "destructive" });
           return null;
         }
 

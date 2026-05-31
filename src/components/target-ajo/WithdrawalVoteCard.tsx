@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import type { TargetAjoWithdrawalRequest, TargetAjoVote } from "@/hooks/useTargetAjo";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 interface Props {
   request: TargetAjoWithdrawalRequest;
   votes: TargetAjoVote[];
@@ -53,7 +54,7 @@ export function WithdrawalVoteCard({ request, votes, isAdmin, onRefresh }: Props
       onRefresh();
     } catch (err: any) {
       if (err.code === "23505") toast.error("You already voted");
-      else toast.error(err.message || "Failed to vote");
+      else toast.error(getUserFriendlyError(err.message || "Failed to vote"));
     }
   };
 

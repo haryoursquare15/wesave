@@ -10,6 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 export default function CreateSplitPay() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
@@ -74,7 +75,7 @@ export default function CreateSplitPay() {
 
     if (error) {
       setSubmitting(false);
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: "Error", description: getUserFriendlyError(error.message), variant: "destructive" });
       return;
     }
 

@@ -12,6 +12,7 @@ import { SplitParticipantList } from "@/components/splitpay/SplitParticipantList
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 export default function SplitPayDetail() {
   const { requestId } = useParams<{ requestId: string }>();
   const navigate = useNavigate();
@@ -100,19 +101,19 @@ export default function SplitPayDetail() {
         });
       } else {
         console.error("[SplitPay] Payment failed result:", result);
-        toast({ title: "Payment Failed", description: result.error || "Something went wrong", variant: "destructive" });
+        toast({ title: "Payment Failed", description: getUserFriendlyError(result.error || "Something went wrong"), variant: "destructive" });
       }
     } catch (err: any) {
       setPaying(false);
       console.error("[SplitPay] Payment exception:", err);
-      toast({ title: "Payment Failed", description: err?.message || "An unexpected error occurred", variant: "destructive" });
+      toast({ title: "Payment Failed", description: getUserFriendlyError(err?.message || "An unexpected error occurred"), variant: "destructive" });
     }
   };
 
   const handleDecline = async () => {
     const result = await declineShare();
     if (result?.success === false) {
-      toast({ title: "Error", description: result.error || "Could not decline", variant: "destructive" });
+      toast({ title: "Error", description: getUserFriendlyError(result.error || "Could not decline"), variant: "destructive" });
     } else {
       toast({ title: "Declined", description: "You have declined this split request." });
     }
@@ -128,7 +129,7 @@ export default function SplitPayDetail() {
         : "";
       toast({ title: "Cancelled", description: `Split request has been cancelled.${refundMsg}` });
     } else {
-      toast({ title: "Error", description: result?.error || "Could not cancel", variant: "destructive" });
+      toast({ title: "Error", description: getUserFriendlyError(result?.error || "Could not cancel"), variant: "destructive" });
     }
   };
 
@@ -144,7 +145,7 @@ export default function SplitPayDetail() {
     if (error || result?.success === false) {
       toast({
         title: "Error",
-        description: error?.message || result?.error || "Reminder could not be sent",
+        description: getUserFriendlyError(error?.message || result?.error || "Reminder could not be sent"),
         variant: "destructive",
       });
       return;
@@ -159,7 +160,7 @@ export default function SplitPayDetail() {
     if (result.success) {
       toast({ title: "Removed", description: `${participant.profile?.full_name || "Participant"} has been removed.` });
     } else {
-      toast({ title: "Error", description: result.error || "Could not remove", variant: "destructive" });
+      toast({ title: "Error", description: getUserFriendlyError(result.error || "Could not remove"), variant: "destructive" });
     }
   };
 

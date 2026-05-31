@@ -26,6 +26,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 interface ChatMessage {
   id: string;
   user_id: string;
@@ -305,7 +306,7 @@ export default function GroupDetail() {
         });
         if (orderData) setPayoutOrder(orderData as PayoutMember[]);
       } else {
-        toast.error(result.error || "Failed to commence thrift");
+        toast.error(getUserFriendlyError(result.error || "Failed to commence thrift"));
       }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : "Failed to commence thrift";
@@ -359,7 +360,7 @@ export default function GroupDetail() {
           toast.info("All members have contributed! Payout processing...");
         }
       } else {
-        toast.error(data.error || "Failed to make contribution");
+        toast.error(getUserFriendlyError(data.error || "Failed to make contribution"));
       }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : "Failed to make contribution";
@@ -399,7 +400,7 @@ export default function GroupDetail() {
         });
         if (orderData) setPayoutOrder(orderData);
       } else {
-        toast.error(data.error || "Failed to process payout");
+        toast.error(getUserFriendlyError(data.error || "Failed to process payout"));
       }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : "Failed to process payout";
@@ -426,7 +427,7 @@ export default function GroupDetail() {
         toast.success("You have left the group");
         navigate("/groups");
       } else {
-        toast.error(data.error || "Failed to exit group");
+        toast.error(getUserFriendlyError(data.error || "Failed to exit group"));
       }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : "Failed to exit group";
@@ -452,7 +453,7 @@ export default function GroupDetail() {
       if (data.success) {
         toast.success("Your decision to continue has been recorded");
       } else {
-        toast.error(data.error || "Failed to confirm");
+        toast.error(getUserFriendlyError(data.error || "Failed to confirm"));
       }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : "Failed to confirm";
@@ -509,7 +510,7 @@ export default function GroupDetail() {
           .eq("status", "active");
         setMemberCount(count || 0);
       } else {
-        toast.error(data.error || "Failed to restart group");
+        toast.error(getUserFriendlyError(data.error || "Failed to restart group"));
       }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : "Failed to restart group";

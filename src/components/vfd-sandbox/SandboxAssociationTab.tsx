@@ -15,6 +15,7 @@ import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 interface Association {
   id: string;
   name: string;
@@ -97,7 +98,7 @@ export function SandboxAssociationTab() {
       const path = `${userId}/${Date.now()}-${key}.${ext}`;
       const { error } = await client.storage.from("sandbox-association-docs").upload(path, file, { upsert: false });
       if (error) {
-        toast({ title: "Upload failed", description: error.message, variant: "destructive" });
+        toast({ title: "Upload failed", description: getUserFriendlyError(error.message), variant: "destructive" });
         return null;
       }
       return path;

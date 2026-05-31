@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { sandboxSupabase } from "@/integrations/supabase/sandboxClient";
 import { toast } from "sonner";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 export default function SandboxForgotPassword() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
@@ -21,7 +22,7 @@ export default function SandboxForgotPassword() {
         redirectTo: `${window.location.origin}/vfd-sandbox/reset-password`,
       });
       if (error) {
-        toast.error(error.message);
+        toast.error(getUserFriendlyError(error.message));
         return;
       }
       setSent(true);

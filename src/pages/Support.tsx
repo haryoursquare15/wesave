@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { supportTicketSchema, validateInput } from "@/lib/validation";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 const categories = [
   { value: "payment", label: "Payment Issues" },
   { value: "group", label: "Thrift Group Issues" },
@@ -85,7 +86,7 @@ export default function Support() {
     const validation = validateInput(supportTicketSchema, { subject, category, description });
     
     if (validation.success === false) {
-      toast.error(validation.error);
+      toast.error(getUserFriendlyError(validation.error));
       return;
     }
 

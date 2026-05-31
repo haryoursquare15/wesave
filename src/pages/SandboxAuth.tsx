@@ -10,6 +10,7 @@ import { SandboxSplash } from "@/components/vfd-sandbox/SandboxSplash";
 import { sandboxSupabase } from "@/integrations/supabase/sandboxClient";
 import { toast } from "sonner";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 export default function SandboxAuth() {
   const navigate = useNavigate();
   const { signIn, signUp } = useSandboxAuth();
@@ -45,7 +46,7 @@ export default function SandboxAuth() {
         }
         const { error } = await signUp(form.email, form.password, form.name);
         if (error) {
-          toast.error(error.message);
+          toast.error(getUserFriendlyError(error.message));
           return;
         }
         // Sandbox accounts are auto-confirmed, so we can sign in immediately
@@ -61,7 +62,7 @@ export default function SandboxAuth() {
       } else {
         const { error } = await signIn(form.email, form.password);
         if (error) {
-          toast.error(error.message);
+          toast.error(getUserFriendlyError(error.message));
           return;
         }
         toast.success("Welcome to the VFD Sandbox");

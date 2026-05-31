@@ -8,6 +8,7 @@ import { useVfdSandboxProducts } from "@/hooks/useVfdSandboxProducts";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 interface Notification {
   id: string;
   title: string;
@@ -100,14 +101,14 @@ export function SandboxNotificationBell() {
           toast.message("This invite is no longer available");
           await refresh();
         } else {
-          toast.error(res.error);
+          toast.error(getUserFriendlyError(res.error));
         }
       } else {
         toast.success(accept ? "Joined group!" : "Invite declined");
         await refresh();
       }
     } catch (e: any) {
-      toast.error(e?.message || "Failed to respond");
+      toast.error(getUserFriendlyError(e?.message || "Failed to respond"));
     } finally {
       setRespondingId(null);
     }

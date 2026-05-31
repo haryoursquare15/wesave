@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
 import { useToast } from "@/hooks/use-toast";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 export function useVfdSandboxProducts() {
   const { session, client } = useSandboxAwareAuth();
   const { toast } = useToast();
@@ -67,12 +68,12 @@ export function useVfdSandboxProducts() {
 
         if (!resp.ok) {
           const msg = data?.error || data?.message || `Request failed (${resp.status})`;
-          toast({ title: "Error", description: msg, variant: "destructive" });
+          toast({ title: "Error", description: getUserFriendlyError(msg), variant: "destructive" });
           return { error: msg, status: resp.status };
         }
 
         if (data?.error) {
-          toast({ title: "Error", description: data.error, variant: "destructive" });
+          toast({ title: "Error", description: getUserFriendlyError(data.error), variant: "destructive" });
           return data;
         }
 

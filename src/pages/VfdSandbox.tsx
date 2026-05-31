@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { AnimatePresence } from "framer-motion";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 interface LockConfig { id: string; duration_months: number; interest_rate: number; early_withdrawal_penalty: number; }
 interface UserBalance {
   total_balance: number; locked_balance: number; savings_balance: number; available_balance: number;
@@ -318,7 +319,7 @@ function VfdSandboxInner() {
     const result = await vfd.validateBeneficiary(account, bankCode);
     if (!result) return null;
     if (result.error) {
-      toast({ title: "Verification failed", description: String(result.error), variant: "destructive" });
+      toast({ title: "Verification failed", description: getUserFriendlyError(String(result.error)), variant: "destructive" });
       return null;
     }
     const name = result.accountName ||

@@ -17,6 +17,7 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import type { TargetAjoMemberContribution } from "@/hooks/useTargetAjo";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 interface MemberProfile {
   id: string;
   full_name: string | null;
@@ -112,13 +113,13 @@ export default function TargetAjoDetail() {
       if (error) throw error;
       const result = data as { success: boolean; error?: string; amount?: number };
       if (!result.success) {
-        toast.error(result.error || "Withdrawal failed");
+        toast.error(getUserFriendlyError(result.error || "Withdrawal failed"));
         return;
       }
       toast.success(`₦${fmt(result.amount || myTotal)} withdrawn to your wallet!`);
       refetch();
     } catch (err: any) {
-      toast.error(err.message || "Withdrawal failed");
+      toast.error(getUserFriendlyError(err.message || "Withdrawal failed"));
     } finally {
       setSelfWithdrawing(false);
     }
@@ -137,13 +138,13 @@ export default function TargetAjoDetail() {
       if (error) throw error;
       const result = data as { success: boolean; error?: string; refund_count?: number; total_refunded?: number };
       if (!result.success) {
-        toast.error(result.error || "Failed to close group");
+        toast.error(getUserFriendlyError(result.error || "Failed to close group"));
         return;
       }
       toast.success(`Group closed! ₦${fmt(result.total_refunded || 0)} refunded to ${result.refund_count || 0} member(s).`);
       refetch();
     } catch (err: any) {
-      toast.error(err.message || "Failed to close group");
+      toast.error(getUserFriendlyError(err.message || "Failed to close group"));
     } finally {
       setClosing(false);
     }
@@ -163,7 +164,7 @@ export default function TargetAjoDetail() {
       toast.success(`${getMemberName(memberUserId)} removed`);
       refetch();
     } catch (err: any) {
-      toast.error(err.message || "Failed to remove member");
+      toast.error(getUserFriendlyError(err.message || "Failed to remove member"));
     } finally {
       setRemovingId(null);
     }
@@ -245,7 +246,7 @@ export default function TargetAjoDetail() {
       setWithdrawReason("");
       refetch();
     } catch (err: any) {
-      toast.error(err.message || "Failed to request withdrawal");
+      toast.error(getUserFriendlyError(err.message || "Failed to request withdrawal"));
     } finally {
       setRequestingWithdraw(false);
     }

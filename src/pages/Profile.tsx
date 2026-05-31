@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { usernameSchema, validateInput } from "@/lib/validation";
 import { ProfilePictureUpload } from "@/components/settings/ProfilePictureUpload";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 const menuItems = [
   { icon: User, label: "Edit Profile", path: "/settings/profile" },
   { icon: Shield, label: "Security & Privacy", path: "/settings/security" },
@@ -124,7 +125,7 @@ export default function Profile() {
     const validation = validateInput(usernameSchema, newUsername.trim());
     
     if (validation.success === false) {
-      toast.error(validation.error);
+      toast.error(getUserFriendlyError(validation.error));
       return;
     }
 

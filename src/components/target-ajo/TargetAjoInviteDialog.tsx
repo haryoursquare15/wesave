@@ -7,6 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { UserPlus, Search } from "lucide-react";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -54,7 +55,7 @@ export function TargetAjoInviteDialog({ open, onOpenChange, groupId, onSuccess }
       toast.success("Invite sent!");
       onSuccess();
     } catch (err: any) {
-      toast.error(err.message || "Failed to invite");
+      toast.error(getUserFriendlyError(err.message || "Failed to invite"));
     } finally {
       setInviting(null);
     }

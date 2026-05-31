@@ -262,7 +262,7 @@ export default function Wallet() {
         // Redirect to payment page
         window.location.href = data.payment_link;
       } else {
-        toast.error(data.error || "Failed to initiate payment");
+        toast.error(getUserFriendlyError(data.error || "Failed to initiate payment"));
       }
     } catch (err: unknown) {
       toast.error(getUserFriendlyError(err));
