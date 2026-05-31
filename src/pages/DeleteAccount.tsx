@@ -8,6 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 export default function DeleteAccount() {
   const navigate = useNavigate();
   const { user, signOut, loading: authLoading } = useAuth();
@@ -33,7 +34,7 @@ export default function DeleteAccount() {
       await signOut();
       navigate("/");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to delete account. Please contact support.");
+      toast.error(getUserFriendlyError(e instanceof Error ? e.message : "Failed to delete account. Please contact support."));
     } finally {
       setDeleting(false);
     }

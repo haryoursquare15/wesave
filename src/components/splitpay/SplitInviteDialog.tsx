@@ -10,6 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { useDebounce } from "@/hooks/useDebounce";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -128,13 +129,13 @@ export function SplitInviteDialog({ open, onOpenChange, splitRequestId, amountPe
       console.log("[SplitInvite] RPC result:", JSON.stringify(data), "error:", error);
 
       if (error) {
-        toast({ title: "Error", description: error.message || "Could not send invite", variant: "destructive" });
+        toast({ title: "Error", description: getUserFriendlyError(error.message || "Could not send invite"), variant: "destructive" });
         return;
       }
 
       const result = data as { success?: boolean; error?: string } | null;
       if (result && result.success === false) {
-        toast({ title: "Error", description: result.error || "Could not send invite", variant: "destructive" });
+        toast({ title: "Error", description: getUserFriendlyError(result.error || "Could not send invite"), variant: "destructive" });
         return;
       }
 
@@ -142,7 +143,7 @@ export function SplitInviteDialog({ open, onOpenChange, splitRequestId, amountPe
       toast({ title: "Invited!", description: `${targetUser.full_name || targetUser.username} has been invited.` });
     } catch (err: any) {
       console.error("[SplitInvite] Exception:", err);
-      toast({ title: "Error", description: err.message || "Something went wrong", variant: "destructive" });
+      toast({ title: "Error", description: getUserFriendlyError(err.message || "Something went wrong"), variant: "destructive" });
     }
   };
 

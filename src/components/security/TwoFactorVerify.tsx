@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { useSecurity } from "@/hooks/useSecurity";
 import { toast } from "sonner";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 interface TwoFactorVerifyProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -36,7 +37,7 @@ export function TwoFactorVerify({
       onOpenChange(false);
       onVerified(code);
     } else {
-      toast.error(result.error || "Invalid code. Please try again.");
+      toast.error(getUserFriendlyError(result.error || "Invalid code. Please try again."));
     }
   };
 

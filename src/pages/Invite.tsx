@@ -9,6 +9,7 @@ import { useValidateInvite, useJoinGroupViaInvite } from "@/hooks/useGroupInvite
 import { useUserGroupCount } from "@/hooks/useUserGroupCount";
 import { toast } from "sonner";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 export default function Invite() {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
@@ -53,7 +54,7 @@ export default function Invite() {
         navigate(groupId ? `/groups/${groupId}` : "/dashboard");
       }, 1500);
     } catch (err: any) {
-      toast.error(err.message || "Failed to join group");
+      toast.error(getUserFriendlyError(err.message || "Failed to join group"));
       setStatus("valid");
     }
   };

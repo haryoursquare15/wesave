@@ -8,6 +8,7 @@ import { useDeviceFingerprint } from "@/hooks/useDeviceFingerprint";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 interface DeviceInfo {
   id: string;
   device_name: string;
@@ -50,7 +51,7 @@ export function DeviceManagement({ open, onOpenChange }: DeviceManagementProps) 
       toast.success(`${deviceName} has been removed`);
       fetchDevices();
     } else {
-      toast.error(result.error || "Failed to remove device");
+      toast.error(getUserFriendlyError(result.error || "Failed to remove device"));
     }
   };
 
@@ -61,7 +62,7 @@ export function DeviceManagement({ open, onOpenChange }: DeviceManagementProps) 
       toast.success("Device marked as trusted");
       fetchDevices();
     } else {
-      toast.error(result.error || "Failed to trust device");
+      toast.error(getUserFriendlyError(result.error || "Failed to trust device"));
     }
   };
 

@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
 import { useToast } from "@/hooks/use-toast";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 interface VfdClient {
   id: string;
   user_id: string;
@@ -66,7 +67,7 @@ export function useVfdBanking() {
         });
 
         if (error) {
-          toast({ title: "VFD API Error", description: error.message, variant: "destructive" });
+          toast({ title: "VFD API Error", description: getUserFriendlyError(error.message), variant: "destructive" });
           return null;
         }
 

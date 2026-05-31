@@ -16,6 +16,7 @@ import { useSearchUsers, useSendMemberInvite, useCreateInviteLink } from "@/hook
 import { toast } from "sonner";
 import { useDebounce } from "@/hooks/useDebounce";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 interface AddMembersDialogProps {
   groupId: string;
   groupName: string;
@@ -50,7 +51,7 @@ export function AddMembersDialog({ groupId, groupName, children, onMemberAdded }
       toast.success("Invite sent! Waiting for user to accept.");
       onMemberAdded?.();
     } catch (err: any) {
-      toast.error(err.message || "Failed to send invite");
+      toast.error(getUserFriendlyError(err.message || "Failed to send invite"));
     }
   };
 
@@ -59,7 +60,7 @@ export function AddMembersDialog({ groupId, groupName, children, onMemberAdded }
       const link = await createInviteLink(groupId);
       setInviteLink(link);
     } catch (err: any) {
-      toast.error(err.message || "Failed to create invite link");
+      toast.error(getUserFriendlyError(err.message || "Failed to create invite link"));
     }
   };
 

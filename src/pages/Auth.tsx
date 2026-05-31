@@ -13,6 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { TwoFactorEnforcement } from "@/components/security/TwoFactorEnforcement";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 export default function Auth() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -132,7 +133,7 @@ export default function Auth() {
           if (error.message.includes("already registered")) {
             toast.error("This email is already registered. Please sign in instead.");
           } else {
-            toast.error(error.message);
+            toast.error(getUserFriendlyError(error.message));
           }
         } else {
           toast.success("Account created! Please check your email to verify your account.");
@@ -144,7 +145,7 @@ export default function Auth() {
           if (error.message.includes("Invalid login")) {
             toast.error("Invalid email or password. Please try again.");
           } else {
-            toast.error(error.message);
+            toast.error(getUserFriendlyError(error.message));
           }
         } else {
           toast.success("Welcome back!");
@@ -187,7 +188,7 @@ export default function Auth() {
       });
       
       if (error) {
-        toast.error(error.message);
+        toast.error(getUserFriendlyError(error.message));
       } else {
         setPasswordResetSuccess(true);
         toast.success("Password updated successfully!");
@@ -400,7 +401,7 @@ export default function Auth() {
                         redirect_uri: window.location.origin,
                       });
                       if (error) {
-                        toast.error(error.message);
+                        toast.error(getUserFriendlyError(error.message));
                       }
                     } catch (err) {
                       toast.error("Failed to sign in with Google");
@@ -441,7 +442,7 @@ export default function Auth() {
                         redirect_uri: window.location.origin,
                       });
                       if (error) {
-                        toast.error(error.message);
+                        toast.error(getUserFriendlyError(error.message));
                       }
                     } catch (err) {
                       toast.error("Failed to sign in with Apple");

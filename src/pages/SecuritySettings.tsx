@@ -16,6 +16,7 @@ import { invokeSecureFunction } from "@/lib/secureApi";
 
 import { toast } from "sonner";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 export default function SecuritySettings() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -88,7 +89,7 @@ export default function SecuritySettings() {
       setTwoFAVerifiedAt(null);
       toast.success("2FA has been disabled");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to disable 2FA");
+      toast.error(getUserFriendlyError(e instanceof Error ? e.message : "Failed to disable 2FA"));
     }
   };
 
@@ -117,7 +118,7 @@ export default function SecuritySettings() {
       if (msg.includes("FunctionsHttpError") || msg.includes("FunctionsFetchError")) {
         toast.error("Something went wrong. Please try again later.");
       } else {
-        toast.error(msg || "We couldn't process your withdrawal. Please try again.");
+        toast.error(getUserFriendlyError(msg || "We couldn't process your withdrawal. Please try again."));
       }
     }
   };

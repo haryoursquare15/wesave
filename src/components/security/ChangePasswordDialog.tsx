@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 interface ChangePasswordDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -63,7 +64,7 @@ export function ChangePasswordDialog({ open, onOpenChange }: ChangePasswordDialo
       handleClose();
     } catch (err) {
       console.error("Password update error:", err);
-      toast.error(err instanceof Error ? err.message : "Failed to update password");
+      toast.error(getUserFriendlyError(err instanceof Error ? err.message : "Failed to update password"));
     } finally {
       setLoading(false);
     }

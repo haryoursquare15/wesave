@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
+import { getUserFriendlyError } from "@/lib/errorMessages";
 import { BottomNav } from "@/components/BottomNav";
 import { useCreateGroup } from "@/hooks/useThriftGroups";
 import { useUserGroupCount } from "@/hooks/useUserGroupCount";
@@ -104,8 +105,7 @@ export default function CreateGroup() {
       setCreatedGroup({ id: group.id, name: group.name });
       toast.success("Thrift group created successfully!");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to create group. Please try again.";
-      toast.error(message);
+      toast.error(getUserFriendlyError(error));
     }
   };
 

@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { Wallet } from "lucide-react";
 import type { TargetAjoGroup } from "@/hooks/useTargetAjo";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -43,7 +44,7 @@ export function TargetAjoContributeDialog({ open, onOpenChange, group, onSuccess
       const result = data as { success: boolean; error?: string; target_reached?: boolean };
 
       if (!result.success) {
-        toast.error(result.error || "Contribution failed");
+        toast.error(getUserFriendlyError(result.error || "Contribution failed"));
         return;
       }
 
@@ -55,7 +56,7 @@ export function TargetAjoContributeDialog({ open, onOpenChange, group, onSuccess
       onOpenChange(false);
       onSuccess();
     } catch (err: any) {
-      toast.error(err.message || "Failed to contribute");
+      toast.error(getUserFriendlyError(err.message || "Failed to contribute"));
     } finally {
       setSubmitting(false);
     }

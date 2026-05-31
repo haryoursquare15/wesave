@@ -13,6 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { nigerianBanks } from "@/lib/nigerianBanks";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 export default function CreateGoalCampaign() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
@@ -82,7 +83,7 @@ export default function CreateGoalCampaign() {
       toast.success("Campaign created!");
       navigate("/goal-funding");
     } catch (err: any) {
-      toast.error(err.message || "Failed to create campaign");
+      toast.error(getUserFriendlyError(err.message || "Failed to create campaign"));
     } finally {
       setSubmitting(false);
     }

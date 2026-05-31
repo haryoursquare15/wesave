@@ -22,6 +22,7 @@ import { SandboxGroupChat } from "./SandboxGroupChat";
 import { Settings as SettingsIcon, MessageSquare, Check, X } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 interface Group {
   id: string; name: string; contribution_amount: number; period: string;
   max_members: number; member_count: number; current_cycle: number;
@@ -212,7 +213,7 @@ export function SandboxAjoTab() {
     const res = await products.respondGroupInvite(inviteGate.invite.id, accept);
     setInviteBusy(false);
     if (res?.error) {
-      toast({ title: "Action failed", description: res.error, variant: "destructive" });
+      toast({ title: "Action failed", description: getUserFriendlyError(res.error), variant: "destructive" });
       return;
     }
     if (accept) {

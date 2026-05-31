@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 interface TokenizationGateProps {
   groupId: string;
   groupName: string;
@@ -79,7 +80,7 @@ export function TokenizationGate({
       setStep("success");
       setTimeout(() => onComplete(), 1200);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to activate group");
+      toast.error(getUserFriendlyError(err instanceof Error ? err.message : "Failed to activate group"));
     } finally {
       setLoading(false);
     }
@@ -132,7 +133,7 @@ export function TokenizationGate({
               setStep("success");
               setTimeout(() => onComplete(), 1500);
             } catch (err) {
-              toast.error(err instanceof Error ? err.message : "Verification failed");
+              toast.error(getUserFriendlyError(err instanceof Error ? err.message : "Verification failed"));
               setStep("tokenize");
             }
           } else {
@@ -145,7 +146,7 @@ export function TokenizationGate({
         },
       });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to start card authorization");
+      toast.error(getUserFriendlyError(err instanceof Error ? err.message : "Failed to start card authorization"));
       setLoading(false);
     }
   };

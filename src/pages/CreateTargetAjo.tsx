@@ -13,6 +13,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 export default function CreateTargetAjo() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
@@ -137,7 +138,7 @@ export default function CreateTargetAjo() {
       toast.success("Target Ajo created!" + (selectedMembers.length > 0 ? ` ${selectedMembers.length} invite(s) sent.` : ""));
       navigate(`/target-ajo/${group.id}`);
     } catch (err: any) {
-      toast.error(err.message || "Failed to create target");
+      toast.error(getUserFriendlyError(err.message || "Failed to create target"));
     } finally {
       setSubmitting(false);
     }

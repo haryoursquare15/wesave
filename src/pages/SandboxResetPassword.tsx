@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { sandboxSupabase } from "@/integrations/supabase/sandboxClient";
 import { toast } from "sonner";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 export default function SandboxResetPassword() {
   const navigate = useNavigate();
   const [password, setPassword] = useState("");
@@ -47,7 +48,7 @@ export default function SandboxResetPassword() {
     try {
       const { error } = await sandboxSupabase.auth.updateUser({ password });
       if (error) {
-        toast.error(error.message);
+        toast.error(getUserFriendlyError(error.message));
         return;
       }
       toast.success("Password updated. Please sign in.");

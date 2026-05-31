@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -24,7 +25,7 @@ export default function ForgotPassword() {
       });
 
       if (error) {
-        toast.error(error.message);
+        toast.error(getUserFriendlyError(error.message));
       } else {
         setEmailSent(true);
         toast.success("Password reset email sent! Check your inbox.");

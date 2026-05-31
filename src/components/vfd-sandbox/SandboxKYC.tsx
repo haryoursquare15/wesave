@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { SandboxKYCDocumentUpload } from "./SandboxKYCDocumentUpload";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 function formatDobForVfd(dateStr: string): string {
@@ -112,7 +113,7 @@ export function SandboxKYC({ vfd, onComplete }: SandboxKYCProps) {
       const vfdData = result.data as Record<string, unknown>;
       if ((result as Record<string, unknown>).vfd_status !== 200 || (vfdData?.status && vfdData.status !== 200 && vfdData.status !== "00")) {
         const errMsg = vfdData?.message?.toString() || vfdData?.error?.toString() || "BVN lookup failed";
-        toast({ title: "BVN Error", description: errMsg, variant: "destructive" });
+        toast({ title: "BVN Error", description: getUserFriendlyError(errMsg), variant: "destructive" });
         return;
       }
       setBvnData(vfdData);
@@ -162,7 +163,7 @@ export function SandboxKYC({ vfd, onComplete }: SandboxKYCProps) {
           setTimeout(onComplete, 2500);
           return;
         }
-        toast({ title: "Upgrade Failed", description: vfdData?.message?.toString() || "Could not upgrade account", variant: "destructive" });
+        toast({ title: "Upgrade Failed", description: getUserFriendlyError(vfdData?.message?.toString() || "Could not upgrade account"), variant: "destructive" });
       }
       return;
     }
@@ -180,7 +181,7 @@ export function SandboxKYC({ vfd, onComplete }: SandboxKYCProps) {
     if (result) {
       const vfdData = result.data as Record<string, unknown>;
       if (vfdData?.status !== "00" && vfdData?.status !== "01") {
-        toast({ title: "VFD Error", description: vfdData?.message?.toString() || "Account creation failed", variant: "destructive" });
+        toast({ title: "VFD Error", description: getUserFriendlyError(vfdData?.message?.toString() || "Account creation failed"), variant: "destructive" });
         return;
       }
       await vfd.fetchClient();

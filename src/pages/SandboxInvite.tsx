@@ -10,6 +10,7 @@ import { SandboxModeContext } from "@/hooks/useSandboxAwareAuth";
 import { useVfdSandboxProducts } from "@/hooks/useVfdSandboxProducts";
 import { toast } from "sonner";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 interface InviteValidation {
   valid: boolean;
   error_message?: string;
@@ -53,7 +54,7 @@ function SandboxInviteInner() {
     setJoining(true);
     const res = await products.joinGroupViaLink(token!);
     if (res?.error) {
-      toast.error(res.error);
+      toast.error(getUserFriendlyError(res.error));
       setJoining(false);
       return;
     }

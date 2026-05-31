@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import type { GoalContribution, GoalCampaign } from "@/hooks/useGoalCampaigns";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 interface Props {
   campaign: GoalCampaign;
   contributions: GoalContribution[];
@@ -34,7 +35,7 @@ export function CampaignOwnerPanel({ campaign, contributions, onRefresh }: Props
       toast.success("Contribution confirmed");
       onRefresh();
     } catch (err: any) {
-      toast.error(err.message || "Failed to confirm");
+      toast.error(getUserFriendlyError(err.message || "Failed to confirm"));
     } finally {
       setConfirming(null);
     }
@@ -53,7 +54,7 @@ export function CampaignOwnerPanel({ campaign, contributions, onRefresh }: Props
       toast.success("Update posted");
       onRefresh();
     } catch (err: any) {
-      toast.error(err.message || "Failed to post update");
+      toast.error(getUserFriendlyError(err.message || "Failed to post update"));
     } finally {
       setPosting(false);
     }
@@ -68,7 +69,7 @@ export function CampaignOwnerPanel({ campaign, contributions, onRefresh }: Props
       toast.success("Campaign closed");
       onRefresh();
     } catch (err: any) {
-      toast.error(err.message || "Failed to close campaign");
+      toast.error(getUserFriendlyError(err.message || "Failed to close campaign"));
     }
   };
 

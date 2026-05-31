@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 interface CardInfo {
   id: string;
   card_last4: string | null;
@@ -105,7 +106,7 @@ export function CardManagement() {
               );
               await fetchCard();
             } catch (err) {
-              toast.error(err instanceof Error ? err.message : "Verification failed");
+              toast.error(getUserFriendlyError(err instanceof Error ? err.message : "Verification failed"));
             } finally {
               setVerifying(false);
             }
@@ -119,7 +120,7 @@ export function CardManagement() {
         },
       });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to start card update");
+      toast.error(getUserFriendlyError(err instanceof Error ? err.message : "Failed to start card update"));
       setRetokenizing(false);
     }
   };
@@ -137,7 +138,7 @@ export function CardManagement() {
       toast.success(`Card token recovered! Card ending ${data.card_last4 || "****"} is now active.`);
       await fetchCard();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to recover card token");
+      toast.error(getUserFriendlyError(err instanceof Error ? err.message : "Failed to recover card token"));
     } finally {
       setRecovering(false);
     }

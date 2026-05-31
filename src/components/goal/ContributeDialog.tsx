@@ -10,6 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import type { GoalCampaign } from "@/hooks/useGoalCampaigns";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -73,7 +74,7 @@ export function ContributeDialog({ open, onOpenChange, campaign, onSuccess }: Pr
       onOpenChange(false);
       onSuccess();
     } catch (err: any) {
-      toast.error(err.message || "Failed to record contribution");
+      toast.error(getUserFriendlyError(err.message || "Failed to record contribution"));
     } finally {
       setSubmitting(false);
     }

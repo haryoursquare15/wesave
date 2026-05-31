@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 export type VestaraProductCode = "goalsave" | "vault" | "lockmax" | "upfront_yield";
 
 export interface VestaraRateConfig {
@@ -52,7 +53,7 @@ export function useVestaraRateConfigs() {
       setConfigs((data || []) as VestaraRateConfig[]);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to load rate configs";
-      toast({ title: "Error", description: msg, variant: "destructive" });
+      toast({ title: "Error", description: getUserFriendlyError(msg), variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -80,7 +81,7 @@ export function useVestaraRateConfigs() {
         return true;
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Failed to create";
-        toast({ title: "Error", description: msg, variant: "destructive" });
+        toast({ title: "Error", description: getUserFriendlyError(msg), variant: "destructive" });
         return false;
       } finally {
         setLoading(false);
@@ -103,7 +104,7 @@ export function useVestaraRateConfigs() {
         return true;
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Failed to update";
-        toast({ title: "Error", description: msg, variant: "destructive" });
+        toast({ title: "Error", description: getUserFriendlyError(msg), variant: "destructive" });
         return false;
       } finally {
         setLoading(false);
@@ -131,7 +132,7 @@ export function useVestaraRateConfigs() {
         return true;
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Failed to delete";
-        toast({ title: "Error", description: msg, variant: "destructive" });
+        toast({ title: "Error", description: getUserFriendlyError(msg), variant: "destructive" });
         return false;
       } finally {
         setLoading(false);

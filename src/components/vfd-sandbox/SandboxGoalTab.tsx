@@ -20,6 +20,7 @@ import {
 import { format } from "date-fns";
 import { SocialShareButtons } from "./SocialShareButtons";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 interface Campaign {
   id: string; title: string; description: string | null;
   goal_amount: number; raised_amount: number; contributor_count: number;
@@ -87,7 +88,7 @@ export function SandboxGoalTab() {
         .from("sandbox-campaign-images")
         .upload(path, file, { upsert: false, contentType: file.type });
       if (error) {
-        toast({ title: "Upload failed", description: error.message, variant: "destructive" });
+        toast({ title: "Upload failed", description: getUserFriendlyError(error.message), variant: "destructive" });
         return;
       }
       const { data } = client.storage.from("sandbox-campaign-images").getPublicUrl(path);
@@ -95,7 +96,7 @@ export function SandboxGoalTab() {
       toast({ title: "Image uploaded" });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Unknown error";
-      toast({ title: "Upload failed", description: msg, variant: "destructive" });
+      toast({ title: "Upload failed", description: getUserFriendlyError(msg), variant: "destructive" });
     } finally {
       setUploadingImage(false);
     }
@@ -128,7 +129,7 @@ export function SandboxGoalTab() {
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Could not create campaign";
-      toast({ title: "Create failed", description: msg, variant: "destructive" });
+      toast({ title: "Create failed", description: getUserFriendlyError(msg), variant: "destructive" });
     }
   };
 

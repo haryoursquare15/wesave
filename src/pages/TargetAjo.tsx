@@ -12,6 +12,7 @@ import { useTargetAjoGroups, useTargetAjoInvites } from "@/hooks/useTargetAjo";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
+import { getUserFriendlyError } from "@/lib/errorMessages";
 export default function TargetAjo() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
@@ -71,7 +72,7 @@ export default function TargetAjo() {
       refetchInvites();
       refetchGroups();
     } catch (err: any) {
-      toast.error(err.message || "Failed to respond to invite");
+      toast.error(getUserFriendlyError(err.message || "Failed to respond to invite"));
     } finally {
       setRespondingId(null);
     }
