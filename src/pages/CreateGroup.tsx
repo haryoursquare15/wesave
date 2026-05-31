@@ -104,8 +104,7 @@ export default function CreateGroup() {
       setCreatedGroup({ id: group.id, name: group.name });
       toast.success("Thrift group created successfully!");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to create group. Please try again.";
-      toast.error(message);
+      toast.error(getUserFriendlyError(error));
     }
   };
 
