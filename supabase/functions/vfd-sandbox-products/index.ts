@@ -2055,7 +2055,7 @@ async function handleInviteSplitMember(userId: string, body: Record<string, unkn
 
   const { count } = await db.from("vfd_sandbox_split_participants")
     .select("*", { count: "exact", head: true }).eq("split_id", splitId).in("status", ["pending", "paid"]);
-  if (count && count >= split.split_count) return jsonResponse({ error: "Split is full" }, 400);
+  if (count && count >= split.split_count) return jsonResponse({ error: `Split is full (${count}/${split.split_count} slots taken). Remove a pending participant or create a larger split to invite more.` }, 400);
 
   const { error } = await db.from("vfd_sandbox_split_participants").insert({
     split_id: splitId, user_id: inviteeId, amount: Number(split.per_person_amount), status: "pending",
