@@ -85,13 +85,13 @@ export function PendingInvitesNotification() {
       const msg = err?.message || "Failed to respond";
       console.error("Invite response error:", msg, err);
       if (msg.toLowerCase().includes("insufficient") || msg.toLowerCase().includes("fund your wallet")) {
-        toast.error(getUserFriendlyError(msg, {
+        toast.error(getUserFriendlyError(msg), {
           action: {
             label: "Fund Wallet",
             onClick: () => navigate("/wallet"),
           },
           duration: 8000,
-        }));
+        });
       } else {
         toast.error(getUserFriendlyError(msg));
       }

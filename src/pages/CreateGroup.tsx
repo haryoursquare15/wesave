@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
+import { getUserFriendlyError } from "@/lib/errorMessages";
 import { BottomNav } from "@/components/BottomNav";
 import { useCreateGroup } from "@/hooks/useThriftGroups";
 import { useUserGroupCount } from "@/hooks/useUserGroupCount";
