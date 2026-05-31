@@ -2055,7 +2055,32 @@ async function handleInviteSplitMember(userId: string, body: Record<string, unkn
 
   const { count } = await db.from("vfd_sandbox_split_participants")
     .select("*", { count: "exact", head: true }).eq("split_id", splitId).in("status", ["pending", "paid"]);
-  if (count && count >= split.split_count) return jsonResponse({ error: `Split is full (${count}/${split.split_count} slots taken). Remove a pending participant or create a larger split to invite more.` }, 400);
+
+  // Auto-grow capacity if creator is inviting past the cap and no one has paid yet.
+  if (count && count >= split.split_count) {
+    const { count: paidCount } = await db.from("vfd_sandbox_split_participants")
+      .select("*", { count: "exact", head: true }).eq("split_id", splitId).eq("status", "paid");
+    if (paidCount && paidCount > 0) {
+      return jsonResponse({ error: `Split is full (${count}/${split.split_count} slots taken). Someone has already paid, so capacity is locked. Remove a pending participant to invite more.` }, 400);
+    }
+    const newCount = count + 1;
+    const newPerPerson = Math.ceil((Number(split.total_amount) / newCount) * 100) / 100;
+    const newFeePerPerson = split.fee_per_person > 0
+      ? Math.ceil((Number(split.platform_fee) / newCount) * 100) / 100
+      : 0;
+    const { error: capErr } = await db.from("vfd_sandbox_splits").update({
+      split_count: newCount,
+      per_person_amount: newPerPerson,
+      fee_per_person: newFeePerPerson,
+    }).eq("id", splitId);
+    if (capErr) return jsonResponse({ error: `Could not grow split capacity: ${capErr.message}` }, 500);
+    // Re-price existing pending participants so everyone owes the same fair share.
+    await db.from("vfd_sandbox_split_participants").update({ amount: newPerPerson })
+      .eq("split_id", splitId).eq("status", "pending");
+    split.split_count = newCount;
+    split.per_person_amount = newPerPerson;
+    split.fee_per_person = newFeePerPerson;
+  }
 
   const { error } = await db.from("vfd_sandbox_split_participants").insert({
     split_id: splitId, user_id: inviteeId, amount: Number(split.per_person_amount), status: "pending",
