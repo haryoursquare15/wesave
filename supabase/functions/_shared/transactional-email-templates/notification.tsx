@@ -33,8 +33,9 @@ const Notification = ({
       <Container style={container}>
         {/* Header with logo */}
         <Section style={header}>
-          <Img src={LOGO_URL} alt="Vestara" width="44" height="44" style={logo} />
+          <Img src={LOGO_URL} alt="Vestara" width="96" height="96" style={logo} />
           <Text style={brandWordmark}>VESTARA</Text>
+          <Text style={brandTagline}>Grow Your Money Smarter</Text>
         </Section>
 
         {/* Main card */}
