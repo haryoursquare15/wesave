@@ -36,10 +36,10 @@ const EMAIL_TEMPLATES: Record<string, React.ComponentType<any>> = {
 }
 
 // Configuration
-const SITE_NAME = "wesave"
-const SENDER_DOMAIN = "notify.noreply.wesave.ng"
-const ROOT_DOMAIN = "noreply.wesave.ng"
-const FROM_DOMAIN = "noreply.wesave.ng" // Domain shown in From address (may be root or sender subdomain)
+const SITE_NAME = "Vestara"
+const SENDER_DOMAIN = "notify.vestara.ng"
+const ROOT_DOMAIN = "vestara.ng"
+const FROM_DOMAIN = "vestara.ng" // Domain shown in From address (may be root or sender subdomain)
 
 // Sample data for preview mode ONLY (not used in actual email sending).
 // URLs are baked in at scaffold time from the project's real data.
