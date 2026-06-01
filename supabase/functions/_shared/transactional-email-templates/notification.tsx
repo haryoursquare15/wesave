@@ -61,3 +61,13 @@ export const template = {
     actionLabel: 'View in WeSave',
   },
 } satisfies TemplateEntry
+
+const main = { backgroundColor: '#ffffff', fontFamily: 'Arial, sans-serif' }
+const container = { padding: '24px 28px', maxWidth: '560px' }
+const brand = { fontSize: '14px', fontWeight: 'bold' as const, color: '#0f3460', margin: '0 0 16px', letterSpacing: '1px' }
+const h1 = { fontSize: '22px', fontWeight: 'bold' as const, color: '#0d0d0d', margin: '0 0 20px' }
+const text = { fontSize: '15px', color: '#3a3a3a', lineHeight: '1.55', margin: '0 0 16px' }
+const button = { backgroundColor: '#0f3460', color: '#ffffff', fontSize: '14px', borderRadius: '10px', padding: '12px 22px', textDecoration: 'none', display: 'inline-block', marginTop: '8px' }
+const hr = { borderColor: '#e5e7eb', margin: '28px 0 16px' }
+const footer = { fontSize: '12px', color: '#888', lineHeight: '1.5', margin: '0' }
+const link = { color: '#0f3460', textDecoration: 'underline' }
