@@ -123,18 +123,27 @@ const container = { maxWidth: '600px', margin: '0 auto', padding: '0 16px' }
 
 const header = {
   textAlign: 'center' as const,
-  padding: '8px 0 20px',
+  padding: '16px 0 24px',
 }
 const logo = {
-  display: 'inline-block',
-  borderRadius: '10px',
+  display: 'block',
+  margin: '0 auto',
+  borderRadius: '20px',
+  boxShadow: '0 6px 18px rgba(232, 98, 26, 0.18)',
 }
 const brandWordmark = {
-  fontSize: '12px',
-  letterSpacing: '6px',
+  fontSize: '14px',
+  letterSpacing: '8px',
   color: '#E8621A',
   fontWeight: 'bold' as const,
-  margin: '8px 0 0',
+  margin: '14px 0 4px',
+}
+const brandTagline = {
+  fontSize: '11px',
+  letterSpacing: '2px',
+  color: '#8a7656',
+  textTransform: 'uppercase' as const,
+  margin: 0,
 }
 
 const card = {
