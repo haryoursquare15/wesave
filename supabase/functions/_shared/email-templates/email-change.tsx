@@ -9,15 +9,18 @@ import {
   Head,
   Heading,
   Html,
-  Img,
   Link,
   Preview,
-  Section,
   Text,
 } from 'npm:@react-email/components@0.0.22'
 
 interface EmailChangeEmailProps {
   siteName: string
+  // oldEmail is the user's current address (HookData.OldEmail). For the
+  // NEW-recipient half of a secure email_change fanout, `email` equals the
+  // recipient (NEW), so the "from" line must render oldEmail to read
+  // "from OLD to NEW" instead of "from NEW to NEW".
+  oldEmail: string
   email: string
   newEmail: string
   confirmationUrl: string
@@ -25,29 +28,20 @@ interface EmailChangeEmailProps {
 
 export const EmailChangeEmail = ({
   siteName,
-  email,
+  oldEmail,
   newEmail,
   confirmationUrl,
 }: EmailChangeEmailProps) => (
   <Html lang="en" dir="ltr">
     <Head />
-    <Preview>Confirm your new email for WeSave</Preview>
+    <Preview>Confirm your email change for {siteName}</Preview>
     <Body style={main}>
       <Container style={container}>
-        <Section style={logoSection}>
-          <Img
-            src="https://sdwkqwmqgpsjrmijkdix.supabase.co/storage/v1/object/public/email-assets/wesave-logo.png"
-            width="48"
-            height="48"
-            alt="WeSave"
-            style={logo}
-          />
-        </Section>
-        <Heading style={h1}>Confirm your new email</Heading>
+        <Heading style={h1}>Confirm your email change</Heading>
         <Text style={text}>
-          You requested to change your WeSave email from{' '}
-          <Link href={`mailto:${email}`} style={link}>
-            {email}
+          You requested to change your email address for {siteName} from{' '}
+          <Link href={`mailto:${oldEmail}`} style={link}>
+            {oldEmail}
           </Link>{' '}
           to{' '}
           <Link href={`mailto:${newEmail}`} style={link}>
@@ -56,18 +50,14 @@ export const EmailChangeEmail = ({
           .
         </Text>
         <Text style={text}>
-          Click below to confirm this change:
+          Click the button below to confirm this change:
         </Text>
-        <Section style={buttonSection}>
-          <Button style={button} href={confirmationUrl}>
-            Confirm Email Change
-          </Button>
-        </Section>
+        <Button style={button} href={confirmationUrl}>
+          Confirm Email Change
+        </Button>
         <Text style={footer}>
-          If you didn't request this, please secure your account immediately.
-        </Text>
-        <Text style={footerBrand}>
-          WeSave — Save Together, Grow Together 🌍
+          If you didn't request this change, please secure your account
+          immediately.
         </Text>
       </Container>
     </Body>
@@ -76,32 +66,27 @@ export const EmailChangeEmail = ({
 
 export default EmailChangeEmail
 
-const main = { backgroundColor: '#ffffff', fontFamily: "'Roboto', Arial, sans-serif" }
-const container = { padding: '32px 28px' }
-const logoSection = { marginBottom: '24px' }
-const logo = { borderRadius: '8px' }
+const main = { backgroundColor: '#ffffff', fontFamily: 'Arial, sans-serif' }
+const container = { padding: '20px 25px' }
 const h1 = {
-  fontSize: '24px',
+  fontSize: '22px',
   fontWeight: 'bold' as const,
-  color: '#171717',
-  margin: '0 0 16px',
-}
-const text = {
-  fontSize: '15px',
-  color: '#555555',
-  lineHeight: '1.6',
+  color: '#000000',
   margin: '0 0 20px',
 }
-const link = { color: '#E8621A', textDecoration: 'underline' }
-const buttonSection = { margin: '0 0 28px' }
+const text = {
+  fontSize: '14px',
+  color: '#55575d',
+  lineHeight: '1.5',
+  margin: '0 0 25px',
+}
+const link = { color: 'inherit', textDecoration: 'underline' }
 const button = {
-  backgroundColor: '#E8621A',
-  color: '#FFF5EB',
-  fontSize: '15px',
-  fontWeight: '600' as const,
-  borderRadius: '12px',
-  padding: '14px 28px',
+  backgroundColor: '#000000',
+  color: '#ffffff',
+  fontSize: '14px',
+  borderRadius: '8px',
+  padding: '12px 20px',
   textDecoration: 'none',
 }
-const footer = { fontSize: '12px', color: '#999999', margin: '24px 0 8px' }
-const footerBrand = { fontSize: '12px', color: '#E8621A', margin: '0', fontWeight: '500' as const }
+const footer = { fontSize: '12px', color: '#999999', margin: '30px 0 0' }
