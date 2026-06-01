@@ -14,7 +14,7 @@ interface Props {
   unsubscribeUrl?: string
 }
 
-const BANNER_URL = 'https://vestara.ng/__l5e/assets-v1/37f8b07d-1fff-47ca-a0da-4557a8244e1f/vestara-email-banner.jpg'
+const LOGO_URL = 'https://vestara.ng/__l5e/assets-v1/833d06eb-58c2-42da-9af9-e4a7a732febe/vestara-logo.jpg'
 const APP_URL = 'https://vestara.ng'
 const SPLIT_BILL_URL = 'https://vestara.ng/splitpay'
 
@@ -31,45 +31,36 @@ const Notification = ({
     <Preview>{title}</Preview>
     <Body style={main}>
       <Container style={container}>
-        {/* Hero banner */}
-        <Section style={bannerWrap}>
-          <Img
-            src={BANNER_URL}
-            alt="Vestara — Grow Your Money Smarter"
-            width="560"
-            style={banner}
-          />
+        {/* Header with logo */}
+        <Section style={header}>
+          <Img src={LOGO_URL} alt="Vestara" width="44" height="44" style={logo} />
+          <Text style={brandWordmark}>VESTARA</Text>
         </Section>
 
-        {/* Body card */}
+        {/* Main card */}
         <Section style={card}>
           <Heading style={h1}>{title}</Heading>
           <Text style={text}>Hi {recipientName},</Text>
           <Text style={text}>{message}</Text>
           {actionUrl ? (
-            <Button style={button} href={actionUrl}>{actionLabel}</Button>
+            <Section style={{ textAlign: 'center', margin: '24px 0 4px' }}>
+              <Button style={button} href={actionUrl}>{actionLabel}</Button>
+            </Section>
           ) : null}
         </Section>
 
-        {/* Split Bill promo strip */}
-        <Section style={promo}>
+        {/* Combined footer: Split Bill promo + links + legal */}
+        <Section style={footer}>
           <Text style={promoEyebrow}>NEW · SPLIT BILL</Text>
           <Heading as="h2" style={promoTitle}>
             Share the bill. Skip the awkward maths.
           </Heading>
           <Text style={promoText}>
-            Split dinners, rent, trips and subscriptions instantly with friends.
-            Everyone pays their share — Vestara handles the rest.
+            Split dinners, rent, trips and subscriptions with friends — everyone pays their share.
           </Text>
           <Button style={promoButton} href={SPLIT_BILL_URL}>
             Try Split Bill →
           </Button>
-        </Section>
-
-        {/* Footer */}
-        <Section style={footer}>
-          <Heading as="h3" style={footerBrand}>VESTARA</Heading>
-          <Text style={footerTagline}>Grow Your Money Smarter</Text>
 
           <Hr style={footerHr} />
 
@@ -93,7 +84,7 @@ const Notification = ({
             ) : null}
           </Text>
           <Text style={footerFine}>
-            © {new Date().getFullYear()} Vestara. All rights reserved.
+            © {new Date().getFullYear()} Vestara · Grow Your Money Smarter
           </Text>
         </Section>
       </Container>
@@ -115,6 +106,12 @@ export const template = {
 } satisfies TemplateEntry
 
 /* ---------- styles ---------- */
+/* Vestara brand:
+   - Primary orange:  #E8621A
+   - Gold accent:     #F5B921
+   - Ink:             #1a1208
+   - Cream surface:   #FFF8F1
+*/
 const main = {
   backgroundColor: '#ffffff',
   fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif',
@@ -123,80 +120,70 @@ const main = {
 }
 const container = { maxWidth: '600px', margin: '0 auto', padding: '0 16px' }
 
-const bannerWrap = { margin: 0, padding: 0 }
-const banner = {
-  width: '100%',
-  height: 'auto',
-  display: 'block',
-  borderRadius: '14px 14px 0 0',
+const header = {
+  textAlign: 'center' as const,
+  padding: '8px 0 20px',
+}
+const logo = {
+  display: 'inline-block',
+  borderRadius: '10px',
+}
+const brandWordmark = {
+  fontSize: '12px',
+  letterSpacing: '6px',
+  color: '#E8621A',
+  fontWeight: 'bold' as const,
+  margin: '8px 0 0',
 }
 
 const card = {
-  backgroundColor: '#ffffff',
-  border: '1px solid #ececec',
-  borderTop: 'none',
-  padding: '28px 28px 24px',
-  borderRadius: '0 0 14px 14px',
+  backgroundColor: '#FFF8F1',
+  border: '1px solid #f3e3cf',
+  padding: '32px 28px 28px',
+  borderRadius: '14px',
+  borderTop: '4px solid #E8621A',
 }
-const h1 = { fontSize: '22px', fontWeight: 'bold' as const, color: '#0d0d0d', margin: '0 0 18px' }
-const text = { fontSize: '15px', color: '#3a3a3a', lineHeight: '1.6', margin: '0 0 14px' }
+const h1 = { fontSize: '22px', fontWeight: 'bold' as const, color: '#1a1208', margin: '0 0 18px' }
+const text = { fontSize: '15px', color: '#3a2a1a', lineHeight: '1.6', margin: '0 0 14px' }
 const button = {
-  backgroundColor: '#0d0d0d',
+  backgroundColor: '#E8621A',
   color: '#ffffff',
   fontSize: '14px',
   fontWeight: 'bold' as const,
   borderRadius: '10px',
-  padding: '13px 22px',
+  padding: '13px 24px',
   textDecoration: 'none',
   display: 'inline-block',
-  marginTop: '10px',
 }
 
-/* Split Bill promo */
-const promo = {
+/* Combined footer */
+const footer = {
   marginTop: '20px',
-  padding: '26px 26px 24px',
+  padding: '28px 26px 24px',
   borderRadius: '14px',
-  background: 'linear-gradient(135deg, #111111 0%, #1f1f1f 100%)',
+  background: 'linear-gradient(135deg, #1a1208 0%, #2a1a0c 100%)',
   textAlign: 'center' as const,
 }
 const promoEyebrow = {
   fontSize: '11px',
   letterSpacing: '2px',
-  color: '#c9a84c',
+  color: '#F5B921',
   fontWeight: 'bold' as const,
   margin: '0 0 10px',
 }
-const promoTitle = { fontSize: '20px', color: '#ffffff', margin: '0 0 10px', lineHeight: '1.3' }
-const promoText = { fontSize: '14px', color: '#bdbdbd', lineHeight: '1.6', margin: '0 0 18px' }
+const promoTitle = { fontSize: '19px', color: '#ffffff', margin: '0 0 8px', lineHeight: '1.3' }
+const promoText = { fontSize: '13px', color: '#d8c7a8', lineHeight: '1.6', margin: '0 0 16px' }
 const promoButton = {
-  backgroundColor: '#c9a84c',
-  color: '#0d0d0d',
-  fontSize: '14px',
+  backgroundColor: '#F5B921',
+  color: '#1a1208',
+  fontSize: '13px',
   fontWeight: 'bold' as const,
   borderRadius: '10px',
-  padding: '12px 22px',
+  padding: '11px 22px',
   textDecoration: 'none',
   display: 'inline-block',
 }
-
-/* Footer */
-const footer = {
-  marginTop: '20px',
-  padding: '28px 24px',
-  backgroundColor: '#0a0a0a',
-  borderRadius: '14px',
-  textAlign: 'center' as const,
-}
-const footerBrand = {
-  fontSize: '18px',
-  letterSpacing: '4px',
-  color: '#c9a84c',
-  margin: '0 0 4px',
-  fontWeight: 'bold' as const,
-}
-const footerTagline = { fontSize: '12px', color: '#9a9a9a', margin: '0 0 4px', letterSpacing: '1px' }
-const footerHr = { borderColor: '#1f1f1f', margin: '20px 0 16px' }
-const footerLinks = { fontSize: '13px', color: '#cfcfcf', margin: '0 0 16px' }
-const footerLink = { color: '#c9a84c', textDecoration: 'none' }
-const footerFine = { fontSize: '11px', color: '#7a7a7a', lineHeight: '1.6', margin: '4px 0' }
+const footerHr = { borderColor: '#3a2a18', margin: '22px 0 16px' }
+const footerLinks = { fontSize: '13px', color: '#d8c7a8', margin: '0 0 14px' }
+const footerLink = { color: '#F5B921', textDecoration: 'none' }
+const footerFine = { fontSize: '11px', color: '#8a7656', lineHeight: '1.6', margin: '4px 0' }
