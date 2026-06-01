@@ -48,10 +48,11 @@ import SandboxInvite from "./pages/SandboxInvite";
 import SandboxHealth from "./pages/SandboxHealth";
 import { SandboxAuthProvider } from "./contexts/SandboxAuthContext";
 import NotFound from "./pages/NotFound";
+import Unsubscribe from "./pages/Unsubscribe";
 
 const queryClient = new QueryClient();
 
-const PUBLIC_ROUTES = ["/", "/auth", "/forgot-password", "/invite", "/onboarding", "/terms", "/privacy", "/aml-policy", "/kyc-policy", "/goal", "/delete-account", "/app-home", "/vfd-sandbox", "/vfd-sandbox/auth"];
+const PUBLIC_ROUTES = ["/", "/auth", "/forgot-password", "/invite", "/onboarding", "/terms", "/privacy", "/aml-policy", "/kyc-policy", "/goal", "/delete-account", "/app-home", "/vfd-sandbox", "/vfd-sandbox/auth", "/unsubscribe"];
 
 function isPublicRoute(pathname: string) {
   return PUBLIC_ROUTES.some(route => 
@@ -153,6 +154,7 @@ const App = () => {
                 <Route path="/aml-policy" element={<AmlPolicy />} />
                 <Route path="/kyc-policy" element={<KycPolicy />} />
                 <Route path="/delete-account" element={<DeleteAccount />} />
+                <Route path="/unsubscribe" element={<Unsubscribe />} />
                 <Route path="/vfd-sandbox/auth" element={
                   <SandboxAuthProvider>
                     <SandboxAuth />
