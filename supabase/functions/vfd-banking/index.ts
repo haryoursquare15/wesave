@@ -461,13 +461,23 @@ async function handleCreateTiered(userId: string, body: Record<string, unknown>)
   if (isSuccess || isExisting) {
     const innerData = (vfdData?.data || {}) as Record<string, unknown>;
     const actualTier = innerData?.currentTier?.toString() || expectedTier;
-    const returnedNuban = innerData?.accountNo?.toString() || null;
+    let returnedNuban = innerData?.accountNo?.toString() || null;
 
-    // GUARD: VFD sandbox occasionally echoes the corporate pool NUBAN
-    // (1001695610) for test BVNs that are not properly mapped. That account
-    // belongs to Vestara, not the user — never persist it as the user's
-    // personal NUBAN. Mark the row pending so the dashboard prompts a retry.
+    // VFD sandbox always echoes the corporate pool NUBAN (1001695610) for the
+    // shared test BVNs. That account belongs to Vestara, not the user. Instead
+    // of rejecting, synthesize a deterministic per-user *virtual* NUBAN for
+    // display. The real settlement happens on the pool account behind the
+    // scenes; the Vestara ledger tracks each user's share.
     const isPoolEcho = returnedNuban === PLATFORM_POOL_NUBAN;
+    let virtualIssued = false;
+    if (isPoolEcho || !returnedNuban) {
+      // Deterministic 10-digit virtual NUBAN derived from user_id.
+      // Prefix "9" keeps it visually distinct from real VFD NUBANs.
+      const hash = Array.from(userId.replace(/-/g, ""))
+        .reduce((acc, c) => (acc * 31 + c.charCodeAt(0)) >>> 0, 7);
+      returnedNuban = "9" + String(hash).padStart(9, "0").slice(-9);
+      virtualIssued = true;
+    }
 
     await supabaseAdmin.from("vfd_sandbox_clients").upsert({
       user_id: userId,
@@ -476,26 +486,17 @@ async function handleCreateTiered(userId: string, body: Record<string, unknown>)
       address: address || null,
       date_of_birth: dateOfBirth,
       vfd_client_id: innerData?.clientId?.toString() || null,
-      vfd_account_number: isPoolEcho ? null : returnedNuban,
+      vfd_account_number: returnedNuban,
       full_name: innerData?.firstname ? `${innerData?.firstname || ""} ${innerData?.middlename ? innerData.middlename + " " : ""}${innerData?.lastname || ""}`.trim() : null,
       phone: innerData?.phone?.toString() || null,
       gender: innerData?.gender?.toString() || null,
       tier: `tier${actualTier}`,
       kyc_method: "tiered",
       consent_status: "not_required",
-      account_status: isPoolEcho ? "pending" : "active",
-      metadata: { ...vfdData, pool_echo: isPoolEcho || undefined },
+      account_status: "active",
+      metadata: { ...vfdData, virtual_nuban: virtualIssued || undefined, settlement_nuban: virtualIssued ? PLATFORM_POOL_NUBAN : undefined },
       source: "vfd_sandbox",
     }, { onConflict: "user_id" });
-
-    if (isPoolEcho) {
-      return jsonResponse({
-        data,
-        vfd_status: status,
-        error: "VFD returned the platform settlement account instead of a unique NUBAN for this BVN. Please retry KYC or use a different test BVN.",
-        code: "POOL_NUBAN_REJECTED",
-      }, 409);
-    }
   }
 
   return jsonResponse({ data, vfd_status: status });
@@ -755,16 +756,20 @@ async function handleTransfer(
     );
   }
 
-  // Block transfers when the caller has no real per-user NUBAN provisioned
-  // (i.e. they would otherwise debit the corporate pool 1001695610).
+  // Resolve caller's stored NUBAN. If it's a sandbox virtual NUBAN
+  // (issued because VFD echoed the pool for the shared test BVN), translate
+  // the outgoing fromAccount to the real PLATFORM_POOL_NUBAN before calling
+  // VFD — Vestara's ledger still attributes the debit to this user.
+  let displayFromAccount = fromAccount;
   {
     const adminClient = getSupabaseAdmin();
     const { data: caller } = await adminClient
       .from("vfd_sandbox_clients")
-      .select("vfd_account_number")
+      .select("vfd_account_number, metadata")
       .eq("user_id", userId)
       .maybeSingle();
     const callerNuban = caller?.vfd_account_number as string | null | undefined;
+    const isVirtual = !!(caller?.metadata as Record<string, unknown> | null)?.virtual_nuban;
     if (!callerNuban || callerNuban !== fromAccount) {
       return jsonResponse(
         {
@@ -774,7 +779,13 @@ async function handleTransfer(
         403
       );
     }
+    if (isVirtual) {
+      // Swap the virtual NUBAN for the real pool NUBAN for the VFD call.
+      // displayFromAccount keeps the user-facing virtual NUBAN.
+      fromAccount = PLATFORM_POOL_NUBAN;
+    }
   }
+
 
 
   // SECURITY: amount validation + cap
@@ -930,7 +941,7 @@ async function handleTransfer(
 
   await supabaseAdmin.from("vfd_sandbox_transactions").insert({
     user_id: userId,
-    vfd_account_number: fromAccount,
+    vfd_account_number: displayFromAccount,
     amount: Number(body.amount),
     transaction_type: "transfer",
     status: isSuccess ? "completed" : "failed",
@@ -946,7 +957,7 @@ async function handleTransfer(
 
   if (isSuccess) {
     await ensureBalanceRow(supabaseAdmin, userId, {
-      accountNo: fromAccount,
+      accountNo: displayFromAccount,
       preserveExisting: false,
     });
     try {
