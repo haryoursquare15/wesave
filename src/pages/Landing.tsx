@@ -16,14 +16,16 @@ export default function Landing() {
   const [isVestara, setIsVestara] = useState(false);
 
   useEffect(() => {
-    // Redirect vestara.ng visitors straight to the VFD sandbox
     if (typeof window !== "undefined") {
       const host = window.location.hostname.toLowerCase();
       if (host === "vestara.ng" || host === "www.vestara.ng") {
-        navigate("/vfd-sandbox", { replace: true });
+        setIsVestara(true);
       }
     }
   }, [navigate]);
+
+  if (isVestara) return <VestaraLanding />;
+
 
   return (
     <div className="min-h-screen min-h-[100dvh] bg-background">
