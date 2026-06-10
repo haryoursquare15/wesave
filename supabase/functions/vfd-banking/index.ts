@@ -97,6 +97,10 @@ async function getUserFromRequest(req: Request) {
  */
 async function assertOwnsAccount(userId: string, accountNo: string): Promise<void> {
   if (!accountNo) throw new Error("accountNo required");
+  // Hard block: the platform pool can never be acted on as a personal account.
+  if (accountNo === PLATFORM_POOL_NUBAN) {
+    throw new Error("Platform settlement account cannot be used as a personal account");
+  }
   const supabaseAdmin = getSupabaseAdmin();
   const { data, error } = await supabaseAdmin
     .from("vfd_sandbox_clients")
@@ -108,9 +112,19 @@ async function assertOwnsAccount(userId: string, accountNo: string): Promise<voi
   if (!data) throw new Error("Account does not belong to authenticated user");
 }
 
+
 // Sandbox credit caps (per user) to prevent abuse of test-credit endpoint
 const SANDBOX_CREDIT_MAX_PER_TXN = 500_000; // ₦500k single
 const SANDBOX_CREDIT_MAX_PER_DAY = 1_000_000; // ₦1M daily
+
+// Platform settlement (pool) account at VFD. This NUBAN is owned by Vestara,
+// NOT by any end user. It is the corporate settlement account through which
+// all inbound credits and outbound debits flow; Vestara's internal ledger
+// (vestara_accounts / vestara_ledger_entries) maps every movement back to
+// the originating user. It MUST never be persisted as a user's per-user
+// VFD account number.
+const PLATFORM_POOL_NUBAN = "1001695610";
+
 
 // VFD API helper
 async function vfdRequest(
@@ -447,6 +461,13 @@ async function handleCreateTiered(userId: string, body: Record<string, unknown>)
   if (isSuccess || isExisting) {
     const innerData = (vfdData?.data || {}) as Record<string, unknown>;
     const actualTier = innerData?.currentTier?.toString() || expectedTier;
+    const returnedNuban = innerData?.accountNo?.toString() || null;
+
+    // GUARD: VFD sandbox occasionally echoes the corporate pool NUBAN
+    // (1001695610) for test BVNs that are not properly mapped. That account
+    // belongs to Vestara, not the user — never persist it as the user's
+    // personal NUBAN. Mark the row pending so the dashboard prompts a retry.
+    const isPoolEcho = returnedNuban === PLATFORM_POOL_NUBAN;
 
     await supabaseAdmin.from("vfd_sandbox_clients").upsert({
       user_id: userId,
@@ -455,21 +476,31 @@ async function handleCreateTiered(userId: string, body: Record<string, unknown>)
       address: address || null,
       date_of_birth: dateOfBirth,
       vfd_client_id: innerData?.clientId?.toString() || null,
-      vfd_account_number: innerData?.accountNo?.toString() || null,
+      vfd_account_number: isPoolEcho ? null : returnedNuban,
       full_name: innerData?.firstname ? `${innerData?.firstname || ""} ${innerData?.middlename ? innerData.middlename + " " : ""}${innerData?.lastname || ""}`.trim() : null,
       phone: innerData?.phone?.toString() || null,
       gender: innerData?.gender?.toString() || null,
       tier: `tier${actualTier}`,
       kyc_method: "tiered",
       consent_status: "not_required",
-      account_status: "active",
-      metadata: vfdData,
+      account_status: isPoolEcho ? "pending" : "active",
+      metadata: { ...vfdData, pool_echo: isPoolEcho || undefined },
       source: "vfd_sandbox",
     }, { onConflict: "user_id" });
+
+    if (isPoolEcho) {
+      return jsonResponse({
+        data,
+        vfd_status: status,
+        error: "VFD returned the platform settlement account instead of a unique NUBAN for this BVN. Please retry KYC or use a different test BVN.",
+        code: "POOL_NUBAN_REJECTED",
+      }, 409);
+    }
   }
 
   return jsonResponse({ data, vfd_status: status });
 }
+
 
 // Legacy backward compat → Tier 1
 async function handleCreateNoConsent(userId: string, bvn: string, dateOfBirth: string) {

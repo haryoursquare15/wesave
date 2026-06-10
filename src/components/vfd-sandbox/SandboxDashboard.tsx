@@ -262,24 +262,50 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
             </motion.h2>
           </AnimatePresence>
 
-          {/* Account number */}
-          <button
-            onClick={copyAccount}
-            className="flex flex-col items-start gap-0.5 text-xs opacity-80 hover:opacity-100 transition-opacity mb-4 text-left"
-          >
-            <span className="text-[10px] uppercase tracking-wider opacity-60">
-              Your VFD account number
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="font-mono font-semibold tracking-wide">{balance.accountNumber}</span>
-              {copied ? (
-                <Check className="h-3 w-3 text-green-300" />
-              ) : (
-                <Copy className="h-3 w-3" />
-              )}
-            </span>
-            <span className="truncate max-w-[220px] opacity-60">{balance.fullName} • VFD MFB</span>
-          </button>
+          {/* Account number — never show the platform pool (1001695610) as a user NUBAN */}
+          {(() => {
+            const POOL = "1001695610";
+            const acct = balance.accountNumber;
+            const hasRealNuban = acct && acct !== "—" && acct !== POOL;
+            if (!hasRealNuban) {
+              return (
+                <button
+                  onClick={() => onNavigate("kyc")}
+                  className="flex flex-col items-start gap-0.5 text-xs opacity-90 hover:opacity-100 transition-opacity mb-4 text-left"
+                >
+                  <span className="text-[10px] uppercase tracking-wider opacity-60">
+                    Your VFD account number
+                  </span>
+                  <span className="flex items-center gap-1.5 font-mono font-semibold tracking-wide">
+                    Provisioning… <ChevronRight className="h-3 w-3" />
+                  </span>
+                  <span className="truncate max-w-[260px] opacity-70 text-[10px]">
+                    Complete KYC to activate your unique VFD account
+                  </span>
+                </button>
+              );
+            }
+            return (
+              <button
+                onClick={copyAccount}
+                className="flex flex-col items-start gap-0.5 text-xs opacity-80 hover:opacity-100 transition-opacity mb-4 text-left"
+              >
+                <span className="text-[10px] uppercase tracking-wider opacity-60">
+                  Your VFD account number
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="font-mono font-semibold tracking-wide">{acct}</span>
+                  {copied ? (
+                    <Check className="h-3 w-3 text-green-300" />
+                  ) : (
+                    <Copy className="h-3 w-3" />
+                  )}
+                </span>
+                <span className="truncate max-w-[220px] opacity-60">{balance.fullName} • VFD MFB</span>
+              </button>
+            );
+          })()}
+
 
 
           {/* Sub-balances */}
