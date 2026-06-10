@@ -810,6 +810,28 @@ async function handleTransfer(
   // VFD: bankCode "999999" = intra-bank (within VFD); anything else = inter-bank
   const transferType = (body.transferType as string) || (body.bankCode === "999999" ? "intra" : "inter");
 
+  // For INTRA transfers VFD requires toSavingsId / toClientId / toBvn.
+  // Enrich from beneficiary enquiry if caller didn't provide them.
+  let toClientId = body.toClientId as string || "";
+  let toSavingsId = body.toSavingsId as string || "";
+  let toBvn = body.toBvn as string || "";
+  let toClient = body.beneficiaryName as string || body.toClient as string || "";
+
+  if (transferType === "intra" && (!toSavingsId || !toClientId)) {
+    const { data: benEnquiry, status: benStatus } = await vfdRequest("/account/enquiry", "GET", undefined, {
+      accountNumber: toAccount,
+    });
+    if (benStatus === 200 && (benEnquiry as Record<string, unknown>)?.status === "00") {
+      const bd = (benEnquiry as Record<string, unknown>).data as Record<string, unknown>;
+      toClientId = toClientId || bd?.clientId?.toString() || "";
+      toSavingsId = toSavingsId || bd?.accountId?.toString() || "";
+      toBvn = toBvn || bd?.bvn?.toString() || "";
+      toClient = toClient || bd?.client?.toString() || "";
+    } else {
+      return jsonResponse({ error: "Could not retrieve beneficiary VFD account details for intra transfer", data: benEnquiry }, 400);
+    }
+  }
+
   const transferPayload: Record<string, unknown> = {
     fromAccount,
     fromClientId: senderData?.clientId?.toString() || "",
@@ -818,17 +840,18 @@ async function handleTransfer(
     fromBvn: senderData?.bvn?.toString() || "",
     toAccount,
     toBank: body.bankCode as string || "",
-    toClient: body.beneficiaryName as string || body.toClient as string || "",
-    toClientId: body.toClientId as string || "",
-    toSavingsId: body.toSavingsId as string || "",
+    toClient,
+    toClientId,
+    toSavingsId,
     toSession: body.toSession as string || "",
-    toBvn: body.toBvn as string || "",
+    toBvn,
     signature,
     amount: String(body.amount),
     remark: body.narration as string || body.remark as string || "Transfer",
     transferType,
     reference,
   };
+
 
   // Add uniqueSenderAccountId if provided (for pool implementation)
   if (body.uniqueSenderAccountId) {
