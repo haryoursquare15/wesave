@@ -957,7 +957,7 @@ async function handleTransfer(
 
   if (isSuccess) {
     await ensureBalanceRow(supabaseAdmin, userId, {
-      accountNo: fromAccount,
+      accountNo: displayFromAccount,
       preserveExisting: false,
     });
     try {
