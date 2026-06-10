@@ -97,6 +97,10 @@ async function getUserFromRequest(req: Request) {
  */
 async function assertOwnsAccount(userId: string, accountNo: string): Promise<void> {
   if (!accountNo) throw new Error("accountNo required");
+  // Hard block: the platform pool can never be acted on as a personal account.
+  if (accountNo === PLATFORM_POOL_NUBAN) {
+    throw new Error("Platform settlement account cannot be used as a personal account");
+  }
   const supabaseAdmin = getSupabaseAdmin();
   const { data, error } = await supabaseAdmin
     .from("vfd_sandbox_clients")
@@ -107,6 +111,7 @@ async function assertOwnsAccount(userId: string, accountNo: string): Promise<voi
   if (error) throw new Error("Account ownership check failed");
   if (!data) throw new Error("Account does not belong to authenticated user");
 }
+
 
 // Sandbox credit caps (per user) to prevent abuse of test-credit endpoint
 const SANDBOX_CREDIT_MAX_PER_TXN = 500_000; // ₦500k single
