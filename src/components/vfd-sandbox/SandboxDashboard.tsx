@@ -139,7 +139,7 @@ function getTxMeta(type: string) {
 }
 
 /* ─── Main Dashboard Component ─── */
-export function SandboxDashboard({ balance, onNavigate, recentTransactions = [] }: SandboxDashboardProps) {
+export function SandboxDashboard({ balance, onNavigate, recentTransactions = [], tier }: SandboxDashboardProps) {
   const [showBalance, setShowBalance] = useState(true);
   const [copied, setCopied] = useState(false);
   const [activeBanner, setActiveBanner] = useState(0);
