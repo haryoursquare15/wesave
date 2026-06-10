@@ -34,7 +34,14 @@ interface SandboxDashboardProps {
   balance: BalanceData;
   onNavigate: (tab: string) => void;
   recentTransactions?: Transaction[];
+  tier?: string | null;
 }
+
+const TIER_INFO: Record<string, { label: string; daily: string; color: string }> = {
+  tier1: { label: "Tier 1 — Starter", daily: "₦30,000 daily", color: "bg-blue-500/15 text-blue-200 border-blue-400/30" },
+  tier2: { label: "Tier 2 — Standard", daily: "₦100,000 daily", color: "bg-amber-500/15 text-amber-100 border-amber-400/30" },
+  tier3: { label: "Tier 3 — Premium", daily: "No daily cap", color: "bg-emerald-500/15 text-emerald-100 border-emerald-400/30" },
+};
 
 /* ─── Animated Counter ─── */
 function AnimatedNumber({ value, prefix = "₦" }: { value: number; prefix?: string }) {
