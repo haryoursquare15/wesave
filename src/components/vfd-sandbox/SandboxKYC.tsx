@@ -79,7 +79,7 @@ interface SandboxKYCProps {
     releaseClient: (clientId: string) => Promise<unknown>;
     upgradeTier: (body: { bvn?: string; nin?: string; address?: string }) => Promise<unknown>;
     fetchClient: () => Promise<unknown>;
-    client: { vfd_client_id: string | null; tier?: string; nin?: string | null; address?: string | null; bvn?: string | null } | null;
+    client: { vfd_client_id: string | null; tier?: string; nin?: string | null; address?: string | null; bvn?: string | null; date_of_birth?: string | null; vfd_account_number?: string | null; account_status?: string } | null;
   };
   onComplete: () => void;
 }
