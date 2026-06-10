@@ -756,16 +756,20 @@ async function handleTransfer(
     );
   }
 
-  // Block transfers when the caller has no real per-user NUBAN provisioned
-  // (i.e. they would otherwise debit the corporate pool 1001695610).
+  // Resolve caller's stored NUBAN. If it's a sandbox virtual NUBAN
+  // (issued because VFD echoed the pool for the shared test BVN), translate
+  // the outgoing fromAccount to the real PLATFORM_POOL_NUBAN before calling
+  // VFD — Vestara's ledger still attributes the debit to this user.
+  let displayFromAccount = fromAccount;
   {
     const adminClient = getSupabaseAdmin();
     const { data: caller } = await adminClient
       .from("vfd_sandbox_clients")
-      .select("vfd_account_number")
+      .select("vfd_account_number, metadata")
       .eq("user_id", userId)
       .maybeSingle();
     const callerNuban = caller?.vfd_account_number as string | null | undefined;
+    const isVirtual = !!(caller?.metadata as Record<string, unknown> | null)?.virtual_nuban;
     if (!callerNuban || callerNuban !== fromAccount) {
       return jsonResponse(
         {
@@ -775,7 +779,13 @@ async function handleTransfer(
         403
       );
     }
+    if (isVirtual) {
+      // Swap the virtual NUBAN for the real pool NUBAN for the VFD call.
+      // displayFromAccount keeps the user-facing virtual NUBAN.
+      fromAccount = PLATFORM_POOL_NUBAN;
+    }
   }
+
 
 
   // SECURITY: amount validation + cap
