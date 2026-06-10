@@ -21,6 +21,10 @@ function formatDobForVfd(dateStr: string): string {
   return `${d}-${MONTHS[parseInt(m, 10) - 1]}-${y}`;
 }
 
+// Limits per VFD Microfinance Bank official policy
+// Tier 1: ₦30,000 daily cumulative
+// Tier 2: ₦100,000 daily cumulative
+// Tier 3: Above ₦100,000 (no fixed daily cap; per-txn capped at ₦5,000,000 by VFD)
 const TIERS = [
   {
     level: 1,
@@ -31,7 +35,7 @@ const TIERS = [
     dailyLimit: "₦30,000",
     txnLimit: "₦30,000",
     requirements: ["BVN or NIN", "Date of Birth"],
-    description: "Basic account for everyday transactions",
+    description: "Basic account — ₦30,000 daily cumulative limit",
   },
   {
     level: 2,
@@ -41,8 +45,8 @@ const TIERS = [
     badge: "bg-primary/10 text-primary border-primary/20",
     dailyLimit: "₦100,000",
     txnLimit: "₦100,000",
-    requirements: ["BVN + NIN", "Date of Birth", "Address", "Government ID"],
-    description: "Enhanced limits for regular users",
+    requirements: ["BVN + NIN", "Date of Birth"],
+    description: "Enhanced account — ₦100,000 daily cumulative limit",
   },
   {
     level: 3,
@@ -50,10 +54,10 @@ const TIERS = [
     icon: Crown,
     color: "from-gold to-amber-500",
     badge: "bg-gold/10 text-gold border-gold/20",
-    dailyLimit: "₦10,000,000",
-    txnLimit: "₦1,000,000",
-    requirements: ["BVN + NIN", "DOB", "Address", "Government ID", "Utility Bill", "Passport Photo"],
-    description: "Maximum limits for power users",
+    dailyLimit: "Above ₦100,000",
+    txnLimit: "₦5,000,000",
+    requirements: ["BVN + NIN", "DOB", "Address (or Utility Bill / Bank Statement)"],
+    description: "Premium account — no daily cap, up to ₦5M per transfer",
   },
 ];
 

@@ -34,7 +34,14 @@ interface SandboxDashboardProps {
   balance: BalanceData;
   onNavigate: (tab: string) => void;
   recentTransactions?: Transaction[];
+  tier?: string | null;
 }
+
+const TIER_INFO: Record<string, { label: string; daily: string; color: string }> = {
+  tier1: { label: "Tier 1 — Starter", daily: "₦30,000 daily", color: "bg-blue-500/15 text-blue-200 border-blue-400/30" },
+  tier2: { label: "Tier 2 — Standard", daily: "₦100,000 daily", color: "bg-amber-500/15 text-amber-100 border-amber-400/30" },
+  tier3: { label: "Tier 3 — Premium", daily: "No daily cap", color: "bg-emerald-500/15 text-emerald-100 border-emerald-400/30" },
+};
 
 /* ─── Animated Counter ─── */
 function AnimatedNumber({ value, prefix = "₦" }: { value: number; prefix?: string }) {
@@ -132,7 +139,7 @@ function getTxMeta(type: string) {
 }
 
 /* ─── Main Dashboard Component ─── */
-export function SandboxDashboard({ balance, onNavigate, recentTransactions = [] }: SandboxDashboardProps) {
+export function SandboxDashboard({ balance, onNavigate, recentTransactions = [], tier }: SandboxDashboardProps) {
   const [showBalance, setShowBalance] = useState(true);
   const [copied, setCopied] = useState(false);
   const [activeBanner, setActiveBanner] = useState(0);
@@ -291,6 +298,36 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [] 
           </div>
         </div>
       </motion.div>
+
+      {/* ═══ KYC TIER BANNER ═══ */}
+      {(() => {
+        const tierKey = (tier || "tier1").toLowerCase();
+        const info = TIER_INFO[tierKey] || TIER_INFO.tier1;
+        const canUpgrade = tierKey !== "tier3";
+        return (
+          <motion.button
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.12 }}
+            onClick={() => canUpgrade && onNavigate("kyc")}
+            disabled={!canUpgrade}
+            className={`w-full flex items-center justify-between rounded-xl border px-3.5 py-2.5 text-left ${info.color} ${canUpgrade ? "active:scale-[0.99] hover:opacity-90" : "cursor-default"}`}
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <Shield className="h-4 w-4 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-xs font-semibold leading-tight truncate">{info.label}</p>
+                <p className="text-[10px] opacity-80 leading-tight">Limit: {info.daily}</p>
+              </div>
+            </div>
+            {canUpgrade && (
+              <span className="text-[10px] font-semibold whitespace-nowrap flex items-center gap-1">
+                Upgrade <ChevronRight className="h-3 w-3" />
+              </span>
+            )}
+          </motion.button>
+        );
+      })()}
 
       {/* ═══ QUICK ACTIONS ROW ═══ */}
       <motion.div

@@ -33,7 +33,7 @@ interface UserBalance {
   total_balance: number; locked_balance: number; savings_balance: number; available_balance: number;
 }
 
-type View = "dashboard" | "fund" | "transfer" | "lock" | "history" | "ajo" | "target" | "goal" | "split" | "association" | "bills" | "card";
+type View = "dashboard" | "fund" | "transfer" | "lock" | "history" | "ajo" | "target" | "goal" | "split" | "association" | "bills" | "card" | "kyc";
 
 function ProductWrapper({ children, onBack }: { children: React.ReactNode; onBack: () => void }) {
   return (
@@ -419,6 +419,17 @@ function VfdSandboxInner() {
                 balance={balanceData}
                 onNavigate={(v) => setCurrentView(v as View)}
                 recentTransactions={mappedTransactions}
+                tier={vfd.client?.tier}
+              />
+            )}
+            {currentView === "kyc" && (
+              <SandboxKYC
+                vfd={vfd}
+                onComplete={() => {
+                  setCurrentView("dashboard");
+                  refreshVestaraBalance();
+                  refreshVestaraLockedFunds();
+                }}
               />
             )}
             {currentView === "fund" && (

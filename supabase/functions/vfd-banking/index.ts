@@ -724,6 +724,72 @@ async function handleTransfer(
     return jsonResponse({ error: "Amount exceeds per-transfer limit (₦5,000,000)" }, 400);
   }
 
+  // ─── KYC TIER LIMIT ENFORCEMENT (per VFD Microfinance Bank policy) ───
+  // Tier 1: ₦30,000 cumulative daily debit
+  // Tier 2: ₦100,000 cumulative daily debit
+  // Tier 3: no daily cap (per-txn ₦5M already enforced above)
+  {
+    const adminClient = getSupabaseAdmin();
+    const { data: clientRow } = await adminClient
+      .from("vfd_sandbox_clients")
+      .select("tier")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    const tier = (clientRow?.tier as string | undefined) || "tier1";
+    const TIER_DAILY_CAP: Record<string, number> = {
+      tier1: 30_000,
+      tier2: 100_000,
+      tier3: Number.POSITIVE_INFINITY,
+    };
+    const dailyCap = TIER_DAILY_CAP[tier] ?? 30_000;
+
+    if (Number.isFinite(dailyCap)) {
+      // Single-transfer guard: at Tier 1/2, per-txn cannot exceed the daily cap
+      if (amountNum > dailyCap) {
+        return jsonResponse(
+          {
+            error: `This transfer exceeds your ${tier.toUpperCase()} limit of ₦${dailyCap.toLocaleString()}. Upgrade your KYC tier to unlock higher limits.`,
+            code: "TIER_LIMIT_EXCEEDED",
+            tier,
+            limit: dailyCap,
+          },
+          403
+        );
+      }
+
+      // Cumulative daily debit (transfers only, completed) in the last 24h
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { data: todays } = await adminClient
+        .from("vfd_sandbox_transactions")
+        .select("amount")
+        .eq("user_id", userId)
+        .eq("transaction_type", "transfer")
+        .eq("status", "completed")
+        .gte("created_at", since);
+
+      const spentToday = (todays ?? []).reduce(
+        (s, r) => s + Number((r as { amount?: number }).amount || 0),
+        0
+      );
+      if (spentToday + amountNum > dailyCap) {
+        const remaining = Math.max(0, dailyCap - spentToday);
+        return jsonResponse(
+          {
+            error: `Daily limit reached. ${tier.toUpperCase()} allows ₦${dailyCap.toLocaleString()} per 24h (₦${remaining.toLocaleString()} remaining). Upgrade your KYC tier for higher limits.`,
+            code: "TIER_DAILY_LIMIT_EXCEEDED",
+            tier,
+            limit: dailyCap,
+            spent: spentToday,
+            remaining,
+          },
+          403
+        );
+      }
+    }
+  }
+  // ─── END TIER ENFORCEMENT ───
+
   // Step 1: Get sender account details via enquiry
   const { data: senderEnquiry, status: senderStatus } = await vfdRequest("/account/enquiry", "GET", undefined, {
     accountNumber: fromAccount,
