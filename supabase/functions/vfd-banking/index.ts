@@ -704,13 +704,30 @@ async function handleValidateBeneficiary(accountNo: string, bankCode: string, tr
     const admin = getSupabaseAdmin();
     const { data: localClient } = await admin
       .from("vfd_sandbox_clients")
-      .select("full_name, vfd_account_number")
+      .select("full_name, user_id, vfd_account_number")
       .eq("vfd_account_number", accountNo)
       .maybeSingle();
-    if (localClient?.full_name) {
+    let resolvedName: string | null = localClient?.full_name ?? null;
+    // Fall back to the linked profile if the client row has no name yet.
+    if (!resolvedName && localClient?.user_id) {
+      const { data: profile } = await admin
+        .from("profiles")
+        .select("full_name")
+        .eq("id", localClient.user_id)
+        .maybeSingle();
+      resolvedName = profile?.full_name ?? null;
+      // Backfill so subsequent lookups are instant.
+      if (resolvedName) {
+        await admin
+          .from("vfd_sandbox_clients")
+          .update({ full_name: resolvedName })
+          .eq("vfd_account_number", accountNo);
+      }
+    }
+    if (resolvedName) {
       return jsonResponse({
-        data: { accountName: localClient.full_name, source: "local" },
-        accountName: localClient.full_name,
+        data: { accountName: resolvedName, source: "local" },
+        accountName: resolvedName,
         vfd_status: 200,
       });
     }
