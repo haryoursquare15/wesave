@@ -823,6 +823,93 @@ async function handleTransfer(
     }
   }
 
+  // ─── SANDBOX VIRTUAL→VIRTUAL SHORT-CIRCUIT ───
+  // Virtual NUBANs (9xxxxxxxxx) all settle to the shared PLATFORM_POOL_NUBAN
+  // on VFD, so a VFD /transfer call would be pool→pool (rejected). Resolve
+  // the recipient locally and record the move purely on our internal ledger.
+  if (toAccount.startsWith("9")) {
+    const adminClient2 = getSupabaseAdmin();
+    const { data: recipient } = await adminClient2
+      .from("vfd_sandbox_clients")
+      .select("user_id, full_name, vfd_account_number")
+      .eq("vfd_account_number", toAccount)
+      .maybeSingle();
+    if (recipient?.user_id) {
+      const amountNum2 = Number(body.amount);
+      if (!Number.isFinite(amountNum2) || amountNum2 <= 0) {
+        return jsonResponse({ error: "Invalid amount" }, 400);
+      }
+      const senderBal = await getRecordedSandboxBalance(adminClient2, userId);
+      if (senderBal < amountNum2) {
+        return jsonResponse(
+          { error: `Insufficient balance. Available: ₦${senderBal.toLocaleString()}` },
+          400
+        );
+      }
+      const walletPrefix2 = Deno.env.get("VFD_WALLET_NAME") || "WeSave";
+      const ref2 = `${walletPrefix2}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+      const narration = (body.narration as string) || (body.remark as string) || "Transfer";
+      const benName = (body.beneficiaryName as string) || recipient.full_name || toAccount;
+
+      await adminClient2.from("vfd_sandbox_transactions").insert({
+        user_id: userId,
+        vfd_account_number: displayFromAccount,
+        amount: amountNum2,
+        transaction_type: "transfer",
+        status: "completed",
+        reference: ref2,
+        beneficiary_account: toAccount,
+        beneficiary_bank_code: (body.bankCode as string) || "999999",
+        beneficiary_name: benName,
+        description: narration,
+        metadata: { intra_virtual: true },
+        source: "vfd_sandbox",
+      });
+      await adminClient2.from("vfd_sandbox_transactions").insert({
+        user_id: recipient.user_id,
+        vfd_account_number: toAccount,
+        amount: amountNum2,
+        transaction_type: "credit",
+        status: "completed",
+        reference: `${ref2}-IN`,
+        beneficiary_account: displayFromAccount,
+        beneficiary_bank_code: "999999",
+        beneficiary_name: benName,
+        description: `Received from ${displayFromAccount}: ${narration}`,
+        metadata: { intra_virtual: true, from_user_id: userId },
+        source: "vfd_sandbox",
+      });
+
+      await ensureBalanceRow(adminClient2, userId, { accountNo: displayFromAccount, preserveExisting: false });
+      await ensureBalanceRow(adminClient2, recipient.user_id, { accountNo: toAccount, preserveExisting: false });
+
+      try {
+        await adminClient2.from("vfd_sandbox_notifications").insert([
+          {
+            user_id: userId,
+            title: "Transfer sent",
+            message: `₦${amountNum2.toLocaleString()} sent to ${benName}. Ref: ${ref2}`,
+            notification_type: "transfer_sent",
+          },
+          {
+            user_id: recipient.user_id,
+            title: "Money received",
+            message: `₦${amountNum2.toLocaleString()} received from ${displayFromAccount}.`,
+            notification_type: "wallet_credit",
+          },
+        ]);
+      } catch (_) { /* best-effort */ }
+
+      return jsonResponse({
+        data: { status: "00", message: "Transfer successful", txnId: ref2 },
+        vfd_status: 200,
+        reference: ref2,
+      });
+    }
+  }
+
+
+
 
 
   // SECURITY: amount validation + cap
