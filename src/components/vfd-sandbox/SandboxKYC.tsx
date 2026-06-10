@@ -97,8 +97,43 @@ export function SandboxKYC({ vfd, onComplete }: SandboxKYCProps) {
   const [bvnData, setBvnData] = useState<Record<string, unknown> | null>(null);
   const [isUpgrade, setIsUpgrade] = useState(false);
   const [docsReady, setDocsReady] = useState(false);
+  const [reactivating, setReactivating] = useState(false);
 
   const currentTierNum = vfd.client?.tier ? parseInt(vfd.client.tier.replace("tier", "")) : 0;
+  const needsReactivation = currentTierNum > 0 && !vfd.client?.vfd_account_number;
+
+  const handleReactivate = async () => {
+    const c = vfd.client;
+    if (!c?.date_of_birth) {
+      toast({ title: "Missing details", description: "Your date of birth is not on file. Please contact support.", variant: "destructive" });
+      return;
+    }
+    // Stored DOB is "DD-MMM-YYYY"; pass through. If "YYYY-MM-DD", convert.
+    const dobIsVfdFmt = /^\d{2}-[A-Za-z]{3}-\d{4}$/.test(c.date_of_birth);
+    const vfdDob = dobIsVfdFmt ? c.date_of_birth : formatDobForVfd(c.date_of_birth);
+    setReactivating(true);
+    try {
+      const body: { bvn?: string; nin?: string; dateOfBirth: string; address?: string } = { dateOfBirth: vfdDob };
+      if (c.bvn) body.bvn = c.bvn;
+      if (c.nin) body.nin = c.nin;
+      if (c.address) body.address = c.address;
+      const result = await vfd.createTiered(body) as Record<string, unknown> | null;
+      const vfdData = result?.data as Record<string, unknown> | undefined;
+      if (vfdData?.status === "00" || vfdData?.status === "01") {
+        await vfd.fetchClient();
+        toast({ title: "Account reactivated", description: "Your unique NUBAN has been provisioned." });
+        onComplete();
+      } else {
+        const code = (result as Record<string, unknown> | null)?.code;
+        const msg = code === "POOL_NUBAN_REJECTED"
+          ? "VFD echoed the platform pool account. Please retry in a moment."
+          : vfdData?.message?.toString() || "Reactivation failed";
+        toast({ title: "Reactivation failed", description: getUserFriendlyError(msg), variant: "destructive" });
+      }
+    } finally {
+      setReactivating(false);
+    }
+  };
 
   const handleTierSelect = (tier: number) => {
     if (currentTierNum > 0 && tier <= currentTierNum) return;
