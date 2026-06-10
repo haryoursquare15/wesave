@@ -767,7 +767,7 @@ async function handleTransfer(
   userId: string,
   body: Record<string, unknown>
 ) {
-  const fromAccount = body.fromAccount as string;
+  let fromAccount = body.fromAccount as string;
   const toAccount = body.toAccount as string;
 
   if (!fromAccount || !toAccount) {
