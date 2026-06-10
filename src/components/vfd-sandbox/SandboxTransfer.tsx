@@ -30,13 +30,35 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
   const [pinOpen, setPinOpen] = useState(false);
   const [successPayload, setSuccessPayload] = useState<TransactionSuccessPayload | null>(null);
 
-  const handleValidate = async () => {
-    const name = await onValidate(form.toAccount, form.bankCode);
-    if (name) {
-      setForm(p => ({ ...p, beneficiaryName: name }));
-      toast({ title: "Account verified", description: name });
+  const lastVerifiedRef = useRef<string>("");
+  const [verifying, setVerifying] = useState(false);
+
+  const runVerify = async (account: string, bankCode: string) => {
+    const key = `${bankCode}:${account}`;
+    if (lastVerifiedRef.current === key) return;
+    lastVerifiedRef.current = key;
+    setVerifying(true);
+    try {
+      const name = await onValidate(account, bankCode);
+      if (name) {
+        setForm(p => ({ ...p, beneficiaryName: name }));
+      } else {
+        setForm(p => ({ ...p, beneficiaryName: "" }));
+        lastVerifiedRef.current = "";
+      }
+    } finally {
+      setVerifying(false);
     }
   };
+
+  // Auto-verify when bank + 10-digit account number are present (debounced)
+  useEffect(() => {
+    if (form.toAccount.length !== 10 || !form.bankCode) return;
+    const t = setTimeout(() => { runVerify(form.toAccount, form.bankCode); }, 400);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.toAccount, form.bankCode]);
+
 
   const handleTransferRequest = () => {
     const amount = parseFloat(form.amount);
