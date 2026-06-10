@@ -265,17 +265,22 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
           {/* Account number */}
           <button
             onClick={copyAccount}
-            className="flex items-center gap-1.5 text-xs opacity-60 hover:opacity-90 transition-opacity mb-4"
+            className="flex flex-col items-start gap-0.5 text-xs opacity-80 hover:opacity-100 transition-opacity mb-4 text-left"
           >
-            <span>{balance.accountNumber}</span>
-            <span className="opacity-50">•</span>
-            <span className="truncate max-w-[120px]">{balance.fullName}</span>
-            {copied ? (
-              <Check className="h-3 w-3 text-green-300" />
-            ) : (
-              <Copy className="h-3 w-3" />
-            )}
+            <span className="text-[10px] uppercase tracking-wider opacity-60">
+              Your VFD account number
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="font-mono font-semibold tracking-wide">{balance.accountNumber}</span>
+              {copied ? (
+                <Check className="h-3 w-3 text-green-300" />
+              ) : (
+                <Copy className="h-3 w-3" />
+              )}
+            </span>
+            <span className="truncate max-w-[220px] opacity-60">{balance.fullName} • VFD MFB</span>
           </button>
+
 
           {/* Sub-balances */}
           <div className="grid grid-cols-3 gap-2">
