@@ -714,12 +714,14 @@ async function handleValidateBeneficiary(accountNo: string, bankCode: string, tr
 
   // Surface a clear error so the UI can show a meaningful toast instead of silent failure
   if (!accountName) {
+    // Always return 200 so the client can surface the error message cleanly
+    // instead of supabase.functions.invoke throwing on a non-2xx status.
     return jsonResponse({
       data,
       accountName: null,
       vfd_status: status,
       error: vfdMessage || `Could not verify account (VFD status ${vfdStatusCode || status})`,
-    }, status >= 400 ? status : 200);
+    }, 200);
   }
 
   return jsonResponse({ data, accountName, vfd_status: status });

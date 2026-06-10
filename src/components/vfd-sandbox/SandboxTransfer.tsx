@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { ArrowLeft, Send, RefreshCw, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -30,13 +30,35 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
   const [pinOpen, setPinOpen] = useState(false);
   const [successPayload, setSuccessPayload] = useState<TransactionSuccessPayload | null>(null);
 
-  const handleValidate = async () => {
-    const name = await onValidate(form.toAccount, form.bankCode);
-    if (name) {
-      setForm(p => ({ ...p, beneficiaryName: name }));
-      toast({ title: "Account verified", description: name });
+  const lastVerifiedRef = useRef<string>("");
+  const [verifying, setVerifying] = useState(false);
+
+  const runVerify = async (account: string, bankCode: string) => {
+    const key = `${bankCode}:${account}`;
+    if (lastVerifiedRef.current === key) return;
+    lastVerifiedRef.current = key;
+    setVerifying(true);
+    try {
+      const name = await onValidate(account, bankCode);
+      if (name) {
+        setForm(p => ({ ...p, beneficiaryName: name }));
+      } else {
+        setForm(p => ({ ...p, beneficiaryName: "" }));
+        lastVerifiedRef.current = "";
+      }
+    } finally {
+      setVerifying(false);
     }
   };
+
+  // Auto-verify when bank + 10-digit account number are present (debounced)
+  useEffect(() => {
+    if (form.toAccount.length !== 10 || !form.bankCode) return;
+    const t = setTimeout(() => { runVerify(form.toAccount, form.bankCode); }, 400);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.toAccount, form.bankCode]);
+
 
   const handleTransferRequest = () => {
     const amount = parseFloat(form.amount);
@@ -111,23 +133,24 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
 
         <div>
           <Label className="text-xs text-muted-foreground">Account Number</Label>
-          <div className="flex gap-2 mt-1">
+          <div className="relative mt-1">
             <Input
               value={form.toAccount}
               onChange={(e) => setForm(p => ({ ...p, toAccount: e.target.value.replace(/\D/g, "").slice(0, 10) }))}
               placeholder="10-digit account"
               maxLength={10}
             />
-            <Button variant="outline" onClick={handleValidate}
-              disabled={form.toAccount.length !== 10 || !form.bankCode || loading} size="sm">
-              Verify
-            </Button>
+            {verifying && (
+              <RefreshCw className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+            )}
           </div>
-          {form.beneficiaryName && (
+          {form.beneficiaryName ? (
             <p className="text-xs text-success mt-1.5 flex items-center gap-1">
               <CheckCircle2 className="h-3 w-3" /> {form.beneficiaryName}
             </p>
-          )}
+          ) : form.toAccount.length === 10 && form.bankCode && !verifying ? (
+            <p className="text-xs text-muted-foreground mt-1.5">Verifying…</p>
+          ) : null}
         </div>
 
         <div>
