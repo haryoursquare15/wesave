@@ -133,23 +133,24 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
 
         <div>
           <Label className="text-xs text-muted-foreground">Account Number</Label>
-          <div className="flex gap-2 mt-1">
+          <div className="relative mt-1">
             <Input
               value={form.toAccount}
               onChange={(e) => setForm(p => ({ ...p, toAccount: e.target.value.replace(/\D/g, "").slice(0, 10) }))}
               placeholder="10-digit account"
               maxLength={10}
             />
-            <Button variant="outline" onClick={handleValidate}
-              disabled={form.toAccount.length !== 10 || !form.bankCode || loading} size="sm">
-              Verify
-            </Button>
+            {verifying && (
+              <RefreshCw className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+            )}
           </div>
-          {form.beneficiaryName && (
+          {form.beneficiaryName ? (
             <p className="text-xs text-success mt-1.5 flex items-center gap-1">
               <CheckCircle2 className="h-3 w-3" /> {form.beneficiaryName}
             </p>
-          )}
+          ) : form.toAccount.length === 10 && form.bankCode && !verifying ? (
+            <p className="text-xs text-muted-foreground mt-1.5">Verifying…</p>
+          ) : null}
         </div>
 
         <div>
