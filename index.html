@@ -61,7 +61,7 @@
         try {
           var host = window.location.hostname.toLowerCase();
           if (host === 'vestara.ng' || host === 'www.vestara.ng') {
-            document.title = 'Vestara — Smart Savings & Banking';
+            document.title = 'Vestara — Smart Savings, Split Pay & Ajo Banking in Nigeria';
             var setMeta = function(name, content, attr) {
               attr = attr || 'name';
               var el = document.querySelector('meta[' + attr + '="' + name + '"]');
@@ -72,9 +72,10 @@
               }
               el.setAttribute('content', content);
             };
-            setMeta('description', 'Vestara — Smart savings, payments and banking built for Africa.');
-            setMeta('og:title', 'Vestara — Smart Savings & Banking', 'property');
-            setMeta('og:description', 'Vestara — Smart savings, payments and banking built for Africa.', 'property');
+            var vDesc = 'Vestara is a Nigerian savings & banking app — split bills with Split Pay, earn daily interest with Vestara Savings, and join Ajo/Esusu groups. Powered and supported by VFD Microfinance Bank.';
+            setMeta('description', vDesc);
+            setMeta('og:title', 'Vestara — Smart Savings, Split Pay & Ajo Banking in Nigeria', 'property');
+            setMeta('og:description', vDesc, 'property');
             setMeta('og:image', 'https://vestara.ng/vestara-logo.jpg', 'property');
             var icon = document.querySelector('link[rel="icon"]');
             if (icon) icon.setAttribute('href', '/vestara-logo.jpg');
