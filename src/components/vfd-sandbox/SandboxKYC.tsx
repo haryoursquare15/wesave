@@ -79,7 +79,7 @@ interface SandboxKYCProps {
     releaseClient: (clientId: string) => Promise<unknown>;
     upgradeTier: (body: { bvn?: string; nin?: string; address?: string }) => Promise<unknown>;
     fetchClient: () => Promise<unknown>;
-    client: { vfd_client_id: string | null; tier?: string; nin?: string | null; address?: string | null; bvn?: string | null } | null;
+    client: { vfd_client_id: string | null; tier?: string; nin?: string | null; address?: string | null; bvn?: string | null; date_of_birth?: string | null; vfd_account_number?: string | null; account_status?: string } | null;
   };
   onComplete: () => void;
 }
@@ -97,8 +97,43 @@ export function SandboxKYC({ vfd, onComplete }: SandboxKYCProps) {
   const [bvnData, setBvnData] = useState<Record<string, unknown> | null>(null);
   const [isUpgrade, setIsUpgrade] = useState(false);
   const [docsReady, setDocsReady] = useState(false);
+  const [reactivating, setReactivating] = useState(false);
 
   const currentTierNum = vfd.client?.tier ? parseInt(vfd.client.tier.replace("tier", "")) : 0;
+  const needsReactivation = currentTierNum > 0 && !vfd.client?.vfd_account_number;
+
+  const handleReactivate = async () => {
+    const c = vfd.client;
+    if (!c?.date_of_birth) {
+      toast({ title: "Missing details", description: "Your date of birth is not on file. Please contact support.", variant: "destructive" });
+      return;
+    }
+    // Stored DOB is "DD-MMM-YYYY"; pass through. If "YYYY-MM-DD", convert.
+    const dobIsVfdFmt = /^\d{2}-[A-Za-z]{3}-\d{4}$/.test(c.date_of_birth);
+    const vfdDob = dobIsVfdFmt ? c.date_of_birth : formatDobForVfd(c.date_of_birth);
+    setReactivating(true);
+    try {
+      const body: { bvn?: string; nin?: string; dateOfBirth: string; address?: string } = { dateOfBirth: vfdDob };
+      if (c.bvn) body.bvn = c.bvn;
+      if (c.nin) body.nin = c.nin;
+      if (c.address) body.address = c.address;
+      const result = await vfd.createTiered(body) as Record<string, unknown> | null;
+      const vfdData = result?.data as Record<string, unknown> | undefined;
+      if (vfdData?.status === "00" || vfdData?.status === "01") {
+        await vfd.fetchClient();
+        toast({ title: "Account reactivated", description: "Your unique NUBAN has been provisioned." });
+        onComplete();
+      } else {
+        const code = (result as Record<string, unknown> | null)?.code;
+        const msg = code === "POOL_NUBAN_REJECTED"
+          ? "VFD echoed the platform pool account. Please retry in a moment."
+          : vfdData?.message?.toString() || "Reactivation failed";
+        toast({ title: "Reactivation failed", description: getUserFriendlyError(msg), variant: "destructive" });
+      }
+    } finally {
+      setReactivating(false);
+    }
+  };
 
   const handleTierSelect = (tier: number) => {
     if (currentTierNum > 0 && tier <= currentTierNum) return;
@@ -266,9 +301,44 @@ export function SandboxKYC({ vfd, onComplete }: SandboxKYCProps) {
         })}
       </div>
 
+      {needsReactivation && step === "tier_select" && (
+        <motion.div
+          key="reactivate"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-2xl border border-primary/40 bg-primary/5 p-5 space-y-4"
+        >
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center shrink-0">
+              <RefreshCw className="h-5 w-5 text-primary" />
+            </div>
+            <div className="flex-1">
+              <h2 className="text-base font-bold">Reactivate your account</h2>
+              <p className="text-xs text-muted-foreground mt-1">
+                You're already on Tier {currentTierNum}. We just need to provision your unique VFD account number — no need to re-enter your details.
+              </p>
+            </div>
+          </div>
+          <Button
+            onClick={handleReactivate}
+            disabled={reactivating || vfd.loading}
+            className="w-full h-11"
+          >
+            {reactivating ? (
+              <><RefreshCw className="h-4 w-4 mr-2 animate-spin" /> Provisioning…</>
+            ) : (
+              <>Reactivate account <ArrowRight className="h-4 w-4 ml-2" /></>
+            )}
+          </Button>
+          <p className="text-[11px] text-muted-foreground text-center">
+            This will not change your tier or limits.
+          </p>
+        </motion.div>
+      )}
+
       <AnimatePresence mode="wait">
         {/* STEP: Tier Selection */}
-        {step === "tier_select" && (
+        {step === "tier_select" && !needsReactivation && (
           <motion.div
             key="tier_select"
             initial={{ opacity: 0, x: 20 }}
