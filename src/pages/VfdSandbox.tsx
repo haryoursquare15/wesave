@@ -96,10 +96,15 @@ function VfdSandboxInner() {
     initRef.current = true;
 
     void vfd.fetchClient().then(async (result) => {
-      // KYC is only truly complete when VFD has issued a per-user NUBAN.
-      // Without it, transfers fall back to the corporate pool and VFD rejects them.
-      const hasNuban = !!result?.data?.vfd_account_number;
-      if (result?.data?.account_status === "active" && hasNuban) {
+      // KYC is considered complete once the account is active for any tier.
+      // Per-user NUBAN provisioning happens silently in the background — we
+      // never force the user back through an upgrade flow just because the
+      // sandbox echoed the pool NUBAN on a previous attempt.
+      const client = result?.data as Record<string, unknown> | undefined;
+      const isActive = client?.account_status === "active";
+      const hasNuban = !!client?.vfd_account_number;
+
+      if (isActive) {
         setKycDone(true);
         // Load bank list
         void vfd.getBankList().then((bankResult) => {
@@ -112,6 +117,19 @@ function VfdSandboxInner() {
         void vfd.getLockConfigs().then((configRes) => {
           if (configRes?.data) setLockConfigs(configRes.data as LockConfig[]);
         });
+
+        // Silently provision a per-user NUBAN if missing (no UI interruption).
+        if (!hasNuban) {
+          const bvn = (client?.bvn as string | undefined) ?? undefined;
+          const nin = (client?.nin as string | undefined) ?? undefined;
+          const dob = (client?.date_of_birth as string | undefined) ?? "";
+          const address = (client?.address as string | undefined) ?? undefined;
+          if (dob && (bvn || nin)) {
+            void vfd.createTiered({ bvn, nin, dateOfBirth: dob, address })
+              .then(() => vfd.fetchClient())
+              .catch(() => { /* non-blocking */ });
+          }
+        }
       }
       setClientChecked(true);
     });
