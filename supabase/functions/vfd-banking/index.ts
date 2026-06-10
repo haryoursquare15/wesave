@@ -112,6 +112,15 @@ async function assertOwnsAccount(userId: string, accountNo: string): Promise<voi
 const SANDBOX_CREDIT_MAX_PER_TXN = 500_000; // ₦500k single
 const SANDBOX_CREDIT_MAX_PER_DAY = 1_000_000; // ₦1M daily
 
+// Platform settlement (pool) account at VFD. This NUBAN is owned by Vestara,
+// NOT by any end user. It is the corporate settlement account through which
+// all inbound credits and outbound debits flow; Vestara's internal ledger
+// (vestara_accounts / vestara_ledger_entries) maps every movement back to
+// the originating user. It MUST never be persisted as a user's per-user
+// VFD account number.
+const PLATFORM_POOL_NUBAN = "1001695610";
+
+
 // VFD API helper
 async function vfdRequest(
   endpoint: string,
