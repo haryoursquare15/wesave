@@ -13,12 +13,13 @@
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://checkout.flutterwave.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://*.supabase.co https://*.flutterwave.com; connect-src 'self' https://*.supabase.co https://api.flutterwave.com wss://*.supabase.co; frame-src https://checkout.flutterwave.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none';" />
     <meta http-equiv="Strict-Transport-Security" content="max-age=31536000; includeSubDomains; preload" />
     
-    <title>WeSave — Modern Ajo & Esusu Savings Platform</title>
-    <meta name="description" content="Join WeSave, Africa's trusted rotating savings platform. Create thrift groups, automate contributions, build credit, and receive payouts securely." />
+    <title>Vestara — Modern Ajo & Esusu Savings Platform</title>
+    <meta name="description" content="Vestara — Smart savings, payments and Ajo/Esusu groups built on bank-grade infrastructure for Africa." />
     <meta name="author" content="LLH Premium Enterprise" />
-    <meta name="keywords" content="ajo, esusu, thrift, rotating savings, Nigeria, fintech, group savings, WeSave" />
+    <meta name="keywords" content="vestara, ajo, esusu, thrift, rotating savings, Nigeria, fintech, group savings, banking" />
     <meta name="robots" content="noarchive, noimageindex" />
-    <link rel="icon" type="image/jpeg" href="/wesave-logo.jpg" />
+    <link rel="icon" type="image/jpeg" href="/vestara-logo.jpg" />
+
     <link rel="canonical" href="https://wesave.ng" />
 
     <meta property="og:title" content="WeSave — Save Together, Grow Together" />
@@ -80,12 +81,8 @@
             var canonical = document.querySelector('link[rel="canonical"]');
             if (canonical) canonical.setAttribute('href', 'https://vestara.ng');
 
-            var path = window.location.pathname;
-            // Allow direct sandbox sub-routes; only rewrite root and unrelated paths
-            var allowed = /^\/(vfd-sandbox|sandbox-auth|sandbox-invite|sandbox-forgot-password|sandbox-reset-password|sandbox-health)(\/|$)/;
-            if (!allowed.test(path)) {
-              window.location.replace('/vfd-sandbox');
-            }
+            // Vestara host loads the dedicated Vestara landing at "/" — no redirect.
+
           }
         } catch (e) { /* noop */ }
       })();
