@@ -705,7 +705,16 @@ async function handleTransfer(
     return jsonResponse({ error: "fromAccount and toAccount are required" }, 400);
   }
 
-  // SECURITY: prevent users from transferring from accounts they don't own
+  // Block self-transfer (would otherwise hit VFD as pool→pool and fail with status 99)
+  if (fromAccount === toAccount) {
+    return jsonResponse(
+      { error: "You cannot transfer to your own account.", code: "SELF_TRANSFER_BLOCKED" },
+      400
+    );
+  }
+
+  // SECURITY: prevent users from transferring from accounts they don't own.
+  // assertOwnsAccount will also reject if the user has no NUBAN yet.
   try {
     await assertOwnsAccount(userId, fromAccount);
   } catch (err) {
@@ -714,6 +723,28 @@ async function handleTransfer(
       403
     );
   }
+
+  // Block transfers when the caller has no real per-user NUBAN provisioned
+  // (i.e. they would otherwise debit the corporate pool 1001695610).
+  {
+    const adminClient = getSupabaseAdmin();
+    const { data: caller } = await adminClient
+      .from("vfd_sandbox_clients")
+      .select("vfd_account_number")
+      .eq("user_id", userId)
+      .maybeSingle();
+    const callerNuban = caller?.vfd_account_number as string | null | undefined;
+    if (!callerNuban || callerNuban !== fromAccount) {
+      return jsonResponse(
+        {
+          error: "Your VFD account isn't fully provisioned yet. Please complete KYC to activate your account.",
+          code: "NUBAN_NOT_PROVISIONED",
+        },
+        403
+      );
+    }
+  }
+
 
   // SECURITY: amount validation + cap
   const amountNum = Number(body.amount);
