@@ -698,6 +698,24 @@ async function handleBankList() {
 
 // Validate Beneficiary - VFD uses GET with query params
 async function handleValidateBeneficiary(accountNo: string, bankCode: string, transferType: string = "inter") {
+  // First, check our own sandbox clients — virtual NUBANs (e.g. 9xxxxxxxxx)
+  // minted locally won't exist on VFD, so resolve them from our DB.
+  if (transferType === "intra" || accountNo.startsWith("9")) {
+    const admin = getSupabaseAdmin();
+    const { data: localClient } = await admin
+      .from("vfd_sandbox_clients")
+      .select("full_name, vfd_account_number")
+      .eq("vfd_account_number", accountNo)
+      .maybeSingle();
+    if (localClient?.full_name) {
+      return jsonResponse({
+        data: { accountName: localClient.full_name, source: "local" },
+        accountName: localClient.full_name,
+        vfd_status: 200,
+      });
+    }
+  }
+
   const { data, status } = await vfdRequest("/transfer/recipient", "GET", undefined, {
     accountNo,
     bank: bankCode,
