@@ -55,13 +55,37 @@
 
   <body>
     <script>
-      // Early redirect: vestara.ng visitors land directly on the VFD sandbox
+      // Vestara host: rebrand tab + early redirect so visitors never see WeSave
       (function() {
         try {
           var host = window.location.hostname.toLowerCase();
-          var path = window.location.pathname;
-          if ((host === 'vestara.ng' || host === 'www.vestara.ng') && (path === '/' || path === '')) {
-            window.location.replace('/vfd-sandbox');
+          if (host === 'vestara.ng' || host === 'www.vestara.ng') {
+            document.title = 'Vestara — Smart Savings & Banking';
+            var setMeta = function(name, content, attr) {
+              attr = attr || 'name';
+              var el = document.querySelector('meta[' + attr + '="' + name + '"]');
+              if (!el) {
+                el = document.createElement('meta');
+                el.setAttribute(attr, name);
+                document.head.appendChild(el);
+              }
+              el.setAttribute('content', content);
+            };
+            setMeta('description', 'Vestara — Smart savings, payments and banking built for Africa.');
+            setMeta('og:title', 'Vestara — Smart Savings & Banking', 'property');
+            setMeta('og:description', 'Vestara — Smart savings, payments and banking built for Africa.', 'property');
+            setMeta('og:image', 'https://vestara.ng/vestara-logo.jpg', 'property');
+            var icon = document.querySelector('link[rel="icon"]');
+            if (icon) icon.setAttribute('href', '/vestara-logo.jpg');
+            var canonical = document.querySelector('link[rel="canonical"]');
+            if (canonical) canonical.setAttribute('href', 'https://vestara.ng');
+
+            var path = window.location.pathname;
+            // Allow direct sandbox sub-routes; only rewrite root and unrelated paths
+            var allowed = /^\/(vfd-sandbox|sandbox-auth|sandbox-invite|sandbox-forgot-password|sandbox-reset-password|sandbox-health)(\/|$)/;
+            if (!allowed.test(path)) {
+              window.location.replace('/vfd-sandbox');
+            }
           }
         } catch (e) { /* noop */ }
       })();
