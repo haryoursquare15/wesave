@@ -96,7 +96,10 @@ function VfdSandboxInner() {
     initRef.current = true;
 
     void vfd.fetchClient().then(async (result) => {
-      if (result?.data?.account_status === "active") {
+      // KYC is only truly complete when VFD has issued a per-user NUBAN.
+      // Without it, transfers fall back to the corporate pool and VFD rejects them.
+      const hasNuban = !!result?.data?.vfd_account_number;
+      if (result?.data?.account_status === "active" && hasNuban) {
         setKycDone(true);
         // Load bank list
         void vfd.getBankList().then((bankResult) => {
