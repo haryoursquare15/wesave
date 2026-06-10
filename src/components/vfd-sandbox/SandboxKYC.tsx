@@ -301,9 +301,44 @@ export function SandboxKYC({ vfd, onComplete }: SandboxKYCProps) {
         })}
       </div>
 
+      {needsReactivation && step === "tier_select" && (
+        <motion.div
+          key="reactivate"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-2xl border border-primary/40 bg-primary/5 p-5 space-y-4"
+        >
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center shrink-0">
+              <RefreshCw className="h-5 w-5 text-primary" />
+            </div>
+            <div className="flex-1">
+              <h2 className="text-base font-bold">Reactivate your account</h2>
+              <p className="text-xs text-muted-foreground mt-1">
+                You're already on Tier {currentTierNum}. We just need to provision your unique VFD account number — no need to re-enter your details.
+              </p>
+            </div>
+          </div>
+          <Button
+            onClick={handleReactivate}
+            disabled={reactivating || vfd.loading}
+            className="w-full h-11"
+          >
+            {reactivating ? (
+              <><RefreshCw className="h-4 w-4 mr-2 animate-spin" /> Provisioning…</>
+            ) : (
+              <>Reactivate account <ArrowRight className="h-4 w-4 ml-2" /></>
+            )}
+          </Button>
+          <p className="text-[11px] text-muted-foreground text-center">
+            This will not change your tier or limits.
+          </p>
+        </motion.div>
+      )}
+
       <AnimatePresence mode="wait">
         {/* STEP: Tier Selection */}
-        {step === "tier_select" && (
+        {step === "tier_select" && !needsReactivation && (
           <motion.div
             key="tier_select"
             initial={{ opacity: 0, x: 20 }}
