@@ -419,6 +419,17 @@ function VfdSandboxInner() {
                 balance={balanceData}
                 onNavigate={(v) => setCurrentView(v as View)}
                 recentTransactions={mappedTransactions}
+                tier={vfd.client?.tier}
+              />
+            )}
+            {currentView === "kyc" && (
+              <SandboxKYC
+                vfd={vfd}
+                onComplete={() => {
+                  setCurrentView("dashboard");
+                  refreshVestaraBalance();
+                  refreshVestaraLockedFunds();
+                }}
               />
             )}
             {currentView === "fund" && (
