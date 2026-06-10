@@ -941,7 +941,7 @@ async function handleTransfer(
 
   await supabaseAdmin.from("vfd_sandbox_transactions").insert({
     user_id: userId,
-    vfd_account_number: fromAccount,
+    vfd_account_number: displayFromAccount,
     amount: Number(body.amount),
     transaction_type: "transfer",
     status: isSuccess ? "completed" : "failed",
