@@ -883,6 +883,30 @@ async function handleTransfer(
       await ensureBalanceRow(adminClient2, userId, { accountNo: displayFromAccount, preserveExisting: false });
       await ensureBalanceRow(adminClient2, recipient.user_id, { accountNo: toAccount, preserveExisting: false });
 
+      // ─── CRITICAL: credit recipient in Vestara ledger (source of truth) ───
+      // Without this, llh's wallet balance and transaction history never reflect
+      // the inbound transfer because the app reads from the Vestara ledger.
+      try {
+        const { error: depositErr } = await adminClient2.rpc("vestara_deposit", {
+          _user_id: recipient.user_id,
+          _amount: amountNum2,
+          _reference: `${ref2}-IN`,
+          _metadata: {
+            source: "intra_virtual_transfer",
+            from_user_id: userId,
+            from_account: displayFromAccount,
+            to_account: toAccount,
+            narration,
+            sender_name: benName,
+          },
+        });
+        if (depositErr) {
+          console.error("[intra-virtual] vestara_deposit failed for recipient:", depositErr);
+        }
+      } catch (e) {
+        console.error("[intra-virtual] vestara_deposit threw:", e);
+      }
+
       try {
         await adminClient2.from("vfd_sandbox_notifications").insert([
           {
