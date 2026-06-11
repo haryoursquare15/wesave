@@ -1475,6 +1475,17 @@ async function handleTransfer(
     })
     .eq("id", reservedTx?.id);
 
+  await recordTxEvent(supabaseAdmin, {
+    transaction_id: reservedTx?.id ?? null,
+    user_id: userId,
+    reference,
+    event_type: isSuccess ? "tx.committed" : "tx.reversed",
+    actor: "vfd_response",
+    from_status: "reserved",
+    to_status: isSuccess ? "completed" : "reversed",
+    payload: { vfd_status: vfdData?.status, vfd_txn_id: vfdTxnId },
+  });
+
   await settleIdempotencyKey(supabaseAdmin, idemKey, {
     status: isSuccess ? "completed" : "failed",
     response: data,
