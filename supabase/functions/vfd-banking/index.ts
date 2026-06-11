@@ -2309,6 +2309,12 @@ async function processStuckReservedTransactions(opts: { olderThanMinutes?: numbe
           reversed_at: nowIso,
           metadata: { ...(query as Record<string, unknown>), stage: "reconciled_reversed" },
         }).eq("id", tx.id);
+        await recordTxEvent(supabaseAdmin, {
+          transaction_id: tx.id, user_id: tx.user_id, reference: tx.reference,
+          event_type: "reconcile.reversed", actor: "cron",
+          from_status: "reserved", to_status: "reversed",
+          payload: { vfd_status: vfdStatus },
+        });
         if (tx.user_id) {
           await ensureBalanceRow(supabaseAdmin, tx.user_id, { accountNo: tx.vfd_account_number ?? null, preserveExisting: false });
           await supabaseAdmin.from("vfd_sandbox_notifications").insert({
