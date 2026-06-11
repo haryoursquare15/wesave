@@ -295,6 +295,36 @@ async function pushWebhookToDlq(
   }
 }
 
+// ─── PHASE 3: append-only tx event log ───
+async function recordTxEvent(
+  supabaseAdmin: ReturnType<typeof getSupabaseAdmin>,
+  params: {
+    transaction_id?: string | null;
+    user_id?: string | null;
+    reference?: string | null;
+    event_type: string;
+    actor?: string;
+    from_status?: string | null;
+    to_status?: string | null;
+    payload?: Record<string, unknown>;
+  }
+) {
+  try {
+    await supabaseAdmin.from("vfd_transaction_events").insert({
+      transaction_id: params.transaction_id ?? null,
+      user_id: params.user_id ?? null,
+      reference: params.reference ?? null,
+      event_type: params.event_type,
+      actor: params.actor ?? "system",
+      from_status: params.from_status ?? null,
+      to_status: params.to_status ?? null,
+      payload: params.payload ?? {},
+    });
+  } catch (e) {
+    console.error("[VFD TxEvent] failed to record:", e);
+  }
+}
+
 function toNumber(value: unknown): number {
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
   if (typeof value === "string") {
@@ -1377,6 +1407,16 @@ async function handleTransfer(
     .select("id")
     .maybeSingle();
 
+  await recordTxEvent(supabaseAdmin, {
+    transaction_id: reservedTx?.id ?? null,
+    user_id: userId,
+    reference,
+    event_type: "tx.reserved",
+    actor: "user",
+    to_status: "reserved",
+    payload: { amount: Number(body.amount), transferType, beneficiary: toAccount },
+  });
+
   // Call VFD — failures here keep tx `reserved` for the webhook to resolve.
   let data: unknown;
   let status = 0;
@@ -1398,6 +1438,15 @@ async function handleTransfer(
       status: "pending",
       response: { error: networkError.message },
       http_status: null,
+    });
+    await recordTxEvent(supabaseAdmin, {
+      transaction_id: reservedTx?.id ?? null,
+      user_id: userId,
+      reference,
+      event_type: "vfd.network_error",
+      from_status: "reserved",
+      to_status: "reserved",
+      payload: { error: networkError.message },
     });
     return jsonResponse(
       {
@@ -1425,6 +1474,17 @@ async function handleTransfer(
       metadata: { ...(data as Record<string, unknown>), stage: isSuccess ? "committed" : "reversed" },
     })
     .eq("id", reservedTx?.id);
+
+  await recordTxEvent(supabaseAdmin, {
+    transaction_id: reservedTx?.id ?? null,
+    user_id: userId,
+    reference,
+    event_type: isSuccess ? "tx.committed" : "tx.reversed",
+    actor: "vfd_response",
+    from_status: "reserved",
+    to_status: isSuccess ? "completed" : "reversed",
+    payload: { vfd_status: vfdData?.status, vfd_txn_id: vfdTxnId },
+  });
 
   await settleIdempotencyKey(supabaseAdmin, idemKey, {
     status: isSuccess ? "completed" : "failed",
@@ -1569,6 +1629,15 @@ async function handleSandboxCredit(userId: string, accountNo: string, amount: nu
     description: "Sandbox test credit",
     metadata: data as Record<string, unknown>,
     source: "vfd_sandbox",
+  });
+
+  await recordTxEvent(supabaseAdmin, {
+    user_id: userId,
+    reference,
+    event_type: isSuccess ? "credit.committed" : "credit.failed",
+    actor: "user",
+    to_status: isSuccess ? "completed" : "failed",
+    payload: { amount, accountNo, vfd_status: vfdData?.status },
   });
 
   await settleIdempotencyKey(supabaseAdmin, idemKey, {
@@ -1724,6 +1793,17 @@ async function handleWebhook(req: Request) {
         metadata: { ...(payload as Record<string, unknown>), stage: success ? "webhook_committed" : "webhook_reversed" },
       })
       .eq("id", tx.id);
+
+    await recordTxEvent(supabaseAdmin, {
+      transaction_id: tx.id,
+      user_id: tx.user_id,
+      reference,
+      event_type: success ? "webhook.committed" : "webhook.reversed",
+      actor: "webhook",
+      from_status: "reserved",
+      to_status: success ? "completed" : "reversed",
+      payload: { vfd_status: vfdStatus, event: eventType },
+    });
 
     if (success && tx.user_id) {
       await ensureBalanceRow(supabaseAdmin, tx.user_id, {
@@ -2204,6 +2284,12 @@ async function processStuckReservedTransactions(opts: { olderThanMinutes?: numbe
           vfd_reference: txnId,
           metadata: { ...(query as Record<string, unknown>), stage: "reconciled_committed" },
         }).eq("id", tx.id);
+        await recordTxEvent(supabaseAdmin, {
+          transaction_id: tx.id, user_id: tx.user_id, reference: tx.reference,
+          event_type: "reconcile.committed", actor: "cron",
+          from_status: "reserved", to_status: "completed",
+          payload: { vfd_status: vfdStatus, vfd_txn_id: txnId },
+        });
         if (tx.user_id) {
           await ensureBalanceRow(supabaseAdmin, tx.user_id, { accountNo: tx.vfd_account_number ?? null, preserveExisting: false });
           await supabaseAdmin.from("vfd_sandbox_notifications").insert({
@@ -2223,6 +2309,12 @@ async function processStuckReservedTransactions(opts: { olderThanMinutes?: numbe
           reversed_at: nowIso,
           metadata: { ...(query as Record<string, unknown>), stage: "reconciled_reversed" },
         }).eq("id", tx.id);
+        await recordTxEvent(supabaseAdmin, {
+          transaction_id: tx.id, user_id: tx.user_id, reference: tx.reference,
+          event_type: "reconcile.reversed", actor: "cron",
+          from_status: "reserved", to_status: "reversed",
+          payload: { vfd_status: vfdStatus },
+        });
         if (tx.user_id) {
           await ensureBalanceRow(supabaseAdmin, tx.user_id, { accountNo: tx.vfd_account_number ?? null, preserveExisting: false });
           await supabaseAdmin.from("vfd_sandbox_notifications").insert({
@@ -2321,6 +2413,117 @@ async function handleReconciliationSweep(userId: string, body: Record<string, un
   return jsonResponse({ data: result });
 }
 
+// ─── PHASE 3: BALANCE DRIFT DETECTION ───
+// For each user with recent VFD activity, compare VFD live balance vs the
+// internal recorded balance and log a finding when |drift| > threshold.
+async function runBalanceDriftSweep(opts: { sinceMinutes?: number; threshold?: number; limit?: number } = {}) {
+  const supabaseAdmin = getSupabaseAdmin();
+  const since = new Date(Date.now() - (opts.sinceMinutes ?? 60) * 60 * 1000).toISOString();
+  const threshold = opts.threshold ?? 1;
+  const limit = Math.min(opts.limit ?? 100, 500);
+
+  // Pull distinct (user_id, account) pairs that had any activity in the window,
+  // plus all active clients (so an idle account still gets periodic checks).
+  const { data: recentTx } = await supabaseAdmin
+    .from("vfd_sandbox_transactions")
+    .select("user_id, vfd_account_number")
+    .gte("created_at", since)
+    .not("vfd_account_number", "is", null)
+    .limit(limit);
+
+  const seen = new Set<string>();
+  const pairs: { userId: string; accountNo: string }[] = [];
+  for (const r of recentTx ?? []) {
+    const key = `${r.user_id}|${r.vfd_account_number}`;
+    if (!seen.has(key) && r.user_id && r.vfd_account_number) {
+      seen.add(key);
+      pairs.push({ userId: r.user_id as string, accountNo: r.vfd_account_number as string });
+    }
+  }
+
+  let checked = 0, healthy = 0, drifted = 0;
+  const findings: Array<Record<string, unknown>> = [];
+
+  for (const { userId, accountNo } of pairs) {
+    try {
+      const { data: balData } = await vfdRequest("/account/enquiry", "GET", undefined, { accountNumber: accountNo });
+      const liveBalance = extractVfdBalance(balData);
+      const recordedBalance = await getRecordedSandboxBalance(supabaseAdmin, userId);
+      const drift = Number((liveBalance - recordedBalance).toFixed(2));
+      const isHealthy = Math.abs(drift) <= threshold;
+
+      const { data: inserted } = await supabaseAdmin
+        .from("vfd_balance_drift_findings")
+        .insert({
+          user_id: userId,
+          vfd_account_number: accountNo,
+          vfd_live_balance: liveBalance,
+          recorded_balance: recordedBalance,
+          drift,
+          threshold,
+          is_healthy: isHealthy,
+          details: { sinceMinutes: opts.sinceMinutes ?? 60 },
+        })
+        .select("id")
+        .maybeSingle();
+
+      checked++;
+      if (isHealthy) healthy++; else drifted++;
+      findings.push({ id: inserted?.id, userId, accountNo, drift, isHealthy });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("[Drift] check failed:", accountNo, msg);
+    }
+  }
+
+  return { checked, healthy, drifted, threshold, findings };
+}
+
+async function handleDriftSweep(userId: string, body: Record<string, unknown>) {
+  const supabaseAdmin = getSupabaseAdmin();
+  const { data: roles } = await supabaseAdmin.from("user_roles").select("role").eq("user_id", userId);
+  const isAdmin = (roles ?? []).some(r => ["admin", "super_admin"].includes(r.role as string));
+  if (!isAdmin) return jsonResponse({ error: "Admin only" }, 403);
+  const result = await runBalanceDriftSweep({
+    sinceMinutes: Number(body.sinceMinutes) || 60,
+    threshold: Number(body.threshold) || 1,
+    limit: Number(body.limit) || 100,
+  });
+  return jsonResponse({ data: result });
+}
+
+async function handleDriftFindings(userId: string, body: Record<string, unknown>) {
+  const supabaseAdmin = getSupabaseAdmin();
+  const { data: roles } = await supabaseAdmin.from("user_roles").select("role").eq("user_id", userId);
+  const isAdmin = (roles ?? []).some(r => ["admin", "super_admin"].includes(r.role as string));
+  if (!isAdmin) return jsonResponse({ error: "Admin only" }, 403);
+  const limit = Math.min(Number(body.limit) || 50, 200);
+  let q = supabaseAdmin.from("vfd_balance_drift_findings").select("*").order("checked_at", { ascending: false }).limit(limit);
+  if (body.onlyUnhealthy) q = q.eq("is_healthy", false);
+  const { data, error } = await q;
+  if (error) return jsonResponse({ error: error.message }, 500);
+  return jsonResponse({ data });
+}
+
+async function handleTxEvents(userId: string, body: Record<string, unknown>) {
+  const supabaseAdmin = getSupabaseAdmin();
+  const { data: roles } = await supabaseAdmin.from("user_roles").select("role").eq("user_id", userId);
+  const isAdmin = (roles ?? []).some(r => ["admin", "super_admin"].includes(r.role as string));
+  const reference = body.reference as string | undefined;
+  const txId = body.transaction_id as string | undefined;
+  if (!reference && !txId) return jsonResponse({ error: "reference or transaction_id required" }, 400);
+
+  let q = supabaseAdmin.from("vfd_transaction_events").select("*").order("created_at", { ascending: true }).limit(200);
+  if (reference) q = q.eq("reference", reference);
+  if (txId) q = q.eq("transaction_id", txId);
+  if (!isAdmin) q = q.eq("user_id", userId);
+  const { data, error } = await q;
+  if (error) return jsonResponse({ error: error.message }, 500);
+  return jsonResponse({ data });
+}
+
+
+
 
 // ─── MAIN HANDLER ───────────────────────────────────────────────
 
@@ -2362,6 +2565,29 @@ Deno.serve(async (req) => {
       const result = await processStuckReservedTransactions({
         olderThanMinutes: Number(body.olderThanMinutes) || 5,
         limit: Number(body.limit) || 50,
+      });
+      return jsonResponse({ data: result });
+    }
+
+    // Cron-callable drift sweep (same shared-secret auth)
+    if (actionFromPath === "drift-sweep" && req.method === "POST") {
+      const supabaseAdmin = getSupabaseAdmin();
+      const { data: tokenRow } = await supabaseAdmin
+        .from("vfd_settings").select("value").eq("key", "reconcile_token").maybeSingle();
+      const expected =
+        (tokenRow?.value as string | undefined) ||
+        Deno.env.get("VFD_RECONCILE_TOKEN") ||
+        Deno.env.get("VFD_WEBHOOK_SECRET");
+      const provided =
+        req.headers.get("x-vfd-reconcile-token") ||
+        req.headers.get("x-vfd-signature") ||
+        req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+      if (!expected || provided !== expected) return jsonResponse({ error: "Unauthorized" }, 401);
+      const body = await req.json().catch(() => ({}));
+      const result = await runBalanceDriftSweep({
+        sinceMinutes: Number(body.sinceMinutes) || 60,
+        threshold: Number(body.threshold) || 1,
+        limit: Number(body.limit) || 100,
       });
       return jsonResponse({ data: result });
     }
@@ -2479,6 +2705,12 @@ Deno.serve(async (req) => {
         return await handleDlqResolve(userId, body.id as string);
       case "reconciliation_sweep":
         return await handleReconciliationSweep(userId, body);
+      case "drift_sweep":
+        return await handleDriftSweep(userId, body);
+      case "drift_findings":
+        return await handleDriftFindings(userId, body);
+      case "tx_events":
+        return await handleTxEvents(userId, body);
 
       default:
         return jsonResponse({ error: `Unknown action: ${action}` }, 400);

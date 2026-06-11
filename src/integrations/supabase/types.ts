@@ -3852,6 +3852,51 @@ export type Database = {
         }
         Relationships: []
       }
+      vfd_balance_drift_findings: {
+        Row: {
+          checked_at: string
+          details: Json
+          drift: number
+          id: string
+          is_healthy: boolean
+          recorded_balance: number
+          resolved: boolean
+          resolved_at: string | null
+          threshold: number
+          user_id: string | null
+          vfd_account_number: string | null
+          vfd_live_balance: number
+        }
+        Insert: {
+          checked_at?: string
+          details?: Json
+          drift: number
+          id?: string
+          is_healthy: boolean
+          recorded_balance: number
+          resolved?: boolean
+          resolved_at?: string | null
+          threshold?: number
+          user_id?: string | null
+          vfd_account_number?: string | null
+          vfd_live_balance: number
+        }
+        Update: {
+          checked_at?: string
+          details?: Json
+          drift?: number
+          id?: string
+          is_healthy?: boolean
+          recorded_balance?: number
+          resolved?: boolean
+          resolved_at?: string | null
+          threshold?: number
+          user_id?: string | null
+          vfd_account_number?: string | null
+          vfd_live_balance?: number
+        }
+        Relationships: []
+      }
       vfd_idempotency_keys: {
         Row: {
           action: string
@@ -5878,6 +5923,45 @@ export type Database = {
           key?: string
           updated_at?: string
           value?: string
+        }
+        Relationships: []
+      }
+      vfd_transaction_events: {
+        Row: {
+          actor: string
+          created_at: string
+          event_type: string
+          from_status: string | null
+          id: string
+          payload: Json
+          reference: string | null
+          to_status: string | null
+          transaction_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          actor?: string
+          created_at?: string
+          event_type: string
+          from_status?: string | null
+          id?: string
+          payload?: Json
+          reference?: string | null
+          to_status?: string | null
+          transaction_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          actor?: string
+          created_at?: string
+          event_type?: string
+          from_status?: string | null
+          id?: string
+          payload?: Json
+          reference?: string | null
+          to_status?: string | null
+          transaction_id?: string | null
+          user_id?: string | null
         }
         Relationships: []
       }
