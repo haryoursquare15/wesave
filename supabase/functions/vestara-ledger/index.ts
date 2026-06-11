@@ -38,6 +38,85 @@ function verifyWebhookSignature(req: Request, body: string): boolean {
   return signature === webhookSecret;
 }
 
+function toNumber(value: unknown): number {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  if (typeof value === "string") {
+    const parsed = Number(value.replace(/,/g, "").trim());
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
+
+async function getSettlementSnapshot(supabase: ReturnType<typeof createClient>, userId: string) {
+  const [{ data: walletAccount }, { data: settlementAccount }] = await Promise.all([
+    supabase
+      .from("vestara_accounts")
+      .select("balance")
+      .eq("user_id", userId)
+      .eq("account_type", "wallet")
+      .maybeSingle(),
+    supabase
+      .from("vestara_accounts")
+      .select("balance")
+      .eq("is_system", true)
+      .eq("account_type", "settlement")
+      .maybeSingle(),
+  ]);
+
+  return {
+    walletBalance: toNumber(walletAccount?.balance),
+    settlementBalance: toNumber(settlementAccount?.balance),
+  };
+}
+
+async function syncBalanceCachesFromVestara(supabase: ReturnType<typeof createClient>, userId: string) {
+  const { data: accounts, error } = await supabase
+    .from("vestara_accounts")
+    .select("account_type, balance")
+    .eq("user_id", userId);
+
+  if (error) {
+    console.error("[vestara-ledger] balance cache sync read failed:", error);
+    return null;
+  }
+
+  const wallet = (accounts ?? [])
+    .filter((a) => a.account_type === "wallet")
+    .reduce((sum, a) => sum + toNumber(a.balance), 0);
+  const locked = (accounts ?? [])
+    .filter((a) => a.account_type === "locked_savings")
+    .reduce((sum, a) => sum + toNumber(a.balance), 0);
+  const savings = (accounts ?? [])
+    .filter((a) => a.account_type === "accrued_interest")
+    .reduce((sum, a) => sum + toNumber(a.balance), 0);
+  const timestamp = new Date().toISOString();
+
+  await supabase.from("wallets").upsert(
+    { user_id: userId, available_balance: wallet, locked_balance: locked, updated_at: timestamp },
+    { onConflict: "user_id" },
+  );
+
+  await supabase.from("vfd_user_balances").upsert(
+    {
+      user_id: userId,
+      total_balance: wallet + locked + savings,
+      available_balance: wallet,
+      locked_balance: locked,
+      savings_balance: savings,
+      last_synced_at: timestamp,
+      updated_at: timestamp,
+    },
+    { onConflict: "user_id" },
+  );
+
+  return { wallet, locked, savings, total: wallet + locked + savings };
+}
+
+async function logSettlementAudit(supabase: ReturnType<typeof createClient>, payload: Record<string, unknown>) {
+  const { error } = await supabase.from("vestara_settlement_balance_audit").insert(payload);
+  if (error) console.error("[vestara-ledger] settlement audit insert failed:", error);
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -133,12 +212,32 @@ serve(async (req) => {
         // Ensure wallet exists
         await ensureWallet(targetUserId);
 
+        const before = await getSettlementSnapshot(supabase, targetUserId);
         const { data } = await supabase.rpc("vestara_deposit", {
           _user_id: targetUserId,
           _amount: amount,
           _reference: reference,
           _metadata: metadata || {},
         });
+        const depositResult = data as { success?: boolean; transaction_id?: string } | null;
+        if (depositResult?.success) {
+          const after = await getSettlementSnapshot(supabase, targetUserId);
+          await syncBalanceCachesFromVestara(supabase, targetUserId);
+          await logSettlementAudit(supabase, {
+            user_id: targetUserId,
+            account_number: account_number === "__self__" ? null : account_number,
+            event_type: "deposit_settlement_credit",
+            reference,
+            vestara_transaction_id: depositResult.transaction_id ?? null,
+            amount,
+            wallet_balance_before: before.walletBalance,
+            wallet_balance_after: after.walletBalance,
+            settlement_balance_before: before.settlementBalance,
+            settlement_balance_after: after.settlementBalance,
+            legacy_wallet_balance_after: after.walletBalance,
+            metadata: metadata || {},
+          });
+        }
         result = data;
         break;
       }
@@ -198,6 +297,9 @@ serve(async (req) => {
           _reference: reference,
           _metadata: metadata || {},
         });
+        if ((data as { success?: boolean } | null)?.success) {
+          await syncBalanceCachesFromVestara(supabase, userId!);
+        }
         result = data;
         break;
       }
@@ -207,12 +309,38 @@ serve(async (req) => {
         const { original_reference, success: transferSuccess, metadata } = params;
         if (!original_reference) return err("original_reference is required");
 
+        const { data: originalTx } = await supabase
+          .from("vestara_transactions")
+          .select("amount")
+          .eq("reference", original_reference)
+          .eq("type", "transfer")
+          .maybeSingle();
+        const completingSuccess = transferSuccess ?? true;
+        const before = await getSettlementSnapshot(supabase, userId!);
         const { data } = await supabase.rpc("vestara_transfer_complete", {
           _user_id: userId,
           _original_reference: original_reference,
-          _success: transferSuccess ?? true,
+          _success: completingSuccess,
           _metadata: metadata || {},
         });
+        const completeResult = data as { success?: boolean; transaction_id?: string } | null;
+        if (completeResult?.success) {
+          const after = await getSettlementSnapshot(supabase, userId!);
+          await syncBalanceCachesFromVestara(supabase, userId!);
+          await logSettlementAudit(supabase, {
+            user_id: userId,
+            event_type: completingSuccess ? "transfer_settlement_complete" : "transfer_settlement_reversal",
+            reference: `${original_reference}-${completingSuccess ? "complete" : "refund"}`,
+            vestara_transaction_id: completeResult.transaction_id ?? null,
+            amount: toNumber(originalTx?.amount),
+            wallet_balance_before: before.walletBalance,
+            wallet_balance_after: after.walletBalance,
+            settlement_balance_before: before.settlementBalance,
+            settlement_balance_after: after.settlementBalance,
+            legacy_wallet_balance_after: after.walletBalance,
+            metadata: { ...(metadata || {}), original_reference },
+          });
+        }
         result = data;
         break;
       }

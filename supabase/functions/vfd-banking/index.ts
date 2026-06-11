@@ -338,36 +338,100 @@ async function ensureBalanceRow(
   return { balance: updated, liveBalance, recordedBalance };
 }
 
-async function syncLegacyWalletFromVestara(
+async function getVestaraSettlementSnapshot(
   supabaseAdmin: ReturnType<typeof getSupabaseAdmin>,
   userId: string
 ) {
-  const { data: walletAccount, error } = await supabaseAdmin
-    .from("vestara_accounts")
-    .select("balance")
-    .eq("user_id", userId)
-    .eq("account_type", "wallet")
-    .maybeSingle();
+  const [{ data: walletAccount }, { data: settlementAccount }] = await Promise.all([
+    supabaseAdmin
+      .from("vestara_accounts")
+      .select("id, balance")
+      .eq("user_id", userId)
+      .eq("account_type", "wallet")
+      .maybeSingle(),
+    supabaseAdmin
+      .from("vestara_accounts")
+      .select("id, balance")
+      .eq("is_system", true)
+      .eq("account_type", "settlement")
+      .maybeSingle(),
+  ]);
 
-  if (error || !walletAccount) {
-    console.error("[wallet-sync] Could not read Vestara wallet balance:", error);
-    return;
+  return {
+    walletAccountId: walletAccount?.id ?? null,
+    settlementAccountId: settlementAccount?.id ?? null,
+    walletBalance: toNumber(walletAccount?.balance),
+    settlementBalance: toNumber(settlementAccount?.balance),
+  };
+}
+
+async function syncBalanceCachesFromVestara(
+  supabaseAdmin: ReturnType<typeof getSupabaseAdmin>,
+  userId: string
+) {
+  const { data: accounts, error } = await supabaseAdmin
+    .from("vestara_accounts")
+    .select("account_type, balance")
+    .eq("user_id", userId);
+
+  if (error) {
+    console.error("[balance-sync] Could not read Vestara accounts:", error);
+    return null;
   }
 
-  const { error: upsertErr } = await supabaseAdmin
+  const wallet = (accounts ?? [])
+    .filter((a) => a.account_type === "wallet")
+    .reduce((sum, a) => sum + toNumber(a.balance), 0);
+  const locked = (accounts ?? [])
+    .filter((a) => a.account_type === "locked_savings")
+    .reduce((sum, a) => sum + toNumber(a.balance), 0);
+  const savings = (accounts ?? [])
+    .filter((a) => a.account_type === "accrued_interest")
+    .reduce((sum, a) => sum + toNumber(a.balance), 0);
+  const timestamp = new Date().toISOString();
+
+  const { error: walletErr } = await supabaseAdmin
     .from("wallets")
     .upsert(
       {
         user_id: userId,
-        available_balance: Number(walletAccount.balance || 0),
-        updated_at: new Date().toISOString(),
+        available_balance: wallet,
+        locked_balance: locked,
+        updated_at: timestamp,
       },
       { onConflict: "user_id" }
     );
 
-  if (upsertErr) {
-    console.error("[wallet-sync] Could not sync legacy wallet balance:", upsertErr);
-  }
+  if (walletErr) console.error("[balance-sync] Could not sync wallets cache:", walletErr);
+
+  const { error: vfdBalanceErr } = await supabaseAdmin
+    .from("vfd_user_balances")
+    .upsert(
+      {
+        user_id: userId,
+        total_balance: wallet + locked + savings,
+        available_balance: wallet,
+        locked_balance: locked,
+        savings_balance: savings,
+        last_synced_at: timestamp,
+        updated_at: timestamp,
+      },
+      { onConflict: "user_id" }
+    );
+
+  if (vfdBalanceErr) console.error("[balance-sync] Could not sync VFD balance cache:", vfdBalanceErr);
+
+  return { wallet, locked, savings, total: wallet + locked + savings };
+}
+
+async function logSettlementBalanceAudit(
+  supabaseAdmin: ReturnType<typeof getSupabaseAdmin>,
+  payload: Record<string, unknown>
+) {
+  const { error } = await supabaseAdmin
+    .from("vestara_settlement_balance_audit")
+    .insert(payload);
+  if (error) console.error("[settlement-audit] insert failed:", error);
 }
 
 // ─── ACTION HANDLERS ────────────────────────────────────────────
@@ -882,8 +946,53 @@ async function handleTransfer(
       const ref2 = `${walletPrefix2}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
       const narration = (body.narration as string) || (body.remark as string) || "Transfer";
       const benName = (body.beneficiaryName as string) || recipient.full_name || toAccount;
+      const recipientBefore = await getVestaraSettlementSnapshot(adminClient2, recipient.user_id);
 
-      await adminClient2.from("vfd_sandbox_transactions").insert({
+      const { data: depositData, error: depositErr } = await adminClient2.rpc("vestara_deposit", {
+        _user_id: recipient.user_id,
+        _amount: amountNum2,
+        _reference: `${ref2}-IN`,
+        _metadata: {
+          source: "intra_virtual_transfer",
+          from_user_id: userId,
+          from_account: displayFromAccount,
+          to_account: toAccount,
+          narration,
+          sender_name: benName,
+        },
+      });
+
+      const depositResult = depositData as { success?: boolean; transaction_id?: string; error?: string } | null;
+      if (depositErr || !depositResult?.success) {
+        console.error("[intra-virtual] vestara_deposit failed for recipient:", depositErr || depositResult);
+        await adminClient2.from("intra_transfer_reports").insert({
+          reference: ref2,
+          sender_user_id: userId,
+          recipient_user_id: recipient.user_id,
+          from_account: displayFromAccount,
+          to_account: toAccount,
+          amount: amountNum2,
+          narration,
+          settlement_status: "vestara_failed",
+          sender_balance_before: senderBal,
+          sender_balance_after: senderBal,
+          recipient_balance_before: recipientBefore.walletBalance,
+          recipient_balance_after: recipientBefore.walletBalance,
+          metadata: { error: depositErr?.message || depositResult?.error || "Vestara deposit failed" },
+        });
+        return jsonResponse(
+          { data: { status: "99", message: "Internal settlement failed; funds were not moved." }, reference: ref2 },
+          500,
+        );
+      }
+
+      const recipientAfter = await getVestaraSettlementSnapshot(adminClient2, recipient.user_id);
+      await Promise.all([
+        syncBalanceCachesFromVestara(adminClient2, userId),
+        syncBalanceCachesFromVestara(adminClient2, recipient.user_id),
+      ]);
+
+      const { data: senderTx, error: senderTxErr } = await adminClient2.from("vfd_sandbox_transactions").insert({
         user_id: userId,
         vfd_account_number: displayFromAccount,
         amount: amountNum2,
@@ -896,8 +1005,10 @@ async function handleTransfer(
         description: narration,
         metadata: { intra_virtual: true },
         source: "vfd_sandbox",
-      });
-      await adminClient2.from("vfd_sandbox_transactions").insert({
+      }).select("id").single();
+      if (senderTxErr) console.error("[intra-virtual] sender tx insert failed:", senderTxErr);
+
+      const { data: recipientTx, error: recipientTxErr } = await adminClient2.from("vfd_sandbox_transactions").insert({
         user_id: recipient.user_id,
         vfd_account_number: toAccount,
         amount: amountNum2,
@@ -910,36 +1021,43 @@ async function handleTransfer(
         description: `Received from ${displayFromAccount}: ${narration}`,
         metadata: { intra_virtual: true, from_user_id: userId },
         source: "vfd_sandbox",
+      }).select("id").single();
+      if (recipientTxErr) console.error("[intra-virtual] recipient tx insert failed:", recipientTxErr);
+
+      await adminClient2.from("intra_transfer_reports").insert({
+        reference: ref2,
+        sender_user_id: userId,
+        recipient_user_id: recipient.user_id,
+        from_account: displayFromAccount,
+        to_account: toAccount,
+        amount: amountNum2,
+        narration,
+        sender_vfd_transaction_id: senderTx?.id ?? null,
+        recipient_vfd_transaction_id: recipientTx?.id ?? null,
+        recipient_vestara_transaction_id: depositResult.transaction_id ?? null,
+        settlement_status: "completed",
+        sender_balance_before: senderBal,
+        sender_balance_after: senderBal - amountNum2,
+        recipient_balance_before: recipientBefore.walletBalance,
+        recipient_balance_after: recipientAfter.walletBalance,
+        metadata: { intra_virtual: true },
       });
 
-      await ensureBalanceRow(adminClient2, userId, { accountNo: displayFromAccount, preserveExisting: false });
-      await ensureBalanceRow(adminClient2, recipient.user_id, { accountNo: toAccount, preserveExisting: false });
-
-      // ─── CRITICAL: credit recipient in Vestara ledger (source of truth) ───
-      // Without this, llh's wallet balance and transaction history never reflect
-      // the inbound transfer because the app reads from the Vestara ledger.
-      try {
-        const { error: depositErr } = await adminClient2.rpc("vestara_deposit", {
-          _user_id: recipient.user_id,
-          _amount: amountNum2,
-          _reference: `${ref2}-IN`,
-          _metadata: {
-            source: "intra_virtual_transfer",
-            from_user_id: userId,
-            from_account: displayFromAccount,
-            to_account: toAccount,
-            narration,
-            sender_name: benName,
-          },
-        });
-        if (depositErr) {
-          console.error("[intra-virtual] vestara_deposit failed for recipient:", depositErr);
-        } else {
-          await syncLegacyWalletFromVestara(adminClient2, recipient.user_id);
-        }
-      } catch (e) {
-        console.error("[intra-virtual] vestara_deposit threw:", e);
-      }
+      await logSettlementBalanceAudit(adminClient2, {
+        user_id: recipient.user_id,
+        account_number: toAccount,
+        event_type: "intra_virtual_transfer_credit",
+        reference: `${ref2}-IN`,
+        vestara_transaction_id: depositResult.transaction_id ?? null,
+        vfd_transaction_id: recipientTx?.id ?? null,
+        amount: amountNum2,
+        wallet_balance_before: recipientBefore.walletBalance,
+        wallet_balance_after: recipientAfter.walletBalance,
+        settlement_balance_before: recipientBefore.settlementBalance,
+        settlement_balance_after: recipientAfter.settlementBalance,
+        legacy_wallet_balance_after: recipientAfter.walletBalance,
+        metadata: { from_user_id: userId, from_account: displayFromAccount, to_account: toAccount, narration },
+      });
 
       try {
         await adminClient2.from("vfd_sandbox_notifications").insert([
