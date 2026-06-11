@@ -338,6 +338,38 @@ async function ensureBalanceRow(
   return { balance: updated, liveBalance, recordedBalance };
 }
 
+async function syncLegacyWalletFromVestara(
+  supabaseAdmin: ReturnType<typeof getSupabaseAdmin>,
+  userId: string
+) {
+  const { data: walletAccount, error } = await supabaseAdmin
+    .from("vestara_accounts")
+    .select("balance")
+    .eq("user_id", userId)
+    .eq("account_type", "wallet")
+    .maybeSingle();
+
+  if (error || !walletAccount) {
+    console.error("[wallet-sync] Could not read Vestara wallet balance:", error);
+    return;
+  }
+
+  const { error: upsertErr } = await supabaseAdmin
+    .from("wallets")
+    .upsert(
+      {
+        user_id: userId,
+        available_balance: Number(walletAccount.balance || 0),
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id" }
+    );
+
+  if (upsertErr) {
+    console.error("[wallet-sync] Could not sync legacy wallet balance:", upsertErr);
+  }
+}
+
 // ─── ACTION HANDLERS ────────────────────────────────────────────
 
 // BVN Lookup
