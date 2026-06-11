@@ -2569,6 +2569,29 @@ Deno.serve(async (req) => {
       return jsonResponse({ data: result });
     }
 
+    // Cron-callable drift sweep (same shared-secret auth)
+    if (actionFromPath === "drift-sweep" && req.method === "POST") {
+      const supabaseAdmin = getSupabaseAdmin();
+      const { data: tokenRow } = await supabaseAdmin
+        .from("vfd_settings").select("value").eq("key", "reconcile_token").maybeSingle();
+      const expected =
+        (tokenRow?.value as string | undefined) ||
+        Deno.env.get("VFD_RECONCILE_TOKEN") ||
+        Deno.env.get("VFD_WEBHOOK_SECRET");
+      const provided =
+        req.headers.get("x-vfd-reconcile-token") ||
+        req.headers.get("x-vfd-signature") ||
+        req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+      if (!expected || provided !== expected) return jsonResponse({ error: "Unauthorized" }, 401);
+      const body = await req.json().catch(() => ({}));
+      const result = await runBalanceDriftSweep({
+        sinceMinutes: Number(body.sinceMinutes) || 60,
+        threshold: Number(body.threshold) || 1,
+        limit: Number(body.limit) || 100,
+      });
+      return jsonResponse({ data: result });
+    }
+
     // All other actions require auth
     const user = await getUserFromRequest(req);
     const userId = user.id;
