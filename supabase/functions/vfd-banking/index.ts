@@ -295,6 +295,36 @@ async function pushWebhookToDlq(
   }
 }
 
+// ─── PHASE 3: append-only tx event log ───
+async function recordTxEvent(
+  supabaseAdmin: ReturnType<typeof getSupabaseAdmin>,
+  params: {
+    transaction_id?: string | null;
+    user_id?: string | null;
+    reference?: string | null;
+    event_type: string;
+    actor?: string;
+    from_status?: string | null;
+    to_status?: string | null;
+    payload?: Record<string, unknown>;
+  }
+) {
+  try {
+    await supabaseAdmin.from("vfd_transaction_events").insert({
+      transaction_id: params.transaction_id ?? null,
+      user_id: params.user_id ?? null,
+      reference: params.reference ?? null,
+      event_type: params.event_type,
+      actor: params.actor ?? "system",
+      from_status: params.from_status ?? null,
+      to_status: params.to_status ?? null,
+      payload: params.payload ?? {},
+    });
+  } catch (e) {
+    console.error("[VFD TxEvent] failed to record:", e);
+  }
+}
+
 function toNumber(value: unknown): number {
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
   if (typeof value === "string") {
