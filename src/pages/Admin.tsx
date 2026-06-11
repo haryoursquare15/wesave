@@ -166,7 +166,12 @@ export default function Admin() {
               <PiggyBank className="h-4 w-4" />
               Investments
             </TabsTrigger>
-          </TabsList>
+            {hasPermission("audit.view") && (
+              <TabsTrigger value="vestara-audit" className="flex items-center gap-1">
+                <FileSpreadsheet className="h-4 w-4" />
+                Vestara Audit Export
+              </TabsTrigger>
+            )}
 
           <TabsContent value="overview">
             <AdminOverviewTab />
