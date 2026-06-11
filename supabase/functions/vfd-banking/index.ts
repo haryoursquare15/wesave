@@ -1407,6 +1407,16 @@ async function handleTransfer(
     .select("id")
     .maybeSingle();
 
+  await recordTxEvent(supabaseAdmin, {
+    transaction_id: reservedTx?.id ?? null,
+    user_id: userId,
+    reference,
+    event_type: "tx.reserved",
+    actor: "user",
+    to_status: "reserved",
+    payload: { amount: Number(body.amount), transferType, beneficiary: toAccount },
+  });
+
   // Call VFD — failures here keep tx `reserved` for the webhook to resolve.
   let data: unknown;
   let status = 0;
