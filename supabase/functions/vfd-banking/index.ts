@@ -1439,6 +1439,15 @@ async function handleTransfer(
       response: { error: networkError.message },
       http_status: null,
     });
+    await recordTxEvent(supabaseAdmin, {
+      transaction_id: reservedTx?.id ?? null,
+      user_id: userId,
+      reference,
+      event_type: "vfd.network_error",
+      from_status: "reserved",
+      to_status: "reserved",
+      payload: { error: networkError.message },
+    });
     return jsonResponse(
       {
         error: "Transfer is processing. We'll confirm the outcome shortly.",
