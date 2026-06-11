@@ -934,6 +934,8 @@ async function handleTransfer(
         });
         if (depositErr) {
           console.error("[intra-virtual] vestara_deposit failed for recipient:", depositErr);
+        } else {
+          await syncLegacyWalletFromVestara(adminClient2, recipient.user_id);
         }
       } catch (e) {
         console.error("[intra-virtual] vestara_deposit threw:", e);
