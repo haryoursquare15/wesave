@@ -172,6 +172,8 @@ export default function Admin() {
                 Vestara Audit Export
               </TabsTrigger>
             )}
+          </TabsList>
+
 
           <TabsContent value="overview">
             <AdminOverviewTab />
