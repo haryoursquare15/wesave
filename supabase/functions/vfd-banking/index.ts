@@ -1794,6 +1794,17 @@ async function handleWebhook(req: Request) {
       })
       .eq("id", tx.id);
 
+    await recordTxEvent(supabaseAdmin, {
+      transaction_id: tx.id,
+      user_id: tx.user_id,
+      reference,
+      event_type: success ? "webhook.committed" : "webhook.reversed",
+      actor: "webhook",
+      from_status: "reserved",
+      to_status: success ? "completed" : "reversed",
+      payload: { vfd_status: vfdStatus, event: eventType },
+    });
+
     if (success && tx.user_id) {
       await ensureBalanceRow(supabaseAdmin, tx.user_id, {
         accountNo: tx.vfd_account_number ?? null,
