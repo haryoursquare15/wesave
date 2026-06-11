@@ -1202,6 +1202,69 @@ export type Database = {
           },
         ]
       }
+      intra_transfer_reports: {
+        Row: {
+          amount: number
+          created_at: string
+          from_account: string
+          id: string
+          metadata: Json
+          narration: string | null
+          recipient_balance_after: number | null
+          recipient_balance_before: number | null
+          recipient_user_id: string
+          recipient_vestara_transaction_id: string | null
+          recipient_vfd_transaction_id: string | null
+          reference: string
+          sender_balance_after: number | null
+          sender_balance_before: number | null
+          sender_user_id: string
+          sender_vfd_transaction_id: string | null
+          settlement_status: string
+          to_account: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          from_account: string
+          id?: string
+          metadata?: Json
+          narration?: string | null
+          recipient_balance_after?: number | null
+          recipient_balance_before?: number | null
+          recipient_user_id: string
+          recipient_vestara_transaction_id?: string | null
+          recipient_vfd_transaction_id?: string | null
+          reference: string
+          sender_balance_after?: number | null
+          sender_balance_before?: number | null
+          sender_user_id: string
+          sender_vfd_transaction_id?: string | null
+          settlement_status?: string
+          to_account: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          from_account?: string
+          id?: string
+          metadata?: Json
+          narration?: string | null
+          recipient_balance_after?: number | null
+          recipient_balance_before?: number | null
+          recipient_user_id?: string
+          recipient_vestara_transaction_id?: string | null
+          recipient_vfd_transaction_id?: string | null
+          reference?: string
+          sender_balance_after?: number | null
+          sender_balance_before?: number | null
+          sender_user_id?: string
+          sender_vfd_transaction_id?: string | null
+          settlement_status?: string
+          to_account?: string
+        }
+        Relationships: []
+      }
       ledger_confirmed_test: {
         Row: {
           amount: number
@@ -3659,6 +3722,60 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      vestara_settlement_balance_audit: {
+        Row: {
+          account_number: string | null
+          amount: number
+          created_at: string
+          event_type: string
+          id: string
+          legacy_wallet_balance_after: number | null
+          metadata: Json
+          reference: string
+          settlement_balance_after: number | null
+          settlement_balance_before: number | null
+          user_id: string | null
+          vestara_transaction_id: string | null
+          vfd_transaction_id: string | null
+          wallet_balance_after: number | null
+          wallet_balance_before: number | null
+        }
+        Insert: {
+          account_number?: string | null
+          amount?: number
+          created_at?: string
+          event_type: string
+          id?: string
+          legacy_wallet_balance_after?: number | null
+          metadata?: Json
+          reference: string
+          settlement_balance_after?: number | null
+          settlement_balance_before?: number | null
+          user_id?: string | null
+          vestara_transaction_id?: string | null
+          vfd_transaction_id?: string | null
+          wallet_balance_after?: number | null
+          wallet_balance_before?: number | null
+        }
+        Update: {
+          account_number?: string | null
+          amount?: number
+          created_at?: string
+          event_type?: string
+          id?: string
+          legacy_wallet_balance_after?: number | null
+          metadata?: Json
+          reference?: string
+          settlement_balance_after?: number | null
+          settlement_balance_before?: number | null
+          user_id?: string | null
+          vestara_transaction_id?: string | null
+          vfd_transaction_id?: string | null
+          wallet_balance_after?: number | null
+          wallet_balance_before?: number | null
+        }
+        Relationships: []
       }
       vestara_transactions: {
         Row: {

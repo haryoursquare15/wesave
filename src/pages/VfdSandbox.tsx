@@ -26,6 +26,7 @@ import { useSandboxSessionEnforcement } from "@/hooks/useSandboxSessionEnforceme
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { AnimatePresence } from "framer-motion";
+import { sandboxSupabase } from "@/integrations/supabase/sandboxClient";
 
 import { getUserFriendlyError } from "@/lib/errorMessages";
 interface LockConfig { id: string; duration_months: number; interest_rate: number; early_withdrawal_penalty: number; }
@@ -55,6 +56,10 @@ function VfdSandboxInner() {
   const { toast } = useToast();
   const vfd = useVfdBanking();
   const vestara = useVestaraLedger();
+  const fetchVfdTransactions = vfd.fetchTransactions;
+  const getVestaraBalanceSummary = vestara.getBalanceSummary;
+  const getVestaraLockedFunds = vestara.getLockedFunds;
+  const fetchVestaraTransactions = vestara.fetchTransactions;
 
   const [kycDone, setKycDone] = useState(false);
   const [clientChecked, setClientChecked] = useState(false);
@@ -143,7 +148,7 @@ function VfdSandboxInner() {
 
   /* ─── Vestara Balance (SINGLE SOURCE OF TRUTH) ─── */
   const refreshVestaraBalance = useCallback(async () => {
-    const summary = await vestara.getBalanceSummary();
+    const summary = await getVestaraBalanceSummary();
     if (summary) {
       setVestaraBalance({
         total_balance: summary.total,
@@ -152,18 +157,59 @@ function VfdSandboxInner() {
         savings_balance: summary.accrued_interest,
       });
     }
-  }, [vestara]);
+  }, [getVestaraBalanceSummary]);
 
   /* ─── Vestara Locked Funds ─── */
   const refreshVestaraLockedFunds = useCallback(async () => {
-    const funds = await vestara.getLockedFunds();
+    const funds = await getVestaraLockedFunds();
     setVestaraLockedFunds(funds);
-  }, [vestara]);
+  }, [getVestaraLockedFunds]);
 
   /* ─── Vestara Transactions ─── */
   const refreshVestaraTransactions = useCallback(async () => {
-    await vestara.fetchTransactions();
-  }, [vestara]);
+    await fetchVestaraTransactions();
+  }, [fetchVestaraTransactions]);
+
+  useEffect(() => {
+    const userId = user?.id;
+    if (!userId || !session?.access_token || !kycDone) return;
+
+    const refreshNow = () => {
+      void Promise.all([
+        refreshVestaraBalance(),
+        refreshVestaraTransactions(),
+        fetchVfdTransactions(),
+      ]);
+    };
+
+    const channel = sandboxSupabase
+      .channel(`vestara-instant-settlement-${userId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "vestara_transactions",
+          filter: `initiated_by=eq.${userId}`,
+        },
+        refreshNow,
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "vfd_sandbox_transactions",
+          filter: `user_id=eq.${userId}`,
+        },
+        refreshNow,
+      )
+      .subscribe();
+
+    return () => {
+      void sandboxSupabase.removeChannel(channel);
+    };
+  }, [user?.id, session?.access_token, kycDone, refreshVestaraBalance, refreshVestaraTransactions, fetchVfdTransactions]);
 
   // Map vestara transactions — show net amount and platform fee for payouts
   const mappedTransactions = vestara.transactions.flatMap((tx) => {
