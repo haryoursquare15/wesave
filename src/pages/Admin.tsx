@@ -173,6 +173,12 @@ export default function Admin() {
                 Vestara Audit Export
               </TabsTrigger>
             )}
+            {hasPermission("audit.view") && (
+              <TabsTrigger value="vfd-dlq" className="flex items-center gap-1">
+                <AlertTriangle className="h-4 w-4" />
+                VFD DLQ
+              </TabsTrigger>
+            )}
           </TabsList>
 
 
