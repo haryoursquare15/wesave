@@ -1503,13 +1503,56 @@ async function handleSandboxCredit(userId: string, accountNo: string, amount: nu
 
   const reference = `WeSave-credit-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
 
-  const { data, status } = await vfdRequest("/credit", "POST", {
-    amount: String(amount),
-    accountNo,
-    senderAccountNo: "5050104070",
-    senderBank: "000002",
-    senderNarration: `Sandbox test credit - ${reference}`,
+  // ─── PHASE 1: idempotency for sandbox credit ───
+  const idemKey = reference;
+  const idem = await reserveIdempotencyKey(supabaseAdmin, {
+    key: idemKey,
+    userId,
+    action: "sandbox_credit",
+    reference,
   });
+
+  if (idem.mode === "replay") {
+    const cached = idem.row.response as Record<string, unknown> | null;
+    return jsonResponse(
+      {
+        data: cached ?? { status: idem.row.status, message: "Replayed from idempotency cache" },
+        vfd_status: idem.row.http_status ?? 200,
+        reference,
+        replayed: true,
+      },
+      200
+    );
+  }
+
+  let data: unknown;
+  let status = 0;
+  let networkError: Error | null = null;
+  try {
+    const result = await vfdRequest("/credit", "POST", {
+      amount: String(amount),
+      accountNo,
+      senderAccountNo: "5050104070",
+      senderBank: "000002",
+      senderNarration: `Sandbox test credit - ${reference}`,
+    });
+    data = result.data;
+    status = result.status;
+  } catch (err) {
+    networkError = err instanceof Error ? err : new Error(String(err));
+  }
+
+  if (networkError) {
+    await settleIdempotencyKey(supabaseAdmin, idemKey, {
+      status: "pending",
+      response: { error: networkError.message },
+      http_status: null,
+    });
+    return jsonResponse(
+      { error: "Credit is processing. Refresh in a moment.", code: "CREDIT_PENDING", reference },
+      202
+    );
+  }
 
   const vfdData = data as Record<string, unknown>;
   const isSuccess = vfdData?.status === "00";
@@ -1521,9 +1564,17 @@ async function handleSandboxCredit(userId: string, accountNo: string, amount: nu
     transaction_type: "credit",
     status: isSuccess ? "completed" : "failed",
     reference,
+    idempotency_key: idemKey,
+    committed_at: isSuccess ? new Date().toISOString() : null,
     description: "Sandbox test credit",
     metadata: data as Record<string, unknown>,
     source: "vfd_sandbox",
+  });
+
+  await settleIdempotencyKey(supabaseAdmin, idemKey, {
+    status: isSuccess ? "completed" : "failed",
+    response: data,
+    http_status: status,
   });
 
   // Auto-sync internal ledger after successful credit
