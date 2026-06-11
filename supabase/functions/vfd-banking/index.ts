@@ -1503,13 +1503,56 @@ async function handleSandboxCredit(userId: string, accountNo: string, amount: nu
 
   const reference = `WeSave-credit-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
 
-  const { data, status } = await vfdRequest("/credit", "POST", {
-    amount: String(amount),
-    accountNo,
-    senderAccountNo: "5050104070",
-    senderBank: "000002",
-    senderNarration: `Sandbox test credit - ${reference}`,
+  // ─── PHASE 1: idempotency for sandbox credit ───
+  const idemKey = reference;
+  const idem = await reserveIdempotencyKey(supabaseAdmin, {
+    key: idemKey,
+    userId,
+    action: "sandbox_credit",
+    reference,
   });
+
+  if (idem.mode === "replay") {
+    const cached = idem.row.response as Record<string, unknown> | null;
+    return jsonResponse(
+      {
+        data: cached ?? { status: idem.row.status, message: "Replayed from idempotency cache" },
+        vfd_status: idem.row.http_status ?? 200,
+        reference,
+        replayed: true,
+      },
+      200
+    );
+  }
+
+  let data: unknown;
+  let status = 0;
+  let networkError: Error | null = null;
+  try {
+    const result = await vfdRequest("/credit", "POST", {
+      amount: String(amount),
+      accountNo,
+      senderAccountNo: "5050104070",
+      senderBank: "000002",
+      senderNarration: `Sandbox test credit - ${reference}`,
+    });
+    data = result.data;
+    status = result.status;
+  } catch (err) {
+    networkError = err instanceof Error ? err : new Error(String(err));
+  }
+
+  if (networkError) {
+    await settleIdempotencyKey(supabaseAdmin, idemKey, {
+      status: "pending",
+      response: { error: networkError.message },
+      http_status: null,
+    });
+    return jsonResponse(
+      { error: "Credit is processing. Refresh in a moment.", code: "CREDIT_PENDING", reference },
+      202
+    );
+  }
 
   const vfdData = data as Record<string, unknown>;
   const isSuccess = vfdData?.status === "00";
@@ -1521,9 +1564,17 @@ async function handleSandboxCredit(userId: string, accountNo: string, amount: nu
     transaction_type: "credit",
     status: isSuccess ? "completed" : "failed",
     reference,
+    idempotency_key: idemKey,
+    committed_at: isSuccess ? new Date().toISOString() : null,
     description: "Sandbox test credit",
     metadata: data as Record<string, unknown>,
     source: "vfd_sandbox",
+  });
+
+  await settleIdempotencyKey(supabaseAdmin, idemKey, {
+    status: isSuccess ? "completed" : "failed",
+    response: data,
+    http_status: status,
   });
 
   // Auto-sync internal ledger after successful credit
@@ -2105,6 +2156,172 @@ async function handleGetLockLedger(userId: string) {
 }
 
 
+// ─── PHASE 2: RECONCILIATION SWEEP ───
+// Find transactions stuck in `reserved` and ask VFD for the real outcome
+// via /transactions. Commit / reverse / leave-pending based on the response.
+async function processStuckReservedTransactions(opts: { olderThanMinutes?: number; limit?: number } = {}) {
+  const supabaseAdmin = getSupabaseAdmin();
+  const olderThan = opts.olderThanMinutes ?? 5;
+  const limit = Math.min(opts.limit ?? 50, 200);
+  const cutoff = new Date(Date.now() - olderThan * 60 * 1000).toISOString();
+
+  const { data: stuck, error } = await supabaseAdmin
+    .from("vfd_sandbox_transactions")
+    .select("id, user_id, amount, reference, vfd_account_number, beneficiary_name, beneficiary_account, idempotency_key")
+    .eq("status", "reserved")
+    .lt("reserved_at", cutoff)
+    .order("reserved_at", { ascending: true })
+    .limit(limit);
+
+  if (error) {
+    console.error("[Reconcile] query error:", error.message);
+    return { scanned: 0, committed: 0, reversed: 0, still_pending: 0, errors: [error.message] };
+  }
+
+  const errors: string[] = [];
+  let committed = 0;
+  let reversed = 0;
+  let pending = 0;
+
+  for (const tx of stuck ?? []) {
+    if (!tx.reference) {
+      pending++;
+      continue;
+    }
+    try {
+      const { data: query } = await vfdRequest("/transactions", "GET", undefined, { reference: tx.reference });
+      const inner = (query as Record<string, unknown>)?.data as Record<string, unknown> | undefined;
+      const vfdStatus = (inner?.transactionStatus as string) || (inner?.status as string) || (query as Record<string, unknown>)?.status as string;
+      const txnId = (inner?.txnId ?? inner?.sessionId)?.toString() ?? null;
+      const success = vfdStatus === "00" || /success|completed/i.test(vfdStatus ?? "");
+      const failed = /fail|reverse|declin/i.test(vfdStatus ?? "");
+      const nowIso = new Date().toISOString();
+
+      if (success) {
+        await supabaseAdmin.from("vfd_sandbox_transactions").update({
+          status: "completed",
+          committed_at: nowIso,
+          vfd_reference: txnId,
+          metadata: { ...(query as Record<string, unknown>), stage: "reconciled_committed" },
+        }).eq("id", tx.id);
+        if (tx.user_id) {
+          await ensureBalanceRow(supabaseAdmin, tx.user_id, { accountNo: tx.vfd_account_number ?? null, preserveExisting: false });
+          await supabaseAdmin.from("vfd_sandbox_notifications").insert({
+            user_id: tx.user_id,
+            title: "Transfer confirmed",
+            message: `₦${Number(tx.amount).toLocaleString()} to ${tx.beneficiary_name || tx.beneficiary_account} confirmed.`,
+            notification_type: "transfer_confirmed",
+          }).then(() => {}, () => {});
+        }
+        if (tx.idempotency_key) {
+          await settleIdempotencyKey(supabaseAdmin, tx.idempotency_key, { status: "completed", response: query, http_status: 200 });
+        }
+        committed++;
+      } else if (failed) {
+        await supabaseAdmin.from("vfd_sandbox_transactions").update({
+          status: "reversed",
+          reversed_at: nowIso,
+          metadata: { ...(query as Record<string, unknown>), stage: "reconciled_reversed" },
+        }).eq("id", tx.id);
+        if (tx.user_id) {
+          await ensureBalanceRow(supabaseAdmin, tx.user_id, { accountNo: tx.vfd_account_number ?? null, preserveExisting: false });
+          await supabaseAdmin.from("vfd_sandbox_notifications").insert({
+            user_id: tx.user_id,
+            title: "Transfer reversed",
+            message: `₦${Number(tx.amount).toLocaleString()} to ${tx.beneficiary_name || tx.beneficiary_account} was reversed and refunded.`,
+            notification_type: "transfer_reversed",
+          }).then(() => {}, () => {});
+        }
+        if (tx.idempotency_key) {
+          await settleIdempotencyKey(supabaseAdmin, tx.idempotency_key, { status: "failed", response: query, http_status: 200 });
+        }
+        reversed++;
+      } else {
+        pending++;
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      errors.push(`${tx.reference}: ${msg}`);
+    }
+  }
+
+  await supabaseAdmin.from("vfd_sandbox_webhook_logs").insert({
+    event_type: "reconciliation_sweep",
+    payload: { scanned: stuck?.length ?? 0, committed, reversed, still_pending: pending, older_than_minutes: olderThan, errors },
+    processed: true,
+    processed_at: new Date().toISOString(),
+  });
+
+  return { scanned: stuck?.length ?? 0, committed, reversed, still_pending: pending, errors };
+}
+
+async function handleDlqList(userId: string, limit = 50) {
+  const supabaseAdmin = getSupabaseAdmin();
+  const { data: roles } = await supabaseAdmin.from("user_roles").select("role").eq("user_id", userId);
+  const isAdmin = (roles ?? []).some(r => ["admin", "super_admin"].includes(r.role as string));
+  if (!isAdmin) return jsonResponse({ error: "Admin only" }, 403);
+  const { data, error } = await supabaseAdmin
+    .from("vfd_webhook_dlq")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(Math.min(limit, 200));
+  if (error) return jsonResponse({ error: error.message }, 500);
+  return jsonResponse({ data });
+}
+
+async function handleDlqReplay(userId: string, dlqId: string) {
+  const supabaseAdmin = getSupabaseAdmin();
+  const { data: roles } = await supabaseAdmin.from("user_roles").select("role").eq("user_id", userId);
+  const isAdmin = (roles ?? []).some(r => ["admin", "super_admin"].includes(r.role as string));
+  if (!isAdmin) return jsonResponse({ error: "Admin only" }, 403);
+
+  const { data: entry } = await supabaseAdmin.from("vfd_webhook_dlq").select("*").eq("id", dlqId).maybeSingle();
+  if (!entry) return jsonResponse({ error: "DLQ entry not found" }, 404);
+
+  // Re-invoke webhook processing using stored payload + a fresh secret-signed request.
+  const secret = Deno.env.get("VFD_WEBHOOK_SECRET");
+  if (!secret) return jsonResponse({ error: "VFD_WEBHOOK_SECRET not configured" }, 503);
+
+  const fakeReq = new Request("https://internal/webhook", {
+    method: "POST",
+    headers: { "x-vfd-signature": secret, "content-type": "application/json" },
+    body: JSON.stringify(entry.payload),
+  });
+  const res = await handleWebhook(fakeReq);
+  const out = await res.json().catch(() => ({}));
+
+  await supabaseAdmin.from("vfd_webhook_dlq").update({
+    attempts: (Number(entry.attempts) || 1) + 1,
+    last_attempt_at: new Date().toISOString(),
+    resolved: out?.status === "processed" || out?.status === "duplicate_ignored",
+    resolved_at: (out?.status === "processed" || out?.status === "duplicate_ignored") ? new Date().toISOString() : null,
+  }).eq("id", dlqId);
+
+  return jsonResponse({ data: out });
+}
+
+async function handleDlqResolve(userId: string, dlqId: string) {
+  const supabaseAdmin = getSupabaseAdmin();
+  const { data: roles } = await supabaseAdmin.from("user_roles").select("role").eq("user_id", userId);
+  const isAdmin = (roles ?? []).some(r => ["admin", "super_admin"].includes(r.role as string));
+  if (!isAdmin) return jsonResponse({ error: "Admin only" }, 403);
+  await supabaseAdmin.from("vfd_webhook_dlq").update({ resolved: true, resolved_at: new Date().toISOString() }).eq("id", dlqId);
+  return jsonResponse({ data: { ok: true } });
+}
+
+async function handleReconciliationSweep(userId: string, body: Record<string, unknown>) {
+  const supabaseAdmin = getSupabaseAdmin();
+  const { data: roles } = await supabaseAdmin.from("user_roles").select("role").eq("user_id", userId);
+  const isAdmin = (roles ?? []).some(r => ["admin", "super_admin"].includes(r.role as string));
+  if (!isAdmin) return jsonResponse({ error: "Admin only" }, 403);
+  const result = await processStuckReservedTransactions({
+    olderThanMinutes: Number(body.olderThanMinutes) || 5,
+    limit: Number(body.limit) || 50,
+  });
+  return jsonResponse({ data: result });
+}
+
+
 // ─── MAIN HANDLER ───────────────────────────────────────────────
 
 Deno.serve(async (req) => {
@@ -2120,6 +2337,33 @@ Deno.serve(async (req) => {
     // Support webhook without auth
     if (actionFromPath === "webhook" && req.method === "POST") {
       return await handleWebhook(req);
+    }
+
+    // Cron-callable reconciliation sweep (no JWT; shared-secret auth)
+    if (actionFromPath === "reconcile" && req.method === "POST") {
+      const supabaseAdmin = getSupabaseAdmin();
+      const { data: tokenRow } = await supabaseAdmin
+        .from("vfd_settings")
+        .select("value")
+        .eq("key", "reconcile_token")
+        .maybeSingle();
+      const expected =
+        (tokenRow?.value as string | undefined) ||
+        Deno.env.get("VFD_RECONCILE_TOKEN") ||
+        Deno.env.get("VFD_WEBHOOK_SECRET");
+      const provided =
+        req.headers.get("x-vfd-reconcile-token") ||
+        req.headers.get("x-vfd-signature") ||
+        req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+      if (!expected || provided !== expected) {
+        return jsonResponse({ error: "Unauthorized" }, 401);
+      }
+      const body = await req.json().catch(() => ({}));
+      const result = await processStuckReservedTransactions({
+        olderThanMinutes: Number(body.olderThanMinutes) || 5,
+        limit: Number(body.limit) || 50,
+      });
+      return jsonResponse({ data: result });
     }
 
     // All other actions require auth
@@ -2225,6 +2469,16 @@ Deno.serve(async (req) => {
 
       case "get_lock_ledger":
         return await handleGetLockLedger(userId);
+
+      // Admin: DLQ + reconciliation
+      case "dlq_list":
+        return await handleDlqList(userId, Number(body.limit) || 50);
+      case "dlq_replay":
+        return await handleDlqReplay(userId, body.id as string);
+      case "dlq_resolve":
+        return await handleDlqResolve(userId, body.id as string);
+      case "reconciliation_sweep":
+        return await handleReconciliationSweep(userId, body);
 
       default:
         return jsonResponse({ error: `Unknown action: ${action}` }, 400);

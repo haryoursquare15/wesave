@@ -25,7 +25,8 @@ import { AdminEmailTab } from "@/components/admin/AdminEmailTab";
 import { VestaraRateConfigTab } from "@/components/admin/VestaraRateConfigTab";
 import { VestaraInvestmentsTab } from "@/components/admin/VestaraInvestmentsTab";
 import { VestaraAuditExportTab } from "@/components/admin/VestaraAuditExportTab";
-import { Percent, PiggyBank, FileSpreadsheet } from "lucide-react";
+import { VfdWebhookDlqTab } from "@/components/admin/VfdWebhookDlqTab";
+import { Percent, PiggyBank, FileSpreadsheet, AlertTriangle } from "lucide-react";
 
 export default function Admin() {
   const navigate = useNavigate();
@@ -172,6 +173,12 @@ export default function Admin() {
                 Vestara Audit Export
               </TabsTrigger>
             )}
+            {hasPermission("audit.view") && (
+              <TabsTrigger value="vfd-dlq" className="flex items-center gap-1">
+                <AlertTriangle className="h-4 w-4" />
+                VFD DLQ
+              </TabsTrigger>
+            )}
           </TabsList>
 
 
@@ -229,6 +236,10 @@ export default function Admin() {
 
           <TabsContent value="vestara-audit">
             <VestaraAuditExportTab />
+          </TabsContent>
+
+          <TabsContent value="vfd-dlq">
+            <VfdWebhookDlqTab />
           </TabsContent>
         </Tabs>
       </div>
