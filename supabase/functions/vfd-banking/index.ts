@@ -1631,6 +1631,15 @@ async function handleSandboxCredit(userId: string, accountNo: string, amount: nu
     source: "vfd_sandbox",
   });
 
+  await recordTxEvent(supabaseAdmin, {
+    user_id: userId,
+    reference,
+    event_type: isSuccess ? "credit.committed" : "credit.failed",
+    actor: "user",
+    to_status: isSuccess ? "completed" : "failed",
+    payload: { amount, accountNo, vfd_status: vfdData?.status },
+  });
+
   await settleIdempotencyKey(supabaseAdmin, idemKey, {
     status: isSuccess ? "completed" : "failed",
     response: data,
