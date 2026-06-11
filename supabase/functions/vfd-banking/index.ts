@@ -1597,14 +1597,115 @@ async function handleWebhook(req: Request) {
   }
 
   const supabaseAdmin = getSupabaseAdmin();
+  const eventType = (payload?.event as string) || (payload?.type as string) || "unknown";
+
+  // Always log every received webhook for audit.
   await supabaseAdmin.from("vfd_sandbox_webhook_logs").insert({
-    event_type: (payload?.event as string) || (payload?.type as string) || "unknown",
+    event_type: eventType,
     payload,
     processed: false,
   });
 
   console.log("[VFD Webhook]", JSON.stringify(payload));
-  return jsonResponse({ status: "received" });
+
+  // ─── PHASE 1: idempotent state transition for transfer webhooks ───
+  // Extract a reference / outcome from VFD's payload shape.
+  const inner = (payload?.data as Record<string, unknown>) ?? {};
+  const reference =
+    (payload?.reference as string) ||
+    (inner?.reference as string) ||
+    (inner?.sessionId as string) ||
+    (payload?.sessionId as string) ||
+    null;
+  const vfdStatus =
+    (payload?.status as string) ||
+    (inner?.status as string) ||
+    (payload?.transactionStatus as string) ||
+    (inner?.transactionStatus as string) ||
+    null;
+
+  if (!reference) {
+    await pushWebhookToDlq(supabaseAdmin, {
+      event_type: eventType,
+      reference: null,
+      payload,
+      error: "Webhook missing reference",
+    });
+    return jsonResponse({ status: "received", queued: "dlq" });
+  }
+
+  try {
+    const { data: tx } = await supabaseAdmin
+      .from("vfd_sandbox_transactions")
+      .select("id, status, user_id, amount, vfd_account_number, beneficiary_name, beneficiary_account")
+      .eq("reference", reference)
+      .maybeSingle();
+
+    if (!tx) {
+      await pushWebhookToDlq(supabaseAdmin, {
+        event_type: eventType,
+        reference,
+        payload,
+        error: "No transaction found for reference",
+      });
+      return jsonResponse({ status: "received", queued: "dlq" });
+    }
+
+    // Terminal-state guard — webhook deliveries can duplicate; never re-apply.
+    if (tx.status === "completed" || tx.status === "reversed" || tx.status === "failed") {
+      await supabaseAdmin
+        .from("vfd_sandbox_webhook_logs")
+        .update({ processed: true, processed_at: new Date().toISOString() })
+        .eq("payload", payload as never)
+        .is("processed_at", null);
+      return jsonResponse({ status: "duplicate_ignored", reference });
+    }
+
+    const success = vfdStatus === "00" || /success|completed/i.test(vfdStatus ?? "");
+    const nowIso = new Date().toISOString();
+
+    await supabaseAdmin
+      .from("vfd_sandbox_transactions")
+      .update({
+        status: success ? "completed" : "reversed",
+        committed_at: success ? nowIso : null,
+        reversed_at: success ? null : nowIso,
+        metadata: { ...(payload as Record<string, unknown>), stage: success ? "webhook_committed" : "webhook_reversed" },
+      })
+      .eq("id", tx.id);
+
+    if (success && tx.user_id) {
+      await ensureBalanceRow(supabaseAdmin, tx.user_id, {
+        accountNo: tx.vfd_account_number ?? null,
+        preserveExisting: false,
+      });
+    }
+
+    try {
+      if (tx.user_id) {
+        await supabaseAdmin.from("vfd_sandbox_notifications").insert({
+          user_id: tx.user_id,
+          title: success ? "Transfer confirmed" : "Transfer reversed",
+          message: success
+            ? `₦${Number(tx.amount).toLocaleString()} to ${tx.beneficiary_name || tx.beneficiary_account} confirmed.`
+            : `₦${Number(tx.amount).toLocaleString()} to ${tx.beneficiary_name || tx.beneficiary_account} was reversed and refunded.`,
+          notification_type: success ? "transfer_confirmed" : "transfer_reversed",
+        });
+      }
+    } catch (_) { /* best-effort */ }
+
+    return jsonResponse({ status: "processed", reference, outcome: success ? "completed" : "reversed" });
+  } catch (e) {
+    const err = e instanceof Error ? e.message : String(e);
+    console.error("[VFD Webhook] processing error:", err);
+    await pushWebhookToDlq(supabaseAdmin, {
+      event_type: eventType,
+      reference,
+      payload,
+      error: err,
+    });
+    return jsonResponse({ status: "received", queued: "dlq" });
+  }
 }
 
 // Get user's VFD client data from DB
