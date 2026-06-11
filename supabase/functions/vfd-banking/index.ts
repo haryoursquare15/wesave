@@ -207,6 +207,94 @@ function jsonResponse(data: unknown, status = 200) {
   });
 }
 
+// ─── PHASE 1: IDEMPOTENCY + DLQ HELPERS ───
+// Reserve an idempotency key BEFORE the outbound VFD money-moving call.
+// Returns { mode: "new" | "replay", row } — on replay the caller should return
+// the cached response rather than hit VFD again.
+async function reserveIdempotencyKey(
+  supabaseAdmin: ReturnType<typeof getSupabaseAdmin>,
+  params: { key: string; userId: string | null; action: string; reference: string | null; requestHash?: string | null }
+): Promise<
+  | { mode: "new"; row: Record<string, unknown> }
+  | { mode: "replay"; row: Record<string, unknown> }
+> {
+  const { data: inserted, error: insErr } = await supabaseAdmin
+    .from("vfd_idempotency_keys")
+    .insert({
+      idempotency_key: params.key,
+      user_id: params.userId,
+      action: params.action,
+      transaction_reference: params.reference,
+      request_hash: params.requestHash ?? null,
+      status: "pending",
+    })
+    .select()
+    .maybeSingle();
+
+  if (!insErr && inserted) return { mode: "new", row: inserted as Record<string, unknown> };
+
+  // Conflict — fetch the existing row and decide replay vs retry.
+  const { data: existing } = await supabaseAdmin
+    .from("vfd_idempotency_keys")
+    .select("*")
+    .eq("idempotency_key", params.key)
+    .maybeSingle();
+
+  if (!existing) {
+    // Unexpected; treat as new to avoid hard-blocking the user.
+    return { mode: "new", row: { idempotency_key: params.key } };
+  }
+
+  // Terminal results are replayed verbatim — do NOT call VFD again.
+  if (existing.status === "completed" || existing.status === "failed") {
+    return { mode: "replay", row: existing as Record<string, unknown> };
+  }
+
+  // pending → bump attempts and let the caller proceed (covers prior timeout).
+  await supabaseAdmin
+    .from("vfd_idempotency_keys")
+    .update({
+      attempts: (Number(existing.attempts) || 1) + 1,
+      last_attempt_at: new Date().toISOString(),
+    })
+    .eq("idempotency_key", params.key);
+
+  return { mode: "new", row: existing as Record<string, unknown> };
+}
+
+async function settleIdempotencyKey(
+  supabaseAdmin: ReturnType<typeof getSupabaseAdmin>,
+  key: string,
+  result: { status: "completed" | "failed" | "pending"; response: unknown; http_status?: number | null }
+) {
+  await supabaseAdmin
+    .from("vfd_idempotency_keys")
+    .update({
+      status: result.status,
+      response: result.response as Record<string, unknown> | null,
+      http_status: result.http_status ?? null,
+      last_attempt_at: new Date().toISOString(),
+    })
+    .eq("idempotency_key", key);
+}
+
+async function pushWebhookToDlq(
+  supabaseAdmin: ReturnType<typeof getSupabaseAdmin>,
+  params: { event_type?: string | null; reference?: string | null; payload: unknown; headers?: Record<string, string> | null; error: string }
+) {
+  try {
+    await supabaseAdmin.from("vfd_webhook_dlq").insert({
+      event_type: params.event_type ?? null,
+      reference: params.reference ?? null,
+      payload: params.payload as Record<string, unknown>,
+      headers: params.headers as Record<string, unknown> | null,
+      error: params.error,
+    });
+  } catch (e) {
+    console.error("[VFD DLQ] failed to enqueue:", e);
+  }
+}
+
 function toNumber(value: unknown): number {
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
   if (typeof value === "string") {
