@@ -2413,6 +2413,117 @@ async function handleReconciliationSweep(userId: string, body: Record<string, un
   return jsonResponse({ data: result });
 }
 
+// ─── PHASE 3: BALANCE DRIFT DETECTION ───
+// For each user with recent VFD activity, compare VFD live balance vs the
+// internal recorded balance and log a finding when |drift| > threshold.
+async function runBalanceDriftSweep(opts: { sinceMinutes?: number; threshold?: number; limit?: number } = {}) {
+  const supabaseAdmin = getSupabaseAdmin();
+  const since = new Date(Date.now() - (opts.sinceMinutes ?? 60) * 60 * 1000).toISOString();
+  const threshold = opts.threshold ?? 1;
+  const limit = Math.min(opts.limit ?? 100, 500);
+
+  // Pull distinct (user_id, account) pairs that had any activity in the window,
+  // plus all active clients (so an idle account still gets periodic checks).
+  const { data: recentTx } = await supabaseAdmin
+    .from("vfd_sandbox_transactions")
+    .select("user_id, vfd_account_number")
+    .gte("created_at", since)
+    .not("vfd_account_number", "is", null)
+    .limit(limit);
+
+  const seen = new Set<string>();
+  const pairs: { userId: string; accountNo: string }[] = [];
+  for (const r of recentTx ?? []) {
+    const key = `${r.user_id}|${r.vfd_account_number}`;
+    if (!seen.has(key) && r.user_id && r.vfd_account_number) {
+      seen.add(key);
+      pairs.push({ userId: r.user_id as string, accountNo: r.vfd_account_number as string });
+    }
+  }
+
+  let checked = 0, healthy = 0, drifted = 0;
+  const findings: Array<Record<string, unknown>> = [];
+
+  for (const { userId, accountNo } of pairs) {
+    try {
+      const { data: balData } = await vfdRequest("/account/enquiry", "GET", undefined, { accountNumber: accountNo });
+      const liveBalance = extractVfdBalance(balData);
+      const recordedBalance = await getRecordedSandboxBalance(supabaseAdmin, userId);
+      const drift = Number((liveBalance - recordedBalance).toFixed(2));
+      const isHealthy = Math.abs(drift) <= threshold;
+
+      const { data: inserted } = await supabaseAdmin
+        .from("vfd_balance_drift_findings")
+        .insert({
+          user_id: userId,
+          vfd_account_number: accountNo,
+          vfd_live_balance: liveBalance,
+          recorded_balance: recordedBalance,
+          drift,
+          threshold,
+          is_healthy: isHealthy,
+          details: { sinceMinutes: opts.sinceMinutes ?? 60 },
+        })
+        .select("id")
+        .maybeSingle();
+
+      checked++;
+      if (isHealthy) healthy++; else drifted++;
+      findings.push({ id: inserted?.id, userId, accountNo, drift, isHealthy });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("[Drift] check failed:", accountNo, msg);
+    }
+  }
+
+  return { checked, healthy, drifted, threshold, findings };
+}
+
+async function handleDriftSweep(userId: string, body: Record<string, unknown>) {
+  const supabaseAdmin = getSupabaseAdmin();
+  const { data: roles } = await supabaseAdmin.from("user_roles").select("role").eq("user_id", userId);
+  const isAdmin = (roles ?? []).some(r => ["admin", "super_admin"].includes(r.role as string));
+  if (!isAdmin) return jsonResponse({ error: "Admin only" }, 403);
+  const result = await runBalanceDriftSweep({
+    sinceMinutes: Number(body.sinceMinutes) || 60,
+    threshold: Number(body.threshold) || 1,
+    limit: Number(body.limit) || 100,
+  });
+  return jsonResponse({ data: result });
+}
+
+async function handleDriftFindings(userId: string, body: Record<string, unknown>) {
+  const supabaseAdmin = getSupabaseAdmin();
+  const { data: roles } = await supabaseAdmin.from("user_roles").select("role").eq("user_id", userId);
+  const isAdmin = (roles ?? []).some(r => ["admin", "super_admin"].includes(r.role as string));
+  if (!isAdmin) return jsonResponse({ error: "Admin only" }, 403);
+  const limit = Math.min(Number(body.limit) || 50, 200);
+  let q = supabaseAdmin.from("vfd_balance_drift_findings").select("*").order("checked_at", { ascending: false }).limit(limit);
+  if (body.onlyUnhealthy) q = q.eq("is_healthy", false);
+  const { data, error } = await q;
+  if (error) return jsonResponse({ error: error.message }, 500);
+  return jsonResponse({ data });
+}
+
+async function handleTxEvents(userId: string, body: Record<string, unknown>) {
+  const supabaseAdmin = getSupabaseAdmin();
+  const { data: roles } = await supabaseAdmin.from("user_roles").select("role").eq("user_id", userId);
+  const isAdmin = (roles ?? []).some(r => ["admin", "super_admin"].includes(r.role as string));
+  const reference = body.reference as string | undefined;
+  const txId = body.transaction_id as string | undefined;
+  if (!reference && !txId) return jsonResponse({ error: "reference or transaction_id required" }, 400);
+
+  let q = supabaseAdmin.from("vfd_transaction_events").select("*").order("created_at", { ascending: true }).limit(200);
+  if (reference) q = q.eq("reference", reference);
+  if (txId) q = q.eq("transaction_id", txId);
+  if (!isAdmin) q = q.eq("user_id", userId);
+  const { data, error } = await q;
+  if (error) return jsonResponse({ error: error.message }, 500);
+  return jsonResponse({ data });
+}
+
+
+
 
 // ─── MAIN HANDLER ───────────────────────────────────────────────
 
