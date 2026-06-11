@@ -1,0 +1,1 @@
+DROP POLICY IF EXISTS "Users can update own wallet" ON public.wallets;
