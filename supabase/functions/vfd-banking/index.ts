@@ -2341,9 +2341,23 @@ Deno.serve(async (req) => {
 
     // Cron-callable reconciliation sweep (no JWT; shared-secret auth)
     if (actionFromPath === "reconcile" && req.method === "POST") {
-      const expected = Deno.env.get("VFD_WEBHOOK_SECRET");
-      const provided = req.headers.get("x-vfd-signature") || req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-      if (!expected || provided !== expected) return jsonResponse({ error: "Unauthorized" }, 401);
+      const supabaseAdmin = getSupabaseAdmin();
+      const { data: tokenRow } = await supabaseAdmin
+        .from("vfd_settings")
+        .select("value")
+        .eq("key", "reconcile_token")
+        .maybeSingle();
+      const expected =
+        (tokenRow?.value as string | undefined) ||
+        Deno.env.get("VFD_RECONCILE_TOKEN") ||
+        Deno.env.get("VFD_WEBHOOK_SECRET");
+      const provided =
+        req.headers.get("x-vfd-reconcile-token") ||
+        req.headers.get("x-vfd-signature") ||
+        req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+      if (!expected || provided !== expected) {
+        return jsonResponse({ error: "Unauthorized" }, 401);
+      }
       const body = await req.json().catch(() => ({}));
       const result = await processStuckReservedTransactions({
         olderThanMinutes: Number(body.olderThanMinutes) || 5,
