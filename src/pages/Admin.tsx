@@ -248,6 +248,10 @@ export default function Admin() {
           <TabsContent value="vfd-dlq">
             <VfdWebhookDlqTab />
           </TabsContent>
+
+          <TabsContent value="vfd-audit">
+            <VfdAuditTab />
+          </TabsContent>
         </Tabs>
       </div>
     </div>
