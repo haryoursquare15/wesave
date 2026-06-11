@@ -1326,26 +1326,110 @@ async function handleTransfer(
 
   console.log("[VFD Transfer] Payload:", JSON.stringify(transferPayload));
 
-  const { data, status } = await vfdRequest("/transfer", "POST", transferPayload);
-
   const supabaseAdmin = getSupabaseAdmin();
+
+  // ─── PHASE 1: reserve idempotency key + insert tx as `reserved` BEFORE
+  // hitting VFD. If the network drops mid-call, the row survives so the
+  // webhook (or a retry with the same reference) can commit/reverse it
+  // without double-debiting.
+  const idemKey = (body.idempotency_key as string) || reference;
+  const idem = await reserveIdempotencyKey(supabaseAdmin, {
+    key: idemKey,
+    userId,
+    action: "transfer",
+    reference,
+  });
+
+  if (idem.mode === "replay") {
+    const cached = idem.row.response as Record<string, unknown> | null;
+    console.log("[VFD Transfer] replay for idempotency key", idemKey);
+    return jsonResponse(
+      {
+        data: cached ?? { status: idem.row.status, message: "Replayed from idempotency cache" },
+        vfd_status: idem.row.http_status ?? 200,
+        reference,
+        replayed: true,
+      },
+      200
+    );
+  }
+
+  // Insert tx in RESERVED state — sender's available balance drops now
+  // (getRecordedSandboxBalance counts `reserved` debits/transfers).
+  const { data: reservedTx } = await supabaseAdmin
+    .from("vfd_sandbox_transactions")
+    .insert({
+      user_id: userId,
+      vfd_account_number: displayFromAccount,
+      amount: Number(body.amount),
+      transaction_type: "transfer",
+      status: "reserved",
+      reference,
+      idempotency_key: idemKey,
+      reserved_at: new Date().toISOString(),
+      beneficiary_account: toAccount,
+      beneficiary_bank_code: body.bankCode as string,
+      beneficiary_name: body.beneficiaryName as string || body.toClient as string,
+      description: body.narration as string || body.remark as string || "Transfer",
+      metadata: { stage: "reserved", transferType },
+      source: "vfd_sandbox",
+    })
+    .select("id")
+    .maybeSingle();
+
+  // Call VFD — failures here keep tx `reserved` for the webhook to resolve.
+  let data: unknown;
+  let status = 0;
+  let networkError: Error | null = null;
+  try {
+    const result = await vfdRequest("/transfer", "POST", transferPayload);
+    data = result.data;
+    status = result.status;
+  } catch (err) {
+    networkError = err instanceof Error ? err : new Error(String(err));
+    console.error("[VFD Transfer] network error:", networkError.message);
+  }
+
+  if (networkError) {
+    // Unknown outcome — leave the tx in `reserved`. Idempotency cache stays
+    // pending so a retry with the same reference is safe. Webhook or
+    // reconciliation will settle it.
+    await settleIdempotencyKey(supabaseAdmin, idemKey, {
+      status: "pending",
+      response: { error: networkError.message },
+      http_status: null,
+    });
+    return jsonResponse(
+      {
+        error: "Transfer is processing. We'll confirm the outcome shortly.",
+        code: "TRANSFER_PENDING",
+        reference,
+      },
+      202
+    );
+  }
+
   const vfdData = data as Record<string, unknown>;
   const isSuccess = vfdData?.status === "00";
+  const vfdTxnId = vfdData?.data ? (vfdData.data as Record<string, unknown>)?.txnId?.toString() ?? null : null;
+  const nowIso = new Date().toISOString();
 
-  await supabaseAdmin.from("vfd_sandbox_transactions").insert({
-    user_id: userId,
-    vfd_account_number: displayFromAccount,
-    amount: Number(body.amount),
-    transaction_type: "transfer",
+  // Transition the reserved tx → completed or reversed.
+  await supabaseAdmin
+    .from("vfd_sandbox_transactions")
+    .update({
+      status: isSuccess ? "completed" : "reversed",
+      committed_at: isSuccess ? nowIso : null,
+      reversed_at: isSuccess ? null : nowIso,
+      vfd_reference: vfdTxnId,
+      metadata: { ...(data as Record<string, unknown>), stage: isSuccess ? "committed" : "reversed" },
+    })
+    .eq("id", reservedTx?.id);
+
+  await settleIdempotencyKey(supabaseAdmin, idemKey, {
     status: isSuccess ? "completed" : "failed",
-    reference,
-    vfd_reference: vfdData?.data ? (vfdData.data as Record<string, unknown>)?.txnId?.toString() : null,
-    beneficiary_account: toAccount,
-    beneficiary_bank_code: body.bankCode as string,
-    beneficiary_name: body.beneficiaryName as string || body.toClient as string,
-    description: body.narration as string || body.remark as string || "Transfer",
-    metadata: data as Record<string, unknown>,
-    source: "vfd_sandbox",
+    response: data,
+    http_status: status,
   });
 
   if (isSuccess) {
