@@ -2456,6 +2456,16 @@ Deno.serve(async (req) => {
       case "get_lock_ledger":
         return await handleGetLockLedger(userId);
 
+      // Admin: DLQ + reconciliation
+      case "dlq_list":
+        return await handleDlqList(userId, Number(body.limit) || 50);
+      case "dlq_replay":
+        return await handleDlqReplay(userId, body.id as string);
+      case "dlq_resolve":
+        return await handleDlqResolve(userId, body.id as string);
+      case "reconciliation_sweep":
+        return await handleReconciliationSweep(userId, body);
+
       default:
         return jsonResponse({ error: `Unknown action: ${action}` }, 400);
     }
