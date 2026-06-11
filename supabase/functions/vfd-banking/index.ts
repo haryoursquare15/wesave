@@ -331,20 +331,25 @@ async function getRecordedSandboxBalance(
   supabaseAdmin: ReturnType<typeof getSupabaseAdmin>,
   userId: string
 ) {
+  // Count credits only when completed.
+  // Count debits/transfers when reserved OR completed (reservation must
+  // immediately reduce available balance to prevent double-spend during the
+  // window between VFD call and webhook confirmation).
   const { data } = await supabaseAdmin
     .from("vfd_sandbox_transactions")
     .select("amount, transaction_type, status")
     .eq("user_id", userId)
-    .eq("status", "completed");
+    .in("status", ["completed", "reserved"]);
 
   return (data ?? []).reduce((total, tx) => {
     const amount = toNumber(tx.amount);
-
+    const status = tx.status as string;
     switch (tx.transaction_type) {
       case "credit":
-        return total + amount;
+        return status === "completed" ? total + amount : total;
       case "transfer":
       case "debit":
+        // reserved or completed both count as money-out
         return total - amount;
       default:
         return total;
