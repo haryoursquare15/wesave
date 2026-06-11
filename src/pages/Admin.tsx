@@ -180,6 +180,12 @@ export default function Admin() {
                 VFD DLQ
               </TabsTrigger>
             )}
+            {hasPermission("audit.view") && (
+              <TabsTrigger value="vfd-audit" className="flex items-center gap-1">
+                <ScanLine className="h-4 w-4" />
+                VFD Audit
+              </TabsTrigger>
+            )}
           </TabsList>
 
 
