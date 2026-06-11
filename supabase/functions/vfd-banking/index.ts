@@ -207,6 +207,94 @@ function jsonResponse(data: unknown, status = 200) {
   });
 }
 
+// ─── PHASE 1: IDEMPOTENCY + DLQ HELPERS ───
+// Reserve an idempotency key BEFORE the outbound VFD money-moving call.
+// Returns { mode: "new" | "replay", row } — on replay the caller should return
+// the cached response rather than hit VFD again.
+async function reserveIdempotencyKey(
+  supabaseAdmin: ReturnType<typeof getSupabaseAdmin>,
+  params: { key: string; userId: string | null; action: string; reference: string | null; requestHash?: string | null }
+): Promise<
+  | { mode: "new"; row: Record<string, unknown> }
+  | { mode: "replay"; row: Record<string, unknown> }
+> {
+  const { data: inserted, error: insErr } = await supabaseAdmin
+    .from("vfd_idempotency_keys")
+    .insert({
+      idempotency_key: params.key,
+      user_id: params.userId,
+      action: params.action,
+      transaction_reference: params.reference,
+      request_hash: params.requestHash ?? null,
+      status: "pending",
+    })
+    .select()
+    .maybeSingle();
+
+  if (!insErr && inserted) return { mode: "new", row: inserted as Record<string, unknown> };
+
+  // Conflict — fetch the existing row and decide replay vs retry.
+  const { data: existing } = await supabaseAdmin
+    .from("vfd_idempotency_keys")
+    .select("*")
+    .eq("idempotency_key", params.key)
+    .maybeSingle();
+
+  if (!existing) {
+    // Unexpected; treat as new to avoid hard-blocking the user.
+    return { mode: "new", row: { idempotency_key: params.key } };
+  }
+
+  // Terminal results are replayed verbatim — do NOT call VFD again.
+  if (existing.status === "completed" || existing.status === "failed") {
+    return { mode: "replay", row: existing as Record<string, unknown> };
+  }
+
+  // pending → bump attempts and let the caller proceed (covers prior timeout).
+  await supabaseAdmin
+    .from("vfd_idempotency_keys")
+    .update({
+      attempts: (Number(existing.attempts) || 1) + 1,
+      last_attempt_at: new Date().toISOString(),
+    })
+    .eq("idempotency_key", params.key);
+
+  return { mode: "new", row: existing as Record<string, unknown> };
+}
+
+async function settleIdempotencyKey(
+  supabaseAdmin: ReturnType<typeof getSupabaseAdmin>,
+  key: string,
+  result: { status: "completed" | "failed" | "pending"; response: unknown; http_status?: number | null }
+) {
+  await supabaseAdmin
+    .from("vfd_idempotency_keys")
+    .update({
+      status: result.status,
+      response: result.response as Record<string, unknown> | null,
+      http_status: result.http_status ?? null,
+      last_attempt_at: new Date().toISOString(),
+    })
+    .eq("idempotency_key", key);
+}
+
+async function pushWebhookToDlq(
+  supabaseAdmin: ReturnType<typeof getSupabaseAdmin>,
+  params: { event_type?: string | null; reference?: string | null; payload: unknown; headers?: Record<string, string> | null; error: string }
+) {
+  try {
+    await supabaseAdmin.from("vfd_webhook_dlq").insert({
+      event_type: params.event_type ?? null,
+      reference: params.reference ?? null,
+      payload: params.payload as Record<string, unknown>,
+      headers: params.headers as Record<string, unknown> | null,
+      error: params.error,
+    });
+  } catch (e) {
+    console.error("[VFD DLQ] failed to enqueue:", e);
+  }
+}
+
 function toNumber(value: unknown): number {
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
   if (typeof value === "string") {
@@ -243,20 +331,25 @@ async function getRecordedSandboxBalance(
   supabaseAdmin: ReturnType<typeof getSupabaseAdmin>,
   userId: string
 ) {
+  // Count credits only when completed.
+  // Count debits/transfers when reserved OR completed (reservation must
+  // immediately reduce available balance to prevent double-spend during the
+  // window between VFD call and webhook confirmation).
   const { data } = await supabaseAdmin
     .from("vfd_sandbox_transactions")
     .select("amount, transaction_type, status")
     .eq("user_id", userId)
-    .eq("status", "completed");
+    .in("status", ["completed", "reserved"]);
 
   return (data ?? []).reduce((total, tx) => {
     const amount = toNumber(tx.amount);
-
+    const status = tx.status as string;
     switch (tx.transaction_type) {
       case "credit":
-        return total + amount;
+        return status === "completed" ? total + amount : total;
       case "transfer":
       case "debit":
+        // reserved or completed both count as money-out
         return total - amount;
       default:
         return total;
@@ -1233,26 +1326,110 @@ async function handleTransfer(
 
   console.log("[VFD Transfer] Payload:", JSON.stringify(transferPayload));
 
-  const { data, status } = await vfdRequest("/transfer", "POST", transferPayload);
-
   const supabaseAdmin = getSupabaseAdmin();
+
+  // ─── PHASE 1: reserve idempotency key + insert tx as `reserved` BEFORE
+  // hitting VFD. If the network drops mid-call, the row survives so the
+  // webhook (or a retry with the same reference) can commit/reverse it
+  // without double-debiting.
+  const idemKey = (body.idempotency_key as string) || reference;
+  const idem = await reserveIdempotencyKey(supabaseAdmin, {
+    key: idemKey,
+    userId,
+    action: "transfer",
+    reference,
+  });
+
+  if (idem.mode === "replay") {
+    const cached = idem.row.response as Record<string, unknown> | null;
+    console.log("[VFD Transfer] replay for idempotency key", idemKey);
+    return jsonResponse(
+      {
+        data: cached ?? { status: idem.row.status, message: "Replayed from idempotency cache" },
+        vfd_status: idem.row.http_status ?? 200,
+        reference,
+        replayed: true,
+      },
+      200
+    );
+  }
+
+  // Insert tx in RESERVED state — sender's available balance drops now
+  // (getRecordedSandboxBalance counts `reserved` debits/transfers).
+  const { data: reservedTx } = await supabaseAdmin
+    .from("vfd_sandbox_transactions")
+    .insert({
+      user_id: userId,
+      vfd_account_number: displayFromAccount,
+      amount: Number(body.amount),
+      transaction_type: "transfer",
+      status: "reserved",
+      reference,
+      idempotency_key: idemKey,
+      reserved_at: new Date().toISOString(),
+      beneficiary_account: toAccount,
+      beneficiary_bank_code: body.bankCode as string,
+      beneficiary_name: body.beneficiaryName as string || body.toClient as string,
+      description: body.narration as string || body.remark as string || "Transfer",
+      metadata: { stage: "reserved", transferType },
+      source: "vfd_sandbox",
+    })
+    .select("id")
+    .maybeSingle();
+
+  // Call VFD — failures here keep tx `reserved` for the webhook to resolve.
+  let data: unknown;
+  let status = 0;
+  let networkError: Error | null = null;
+  try {
+    const result = await vfdRequest("/transfer", "POST", transferPayload);
+    data = result.data;
+    status = result.status;
+  } catch (err) {
+    networkError = err instanceof Error ? err : new Error(String(err));
+    console.error("[VFD Transfer] network error:", networkError.message);
+  }
+
+  if (networkError) {
+    // Unknown outcome — leave the tx in `reserved`. Idempotency cache stays
+    // pending so a retry with the same reference is safe. Webhook or
+    // reconciliation will settle it.
+    await settleIdempotencyKey(supabaseAdmin, idemKey, {
+      status: "pending",
+      response: { error: networkError.message },
+      http_status: null,
+    });
+    return jsonResponse(
+      {
+        error: "Transfer is processing. We'll confirm the outcome shortly.",
+        code: "TRANSFER_PENDING",
+        reference,
+      },
+      202
+    );
+  }
+
   const vfdData = data as Record<string, unknown>;
   const isSuccess = vfdData?.status === "00";
+  const vfdTxnId = vfdData?.data ? (vfdData.data as Record<string, unknown>)?.txnId?.toString() ?? null : null;
+  const nowIso = new Date().toISOString();
 
-  await supabaseAdmin.from("vfd_sandbox_transactions").insert({
-    user_id: userId,
-    vfd_account_number: displayFromAccount,
-    amount: Number(body.amount),
-    transaction_type: "transfer",
+  // Transition the reserved tx → completed or reversed.
+  await supabaseAdmin
+    .from("vfd_sandbox_transactions")
+    .update({
+      status: isSuccess ? "completed" : "reversed",
+      committed_at: isSuccess ? nowIso : null,
+      reversed_at: isSuccess ? null : nowIso,
+      vfd_reference: vfdTxnId,
+      metadata: { ...(data as Record<string, unknown>), stage: isSuccess ? "committed" : "reversed" },
+    })
+    .eq("id", reservedTx?.id);
+
+  await settleIdempotencyKey(supabaseAdmin, idemKey, {
     status: isSuccess ? "completed" : "failed",
-    reference,
-    vfd_reference: vfdData?.data ? (vfdData.data as Record<string, unknown>)?.txnId?.toString() : null,
-    beneficiary_account: toAccount,
-    beneficiary_bank_code: body.bankCode as string,
-    beneficiary_name: body.beneficiaryName as string || body.toClient as string,
-    description: body.narration as string || body.remark as string || "Transfer",
-    metadata: data as Record<string, unknown>,
-    source: "vfd_sandbox",
+    response: data,
+    http_status: status,
   });
 
   if (isSuccess) {
@@ -1420,14 +1597,115 @@ async function handleWebhook(req: Request) {
   }
 
   const supabaseAdmin = getSupabaseAdmin();
+  const eventType = (payload?.event as string) || (payload?.type as string) || "unknown";
+
+  // Always log every received webhook for audit.
   await supabaseAdmin.from("vfd_sandbox_webhook_logs").insert({
-    event_type: (payload?.event as string) || (payload?.type as string) || "unknown",
+    event_type: eventType,
     payload,
     processed: false,
   });
 
   console.log("[VFD Webhook]", JSON.stringify(payload));
-  return jsonResponse({ status: "received" });
+
+  // ─── PHASE 1: idempotent state transition for transfer webhooks ───
+  // Extract a reference / outcome from VFD's payload shape.
+  const inner = (payload?.data as Record<string, unknown>) ?? {};
+  const reference =
+    (payload?.reference as string) ||
+    (inner?.reference as string) ||
+    (inner?.sessionId as string) ||
+    (payload?.sessionId as string) ||
+    null;
+  const vfdStatus =
+    (payload?.status as string) ||
+    (inner?.status as string) ||
+    (payload?.transactionStatus as string) ||
+    (inner?.transactionStatus as string) ||
+    null;
+
+  if (!reference) {
+    await pushWebhookToDlq(supabaseAdmin, {
+      event_type: eventType,
+      reference: null,
+      payload,
+      error: "Webhook missing reference",
+    });
+    return jsonResponse({ status: "received", queued: "dlq" });
+  }
+
+  try {
+    const { data: tx } = await supabaseAdmin
+      .from("vfd_sandbox_transactions")
+      .select("id, status, user_id, amount, vfd_account_number, beneficiary_name, beneficiary_account")
+      .eq("reference", reference)
+      .maybeSingle();
+
+    if (!tx) {
+      await pushWebhookToDlq(supabaseAdmin, {
+        event_type: eventType,
+        reference,
+        payload,
+        error: "No transaction found for reference",
+      });
+      return jsonResponse({ status: "received", queued: "dlq" });
+    }
+
+    // Terminal-state guard — webhook deliveries can duplicate; never re-apply.
+    if (tx.status === "completed" || tx.status === "reversed" || tx.status === "failed") {
+      await supabaseAdmin
+        .from("vfd_sandbox_webhook_logs")
+        .update({ processed: true, processed_at: new Date().toISOString() })
+        .eq("payload", payload as never)
+        .is("processed_at", null);
+      return jsonResponse({ status: "duplicate_ignored", reference });
+    }
+
+    const success = vfdStatus === "00" || /success|completed/i.test(vfdStatus ?? "");
+    const nowIso = new Date().toISOString();
+
+    await supabaseAdmin
+      .from("vfd_sandbox_transactions")
+      .update({
+        status: success ? "completed" : "reversed",
+        committed_at: success ? nowIso : null,
+        reversed_at: success ? null : nowIso,
+        metadata: { ...(payload as Record<string, unknown>), stage: success ? "webhook_committed" : "webhook_reversed" },
+      })
+      .eq("id", tx.id);
+
+    if (success && tx.user_id) {
+      await ensureBalanceRow(supabaseAdmin, tx.user_id, {
+        accountNo: tx.vfd_account_number ?? null,
+        preserveExisting: false,
+      });
+    }
+
+    try {
+      if (tx.user_id) {
+        await supabaseAdmin.from("vfd_sandbox_notifications").insert({
+          user_id: tx.user_id,
+          title: success ? "Transfer confirmed" : "Transfer reversed",
+          message: success
+            ? `₦${Number(tx.amount).toLocaleString()} to ${tx.beneficiary_name || tx.beneficiary_account} confirmed.`
+            : `₦${Number(tx.amount).toLocaleString()} to ${tx.beneficiary_name || tx.beneficiary_account} was reversed and refunded.`,
+          notification_type: success ? "transfer_confirmed" : "transfer_reversed",
+        });
+      }
+    } catch (_) { /* best-effort */ }
+
+    return jsonResponse({ status: "processed", reference, outcome: success ? "completed" : "reversed" });
+  } catch (e) {
+    const err = e instanceof Error ? e.message : String(e);
+    console.error("[VFD Webhook] processing error:", err);
+    await pushWebhookToDlq(supabaseAdmin, {
+      event_type: eventType,
+      reference,
+      payload,
+      error: err,
+    });
+    return jsonResponse({ status: "received", queued: "dlq" });
+  }
 }
 
 // Get user's VFD client data from DB

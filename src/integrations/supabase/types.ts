@@ -3852,6 +3852,54 @@ export type Database = {
         }
         Relationships: []
       }
+      vfd_idempotency_keys: {
+        Row: {
+          action: string
+          attempts: number
+          created_at: string
+          http_status: number | null
+          id: string
+          idempotency_key: string
+          last_attempt_at: string
+          request_hash: string | null
+          response: Json | null
+          status: string
+          transaction_reference: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          attempts?: number
+          created_at?: string
+          http_status?: number | null
+          id?: string
+          idempotency_key: string
+          last_attempt_at?: string
+          request_hash?: string | null
+          response?: Json | null
+          status?: string
+          transaction_reference?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          attempts?: number
+          created_at?: string
+          http_status?: number | null
+          id?: string
+          idempotency_key?: string
+          last_attempt_at?: string
+          request_hash?: string | null
+          response?: Json | null
+          status?: string
+          transaction_reference?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       vfd_interest_accruals: {
         Row: {
           accrual_date: string
@@ -5672,15 +5720,20 @@ export type Database = {
           beneficiary_bank: string | null
           beneficiary_bank_code: string | null
           beneficiary_name: string | null
+          committed_at: string | null
           created_at: string | null
           description: string | null
           id: string
+          idempotency_key: string | null
           metadata: Json | null
           reference: string | null
+          reserved_at: string | null
+          reversed_at: string | null
           source: string | null
           status: string | null
           transaction_type: string
           user_id: string
+          vestara_reservation_ref: string | null
           vfd_account_number: string | null
           vfd_reference: string | null
         }
@@ -5690,15 +5743,20 @@ export type Database = {
           beneficiary_bank?: string | null
           beneficiary_bank_code?: string | null
           beneficiary_name?: string | null
+          committed_at?: string | null
           created_at?: string | null
           description?: string | null
           id?: string
+          idempotency_key?: string | null
           metadata?: Json | null
           reference?: string | null
+          reserved_at?: string | null
+          reversed_at?: string | null
           source?: string | null
           status?: string | null
           transaction_type: string
           user_id: string
+          vestara_reservation_ref?: string | null
           vfd_account_number?: string | null
           vfd_reference?: string | null
         }
@@ -5708,15 +5766,20 @@ export type Database = {
           beneficiary_bank?: string | null
           beneficiary_bank_code?: string | null
           beneficiary_name?: string | null
+          committed_at?: string | null
           created_at?: string | null
           description?: string | null
           id?: string
+          idempotency_key?: string | null
           metadata?: Json | null
           reference?: string | null
+          reserved_at?: string | null
+          reversed_at?: string | null
           source?: string | null
           status?: string | null
           transaction_type?: string
           user_id?: string
+          vestara_reservation_ref?: string | null
           vfd_account_number?: string | null
           vfd_reference?: string | null
         }
@@ -5833,6 +5896,48 @@ export type Database = {
           total_balance?: number
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      vfd_webhook_dlq: {
+        Row: {
+          attempts: number
+          created_at: string
+          error: string | null
+          event_type: string | null
+          headers: Json | null
+          id: string
+          last_attempt_at: string
+          payload: Json
+          reference: string | null
+          resolved: boolean
+          resolved_at: string | null
+        }
+        Insert: {
+          attempts?: number
+          created_at?: string
+          error?: string | null
+          event_type?: string | null
+          headers?: Json | null
+          id?: string
+          last_attempt_at?: string
+          payload: Json
+          reference?: string | null
+          resolved?: boolean
+          resolved_at?: string | null
+        }
+        Update: {
+          attempts?: number
+          created_at?: string
+          error?: string | null
+          event_type?: string | null
+          headers?: Json | null
+          id?: string
+          last_attempt_at?: string
+          payload?: Json
+          reference?: string | null
+          resolved?: boolean
+          resolved_at?: string | null
         }
         Relationships: []
       }
