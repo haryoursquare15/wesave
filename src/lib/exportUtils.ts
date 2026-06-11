@@ -1,4 +1,6 @@
 import { format } from "date-fns";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 /**
  * Convert an array of objects to CSV and trigger download.
@@ -31,3 +33,43 @@ export function exportToCSV(data: Record<string, any>[], filename: string) {
   link.click();
   URL.revokeObjectURL(url);
 }
+
+/**
+ * Export a table to PDF using jsPDF + autoTable, with title and optional metadata header.
+ */
+export function exportToPDF(
+  data: Record<string, any>[],
+  filename: string,
+  options?: { title?: string; subtitle?: string; orientation?: "p" | "l" },
+) {
+  if (!data.length) return;
+  const doc = new jsPDF({ orientation: options?.orientation ?? "l", unit: "pt", format: "a4" });
+  const title = options?.title ?? filename;
+  doc.setFontSize(14);
+  doc.text(title, 40, 40);
+  if (options?.subtitle) {
+    doc.setFontSize(9);
+    doc.setTextColor(100);
+    doc.text(options.subtitle, 40, 56);
+    doc.setTextColor(0);
+  }
+  const headers = Object.keys(data[0]);
+  const body = data.map((row) =>
+    headers.map((h) => {
+      const v = row[h];
+      if (v === null || v === undefined) return "";
+      if (typeof v === "object") return JSON.stringify(v);
+      return String(v);
+    }),
+  );
+  autoTable(doc, {
+    startY: options?.subtitle ? 70 : 56,
+    head: [headers],
+    body,
+    styles: { fontSize: 7, cellPadding: 3, overflow: "linebreak" },
+    headStyles: { fillColor: [234, 88, 12] },
+    margin: { left: 40, right: 40 },
+  });
+  doc.save(`${filename}_${format(new Date(), "yyyy-MM-dd_HHmm")}.pdf`);
+}
+

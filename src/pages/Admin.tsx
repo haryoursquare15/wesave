@@ -24,7 +24,8 @@ import { SupportTab } from "@/components/admin/SupportTab";
 import { AdminEmailTab } from "@/components/admin/AdminEmailTab";
 import { VestaraRateConfigTab } from "@/components/admin/VestaraRateConfigTab";
 import { VestaraInvestmentsTab } from "@/components/admin/VestaraInvestmentsTab";
-import { Percent, PiggyBank } from "lucide-react";
+import { VestaraAuditExportTab } from "@/components/admin/VestaraAuditExportTab";
+import { Percent, PiggyBank, FileSpreadsheet } from "lucide-react";
 
 export default function Admin() {
   const navigate = useNavigate();
@@ -165,7 +166,14 @@ export default function Admin() {
               <PiggyBank className="h-4 w-4" />
               Investments
             </TabsTrigger>
+            {hasPermission("audit.view") && (
+              <TabsTrigger value="vestara-audit" className="flex items-center gap-1">
+                <FileSpreadsheet className="h-4 w-4" />
+                Vestara Audit Export
+              </TabsTrigger>
+            )}
           </TabsList>
+
 
           <TabsContent value="overview">
             <AdminOverviewTab />
@@ -217,6 +225,10 @@ export default function Admin() {
 
           <TabsContent value="vestara-investments">
             <VestaraInvestmentsTab />
+          </TabsContent>
+
+          <TabsContent value="vestara-audit">
+            <VestaraAuditExportTab />
           </TabsContent>
         </Tabs>
       </div>
