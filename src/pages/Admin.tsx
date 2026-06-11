@@ -237,6 +237,10 @@ export default function Admin() {
           <TabsContent value="vestara-audit">
             <VestaraAuditExportTab />
           </TabsContent>
+
+          <TabsContent value="vfd-dlq">
+            <VfdWebhookDlqTab />
+          </TabsContent>
         </Tabs>
       </div>
     </div>
