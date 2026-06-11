@@ -2705,6 +2705,12 @@ Deno.serve(async (req) => {
         return await handleDlqResolve(userId, body.id as string);
       case "reconciliation_sweep":
         return await handleReconciliationSweep(userId, body);
+      case "drift_sweep":
+        return await handleDriftSweep(userId, body);
+      case "drift_findings":
+        return await handleDriftFindings(userId, body);
+      case "tx_events":
+        return await handleTxEvents(userId, body);
 
       default:
         return jsonResponse({ error: `Unknown action: ${action}` }, 400);
