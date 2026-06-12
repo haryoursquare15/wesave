@@ -1824,6 +1824,15 @@ async function handleSubAccounts(entity: string = "individual", page: string = "
   return jsonResponse({ data, vfd_status: status });
 }
 
+// Constant-time string compare to avoid timing side-channels on secret comparison.
+function timingSafeEqual(a: string, b: string): boolean {
+  if (typeof a !== "string" || typeof b !== "string") return false;
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
 // Webhook handler (no auth required)
 async function handleWebhook(req: Request) {
   // SECURITY: verify shared-secret header before accepting webhook payloads
@@ -1831,20 +1840,29 @@ async function handleWebhook(req: Request) {
   const provided =
     req.headers.get("x-vfd-signature") ||
     req.headers.get("x-webhook-secret") ||
-    req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+    req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ||
+    "";
 
   if (!expected) {
     console.error("[VFD Webhook] VFD_WEBHOOK_SECRET not configured; rejecting payload");
     return jsonResponse({ error: "Webhook not configured" }, 503);
   }
-  if (!provided || provided !== expected) {
+  if (!timingSafeEqual(provided, expected)) {
     console.warn("[VFD Webhook] invalid signature");
     return jsonResponse({ error: "Unauthorized" }, 401);
   }
 
+  // Reject oversized payloads (defense against memory-exhaustion abuse)
+  const contentLength = Number(req.headers.get("content-length") || 0);
+  if (contentLength > 256 * 1024) {
+    return jsonResponse({ error: "Payload too large" }, 413);
+  }
+
   let payload: Record<string, unknown> = {};
   try {
-    payload = await req.json();
+    const raw = await req.text();
+    if (raw.length > 256 * 1024) return jsonResponse({ error: "Payload too large" }, 413);
+    payload = raw ? JSON.parse(raw) : {};
   } catch {
     return jsonResponse({ error: "Invalid JSON" }, 400);
   }
