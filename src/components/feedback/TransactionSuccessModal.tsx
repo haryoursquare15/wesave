@@ -56,6 +56,7 @@ export function TransactionSuccessModal({
   payload,
   onPrimary,
   onSecondary,
+  extraContent,
 }: Props) {
   const { toast } = useToast();
 
