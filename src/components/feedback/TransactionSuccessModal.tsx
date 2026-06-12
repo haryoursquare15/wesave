@@ -40,6 +40,8 @@ interface Props {
   payload: TransactionSuccessPayload | null;
   onPrimary?: () => void;
   onSecondary?: () => void;
+  /** Optional extra content (e.g. "Save as beneficiary" prompt) rendered above CTAs */
+  extraContent?: React.ReactNode;
 }
 
 /**
