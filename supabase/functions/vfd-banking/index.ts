@@ -2845,6 +2845,14 @@ Deno.serve(async (req) => {
       case "tx_events":
         return await handleTxEvents(userId, body);
 
+      case "list_transfer_beneficiaries":
+        return await handleListTransferBeneficiaries(userId);
+      case "save_transfer_beneficiary":
+        return await handleSaveTransferBeneficiary(userId, body);
+      case "delete_transfer_beneficiary":
+        return await handleDeleteTransferBeneficiary(userId, body);
+
+
       default:
         return jsonResponse({ error: `Unknown action: ${action}` }, 400);
     }
