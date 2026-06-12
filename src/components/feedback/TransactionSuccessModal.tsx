@@ -136,6 +136,8 @@ export function TransactionSuccessModal({
           </button>
         )}
 
+        {extraContent}
+
         <div className="flex gap-2 pt-1">
           {payload?.secondaryLabel && (
             <Button
