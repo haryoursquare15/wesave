@@ -1107,7 +1107,7 @@ async function handleTransfer(
         const remainingT = Math.max(0, dailyCapT - spentTodayT);
         return jsonResponse(
           {
-            error: `You've used ₦${spentTodayT.toLocaleString()} of your ${tierLabel} ₦${dailyCapT.toLocaleString()} daily limit. Only ₦${remainingT.toLocaleString()} is available in the next 24 hours. Upgrade your KYC to send more.`,
+            error: `Your ₦${_amt.toLocaleString()} transfer can't go through. You've already sent ₦${spentTodayT.toLocaleString()} in the last 24 hours, which is at or above your ${tierLabel} daily limit of ₦${dailyCapT.toLocaleString()}. Only ₦${remainingT.toLocaleString()} is available right now. Upgrade your KYC to unlock higher limits.`,
             code: "TIER_DAILY_LIMIT_EXCEEDED",
             tier: tierT,
             limit: dailyCapT,
