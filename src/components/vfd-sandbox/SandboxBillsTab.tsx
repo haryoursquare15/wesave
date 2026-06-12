@@ -16,6 +16,7 @@ import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
 import { SandboxBillReceipts } from "./SandboxBillReceipts";
 import { SandboxBillBeneficiaries } from "./SandboxBillBeneficiaries";
 import { SandboxRecurringBills } from "./SandboxRecurringBills";
+import { BillBeneficiaryRename } from "./BillBeneficiaryRename";
 
 /* ─── Types ─── */
 interface Biller {
@@ -870,6 +871,14 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
                 <span className="text-xs font-bold text-foreground">₦{Number(amount).toLocaleString()}</span>
               </div>
             </div>
+            <BillBeneficiaryRename
+              category={selectedCategory}
+              biller={selectedBiller}
+              item={selectedItem}
+              customerId={customerId}
+              phoneNumber={phoneNumber}
+              onRenamed={() => toast({ title: "Beneficiary renamed" })}
+            />
             <Button onClick={resetAll} className="w-full">Pay Another Bill</Button>
           </motion.div>
         )}
