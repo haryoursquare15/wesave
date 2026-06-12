@@ -1042,6 +1042,86 @@ async function handleTransfer(
     }
   }
 
+  // ─── EARLY AMOUNT + KYC TIER LIMIT ENFORCEMENT ───
+  // Must run BEFORE the intra-virtual short-circuit and BEFORE the
+  // insufficient-balance check so users get the most informative reason
+  // (tier limit + upgrade prompt) rather than a generic balance error.
+  {
+    const _amt = Number(body.amount);
+    if (!Number.isFinite(_amt) || _amt <= 0) {
+      return jsonResponse({ error: "Enter a valid amount greater than zero." }, 400);
+    }
+    if (_amt > 5_000_000) {
+      return jsonResponse(
+        {
+          error: "This transfer exceeds the ₦5,000,000 per-transaction limit. Please split it into smaller transfers.",
+          code: "PER_TXN_LIMIT_EXCEEDED",
+          limit: 5_000_000,
+        },
+        403,
+      );
+    }
+
+    const adminClientT = getSupabaseAdmin();
+    const { data: clientRowT } = await adminClientT
+      .from("vfd_sandbox_clients")
+      .select("tier")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    const tierT = (clientRowT?.tier as string | undefined) || "tier1";
+    const TIER_DAILY_CAP_T: Record<string, number> = {
+      tier1: 30_000,
+      tier2: 100_000,
+      tier3: Number.POSITIVE_INFINITY,
+    };
+    const dailyCapT = TIER_DAILY_CAP_T[tierT] ?? 30_000;
+    const tierLabel = tierT.replace("tier", "Tier ");
+
+    if (Number.isFinite(dailyCapT)) {
+      if (_amt > dailyCapT) {
+        return jsonResponse(
+          {
+            error: `This ₦${_amt.toLocaleString()} transfer is above your ${tierLabel} limit of ₦${dailyCapT.toLocaleString()} per 24 hours. Upgrade your KYC to unlock higher limits.`,
+            code: "TIER_LIMIT_EXCEEDED",
+            tier: tierT,
+            limit: dailyCapT,
+            action: "upgrade_kyc",
+          },
+          403,
+        );
+      }
+      const sinceT = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { data: todaysT } = await adminClientT
+        .from("vfd_sandbox_transactions")
+        .select("amount")
+        .eq("user_id", userId)
+        .in("transaction_type", ["transfer", "debit"])
+        .eq("status", "completed")
+        .gte("created_at", sinceT);
+      const spentTodayT = (todaysT ?? []).reduce(
+        (s, r) => s + Number((r as { amount?: number }).amount || 0),
+        0,
+      );
+      if (spentTodayT + _amt > dailyCapT) {
+        const remainingT = Math.max(0, dailyCapT - spentTodayT);
+        return jsonResponse(
+          {
+            error: `You've used ₦${spentTodayT.toLocaleString()} of your ${tierLabel} ₦${dailyCapT.toLocaleString()} daily limit. Only ₦${remainingT.toLocaleString()} is available in the next 24 hours. Upgrade your KYC to send more.`,
+            code: "TIER_DAILY_LIMIT_EXCEEDED",
+            tier: tierT,
+            limit: dailyCapT,
+            spent: spentTodayT,
+            remaining: remainingT,
+            action: "upgrade_kyc",
+          },
+          403,
+        );
+      }
+    }
+  }
+  // ─── END EARLY TIER ENFORCEMENT ───
+
   // ─── SANDBOX VIRTUAL→VIRTUAL SHORT-CIRCUIT ───
   // Virtual NUBANs (9xxxxxxxxx) all settle to the shared PLATFORM_POOL_NUBAN
   // on VFD, so a VFD /transfer call would be pool→pool (rejected). Resolve
