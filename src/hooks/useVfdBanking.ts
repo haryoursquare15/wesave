@@ -274,6 +274,26 @@ export function useVfdBanking() {
   );
   const getLockLedger = useCallback(() => invokeVfd("get_lock_ledger"), [invokeVfd]);
 
+  // Transfer beneficiaries
+  const listTransferBeneficiaries = useCallback(
+    () => invokeVfd("list_transfer_beneficiaries"),
+    [invokeVfd]
+  );
+  const saveTransferBeneficiary = useCallback(
+    (body: {
+      alias?: string;
+      account_number: string;
+      bank_code: string;
+      bank_name: string;
+      beneficiary_name: string;
+    }) => invokeVfd("save_transfer_beneficiary", body),
+    [invokeVfd]
+  );
+  const deleteTransferBeneficiary = useCallback(
+    (id: string) => invokeVfd("delete_transfer_beneficiary", { id }),
+    [invokeVfd]
+  );
+
   return {
     loading,
     client,
