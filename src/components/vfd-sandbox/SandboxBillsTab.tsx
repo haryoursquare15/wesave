@@ -16,6 +16,7 @@ import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
 import { SandboxBillReceipts } from "./SandboxBillReceipts";
 import { SandboxBillBeneficiaries } from "./SandboxBillBeneficiaries";
 import { SandboxRecurringBills } from "./SandboxRecurringBills";
+import { BillBeneficiaryRename } from "./BillBeneficiaryRename";
 
 /* ─── Types ─── */
 interface Biller {
