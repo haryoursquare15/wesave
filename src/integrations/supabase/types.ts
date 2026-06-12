@@ -5830,6 +5830,48 @@ export type Database = {
         }
         Relationships: []
       }
+      vfd_sandbox_transfer_beneficiaries: {
+        Row: {
+          account_number: string
+          alias: string
+          bank_code: string
+          bank_name: string
+          beneficiary_name: string
+          created_at: string
+          id: string
+          is_intra: boolean
+          last_used_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_number: string
+          alias: string
+          bank_code: string
+          bank_name: string
+          beneficiary_name: string
+          created_at?: string
+          id?: string
+          is_intra?: boolean
+          last_used_at?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_number?: string
+          alias?: string
+          bank_code?: string
+          bank_name?: string
+          beneficiary_name?: string
+          created_at?: string
+          id?: string
+          is_intra?: boolean
+          last_used_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       vfd_sandbox_virtual_cards: {
         Row: {
           activated_at: string | null

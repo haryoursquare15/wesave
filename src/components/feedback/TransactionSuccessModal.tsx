@@ -40,6 +40,8 @@ interface Props {
   payload: TransactionSuccessPayload | null;
   onPrimary?: () => void;
   onSecondary?: () => void;
+  /** Optional extra content (e.g. "Save as beneficiary" prompt) rendered above CTAs */
+  extraContent?: React.ReactNode;
 }
 
 /**
@@ -54,6 +56,7 @@ export function TransactionSuccessModal({
   payload,
   onPrimary,
   onSecondary,
+  extraContent,
 }: Props) {
   const { toast } = useToast();
 
@@ -132,6 +135,8 @@ export function TransactionSuccessModal({
             <Copy className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
           </button>
         )}
+
+        {extraContent}
 
         <div className="flex gap-2 pt-1">
           {payload?.secondaryLabel && (
