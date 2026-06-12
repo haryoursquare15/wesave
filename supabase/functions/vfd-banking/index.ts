@@ -2862,3 +2862,63 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: message }, 500);
   }
 });
+
+// =============================================
+// TRANSFER BENEFICIARIES
+// =============================================
+
+async function handleListTransferBeneficiaries(userId: string) {
+  const db = getSupabaseAdmin();
+  const { data, error } = await db
+    .from("vfd_sandbox_transfer_beneficiaries")
+    .select("*")
+    .eq("user_id", userId)
+    .order("last_used_at", { ascending: false, nullsFirst: false });
+  if (error) return jsonResponse({ error: error.message }, 500);
+  return jsonResponse({ data: data || [] });
+}
+
+async function handleSaveTransferBeneficiary(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const alias = String(body.alias || "").trim();
+  const accountNumber = String(body.account_number || "").trim();
+  const bankCode = String(body.bank_code || "").trim();
+  const bankName = String(body.bank_name || "").trim();
+  const beneficiaryName = String(body.beneficiary_name || "").trim();
+  const isIntra = bankCode === "999999";
+  if (!accountNumber || !bankCode || !bankName || !beneficiaryName) {
+    return jsonResponse({ error: "account_number, bank_code, bank_name and beneficiary_name are required." }, 400);
+  }
+  if (!/^\d{10}$/.test(accountNumber)) {
+    return jsonResponse({ error: "Account number must be 10 digits." }, 400);
+  }
+  const { data, error } = await db
+    .from("vfd_sandbox_transfer_beneficiaries")
+    .upsert({
+      user_id: userId,
+      alias: alias || beneficiaryName,
+      account_number: accountNumber,
+      bank_code: bankCode,
+      bank_name: bankName,
+      beneficiary_name: beneficiaryName,
+      is_intra: isIntra,
+      last_used_at: new Date().toISOString(),
+    }, { onConflict: "user_id,bank_code,account_number" })
+    .select()
+    .single();
+  if (error) return jsonResponse({ error: error.message }, 500);
+  return jsonResponse({ data });
+}
+
+async function handleDeleteTransferBeneficiary(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const id = String(body.id || "");
+  if (!id) return jsonResponse({ error: "id required" }, 400);
+  const { error } = await db
+    .from("vfd_sandbox_transfer_beneficiaries")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", userId);
+  if (error) return jsonResponse({ error: error.message }, 500);
+  return jsonResponse({ data: { deleted: true } });
+}
