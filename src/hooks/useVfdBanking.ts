@@ -67,7 +67,40 @@ export function useVfdBanking() {
         });
 
         if (error) {
-          toast({ title: "VFD API Error", description: getUserFriendlyError(error.message), variant: "destructive" });
+          // Pull the real backend error body (FunctionsHttpError hides it
+          // behind a generic "non-2xx" message). This surfaces tier-limit,
+          // KYC, and validation messages verbatim.
+          let backendMsg = "";
+          let backendCode = "";
+          try {
+            const ctx = (error as { context?: Response }).context;
+            if (ctx && typeof ctx.clone === "function") {
+              const body = await ctx.clone().json();
+              backendMsg = body?.error || body?.message || "";
+              backendCode = body?.code || "";
+            }
+          } catch { /* fall back */ }
+          toast({
+            title: backendCode === "TIER_LIMIT_EXCEEDED" || backendCode === "TIER_DAILY_LIMIT_EXCEEDED"
+              ? "Transaction limit reached"
+              : "Transaction failed",
+            description: backendMsg || getUserFriendlyError(error.message),
+            variant: "destructive",
+          });
+          return null;
+        }
+
+        // Defensive: some paths return 2xx with an embedded failure sentinel
+        // (e.g. { data: { status: "99" } }). Treat as failure so the UI
+        // never shows a fake success modal.
+        const embeddedStatus = (data as { data?: { status?: string } } | null)?.data?.status;
+        if (embeddedStatus && embeddedStatus !== "00") {
+          const embeddedMsg = (data as { data?: { message?: string } } | null)?.data?.message;
+          toast({
+            title: "Transaction failed",
+            description: embeddedMsg || "The transaction could not be completed.",
+            variant: "destructive",
+          });
           return null;
         }
 
