@@ -2721,12 +2721,17 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
       recurring_bill_id: recurringBillId,
     });
 
-    // Upsert beneficiary (auto-save) — last_used touch
+    // Upsert beneficiary (auto-save) — last_used touch; preserve user-edited nickname on repeat pay
     if (category && billerId && customerId) {
+      const { data: existingBene } = await db.from("vfd_sandbox_bill_beneficiaries")
+        .select("id, nickname")
+        .eq("user_id", userId).eq("biller_id", billerId).eq("customer_id", customerId)
+        .maybeSingle();
+      const nickname = existingBene?.nickname || `${billerName} • ${customerId.slice(-4)}`;
       await db.from("vfd_sandbox_bill_beneficiaries")
         .upsert({
           user_id: userId,
-          nickname: `${billerName} • ${customerId.slice(-4)}`,
+          nickname,
           category,
           biller_id: billerId,
           biller_name: billerName,
@@ -2738,6 +2743,16 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
           phone_number: phoneNumber || null,
           last_used_at: new Date().toISOString(),
         }, { onConflict: "user_id,biller_id,customer_id", ignoreDuplicates: false });
+
+      // Prune: keep newest 20 per category, evict by oldest last_used_at
+      const { data: catRows } = await db.from("vfd_sandbox_bill_beneficiaries")
+        .select("id, last_used_at")
+        .eq("user_id", userId).eq("category", category)
+        .order("last_used_at", { ascending: false, nullsFirst: false });
+      if (catRows && catRows.length > 20) {
+        const toDelete = catRows.slice(20).map(r => r.id);
+        await db.from("vfd_sandbox_bill_beneficiaries").delete().in("id", toDelete);
+      }
     }
 
     await sendNotification(
