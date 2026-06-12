@@ -90,15 +90,35 @@ export function useVfdBanking() {
           return null;
         }
 
-        // Defensive: some paths return 2xx with an embedded failure sentinel
-        // (e.g. { data: { status: "99" } }). Treat as failure so the UI
-        // never shows a fake success modal.
-        const embeddedStatus = (data as { data?: { status?: string } } | null)?.data?.status;
-        if (embeddedStatus && embeddedStatus !== "00") {
-          const embeddedMsg = (data as { data?: { message?: string } } | null)?.data?.message;
+        // Defensive: money-moving paths must not treat any truthy payload as
+        // success. Some backend/VFD failures can arrive as HTTP 200 with either
+        // top-level errors or nested { data: { status: "99" } } sentinels.
+        const response = data as {
+          error?: string;
+          message?: string;
+          code?: string;
+          status?: string;
+          data?: { error?: string; message?: string; code?: string; status?: string };
+        } | null;
+        const embeddedStatus = response?.data?.status ?? response?.status;
+        const embeddedError = response?.error || response?.data?.error;
+        if (embeddedError || (embeddedStatus && embeddedStatus !== "00")) {
+          const embeddedCode = response?.code || response?.data?.code || "";
+          const embeddedMsg = embeddedError || response?.data?.message || response?.message;
+          toast({
+            title: embeddedCode === "TIER_LIMIT_EXCEEDED" || embeddedCode === "TIER_DAILY_LIMIT_EXCEEDED"
+              ? "Transaction limit reached"
+              : "Transaction failed",
+            description: embeddedMsg || "The transaction could not be completed.",
+            variant: "destructive",
+          });
+          return null;
+        }
+
+        if (action === "transfer" && embeddedStatus !== "00") {
           toast({
             title: "Transaction failed",
-            description: embeddedMsg || "The transaction could not be completed.",
+            description: "The transfer was not confirmed. Please try again or contact support.",
             variant: "destructive",
           });
           return null;
