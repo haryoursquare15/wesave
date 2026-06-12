@@ -320,5 +320,8 @@ export function useVfdBanking() {
     unlockFunds,
     breakLock,
     getLockLedger,
+    listTransferBeneficiaries,
+    saveTransferBeneficiary,
+    deleteTransferBeneficiary,
   };
 }
