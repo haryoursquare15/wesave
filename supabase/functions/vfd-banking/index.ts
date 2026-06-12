@@ -1071,6 +1071,47 @@ async function handleTransfer(
       const benName = (body.beneficiaryName as string) || recipient.full_name || toAccount;
       const recipientBefore = await getVestaraSettlementSnapshot(adminClient2, recipient.user_id);
 
+      // ─── ATOMIC SENDER DEBIT FIRST ───
+      // Previously only the recipient was credited via vestara_deposit; the
+      // sender was never debited on the Vestara ledger, so the next sync wiped
+      // any cache-only debit. We now post a proper double-entry withdrawal
+      // (sender wallet → settlement) before crediting the recipient.
+      const { data: senderWdData, error: senderWdErr } = await adminClient2.rpc("vestara_withdraw", {
+        _user_id: userId,
+        _amount: amountNum2,
+        _reference: `${ref2}-OUT`,
+        _metadata: {
+          source: "intra_virtual_transfer",
+          to_user_id: recipient.user_id,
+          from_account: displayFromAccount,
+          to_account: toAccount,
+          narration,
+        },
+      });
+      const senderWdResult = senderWdData as { success?: boolean; error?: string } | null;
+      if (senderWdErr || !senderWdResult?.success) {
+        console.error("[intra-virtual] sender vestara_withdraw failed:", senderWdErr || senderWdResult);
+        await adminClient2.from("intra_transfer_reports").insert({
+          reference: ref2,
+          sender_user_id: userId,
+          recipient_user_id: recipient.user_id,
+          from_account: displayFromAccount,
+          to_account: toAccount,
+          amount: amountNum2,
+          narration,
+          settlement_status: "vestara_failed",
+          sender_balance_before: senderBal,
+          sender_balance_after: senderBal,
+          recipient_balance_before: recipientBefore.walletBalance,
+          recipient_balance_after: recipientBefore.walletBalance,
+          metadata: { error: senderWdErr?.message || senderWdResult?.error || "Sender debit failed", stage: "sender_withdraw" },
+        });
+        return jsonResponse(
+          { data: { status: "99", message: "Internal settlement failed; funds were not moved." }, reference: ref2 },
+          500,
+        );
+      }
+
       const { data: depositData, error: depositErr } = await adminClient2.rpc("vestara_deposit", {
         _user_id: recipient.user_id,
         _amount: amountNum2,
@@ -1088,6 +1129,18 @@ async function handleTransfer(
       const depositResult = depositData as { success?: boolean; transaction_id?: string; error?: string } | null;
       if (depositErr || !depositResult?.success) {
         console.error("[intra-virtual] vestara_deposit failed for recipient:", depositErr || depositResult);
+        // Reverse the sender debit so funds aren't trapped in settlement.
+        const { error: reverseErr } = await adminClient2.rpc("vestara_deposit", {
+          _user_id: userId,
+          _amount: amountNum2,
+          _reference: `${ref2}-OUT-REVERSAL`,
+          _metadata: {
+            source: "intra_virtual_transfer_reversal",
+            original_reference: `${ref2}-OUT`,
+            reason: depositErr?.message || depositResult?.error || "recipient_deposit_failed",
+          },
+        });
+        if (reverseErr) console.error("[intra-virtual] CRITICAL: sender reversal failed:", reverseErr);
         await adminClient2.from("intra_transfer_reports").insert({
           reference: ref2,
           sender_user_id: userId,
@@ -1096,12 +1149,12 @@ async function handleTransfer(
           to_account: toAccount,
           amount: amountNum2,
           narration,
-          settlement_status: "vestara_failed",
+          settlement_status: reverseErr ? "vestara_failed_unreversed" : "vestara_failed",
           sender_balance_before: senderBal,
-          sender_balance_after: senderBal,
+          sender_balance_after: reverseErr ? senderBal - amountNum2 : senderBal,
           recipient_balance_before: recipientBefore.walletBalance,
           recipient_balance_after: recipientBefore.walletBalance,
-          metadata: { error: depositErr?.message || depositResult?.error || "Vestara deposit failed" },
+          metadata: { error: depositErr?.message || depositResult?.error || "Vestara deposit failed", stage: "recipient_deposit" },
         });
         return jsonResponse(
           { data: { status: "99", message: "Internal settlement failed; funds were not moved." }, reference: ref2 },

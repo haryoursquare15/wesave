@@ -2663,6 +2663,31 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
 
   if (isSuccess) {
     const db = getSupabaseAdmin();
+    // Atomic double-entry debit: wallet → settlement (via vestara_withdraw RPC).
+    // This guarantees the settlement account is credited and prevents the
+    // syncBalanceCachesFromVestara routine from later "restoring" a stale
+    // vfd_user_balances row.
+    const { data: wdData, error: wdErr } = await db.rpc("vestara_withdraw", {
+      _user_id: userId,
+      _amount: numAmount,
+      _reference: reference,
+      _metadata: {
+        source: "bill_payment",
+        biller_id: billerId,
+        customer_id: customerId,
+        division,
+        product_id: productId,
+      },
+    });
+    const wdResult = wdData as { success?: boolean; error?: string } | null;
+    if (wdErr || !wdResult?.success) {
+      console.error("[bills] vestara_withdraw failed:", wdErr || wdResult);
+      return jsonResponse(
+        { error: "Bill payment could not be recorded. Please contact support.", details: wdErr?.message || wdResult?.error },
+        500,
+      );
+    }
+    // Mirror the debit to the vfd_user_balances cache so the UI reflects it immediately.
     await db.from("vfd_user_balances").update({
       total_balance: bal.total_balance - numAmount,
       updated_at: new Date().toISOString(),
@@ -3047,15 +3072,36 @@ async function handleCreateVirtualCard(userId: string, _body: Record<string, unk
 
   if (data?.status === "00" && data?.data) {
     const cardData = data.data;
-    // Debit issuance fee
+    const cardRef = `card-issue-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+    // Atomic double-entry debit of the issuance fee (wallet → settlement).
+    const { data: wdData, error: wdErr } = await db.rpc("vestara_withdraw", {
+      _user_id: userId,
+      _amount: CARD_ISSUANCE_FEE,
+      _reference: cardRef,
+      _metadata: {
+        source: "virtual_card_issuance",
+        card_id: cardData.cardId?.toString() || "",
+        masked_pan: cardData.maskedPan || "",
+      },
+    });
+    const wdResult = wdData as { success?: boolean; error?: string } | null;
+    if (wdErr || !wdResult?.success) {
+      console.error("[card-issue] vestara_withdraw failed:", wdErr || wdResult);
+      return jsonResponse(
+        { error: "Card created but fee could not be charged. Please contact support.", details: wdErr?.message || wdResult?.error },
+        500,
+      );
+    }
+    // Mirror the debit to the vfd_user_balances cache.
     await db.from("vfd_user_balances").update({
       total_balance: bal.total_balance - CARD_ISSUANCE_FEE,
+      updated_at: new Date().toISOString(),
     }).eq("user_id", userId);
 
     await db.from("vfd_sandbox_transactions").insert({
       user_id: userId, transaction_type: "debit", amount: CARD_ISSUANCE_FEE,
       description: "Virtual Card Issuance Fee",
-      reference: `card-issue-${Date.now()}`, status: "completed",
+      reference: cardRef, status: "completed",
     });
 
     // Store card
