@@ -75,10 +75,17 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
       narration: form.narration || "Sandbox Transfer",
       beneficiaryName: form.beneficiaryName,
     });
-    if (result) {
-      const ref = (result as { reference?: string; transactionId?: string })?.reference
-        || (result as { transactionId?: string })?.transactionId
-        || `TRF-${Date.now()}`;
+    const transferResult = result as {
+      reference?: string;
+      transactionId?: string;
+      data?: { status?: string; txnId?: string; reference?: string; message?: string };
+    } | null;
+    if (transferResult?.data?.status === "00") {
+      const ref = transferResult.reference
+        || transferResult.data?.reference
+        || transferResult.data?.txnId
+        || transferResult.transactionId;
+      if (!ref) return;
       setSuccessPayload({
         title: "Transfer Successful",
         description: `Your transfer of ₦${amount.toLocaleString()} has been sent.`,
