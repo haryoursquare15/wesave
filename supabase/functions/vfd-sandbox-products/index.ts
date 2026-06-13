@@ -1937,6 +1937,13 @@ async function handlePaySplit(userId: string, body: Record<string, unknown>) {
 
   let billDelivery: any = null;
   if (allPaid && split.bill_metadata) {
+    // Immediate confirmation to the creator the moment the last contributor pays —
+    // independent of how long the actual VFD bill-delivery takes in the background.
+    if (split.creator_id !== userId) {
+      await sendNotification(split.creator_id, "SplitPay fully funded",
+        `All ${paidCount} contributors paid for "${split.title}". Delivering the bill now…`,
+        "split_payment");
+    }
     // Bill-payment SplitPay: queue delivery so a slow VFD bills endpoint cannot hold the payer request open.
     billDelivery = await queueSplitBillSettlement(split);
   } else if (!allPaid && split.creator_id !== userId) {
