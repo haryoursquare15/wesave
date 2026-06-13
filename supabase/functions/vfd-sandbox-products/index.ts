@@ -1724,10 +1724,12 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
 
 async function queueSplitBillSettlement(split: Record<string, any>): Promise<{ queued: boolean; status: string; message: string }> {
   const db = getSupabaseAdmin();
+  // Allow reclaiming a row stuck in "processing" for >2 minutes (background task killed mid-flight).
+  const staleCutoff = new Date(Date.now() - 2 * 60 * 1000).toISOString();
   const { data: claimed, error } = await db.from("vfd_sandbox_splits")
     .update({ settlement_status: "processing", updated_at: new Date().toISOString() })
     .eq("id", split.id)
-    .or("settlement_status.is.null,settlement_status.in.(pending,failed)")
+    .or(`settlement_status.is.null,settlement_status.in.(pending,failed),and(settlement_status.eq.processing,updated_at.lt.${staleCutoff})`)
     .select("*")
     .maybeSingle();
 
