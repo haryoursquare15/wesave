@@ -230,7 +230,7 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
                     </div>
                     <button
                       onClick={(e) => removeBeneficiary(b.id, e)}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity p-1 -mr-1 -mt-1 text-muted-foreground hover:text-destructive"
+                      className="p-1 -mr-1 -mt-1 text-muted-foreground hover:text-destructive"
                       aria-label="Remove beneficiary"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
