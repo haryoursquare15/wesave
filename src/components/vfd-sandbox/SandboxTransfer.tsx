@@ -203,7 +203,7 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
       </div>
 
       {/* Saved beneficiaries */}
-      {beneficiaries.length > 0 && (
+      {beneficiaries.length > 0 ? (
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
@@ -211,7 +211,7 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
         >
           <div className="flex items-center gap-2 px-1">
             <Users className="h-3.5 w-3.5 text-muted-foreground" />
-            <p className="text-xs font-medium text-muted-foreground">Saved beneficiaries</p>
+            <p className="text-xs font-medium text-muted-foreground">Saved beneficiaries · tap to fill</p>
           </div>
           <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 snap-x">
             {beneficiaries.map(b => {
@@ -244,6 +244,13 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
             })}
           </div>
         </motion.div>
+      ) : (
+        <div className="rounded-2xl border border-dashed border-border/60 bg-muted/20 p-3 flex items-center gap-2.5">
+          <Users className="h-4 w-4 text-muted-foreground shrink-0" />
+          <p className="text-xs text-muted-foreground">
+            No saved beneficiaries yet. After your next transfer you'll be asked to save the recipient for one-tap reuse.
+          </p>
+        </div>
       )}
 
       <motion.div
