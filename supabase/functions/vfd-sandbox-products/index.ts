@@ -1724,10 +1724,12 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
 
 async function queueSplitBillSettlement(split: Record<string, any>): Promise<{ queued: boolean; status: string; message: string }> {
   const db = getSupabaseAdmin();
+  // Allow reclaiming a row stuck in "processing" for >2 minutes (background task killed mid-flight).
+  const staleCutoff = new Date(Date.now() - 2 * 60 * 1000).toISOString();
   const { data: claimed, error } = await db.from("vfd_sandbox_splits")
     .update({ settlement_status: "processing", updated_at: new Date().toISOString() })
     .eq("id", split.id)
-    .or("settlement_status.is.null,settlement_status.in.(pending,failed)")
+    .or(`settlement_status.is.null,settlement_status.in.(pending,failed),and(settlement_status.eq.processing,updated_at.lt.${staleCutoff})`)
     .select("*")
     .maybeSingle();
 
@@ -1935,6 +1937,13 @@ async function handlePaySplit(userId: string, body: Record<string, unknown>) {
 
   let billDelivery: any = null;
   if (allPaid && split.bill_metadata) {
+    // Immediate confirmation to the creator the moment the last contributor pays —
+    // independent of how long the actual VFD bill-delivery takes in the background.
+    if (split.creator_id !== userId) {
+      await sendNotification(split.creator_id, "SplitPay fully funded",
+        `All ${paidCount} contributors paid for "${split.title}". Delivering the bill now…`,
+        "split_payment");
+    }
     // Bill-payment SplitPay: queue delivery so a slow VFD bills endpoint cannot hold the payer request open.
     billDelivery = await queueSplitBillSettlement(split);
   } else if (!allPaid && split.creator_id !== userId) {
@@ -2103,6 +2112,17 @@ async function handleGetSplitDetail(body: Record<string, unknown>) {
 
   const { data: split } = await db.from("vfd_sandbox_splits").select("*").eq("id", splitId).single();
   if (!split) return jsonResponse({ error: "Split not found" }, 404);
+
+  // Self-heal: if a bill SplitPay is fully paid but stuck in "processing"/"failed"/null for >2 min,
+  // re-queue the bill delivery so the creator + contributors eventually get their success popup.
+  const isFullyPaid = split.status === "completed" || Number(split.paid_count || 0) >= Number(split.split_count || 0);
+  const settlementStuck = !split.settlement_completed_at
+    && ["processing", "failed", null, undefined].includes(split.settlement_status as any);
+  const ageMs = split.updated_at ? Date.now() - new Date(split.updated_at).getTime() : Infinity;
+  if (isFullyPaid && split.bill_metadata && settlementStuck && ageMs > 2 * 60 * 1000) {
+    await queueSplitBillSettlement(split);
+  }
+
 
   const { data: participants } = await db.from("vfd_sandbox_split_participants")
     .select("*").eq("split_id", splitId);
