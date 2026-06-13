@@ -2113,6 +2113,17 @@ async function handleGetSplitDetail(body: Record<string, unknown>) {
   const { data: split } = await db.from("vfd_sandbox_splits").select("*").eq("id", splitId).single();
   if (!split) return jsonResponse({ error: "Split not found" }, 404);
 
+  // Self-heal: if a bill SplitPay is fully paid but stuck in "processing"/"failed"/null for >2 min,
+  // re-queue the bill delivery so the creator + contributors eventually get their success popup.
+  const isFullyPaid = split.status === "completed" || Number(split.paid_count || 0) >= Number(split.split_count || 0);
+  const settlementStuck = !split.settlement_completed_at
+    && ["processing", "failed", null, undefined].includes(split.settlement_status as any);
+  const ageMs = split.updated_at ? Date.now() - new Date(split.updated_at).getTime() : Infinity;
+  if (isFullyPaid && split.bill_metadata && settlementStuck && ageMs > 2 * 60 * 1000) {
+    await queueSplitBillSettlement(split);
+  }
+
+
   const { data: participants } = await db.from("vfd_sandbox_split_participants")
     .select("*").eq("split_id", splitId);
 
