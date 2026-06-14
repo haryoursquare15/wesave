@@ -2660,7 +2660,16 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
 
   const bal = await ensureBalanceRow(userId);
   const available = bal.total_balance - bal.locked_balance - bal.savings_balance;
-  if (numAmount > available) return jsonResponse({ error: "Insufficient balance" }, 400);
+  if (numAmount > available) {
+    const shortfall = Math.max(0, numAmount - available);
+    return jsonResponse({
+      error: `Insufficient wallet balance. You need ₦${numAmount.toLocaleString()} but have ₦${available.toLocaleString()} available. Please fund your wallet with at least ₦${shortfall.toLocaleString()}.`,
+      code: "INSUFFICIENT_BALANCE",
+      required: numAmount,
+      available,
+      shortfall,
+    }, 400);
+  }
 
   const token = await getVfdAccessToken();
   if (!token) return jsonResponse({ error: "VFD auth failed" }, 500);

@@ -2102,7 +2102,14 @@ async function handleCreateLock(userId: string, body: Record<string, unknown>) {
     0
   );
   if (amount > availableBalance) {
-    return jsonResponse({ error: `Insufficient available balance. Available: ${availableBalance}` }, 400);
+    const shortfall = Math.max(0, amount - availableBalance);
+    return jsonResponse({
+      error: `Insufficient wallet balance to lock. You need ₦${amount.toLocaleString()} but have ₦${availableBalance.toLocaleString()} available. Please fund your wallet with at least ₦${shortfall.toLocaleString()}.`,
+      code: "INSUFFICIENT_BALANCE",
+      required: amount,
+      available: availableBalance,
+      shortfall,
+    }, 400);
   }
 
   // Calculate interest (simple interest)
