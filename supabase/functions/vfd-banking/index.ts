@@ -1138,10 +1138,22 @@ async function handleTransfer(
       if (!Number.isFinite(amountNum2) || amountNum2 <= 0) {
         return jsonResponse({ error: "Invalid amount" }, 400);
       }
-      const senderBal = await getRecordedSandboxBalance(adminClient2, userId);
+      // Use the Vestara wallet ledger as the single source of truth for the
+      // sender's available balance. The vfd_sandbox_transactions mirror can
+      // drift (especially for legacy/refunded rows) and must NEVER be used to
+      // gate a money-moving operation — see money-movement-model.md.
+      const senderSnapshot = await getVestaraSettlementSnapshot(adminClient2, userId);
+      const senderBal = senderSnapshot.walletBalance;
       if (senderBal < amountNum2) {
+        const shortfall = amountNum2 - senderBal;
         return jsonResponse(
-          { error: `Insufficient balance. Available: ₦${senderBal.toLocaleString()}` },
+          {
+            error: `You need ₦${amountNum2.toLocaleString()} but only have ₦${senderBal.toLocaleString()} available. Please fund your wallet with at least ₦${shortfall.toLocaleString()} and try again.`,
+            code: "INSUFFICIENT_BALANCE",
+            required: amountNum2,
+            available: senderBal,
+            shortfall,
+          },
           400
         );
       }
