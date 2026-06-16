@@ -15,10 +15,16 @@ export function useTransactionPin() {
 
   const invoke = useCallback(
     async (body: Record<string, unknown>) => {
-      const accessToken = session?.access_token;
-      if (!accessToken) return { success: false, error: "Not authenticated" };
       setLoading(true);
       try {
+        // Always fetch a fresh access token from the active client (sandbox or main).
+        // Relying solely on the `session` value from context can be stale right after
+        // sign-in or after an autoRefresh swap, causing the edge function to return
+        // "Authentication required" because supabase-js sends no/old Authorization header.
+        const { data: sessionData } = await supabase.auth.getSession();
+        const accessToken =
+          sessionData?.session?.access_token || session?.access_token;
+        if (!accessToken) return { success: false, error: "Not authenticated" };
         const { data, error } = await supabase.functions.invoke("transaction-pin", {
           body,
           headers: { Authorization: `Bearer ${accessToken}` },
