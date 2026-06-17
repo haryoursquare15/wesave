@@ -41,6 +41,7 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
     toAccount: "", bankCode: "", amount: "", narration: "", beneficiaryName: "",
   });
   const [pinOpen, setPinOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [successPayload, setSuccessPayload] = useState<TransactionSuccessPayload | null>(null);
   const [bankSearch, setBankSearch] = useState("");
   const [bankPopoverOpen, setBankPopoverOpen] = useState(false);
