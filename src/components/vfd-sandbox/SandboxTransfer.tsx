@@ -369,6 +369,18 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
         </Button>
       </motion.div>
 
+      <TransferPreviewSheet
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        toAccount={form.toAccount}
+        bankCode={form.bankCode}
+        bankName={banks.find(b => b.code === form.bankCode)?.name || ""}
+        beneficiaryName={form.beneficiaryName}
+        amount={parseFloat(form.amount) || 0}
+        narration={form.narration}
+        onConfirm={() => setPinOpen(true)}
+      />
+
       <TransactionPinGate
         open={pinOpen}
         onOpenChange={setPinOpen}
@@ -376,6 +388,7 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
         description={`Send ₦${(parseFloat(form.amount) || 0).toLocaleString()} to ${form.beneficiaryName || form.toAccount}`}
         onVerified={executeTransfer}
       />
+
 
       <TransactionSuccessModal
         open={!!successPayload}
