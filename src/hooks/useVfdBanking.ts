@@ -322,6 +322,7 @@ export function useVfdBanking() {
     getBankList,
     validateBeneficiary,
     transfer,
+    quoteTransfer,
     sandboxCredit,
     getLockConfigs,
     getUserBalance,
