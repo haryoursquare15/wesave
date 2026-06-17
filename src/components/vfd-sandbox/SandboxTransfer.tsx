@@ -131,7 +131,8 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
     // Pre-check: if already saved, hide the save prompt
     const exists = beneficiaries.some(b => b.bank_code === form.bankCode && b.account_number === form.toAccount);
     setShouldSaveBenef(!exists);
-    setPinOpen(true);
+    // Show the preview sheet first; PIN gate opens after the user confirms.
+    setPreviewOpen(true);
   };
 
   const executeTransfer = async () => {
