@@ -1821,11 +1821,25 @@ async function handleTransfer(
       accountNo: displayFromAccount,
       preserveExisting: false,
     });
+
+    // ─── INTERBANK FEE + STAMP DUTY ───
+    // Only inter (NIBSS) transfers incur fee + stamp duty. Intra transfers are
+    // routed through the virtual-account short-circuit above and never reach
+    // this path with transferType === "inter".
+    let feeQuote: TransferFeeQuote | null = null;
+    if (transferType === "inter") {
+      feeQuote = await quoteTransferFees(supabaseAdmin, userId, Number(body.amount), "inter");
+      await chargeTransferFees(supabaseAdmin, userId, reference, feeQuote);
+    }
+
     try {
+      const feeNote = feeQuote && feeQuote.total_fees > 0
+        ? ` (fee ₦${feeQuote.transfer_fee} + stamp duty ₦${feeQuote.stamp_duty})`
+        : "";
       await supabaseAdmin.from("vfd_sandbox_notifications").insert({
         user_id: userId,
         title: "Transfer sent",
-        message: `₦${Number(body.amount).toLocaleString()} sent to ${body.beneficiaryName || toAccount}. Ref: ${reference}`,
+        message: `₦${Number(body.amount).toLocaleString()} sent to ${body.beneficiaryName || toAccount}${feeNote}. Ref: ${reference}`,
         notification_type: "transfer_sent",
       });
     } catch (_) { /* best-effort */ }
