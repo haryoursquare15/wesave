@@ -9,6 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useToast } from "@/hooks/use-toast";
 import { TransactionPinGate } from "@/components/security/TransactionPinGate";
 import { TransactionSuccessModal, TransactionSuccessPayload } from "@/components/feedback/TransactionSuccessModal";
+import { TransferPreviewSheet } from "@/components/vfd-sandbox/TransferPreviewSheet";
 import { useVfdBanking } from "@/hooks/useVfdBanking";
 
 interface Beneficiary {
