@@ -3115,6 +3115,33 @@ export type Database = {
           },
         ]
       }
+      transfer_fee_counters: {
+        Row: {
+          created_at: string
+          id: string
+          inter_count: number
+          month_key: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          inter_count?: number
+          month_key: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          inter_count?: number
+          month_key?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_devices: {
         Row: {
           browser: string | null
@@ -3385,6 +3412,42 @@ export type Database = {
           split_ref?: string | null
           updated_at?: string
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      vestara_fee_ledger: {
+        Row: {
+          amount: number
+          created_at: string
+          fee_type: string
+          id: string
+          metadata: Json
+          reference: string | null
+          transfer_type: string | null
+          tx_reference: string | null
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          fee_type: string
+          id?: string
+          metadata?: Json
+          reference?: string | null
+          transfer_type?: string | null
+          tx_reference?: string | null
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          fee_type?: string
+          id?: string
+          metadata?: Json
+          reference?: string | null
+          transfer_type?: string | null
+          tx_reference?: string | null
+          user_id?: string
         }
         Relationships: []
       }
