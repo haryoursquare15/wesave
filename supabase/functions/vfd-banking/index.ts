@@ -3016,6 +3016,9 @@ Deno.serve(async (req) => {
       case "transfer":
         return await handleTransfer(userId, body);
 
+      case "quote_transfer":
+        return await handleQuoteTransfer(userId, body);
+
       case "sandbox_credit":
         return await handleSandboxCredit(userId, body.accountNo as string, body.amount as number);
 
