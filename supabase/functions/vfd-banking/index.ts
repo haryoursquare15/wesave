@@ -981,6 +981,185 @@ async function handleValidateBeneficiary(accountNo: string, bankCode: string, tr
   return jsonResponse({ data, accountName, vfd_status: status });
 }
 
+// =============================================
+// INTERBANK TRANSFER FEE + STAMP DUTY ENGINE
+// Tiers (by sender wallet balance at time of transfer):
+//   T1  <₦10k                 → ₦20/trf,  no free, ₦50 stamp duty
+//   T2  ₦10k – ₦49,999        → 5 free/month, then ₦20, ₦50 stamp duty
+//   T3  ₦50k – ₦199,999       → 15 free/month, then ₦20, ₦50 stamp duty
+//   T4  ≥₦200k                → Unlimited free, ₦50 stamp duty
+// Stamp duty applies to every interbank transfer regardless of tier.
+// Intra-Vestara transfers: no fee, no stamp duty.
+// =============================================
+
+const TRANSFER_FEE = 20;
+const STAMP_DUTY = 50;
+
+interface TransferFeeQuote {
+  tier: 1 | 2 | 3 | 4;
+  tier_label: string;
+  wallet_balance: number;
+  free_quota: number;          // -1 = unlimited
+  used_this_month: number;
+  free_remaining: number;      // -1 = unlimited
+  transfer_fee: number;
+  stamp_duty: number;
+  total_fees: number;
+  amount: number;
+  total_debit: number;         // amount + total_fees
+  transferType: "intra" | "inter";
+}
+
+function watMonthKey(d: Date = new Date()): string {
+  // WAT = UTC+1
+  const wat = new Date(d.getTime() + 60 * 60 * 1000);
+  const y = wat.getUTCFullYear();
+  const m = String(wat.getUTCMonth() + 1).padStart(2, "0");
+  return `${y}-${m}`;
+}
+
+function computeFeeTier(walletBalance: number): {
+  tier: 1 | 2 | 3 | 4;
+  tier_label: string;
+  free_quota: number;
+} {
+  if (walletBalance < 10_000) return { tier: 1, tier_label: "Tier 1 (<₦10k)", free_quota: 0 };
+  if (walletBalance < 50_000) return { tier: 2, tier_label: "Tier 2 (₦10k–₦49.9k)", free_quota: 5 };
+  if (walletBalance < 200_000) return { tier: 3, tier_label: "Tier 3 (₦50k–₦199k)", free_quota: 15 };
+  return { tier: 4, tier_label: "Tier 4 (₦200k+)", free_quota: -1 };
+}
+
+async function getMonthlyInterCount(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+  monthKey: string,
+): Promise<number> {
+  const { data } = await admin
+    .from("transfer_fee_counters")
+    .select("inter_count")
+    .eq("user_id", userId)
+    .eq("month_key", monthKey)
+    .maybeSingle();
+  return Number((data as { inter_count?: number } | null)?.inter_count ?? 0);
+}
+
+async function quoteTransferFees(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+  amount: number,
+  transferType: "intra" | "inter",
+): Promise<TransferFeeQuote> {
+  const snap = await getVestaraSettlementSnapshot(admin, userId);
+  const walletBalance = Number(snap.walletBalance || 0);
+
+  if (transferType === "intra") {
+    return {
+      tier: 1, tier_label: "Intra-Vestara (no fee)", wallet_balance: walletBalance,
+      free_quota: -1, used_this_month: 0, free_remaining: -1,
+      transfer_fee: 0, stamp_duty: 0, total_fees: 0,
+      amount, total_debit: amount, transferType,
+    };
+  }
+
+  const { tier, tier_label, free_quota } = computeFeeTier(walletBalance);
+  const used = await getMonthlyInterCount(admin, userId, watMonthKey());
+  const free_remaining = free_quota === -1 ? -1 : Math.max(0, free_quota - used);
+  const transfer_fee = free_quota === -1 || used < free_quota ? 0 : TRANSFER_FEE;
+  // Tier 4 wording says "Unlimited" (free). Tier 1 has no free, always ₦20.
+  // Tiers 2/3: free quota then ₦20 thereafter.
+  if (tier === 4) {
+    return {
+      tier, tier_label, wallet_balance: walletBalance,
+      free_quota: -1, used_this_month: used, free_remaining: -1,
+      transfer_fee: 0, stamp_duty: STAMP_DUTY, total_fees: STAMP_DUTY,
+      amount, total_debit: amount + STAMP_DUTY, transferType,
+    };
+  }
+  const fees = transfer_fee + STAMP_DUTY;
+  return {
+    tier, tier_label, wallet_balance: walletBalance,
+    free_quota, used_this_month: used, free_remaining,
+    transfer_fee, stamp_duty: STAMP_DUTY, total_fees: fees,
+    amount, total_debit: amount + fees, transferType,
+  };
+}
+
+// Debit fees from sender wallet → settlement, log in vestara_fee_ledger,
+// and increment the monthly inter counter. Best-effort: errors are logged but
+// do not fail the parent transfer (the user-facing money already moved).
+async function chargeTransferFees(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+  reference: string,
+  quote: TransferFeeQuote,
+): Promise<void> {
+  try {
+    if (quote.transferType === "intra") return;
+
+    if (quote.transfer_fee > 0) {
+      const { error: feeErr } = await admin.rpc("vestara_withdraw", {
+        _user_id: userId,
+        _amount: quote.transfer_fee,
+        _reference: `${reference}-FEE`,
+        _metadata: { source: "interbank_transfer_fee", parent_reference: reference, tier: quote.tier },
+      });
+      if (feeErr) console.error("[chargeTransferFees] fee withdraw failed:", feeErr);
+      else {
+        await admin.from("vestara_fee_ledger").insert({
+          user_id: userId, fee_type: "transfer_fee", amount: quote.transfer_fee,
+          reference: `${reference}-FEE`, tx_reference: reference,
+          transfer_type: "inter",
+          metadata: { tier: quote.tier, tier_label: quote.tier_label, wallet_balance: quote.wallet_balance },
+        });
+      }
+    }
+
+    if (quote.stamp_duty > 0) {
+      const { error: sdErr } = await admin.rpc("vestara_withdraw", {
+        _user_id: userId,
+        _amount: quote.stamp_duty,
+        _reference: `${reference}-SD`,
+        _metadata: { source: "stamp_duty", parent_reference: reference },
+      });
+      if (sdErr) console.error("[chargeTransferFees] stamp duty withdraw failed:", sdErr);
+      else {
+        await admin.from("vestara_fee_ledger").insert({
+          user_id: userId, fee_type: "stamp_duty", amount: quote.stamp_duty,
+          reference: `${reference}-SD`, tx_reference: reference,
+          transfer_type: "inter",
+          metadata: { tier: quote.tier },
+        });
+      }
+    }
+
+    // Increment monthly counter (upsert)
+    const monthKey = watMonthKey();
+    const current = await getMonthlyInterCount(admin, userId, monthKey);
+    await admin.from("transfer_fee_counters").upsert({
+      user_id: userId,
+      month_key: monthKey,
+      inter_count: current + 1,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "user_id,month_key" });
+  } catch (err) {
+    console.error("[chargeTransferFees] unexpected error:", err);
+  }
+}
+
+async function handleQuoteTransfer(userId: string, body: Record<string, unknown>) {
+  const amount = Number(body.amount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return jsonResponse({ error: "Invalid amount" }, 400);
+  }
+  const bankCode = body.bankCode as string || "";
+  const transferType: "intra" | "inter" =
+    (body.transferType as "intra" | "inter") ||
+    (bankCode === "999999" || (body.toAccount as string || "").startsWith("9") ? "intra" : "inter");
+  const admin = getSupabaseAdmin();
+  const quote = await quoteTransferFees(admin, userId, amount, transferType);
+  return jsonResponse({ data: quote });
+}
+
 // Initiate Transfer - Full VFD transfer payload
 async function handleTransfer(
   userId: string,
@@ -1642,11 +1821,25 @@ async function handleTransfer(
       accountNo: displayFromAccount,
       preserveExisting: false,
     });
+
+    // ─── INTERBANK FEE + STAMP DUTY ───
+    // Only inter (NIBSS) transfers incur fee + stamp duty. Intra transfers are
+    // routed through the virtual-account short-circuit above and never reach
+    // this path with transferType === "inter".
+    let feeQuote: TransferFeeQuote | null = null;
+    if (transferType === "inter") {
+      feeQuote = await quoteTransferFees(supabaseAdmin, userId, Number(body.amount), "inter");
+      await chargeTransferFees(supabaseAdmin, userId, reference, feeQuote);
+    }
+
     try {
+      const feeNote = feeQuote && feeQuote.total_fees > 0
+        ? ` (fee ₦${feeQuote.transfer_fee} + stamp duty ₦${feeQuote.stamp_duty})`
+        : "";
       await supabaseAdmin.from("vfd_sandbox_notifications").insert({
         user_id: userId,
         title: "Transfer sent",
-        message: `₦${Number(body.amount).toLocaleString()} sent to ${body.beneficiaryName || toAccount}. Ref: ${reference}`,
+        message: `₦${Number(body.amount).toLocaleString()} sent to ${body.beneficiaryName || toAccount}${feeNote}. Ref: ${reference}`,
         notification_type: "transfer_sent",
       });
     } catch (_) { /* best-effort */ }
@@ -2822,6 +3015,9 @@ Deno.serve(async (req) => {
 
       case "transfer":
         return await handleTransfer(userId, body);
+
+      case "quote_transfer":
+        return await handleQuoteTransfer(userId, body);
 
       case "sandbox_credit":
         return await handleSandboxCredit(userId, body.accountNo as string, body.amount as number);

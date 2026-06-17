@@ -9,6 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useToast } from "@/hooks/use-toast";
 import { TransactionPinGate } from "@/components/security/TransactionPinGate";
 import { TransactionSuccessModal, TransactionSuccessPayload } from "@/components/feedback/TransactionSuccessModal";
+import { TransferPreviewSheet } from "@/components/vfd-sandbox/TransferPreviewSheet";
 import { useVfdBanking } from "@/hooks/useVfdBanking";
 
 interface Beneficiary {
@@ -40,6 +41,7 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
     toAccount: "", bankCode: "", amount: "", narration: "", beneficiaryName: "",
   });
   const [pinOpen, setPinOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [successPayload, setSuccessPayload] = useState<TransactionSuccessPayload | null>(null);
   const [bankSearch, setBankSearch] = useState("");
   const [bankPopoverOpen, setBankPopoverOpen] = useState(false);
@@ -129,7 +131,8 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
     // Pre-check: if already saved, hide the save prompt
     const exists = beneficiaries.some(b => b.bank_code === form.bankCode && b.account_number === form.toAccount);
     setShouldSaveBenef(!exists);
-    setPinOpen(true);
+    // Show the preview sheet first; PIN gate opens after the user confirms.
+    setPreviewOpen(true);
   };
 
   const executeTransfer = async () => {
@@ -366,6 +369,18 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
         </Button>
       </motion.div>
 
+      <TransferPreviewSheet
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        toAccount={form.toAccount}
+        bankCode={form.bankCode}
+        bankName={banks.find(b => b.code === form.bankCode)?.name || ""}
+        beneficiaryName={form.beneficiaryName}
+        amount={parseFloat(form.amount) || 0}
+        narration={form.narration}
+        onConfirm={() => setPinOpen(true)}
+      />
+
       <TransactionPinGate
         open={pinOpen}
         onOpenChange={setPinOpen}
@@ -373,6 +388,7 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
         description={`Send ₦${(parseFloat(form.amount) || 0).toLocaleString()} to ${form.beneficiaryName || form.toAccount}`}
         onVerified={executeTransfer}
       />
+
 
       <TransactionSuccessModal
         open={!!successPayload}

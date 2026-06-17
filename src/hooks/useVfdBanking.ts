@@ -248,6 +248,17 @@ export function useVfdBanking() {
     [invokeVfd]
   );
 
+  // Get a fee quote (tier, transfer fee, stamp duty, total debit) without
+  // committing — used by the transfer preview modal before PIN authorization.
+  const quoteTransfer = useCallback(
+    (params: { toAccount: string; bankCode: string; amount: number }) =>
+      invokeVfd("quote_transfer", {
+        ...params,
+        transferType: params.bankCode === "999999" || params.toAccount.startsWith("9") ? "intra" : "inter",
+      }),
+    [invokeVfd]
+  );
+
   const sandboxCredit = useCallback(
     (accountNo: string, amount: number) =>
       invokeVfd("sandbox_credit", { accountNo, amount }),
@@ -311,6 +322,7 @@ export function useVfdBanking() {
     getBankList,
     validateBeneficiary,
     transfer,
+    quoteTransfer,
     sandboxCredit,
     getLockConfigs,
     getUserBalance,
