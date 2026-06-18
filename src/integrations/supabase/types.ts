@@ -2619,9 +2619,6 @@ export type Database = {
         Row: {
           admin_user_id: string
           amount_raised: number
-          beneficiary_account_name: string | null
-          beneficiary_account_number: string | null
-          beneficiary_bank_name: string | null
           contribution_amount: number
           created_at: string
           description: string | null
@@ -2640,9 +2637,6 @@ export type Database = {
         Insert: {
           admin_user_id: string
           amount_raised?: number
-          beneficiary_account_name?: string | null
-          beneficiary_account_number?: string | null
-          beneficiary_bank_name?: string | null
           contribution_amount: number
           created_at?: string
           description?: string | null
@@ -2661,9 +2655,6 @@ export type Database = {
         Update: {
           admin_user_id?: string
           amount_raised?: number
-          beneficiary_account_name?: string | null
-          beneficiary_account_number?: string | null
-          beneficiary_bank_name?: string | null
           contribution_amount?: number
           created_at?: string
           description?: string | null
