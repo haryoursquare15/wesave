@@ -274,57 +274,29 @@ function VfdSandboxInner() {
     }
   };
 
-  /* ─── Transfer via pending pattern (FIX: atomicity gap) ─── */
+  /* ─── Transfer ───
+   * The vfd-banking edge function is the single source of truth: it atomically
+   * debits the sender wallet (via vestara_withdraw or the intra-virtual
+   * short-circuit) and credits the recipient/settlement. We must NOT wrap this
+   * with a client-side transferInitiate/transferComplete pending-pattern, or
+   * the sender wallet gets debited twice (once by the client hold, once by
+   * the edge function) and a third holding→settlement entry shows up in the
+   * user's history. See: money-movement-model.md.
+   */
   const handleTransfer = async (params: {
     fromAccount: string; toAccount: string; bankCode: string;
     amount: number; narration: string; beneficiaryName: string;
   }) => {
-    const reference = `transfer-${crypto.randomUUID().slice(0, 8)}`;
+    const vfdResult = await vfd.transfer(params) as { data?: { status?: string; message?: string } } | null;
+    const vfdSucceeded = vfdResult?.data?.status === "00";
 
-    // Step 1: Initiate transfer (moves funds to pending_transfer holding)
-    const initiateResult = await vestara.transferInitiate(params.amount, reference, {
-      to_account: params.toAccount,
-      bank_code: params.bankCode,
-      narration: params.narration,
-      beneficiary_name: params.beneficiaryName,
-    });
-
-    if (!initiateResult?.success) return null;
-
-    // Step 2: Execute VFD transfer
-    try {
-      const vfdResult = await vfd.transfer(params) as { data?: { status?: string; message?: string } } | null;
-
-      // VFD returns status "00" on success; anything else (e.g. "99") is a failure
-      const vfdStatus = vfdResult?.data?.status;
-      const vfdSucceeded = vfdStatus === "00";
-
-      // Step 3: Complete or fail based on VFD result
-      if (vfdSucceeded) {
-        await vestara.transferComplete(reference, true, {
-          vfd_result: vfdResult,
-        });
-        toast({ title: "Transfer successful!" });
-      } else {
-        // VFD failed — refund from holding back to wallet
-        const reason = vfdResult?.data?.message || "VFD transfer failed";
-        await vestara.transferComplete(reference, false, {
-          failure_reason: reason,
-          vfd_result: vfdResult,
-        });
-        toast({ title: "Transfer failed", description: `${reason}. Funds returned to your wallet.`, variant: "destructive" });
-      }
-    } catch (err) {
-      // Network error — refund
-      await vestara.transferComplete(reference, false, {
-        failure_reason: err instanceof Error ? err.message : "Unknown error",
-      });
-      toast({ title: "Transfer failed", description: "Funds have been returned to your wallet", variant: "destructive" });
+    if (vfdSucceeded) {
+      toast({ title: "Transfer successful!" });
     }
 
     await refreshVestaraBalance();
     await refreshVestaraTransactions();
-    return initiateResult;
+    return vfdResult;
   };
 
   /* ─── Lock via Vestara Ledger ONLY (no dual-write) ─── */
