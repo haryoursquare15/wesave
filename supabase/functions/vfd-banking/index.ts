@@ -1,3 +1,4 @@
+// vfd-banking edge function — quote_transfer action enabled
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
