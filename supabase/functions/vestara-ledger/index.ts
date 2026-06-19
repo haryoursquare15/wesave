@@ -148,11 +148,27 @@ serve(async (req) => {
     const { action, ...params } = JSON.parse(rawBody);
     console.log(`vestara-ledger action: ${action}`);
 
+    // Cron-only actions (system jobs) — require CRON_SECRET in either the
+    // Authorization Bearer header or the x-cron-secret header. Refuse the
+    // request if the secret is not configured at all.
+    const cronActions = [
+      "accrue_interest_batch", "reconcile",
+      "accrue_daily_interest", "auto_mature_due", "run_savings_reconciliation",
+    ];
+    const isCronAction = cronActions.includes(action);
+    if (isCronAction) {
+      const cronSecret = Deno.env.get("CRON_SECRET");
+      if (!cronSecret) return err("Server cron secret not configured", 503);
+      const provided =
+        req.headers.get("x-cron-secret") ||
+        (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+      if (provided !== cronSecret) return err("Forbidden", 403);
+    }
+
     // Authenticate user (except for webhook and cron actions)
     let userId: string | null = null;
     const noAuthActions = [
-      "deposit_webhook", "accrue_interest_batch", "reconcile",
-      "accrue_daily_interest", "auto_mature_due", "run_savings_reconciliation",
+      "deposit_webhook", ...cronActions,
     ];
     if (!noAuthActions.includes(action)) {
       const authHeader = req.headers.get("Authorization");
@@ -162,6 +178,26 @@ serve(async (req) => {
       );
       if (authErr || !user) return err("Unauthorized", 401);
       userId = user.id;
+    }
+
+    // Caller-context helpers for high-privilege actions
+    async function requireSuperAdmin(uid: string): Promise<boolean> {
+      const { data } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", uid)
+        .in("role", ["super_admin", "admin"])
+        .maybeSingle();
+      return !!data;
+    }
+    async function callerIsCronOrAdmin(): Promise<boolean> {
+      const cronSecret = Deno.env.get("CRON_SECRET");
+      const provided =
+        req.headers.get("x-cron-secret") ||
+        (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+      if (cronSecret && provided === cronSecret) return true;
+      if (!userId) return false;
+      return await requireSuperAdmin(userId);
     }
 
     // Helper: ensure user has a wallet account
