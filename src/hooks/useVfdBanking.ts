@@ -339,5 +339,6 @@ export function useVfdBanking() {
     listTransferBeneficiaries,
     saveTransferBeneficiary,
     deleteTransferBeneficiary,
+    pinTransferBeneficiary,
   };
 }
