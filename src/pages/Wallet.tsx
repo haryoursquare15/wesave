@@ -40,6 +40,23 @@ export default function Wallet() {
   const [withdrawing, setWithdrawing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showBankForm, setShowBankForm] = useState(false);
+  const { getMaskedProfile } = useEncryption();
+  const [maskedBankName, setMaskedBankName] = useState<string | null>(null);
+  const [maskedBankAccount, setMaskedBankAccount] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const res = await getMaskedProfile();
+      if (cancelled) return;
+      if (res.success && res.data) {
+        setMaskedBankName(res.data.bank_name ?? null);
+        setMaskedBankAccount(res.data.bank_account_masked ?? null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [getMaskedProfile, user?.id, withdrawDialogOpen]);
+
 
   const balance = Number(wallet?.available_balance) || 0;
 
