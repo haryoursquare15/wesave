@@ -129,7 +129,7 @@ export function SandboxTransactions({ transactions, loading, onRefresh, onBack }
           {transactions.map((tx, i) => {
             const { icon: Icon, bg, color } = getTxIcon(tx.transaction_type);
             const isCredit = tx.transaction_type === "credit" || tx.transaction_type === "unlock" || tx.transaction_type === "interest";
-            const displayLabel = tx.transaction_type === "unlock" ? "Unlock to wallet" : tx.transaction_type;
+            const displayLabel = getTxLabel(tx);
 
             return (
               <motion.div
@@ -143,7 +143,7 @@ export function SandboxTransactions({ transactions, loading, onRefresh, onBack }
                   <Icon className={`h-4 w-4 ${color}`} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium capitalize truncate">{displayLabel}</p>
+                  <p className="text-sm font-medium truncate">{displayLabel}</p>
                   <p className="text-[10px] text-muted-foreground truncate">
                     {tx.description || tx.reference || "—"}
                   </p>
