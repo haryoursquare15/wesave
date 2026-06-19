@@ -93,7 +93,29 @@ serve(async (req) => {
     const { action, ...params } = await req.json();
     console.log(`Processing wallet action: ${action}`);
 
-    // Bank validation doesn't require auth (needed during onboarding before full session)
+    // All actions require authentication. Bank validation also requires a
+    // session because it consumes paid Flutterwave API quota and reveals
+    // bank-account-holder names (PII / social-engineering vector).
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const jwt = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(jwt);
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    console.log(`Authenticated user: ${user.id}`);
+
+    // Bank account validation (now authenticated)
     if (action === 'validate_bank_account') {
       const { bank_name, account_number } = params;
       if (!bank_name || !account_number) {
@@ -104,23 +126,18 @@ serve(async (req) => {
         throw new Error('Account number must be 10 digits');
       }
 
-      // Resolve bank code from Flutterwave
       const bankCode = await resolveFlutterwaveBankCode(FLUTTERWAVE_SECRET_KEY, bank_name);
       if (!bankCode) {
         throw new Error('Unable to find bank. Please select a valid Nigerian bank.');
       }
 
-      // Verify account with Flutterwave
       const verifyRes = await fetch(`${FLUTTERWAVE_BASE_URL}/accounts/resolve`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${FLUTTERWAVE_SECRET_KEY}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          account_number,
-          account_bank: bankCode,
-        }),
+        body: JSON.stringify({ account_number, account_bank: bankCode }),
       });
 
       const verifyData = await verifyRes.json();
@@ -133,222 +150,13 @@ serve(async (req) => {
       return new Response(JSON.stringify({
         success: true,
         account_name: verifyData.data?.account_name || '',
-        bank_name: bank_name,
-        account_number: account_number,
+        bank_name,
+        account_number,
         verified: true,
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // TEMPORARY: Reconcile withdrawals (no auth required, token-gated)
-    if (action === 'reconcile_now') {
-      const TEMP_TEST_TOKEN = 'wesave-test-wd-2026-02-18';
-      if (params.test_token !== TEMP_TEST_TOKEN) {
-        throw new Error('Unauthorized test call');
-      }
-
-      const { data: staleWithdrawals } = await supabase
-        .from('transactions')
-        .select('reference, amount, user_id')
-        .eq('type', 'withdrawal')
-        .eq('status', 'processing');
-
-      const reconciled: string[] = [];
-      for (const tx of staleWithdrawals || []) {
-        try {
-          const checkRes = await fetch(
-            `${FLUTTERWAVE_BASE_URL}/transfers?reference=${tx.reference}`,
-            { headers: { 'Authorization': `Bearer ${FLUTTERWAVE_SECRET_KEY}` } }
-          );
-          const checkData = await checkRes.json();
-          console.log(`Reconcile check for ${tx.reference}:`, JSON.stringify(checkData));
-          const transfer = checkData?.data?.[0];
-
-          if (!transfer) continue;
-
-          const frozenAmount = Number(tx.amount);
-
-          if (transfer.status === 'SUCCESSFUL') {
-            await supabase.rpc('confirm_withdrawal_debit', {
-              _user_id: tx.user_id,
-              _amount: frozenAmount,
-              _reference: tx.reference,
-              _description: `Withdrawal confirmed — ₦${transfer.amount} sent to bank`,
-            });
-            await supabase.from('transactions').update({ status: 'completed', description: `Withdrawal completed — ₦${transfer.amount} sent to bank` }).eq('reference', tx.reference);
-            reconciled.push(tx.reference!);
-          } else if (transfer.status === 'FAILED') {
-            await supabase.rpc('release_withdrawal_freeze', {
-              _user_id: tx.user_id,
-              _amount: frozenAmount,
-              _reference: tx.reference,
-              _description: `Withdrawal failed — funds released (${transfer.complete_message || transfer.status})`,
-            });
-            await supabase.from('transactions').update({ status: 'failed', description: `Withdrawal failed — ${transfer.complete_message || 'transfer unsuccessful'}` }).eq('reference', tx.reference);
-            reconciled.push(tx.reference!);
-          }
-        } catch (e) {
-          console.error(`Reconciliation error for ${tx.reference}:`, e);
-        }
-      }
-
-      return new Response(JSON.stringify({
-        success: true,
-        checked: staleWithdrawals?.length || 0,
-        reconciled: reconciled.length,
-        references: reconciled,
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // TEMPORARY: Direct test withdrawal (no auth required, token-gated)
-    if (action === 'test_withdraw_direct') {
-      const TEMP_TEST_TOKEN = 'wesave-test-wd-2026-02-18';
-      if (params.test_token !== TEMP_TEST_TOKEN) {
-        throw new Error('Unauthorized test call');
-      }
-
-      const testUserId = params.user_id as string;
-      const testAmount = Number(params.amount);
-      if (!testUserId || !testAmount || testAmount < 200) {
-        throw new Error('user_id and amount (min 200) required');
-      }
-
-      console.log(`[TEST WITHDRAW] Starting for user ${testUserId}, amount ₦${testAmount}`);
-
-      const { data: testProfile } = await supabase
-        .from('profiles')
-        .select('bank_name, bank_account, bank_name_encrypted, bank_account_encrypted, full_name')
-        .eq('id', testUserId)
-        .single();
-
-      if (!testProfile) throw new Error('Profile not found');
-
-      let testBankName = testProfile.bank_name as string | null;
-      let testAccountNumber = testProfile.bank_account as string | null;
-
-      if (testProfile.bank_name_encrypted) {
-        testBankName = await decrypt(testProfile.bank_name_encrypted as string);
-      }
-      if (testProfile.bank_account_encrypted) {
-        testAccountNumber = await decrypt(testProfile.bank_account_encrypted as string);
-      }
-
-      console.log(`[TEST WITHDRAW] Bank: ${testBankName}, Account: ****${testAccountNumber?.slice(-4)}`);
-      if (!testBankName || !testAccountNumber) throw new Error('Bank details missing');
-
-      const testBankCode = await resolveFlutterwaveBankCode(FLUTTERWAVE_SECRET_KEY, testBankName);
-      if (!testBankCode) throw new Error(`Cannot resolve bank code for ${testBankName}`);
-      console.log(`[TEST WITHDRAW] Resolved bank code: ${testBankCode}`);
-
-      const TEST_FEE = 100;
-      const testTransferAmount = testAmount - TEST_FEE;
-      const testRef = `wd-${testUserId}-${Date.now()}`;
-
-      // STEP 1: Freeze
-      console.log(`[TEST WITHDRAW] Freezing ₦${testAmount}...`);
-      const { data: testFreezeResult, error: testFreezeError } = await supabase.rpc('freeze_wallet_for_withdrawal', {
-        _user_id: testUserId,
-        _amount: testAmount,
-        _reference: testRef,
-        _description: `TEST withdrawal freeze (₦${TEST_FEE} fee)`,
-      });
-
-      if (testFreezeError || !testFreezeResult?.success) {
-        console.error(`[TEST WITHDRAW] Freeze failed:`, testFreezeError, testFreezeResult);
-        throw new Error(testFreezeResult?.error || 'Freeze failed');
-      }
-      console.log(`[TEST WITHDRAW] Freeze OK:`, JSON.stringify(testFreezeResult));
-
-      await supabase.from('transactions').insert({
-        user_id: testUserId, type: 'withdrawal', amount: testAmount,
-        status: 'pending', reference: testRef,
-        description: `TEST Withdrawal to bank (₦${TEST_FEE} fee)`,
-      });
-
-      // STEP 2: Verify bank
-      console.log(`[TEST WITHDRAW] Verifying bank account...`);
-      const testVerifyRes = await fetch(`${FLUTTERWAVE_BASE_URL}/accounts/resolve`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${FLUTTERWAVE_SECRET_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ account_number: testAccountNumber, account_bank: testBankCode }),
-      });
-      const testVerifyData = await testVerifyRes.json();
-      console.log(`[TEST WITHDRAW] Bank verify response:`, JSON.stringify(testVerifyData));
-
-      if (testVerifyData.status !== 'success') {
-        await supabase.rpc('release_withdrawal_freeze', {
-          _user_id: testUserId, _amount: testAmount, _reference: testRef,
-          _description: 'TEST withdrawal cancelled — bank verify failed',
-        });
-        await supabase.from('transactions').update({ status: 'failed' }).eq('reference', testRef);
-        throw new Error('Bank verification failed: ' + JSON.stringify(testVerifyData));
-      }
-
-      const testAccountName = testVerifyData.data?.account_name || '';
-      console.log(`[TEST WITHDRAW] Verified account name: ${testAccountName}`);
-
-      // STEP 3: Initiate transfer
-      console.log(`[TEST WITHDRAW] Initiating transfer of ₦${testTransferAmount} to ${testAccountName}...`);
-      const testTransferRes = await fetch(`${FLUTTERWAVE_BASE_URL}/transfers`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${FLUTTERWAVE_SECRET_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          account_bank: testBankCode, account_number: testAccountNumber,
-          amount: testTransferAmount, currency: 'NGN',
-          narration: 'WeSave TEST withdrawal', reference: testRef,
-          debit_currency: 'NGN',
-          meta: [{ sender: 'WeSave', sender_country: 'NG', mobile_number: '' }],
-        }),
-      });
-
-      const testTransferData = await testTransferRes.json();
-      console.log(`[TEST WITHDRAW] Transfer response:`, JSON.stringify(testTransferData));
-
-      if (testTransferData?.status !== 'success') {
-        await supabase.rpc('release_withdrawal_freeze', {
-          _user_id: testUserId, _amount: testAmount, _reference: testRef,
-          _description: 'TEST withdrawal cancelled — transfer failed',
-        });
-        await supabase.from('transactions').update({ status: 'failed' }).eq('reference', testRef);
-        throw new Error('Transfer failed: ' + JSON.stringify(testTransferData));
-      }
-
-      await supabase.from('transactions').update({
-        status: 'processing',
-        description: `TEST Withdrawal processing — ₦${testTransferAmount} to ${testAccountName} (${testBankName})`,
-      }).eq('reference', testRef);
-
-      await supabase.rpc('record_platform_fee', {
-        _amount: TEST_FEE, _source_type: 'withdrawal', _source_id: testRef,
-        _source_user_id: testUserId, _source_group_id: null,
-      });
-
-      return new Response(JSON.stringify({
-        success: true, reference: testRef,
-        transfer_id: testTransferData.data?.id,
-        transfer_status: testTransferData.data?.status,
-        amount_frozen: testAmount, amount_to_bank: testTransferAmount,
-        fee: TEST_FEE, account_name: testAccountName, bank: testBankName,
-        full_response: testTransferData,
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // All other actions require authentication
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      throw new Error('No authorization header');
-    }
 
-    const jwt = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabase.auth.getUser(jwt);
-    if (authError || !user) {
-      throw new Error('Unauthorized');
-    }
-
-    console.log(`Authenticated user: ${user.id}`);
 
     let result;
 

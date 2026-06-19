@@ -233,6 +233,27 @@ serve(async (req) => {
 
     // POST: process-cycle-reward (called by backend when cycle completes)
     if (action === 'process-reward' && req.method === 'POST') {
+      // Authorization: must be admin OR a trusted cron call with CRON_SECRET.
+      // Previously any logged-in user could trigger reward crediting for
+      // any other user_id — opening the door to fraudulent reward claims.
+      const cronSecret = Deno.env.get('CRON_SECRET');
+      const providedCronSecret = req.headers.get('x-cron-secret');
+      const isCron = !!cronSecret && providedCronSecret === cronSecret;
+      if (!isCron) {
+        const { data: role } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', user.id)
+          .in('role', ['admin', 'super_admin'])
+          .maybeSingle();
+        if (!role) {
+          return new Response(JSON.stringify({ error: 'Forbidden' }), {
+            status: 403,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+      }
+
       const { referred_user_id } = await req.json();
 
       const result = await supabase.rpc('process_referral_reward', {

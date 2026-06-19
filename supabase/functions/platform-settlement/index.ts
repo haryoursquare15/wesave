@@ -111,11 +111,17 @@ serve(async (req) => {
       }
 
       case 'auto_settle': {
-        // Can be called by admin or scheduled job
-        const authHeader = req.headers.get('Authorization');
-        if (authHeader) {
+        // Always require authentication: either an admin user session OR a
+        // server-side cron secret. The previous logic skipped the admin
+        // check entirely when no Authorization header was present, which
+        // allowed any unauthenticated caller to trigger a real settlement.
+        const cronSecret = Deno.env.get('CRON_SECRET');
+        const providedCronSecret = req.headers.get('x-cron-secret') || body?.cron_secret;
+        const isCron = !!cronSecret && providedCronSecret === cronSecret;
+        if (!isCron) {
           await checkAdminAccess();
         }
+
 
         if (!PLATFORM_BANK_ACCOUNT) {
           console.log('Platform bank account not configured, skipping settlement');

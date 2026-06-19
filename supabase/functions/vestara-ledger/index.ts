@@ -20,22 +20,41 @@ function err(message: string, status = 400) {
   });
 }
 
-// ── Webhook signature verification ──
-function verifyWebhookSignature(req: Request, body: string): boolean {
+// ── Webhook signature verification (HMAC-SHA256) ──
+async function verifyWebhookSignature(req: Request, body: string): Promise<boolean> {
   const webhookSecret = Deno.env.get("VFD_WEBHOOK_SECRET");
-  // In sandbox mode without a configured secret, allow through but log warning
+  // Hard-fail when the signing secret is not configured — refusing to
+  // process webhooks is much safer than blindly accepting them.
   if (!webhookSecret) {
-    console.warn("[vestara-ledger] VFD_WEBHOOK_SECRET not configured — skipping signature check (sandbox only)");
-    return true;
+    console.error("[vestara-ledger] VFD_WEBHOOK_SECRET not configured — rejecting webhook");
+    return false;
   }
   const signature = req.headers.get("x-vfd-signature") || req.headers.get("x-webhook-signature");
   if (!signature) {
     console.error("[vestara-ledger] Missing webhook signature header");
     return false;
   }
-  // HMAC-SHA256 verification (production pattern)
-  // For sandbox, we accept if secret matches signature directly
-  return signature === webhookSecret;
+  try {
+    const enc = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      "raw",
+      enc.encode(webhookSecret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"],
+    );
+    const macBytes = new Uint8Array(await crypto.subtle.sign("HMAC", key, enc.encode(body)));
+    const expected = Array.from(macBytes).map(b => b.toString(16).padStart(2, "0")).join("");
+    // Constant-time compare
+    const provided = signature.toLowerCase().replace(/^sha256=/, "");
+    if (expected.length !== provided.length) return false;
+    let diff = 0;
+    for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ provided.charCodeAt(i);
+    return diff === 0;
+  } catch (e) {
+    console.error("[vestara-ledger] HMAC verification error:", e);
+    return false;
+  }
 }
 
 function toNumber(value: unknown): number {
@@ -129,11 +148,27 @@ serve(async (req) => {
     const { action, ...params } = JSON.parse(rawBody);
     console.log(`vestara-ledger action: ${action}`);
 
+    // Cron-only actions (system jobs) — require CRON_SECRET in either the
+    // Authorization Bearer header or the x-cron-secret header. Refuse the
+    // request if the secret is not configured at all.
+    const cronActions = [
+      "accrue_interest_batch", "reconcile",
+      "accrue_daily_interest", "auto_mature_due", "run_savings_reconciliation",
+    ];
+    const isCronAction = cronActions.includes(action);
+    if (isCronAction) {
+      const cronSecret = Deno.env.get("CRON_SECRET");
+      if (!cronSecret) return err("Server cron secret not configured", 503);
+      const provided =
+        req.headers.get("x-cron-secret") ||
+        (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+      if (provided !== cronSecret) return err("Forbidden", 403);
+    }
+
     // Authenticate user (except for webhook and cron actions)
     let userId: string | null = null;
     const noAuthActions = [
-      "deposit_webhook", "accrue_interest_batch", "reconcile",
-      "accrue_daily_interest", "auto_mature_due", "run_savings_reconciliation",
+      "deposit_webhook", ...cronActions,
     ];
     if (!noAuthActions.includes(action)) {
       const authHeader = req.headers.get("Authorization");
@@ -143,6 +178,26 @@ serve(async (req) => {
       );
       if (authErr || !user) return err("Unauthorized", 401);
       userId = user.id;
+    }
+
+    // Caller-context helpers for high-privilege actions
+    async function requireSuperAdmin(uid: string): Promise<boolean> {
+      const { data } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", uid)
+        .in("role", ["super_admin", "admin"])
+        .maybeSingle();
+      return !!data;
+    }
+    async function callerIsCronOrAdmin(): Promise<boolean> {
+      const cronSecret = Deno.env.get("CRON_SECRET");
+      const provided =
+        req.headers.get("x-cron-secret") ||
+        (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+      if (cronSecret && provided === cronSecret) return true;
+      if (!userId) return false;
+      return await requireSuperAdmin(userId);
     }
 
     // Helper: ensure user has a wallet account
@@ -195,7 +250,7 @@ serve(async (req) => {
           targetUserId = user.id;
         } else {
           // External webhook — verify signature
-          if (!verifyWebhookSignature(req, rawBody)) {
+          if (!(await verifyWebhookSignature(req, rawBody))) {
             return err("Invalid webhook signature", 403);
           }
 
@@ -402,6 +457,18 @@ serve(async (req) => {
         if (!beneficiary_id || !group_id || !gross_amount)
           return err("beneficiary_id, group_id, and gross_amount are required");
 
+        // Authorization: only the group admin or a platform super_admin can
+        // trigger a thrift payout from the group's pool.
+        const { data: group } = await supabase
+          .from("thrift_groups")
+          .select("admin_id")
+          .eq("id", group_id)
+          .maybeSingle();
+        const isOwner = !!group && group.admin_id === userId;
+        if (!isOwner && !(await requireSuperAdmin(userId!))) {
+          return err("Only the group admin or a platform admin can run thrift payouts", 403);
+        }
+
         const { data } = await supabase.rpc("vestara_thrift_payout", {
           _beneficiary_id: beneficiary_id,
           _group_id: group_id,
@@ -413,6 +480,7 @@ serve(async (req) => {
         result = data;
         break;
       }
+
 
       // ── Split pay ──
       case "split_pay": {
@@ -471,6 +539,18 @@ serve(async (req) => {
         if (!beneficiary_id || !campaign_id || !amount)
           return err("beneficiary_id, campaign_id, and amount are required");
 
+        // Authorization: only the campaign creator or a platform super_admin
+        // can disburse a campaign's pooled funds.
+        const { data: campaign } = await supabase
+          .from("crowdfunding_campaigns")
+          .select("creator_id")
+          .eq("id", campaign_id)
+          .maybeSingle();
+        const isOwner = !!campaign && campaign.creator_id === userId;
+        if (!isOwner && !(await requireSuperAdmin(userId!))) {
+          return err("Only the campaign creator or a platform admin can disburse this campaign", 403);
+        }
+
         const { data } = await supabase.rpc("vestara_crowdfund_disburse", {
           _beneficiary_id: beneficiary_id,
           _campaign_id: campaign_id,
@@ -488,6 +568,11 @@ serve(async (req) => {
         if (!target_user_id || !amount || !reference)
           return err("target_user_id, amount, and reference are required");
 
+        // Authorization: cron jobs OR super_admin only — never end-users.
+        if (!(await callerIsCronOrAdmin())) {
+          return err("Forbidden", 403);
+        }
+
         const { data } = await supabase.rpc("vestara_accrue_interest", {
           _user_id: target_user_id,
           _amount: amount,
@@ -497,6 +582,7 @@ serve(async (req) => {
         result = data;
         break;
       }
+
 
       // ── Batch accrue interest for ALL locked accounts (cron) ──
       case "accrue_interest_batch": {
@@ -590,6 +676,12 @@ serve(async (req) => {
         if (!original_reference || !reason)
           return err("original_reference and reason are required");
 
+        // Authorization: super_admin / admin only — reversing a posted
+        // ledger entry must never be triggerable by an end user.
+        if (!(await requireSuperAdmin(userId!))) {
+          return err("Forbidden", 403);
+        }
+
         const { data } = await supabase.rpc("vestara_reverse_transaction", {
           _original_reference: original_reference,
           _reason: reason,
@@ -599,6 +691,7 @@ serve(async (req) => {
         result = data;
         break;
       }
+
 
       // ── Reconcile (cron) — improved with per-account drift ──
       case "reconcile": {
