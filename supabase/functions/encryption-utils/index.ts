@@ -83,21 +83,28 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Verify authentication
+    // Verify authentication (JWT) OR allow CRON_SECRET for service-only actions
     const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      throw new Error('Authentication required');
-    }
+    const cronHeader = req.headers.get('x-cron-secret');
+    const cronSecret = Deno.env.get('CRON_SECRET');
+    const usingCron = !!(cronSecret && cronHeader && cronHeader === cronSecret);
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser(
-      authHeader.replace('Bearer ', '')
-    );
-    if (authError || !user) {
-      throw new Error('Authentication required');
+    let user: { id: string } = { id: 'cron' };
+    if (!usingCron) {
+      if (!authHeader) {
+        throw new Error('Authentication required');
+      }
+      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser(
+        authHeader.replace('Bearer ', '')
+      );
+      if (authError || !authUser) {
+        throw new Error('Authentication required');
+      }
+      user = authUser;
     }
 
     const { action, ...params } = await req.json();
-    console.log(`Encryption action: ${action} for user: ${user.id}`);
+    console.log(`Encryption action: ${action} for user: ${user.id}${usingCron ? ' (cron)' : ''}`);
 
     let result;
 
