@@ -890,7 +890,7 @@ serve(async (req) => {
 
         // Constant-time-ish hash comparison
         const submittedHash = await hashCode(otp_code);
-        const storedHash = otpRecord.otp_hash || otpRecord.otp_code;
+        const storedHash = otpRecord.otp_hash;
         if (submittedHash !== storedHash) {
           await supabase
             .from('bank_change_otps')
