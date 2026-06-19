@@ -19,6 +19,7 @@ interface Beneficiary {
   bank_code: string;
   bank_name: string;
   beneficiary_name: string;
+  pinned?: boolean;
 }
 
 interface Props {
