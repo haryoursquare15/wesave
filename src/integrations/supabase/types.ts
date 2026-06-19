@@ -2057,6 +2057,7 @@ export type Database = {
           id: string
           id_document_url: string | null
           id_number: string | null
+          id_number_encrypted: string | null
           id_type: string | null
           kyc_status: string | null
           last_security_review: string | null
@@ -2096,6 +2097,7 @@ export type Database = {
           id: string
           id_document_url?: string | null
           id_number?: string | null
+          id_number_encrypted?: string | null
           id_type?: string | null
           kyc_status?: string | null
           last_security_review?: string | null
@@ -2135,6 +2137,7 @@ export type Database = {
           id?: string
           id_document_url?: string | null
           id_number?: string | null
+          id_number_encrypted?: string | null
           id_type?: string | null
           kyc_status?: string | null
           last_security_review?: string | null
