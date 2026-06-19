@@ -457,6 +457,18 @@ serve(async (req) => {
         if (!beneficiary_id || !group_id || !gross_amount)
           return err("beneficiary_id, group_id, and gross_amount are required");
 
+        // Authorization: only the group admin or a platform super_admin can
+        // trigger a thrift payout from the group's pool.
+        const { data: group } = await supabase
+          .from("thrift_groups")
+          .select("admin_id")
+          .eq("id", group_id)
+          .maybeSingle();
+        const isOwner = !!group && group.admin_id === userId;
+        if (!isOwner && !(await requireSuperAdmin(userId!))) {
+          return err("Only the group admin or a platform admin can run thrift payouts", 403);
+        }
+
         const { data } = await supabase.rpc("vestara_thrift_payout", {
           _beneficiary_id: beneficiary_id,
           _group_id: group_id,
@@ -468,6 +480,7 @@ serve(async (req) => {
         result = data;
         break;
       }
+
 
       // ── Split pay ──
       case "split_pay": {
