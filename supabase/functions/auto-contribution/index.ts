@@ -111,6 +111,27 @@ serve(async (req) => {
       // No body or invalid JSON - that's fine for scheduled calls
     }
 
+    // SECURITY: Scheduled (no force_group_id) path requires CRON_SECRET
+    if (!forceGroupId) {
+      const cronSecret = Deno.env.get('CRON_SECRET');
+      const provided =
+        req.headers.get('x-cron-secret') ||
+        (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+      if (!cronSecret) {
+        return new Response(JSON.stringify({ success: false, error: 'Server not configured' }), {
+          status: 503,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      if (provided !== cronSecret) {
+        return new Response(JSON.stringify({ success: false, error: 'Forbidden' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
+
     // ---- Catch-up sweep: process groups whose scheduled trigger was missed entirely ----
     const catchupResults: { groupId: string; groupName: string; catchupMembers: number; succeeded: number }[] = [];
 

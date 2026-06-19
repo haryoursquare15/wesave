@@ -32,10 +32,27 @@ serve(async (req) => {
   }
 
   try {
+    // SECURITY: scheduled job — require CRON_SECRET
+    const cronSecret = Deno.env.get('CRON_SECRET');
+    const provided =
+      req.headers.get('x-cron-secret') ||
+      (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+    if (!cronSecret) {
+      return new Response(JSON.stringify({ success: false, error: 'Server not configured' }), {
+        status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    if (provided !== cronSecret) {
+      return new Response(JSON.stringify({ success: false, error: 'Forbidden' }), {
+        status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     // deno-lint-ignore no-explicit-any
     const supabase = createClient<any>(supabaseUrl, supabaseServiceKey);
+
 
     console.log('Target Ajo auto-contribution sweep started at:', new Date().toISOString());
 

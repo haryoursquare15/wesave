@@ -49,13 +49,11 @@ Deno.serve(async (req) => {
 
     // Guardrail: only auto-confirm accounts explicitly created from the sandbox
     const isSandbox = target.user_metadata?.sandbox_account === true;
-    const createdRecently =
-      target.created_at &&
-      Date.now() - new Date(target.created_at).getTime() < 5 * 60 * 1000;
 
-    if (!isSandbox && !createdRecently) {
+    if (!isSandbox) {
       return json({ error: "not eligible for auto-confirm" }, 403);
     }
+
 
     if (target.email_confirmed_at) {
       return json({ success: true, already_confirmed: true });

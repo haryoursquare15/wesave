@@ -813,10 +813,10 @@ serve(async (req) => {
         const otpHash = await hashCode(otpCode);
         await supabase.from('bank_change_otps').insert({
           user_id: user.id,
-          otp_code: otpHash, // legacy NOT NULL column — write hash to satisfy constraint
           otp_hash: otpHash,
           email: userEmail,
         });
+
 
         // Send email via Resend
         const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
@@ -890,7 +890,7 @@ serve(async (req) => {
 
         // Constant-time-ish hash comparison
         const submittedHash = await hashCode(otp_code);
-        const storedHash = otpRecord.otp_hash || otpRecord.otp_code;
+        const storedHash = otpRecord.otp_hash;
         if (submittedHash !== storedHash) {
           await supabase
             .from('bank_change_otps')
