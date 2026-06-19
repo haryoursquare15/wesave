@@ -133,14 +133,15 @@ export function WithdrawalBankForm({ open, onOpenChange, onComplete }: Withdrawa
 
     setLoading(true);
     try {
-      // Update bank details
+      // Encrypt bank fields server-side
+      const enc = await supabase.functions.invoke('encryption-utils', {
+        body: { action: 'encrypt_profile_pii', bank_name: bankName, bank_account: accountNumber },
+      });
+      if (enc.error) throw new Error(enc.error.message);
+
       const { error } = await supabase
         .from("profiles")
-        .update({
-          bank_name: bankName,
-          bank_account: accountNumber,
-          bank_details_changed_at: new Date().toISOString(),
-        })
+        .update({ bank_details_changed_at: new Date().toISOString() })
         .eq("id", user.id);
 
       if (error) throw error;
