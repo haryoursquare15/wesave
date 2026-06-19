@@ -95,7 +95,7 @@ export function BankAccountManagement() {
             <div className="space-y-3">
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Bank Name</p>
-                <p className="text-sm font-medium text-foreground">{profile.bank_name}</p>
+                <p className="text-sm font-medium text-foreground">{bankName}</p>
               </div>
               <div className="flex justify-between items-end">
                 <div>
