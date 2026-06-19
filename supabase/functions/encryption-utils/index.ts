@@ -228,12 +228,14 @@ serve(async (req) => {
         // One-time admin-only backfill: encrypt any plaintext bvn, bank_account,
         // phone, id_number into *_encrypted columns where the encrypted value is
         // missing. Does NOT null plaintext (drop migration handles removal).
-        const { data: roles } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', user.id);
-        const isSuper = (roles || []).some((r: { role: string }) => r.role === 'super_admin');
-        if (!isSuper) throw new Error('Authentication required');
+        if (!usingCron) {
+          const { data: roles } = await supabase
+            .from('user_roles')
+            .select('role')
+            .eq('user_id', user.id);
+          const isSuper = (roles || []).some((r: { role: string }) => r.role === 'super_admin');
+          if (!isSuper) throw new Error('Authentication required');
+        }
 
         const { data: rows, error: rowsErr } = await supabase
           .from('profiles')
