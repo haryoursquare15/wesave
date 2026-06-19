@@ -3085,6 +3085,8 @@ Deno.serve(async (req) => {
         return await handleSaveTransferBeneficiary(userId, body);
       case "delete_transfer_beneficiary":
         return await handleDeleteTransferBeneficiary(userId, body);
+      case "pin_transfer_beneficiary":
+        return await handlePinTransferBeneficiary(userId, body);
 
 
       default:
