@@ -124,6 +124,24 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
     toast({ title: "Beneficiary removed" });
   };
 
+  const togglePinBeneficiary = async (b: Beneficiary, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const next = !b.pinned;
+    // Optimistic update + re-sort (pinned first)
+    setBeneficiaries(prev =>
+      [...prev.map(x => x.id === b.id ? { ...x, pinned: next } : x)]
+        .sort((a, c) => Number(c.pinned || false) - Number(a.pinned || false))
+    );
+    const r = await pinTransferBeneficiary(b.id, next);
+    if (!r?.data) {
+      // revert on failure
+      setBeneficiaries(prev => prev.map(x => x.id === b.id ? { ...x, pinned: !next } : x));
+      toast({ title: "Couldn't update pin", variant: "destructive" });
+      return;
+    }
+    toast({ title: next ? "Pinned beneficiary" : "Unpinned beneficiary" });
+  };
+
   const handleTransferRequest = () => {
     const amount = parseFloat(form.amount);
     if (isNaN(amount) || amount <= 0) return;
