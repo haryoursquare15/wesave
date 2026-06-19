@@ -61,8 +61,8 @@ export function WithdrawalBankForm({ open, onOpenChange, onComplete }: Withdrawa
 
   useEffect(() => {
     if (open && profile) {
-      setBankName(profile.bank_name || "");
-      setAccountNumber(profile.bank_account || "");
+      setBankName("");
+      setAccountNumber("");
       setAccountName("");
       setValidated(false);
       setStep("bank_details");
