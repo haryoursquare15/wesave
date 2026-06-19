@@ -4,13 +4,30 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
+import { useEncryption } from "@/hooks/useEncryption";
 import { WithdrawalBankForm } from "@/components/settings/WithdrawalBankForm";
 
 export function BankAccountManagement() {
   const { profile } = useAuth();
+  const { getMaskedProfile } = useEncryption();
   const [showBankForm, setShowBankForm] = useState(false);
+  const [bankName, setBankName] = useState<string | null>(null);
+  const [accountMasked, setAccountMasked] = useState<string | null>(null);
 
-  const hasBankDetails = profile?.bank_name && profile?.bank_account;
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const res = await getMaskedProfile();
+      if (cancelled) return;
+      if (res.success && res.data) {
+        setBankName(res.data.bank_name ?? null);
+        setAccountMasked(res.data.bank_account_masked ?? null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [getMaskedProfile, profile?.id]);
+
+  const hasBankDetails = !!(bankName && accountMasked);
 
   const getCooldownHoursLeft = (): number | null => {
     if (!profile?.bank_details_changed_at) return null;
@@ -22,12 +39,8 @@ export function BankAccountManagement() {
 
   const cooldownHours = getCooldownHoursLeft();
 
-  const getMaskedAccount = () => {
-    if (!profile?.bank_account) return null;
-    const acc = profile.bank_account;
-    if (acc.length <= 4) return acc;
-    return "••••••" + acc.slice(-4);
-  };
+  const getMaskedAccount = () => accountMasked;
+
 
   if (!hasBankDetails) {
     return (
@@ -82,7 +95,7 @@ export function BankAccountManagement() {
             <div className="space-y-3">
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Bank Name</p>
-                <p className="text-sm font-medium text-foreground">{profile.bank_name}</p>
+                <p className="text-sm font-medium text-foreground">{bankName}</p>
               </div>
               <div className="flex justify-between items-end">
                 <div>

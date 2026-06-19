@@ -83,21 +83,28 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Verify authentication
+    // Verify authentication (JWT) OR allow CRON_SECRET for service-only actions
     const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      throw new Error('Authentication required');
-    }
+    const cronHeader = req.headers.get('x-cron-secret');
+    const cronSecret = Deno.env.get('CRON_SECRET');
+    const usingCron = !!(cronSecret && cronHeader && cronHeader === cronSecret);
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser(
-      authHeader.replace('Bearer ', '')
-    );
-    if (authError || !user) {
-      throw new Error('Authentication required');
+    let user: { id: string } = { id: 'cron' };
+    if (!usingCron) {
+      if (!authHeader) {
+        throw new Error('Authentication required');
+      }
+      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser(
+        authHeader.replace('Bearer ', '')
+      );
+      if (authError || !authUser) {
+        throw new Error('Authentication required');
+      }
+      user = authUser;
     }
 
     const { action, ...params } = await req.json();
-    console.log(`Encryption action: ${action} for user: ${user.id}`);
+    console.log(`Encryption action: ${action} for user: ${user.id}${usingCron ? ' (cron)' : ''}`);
 
     let result;
 
@@ -214,6 +221,46 @@ serve(async (req) => {
           success: true, 
           data: maskedData 
         };
+        break;
+      }
+
+      case 'backfill_all_pii': {
+        // One-time admin-only backfill: encrypt any plaintext bvn, bank_account,
+        // phone, id_number into *_encrypted columns where the encrypted value is
+        // missing. Does NOT null plaintext (drop migration handles removal).
+        if (!usingCron) {
+          const { data: roles } = await supabase
+            .from('user_roles')
+            .select('role')
+            .eq('user_id', user.id);
+          const isSuper = (roles || []).some((r: { role: string }) => r.role === 'super_admin');
+          if (!isSuper) throw new Error('Authentication required');
+        }
+
+        const { data: rows, error: rowsErr } = await supabase
+          .from('profiles')
+          .select('id, bvn, bvn_encrypted, bank_account, bank_account_encrypted, bank_name, bank_name_encrypted, phone, phone_encrypted, id_number, id_number_encrypted');
+        if (rowsErr) throw new Error('Failed to load profiles');
+
+        let updated = 0;
+        for (const row of rows || []) {
+          const patch: Record<string, string> = {};
+          if (row.bvn && !row.bvn_encrypted) patch.bvn_encrypted = await encrypt(row.bvn);
+          if (row.bank_account && !row.bank_account_encrypted) patch.bank_account_encrypted = await encrypt(row.bank_account);
+          if (row.bank_name && !row.bank_name_encrypted) patch.bank_name_encrypted = await encrypt(row.bank_name);
+          if (row.phone && !row.phone_encrypted) patch.phone_encrypted = await encrypt(row.phone);
+          if (row.id_number && !row.id_number_encrypted) patch.id_number_encrypted = await encrypt(row.id_number);
+          if (Object.keys(patch).length) {
+            const { error: upErr } = await supabase.from('profiles').update(patch).eq('id', row.id);
+            if (upErr) {
+              console.error('Backfill row failed', row.id, upErr.message);
+              continue;
+            }
+            updated++;
+          }
+        }
+        console.log(`PII backfill done by ${user.id}: ${updated} rows`);
+        result = { success: true, updated, scanned: rows?.length || 0 };
         break;
       }
 

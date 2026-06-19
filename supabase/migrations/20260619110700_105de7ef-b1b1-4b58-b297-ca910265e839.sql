@@ -1,0 +1,6 @@
+ALTER TABLE public.profiles
+  DROP COLUMN IF EXISTS bvn,
+  DROP COLUMN IF EXISTS bank_account,
+  DROP COLUMN IF EXISTS bank_name,
+  DROP COLUMN IF EXISTS phone,
+  DROP COLUMN IF EXISTS id_number;
