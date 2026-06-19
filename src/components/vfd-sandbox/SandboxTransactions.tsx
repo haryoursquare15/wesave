@@ -35,6 +35,57 @@ function getTxIcon(type: string) {
   }
 }
 
+/**
+ * Derive a friendly, human-readable label for a transaction by examining
+ * its type, description and reference. Airtime, data, bills, transfers,
+ * thrift/ajo payouts/contributions, savings, locks and split-pays are
+ * all called out explicitly so the history feels self-explanatory.
+ */
+function getTxLabel(tx: { transaction_type: string; description?: string | null; reference?: string | null }): string {
+  const desc = (tx.description || "").toLowerCase();
+  const ref = (tx.reference || "").toLowerCase();
+  const blob = `${desc} ${ref}`;
+  const isCredit = tx.transaction_type === "credit" || tx.transaction_type === "unlock" || tx.transaction_type === "interest";
+
+  if (/\bairtime\b|vtu/.test(blob)) return "Airtime purchase";
+  if (/\bdata\b.*bundle|data\s*bundle|\bdata purchase/.test(blob) || /\bdata\b/.test(desc)) return "Data bundle";
+  if (/electric|disco|prepaid|postpaid|meter/.test(blob)) return "Electricity bill";
+  if (/cable|dstv|gotv|startimes|tv\s*sub/.test(blob)) return "Cable TV";
+  if (/internet|spectranet|smile|swift/.test(blob)) return "Internet bill";
+  if (/betting|sportybet|bet9ja/.test(blob)) return "Betting wallet";
+  if (/ajo|thrift/.test(blob)) {
+    if (/payout/.test(blob)) return "Thrift payout";
+    if (/contribut/.test(blob)) return "Thrift contribution";
+    return isCredit ? "Thrift payout" : "Thrift contribution";
+  }
+  if (/target/.test(blob)) {
+    if (/withdraw|payout/.test(blob)) return "Target withdrawal";
+    return "Target contribution";
+  }
+  if (/split[\s_-]?pay|split\s*request/.test(blob)) return isCredit ? "Split-pay settlement" : "Split-pay contribution";
+  if (/goal|campaign|crowdfund/.test(blob)) return isCredit ? "Goal contribution received" : "Goal contribution";
+  if (/savings|vestara/.test(blob)) {
+    if (/interest/.test(blob)) return "Savings interest";
+    if (/withdraw/.test(blob)) return "Savings withdrawal";
+    return "Savings deposit";
+  }
+  if (/refund|reversal/.test(blob)) return "Refund";
+  if (/fee|charge|stamp\s*duty/.test(blob)) return /stamp/.test(blob) ? "Stamp duty" : "Service fee";
+  if (/fund|top.?up|deposit/.test(blob) && isCredit) return "Wallet funding";
+  if (/transfer/.test(blob) || tx.transaction_type === "debit" || tx.transaction_type === "credit") {
+    return isCredit ? "Transfer received" : "Transfer sent";
+  }
+
+  // Fall back to type-specific names
+  switch (tx.transaction_type) {
+    case "lock": return "Funds locked";
+    case "unlock": return "Funds unlocked";
+    case "interest": return "Interest earned";
+    case "savings": return "Savings activity";
+    default: return tx.transaction_type;
+  }
+}
+
 function getStatusStyle(status: string) {
   switch (status) {
     case "completed": return "bg-success/10 text-success border-success/20";
@@ -78,7 +129,7 @@ export function SandboxTransactions({ transactions, loading, onRefresh, onBack }
           {transactions.map((tx, i) => {
             const { icon: Icon, bg, color } = getTxIcon(tx.transaction_type);
             const isCredit = tx.transaction_type === "credit" || tx.transaction_type === "unlock" || tx.transaction_type === "interest";
-            const displayLabel = tx.transaction_type === "unlock" ? "Unlock to wallet" : tx.transaction_type;
+            const displayLabel = getTxLabel(tx);
 
             return (
               <motion.div
@@ -92,7 +143,7 @@ export function SandboxTransactions({ transactions, loading, onRefresh, onBack }
                   <Icon className={`h-4 w-4 ${color}`} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium capitalize truncate">{displayLabel}</p>
+                  <p className="text-sm font-medium truncate">{displayLabel}</p>
                   <p className="text-[10px] text-muted-foreground truncate">
                     {tx.description || tx.reference || "—"}
                   </p>

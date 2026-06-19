@@ -3085,6 +3085,8 @@ Deno.serve(async (req) => {
         return await handleSaveTransferBeneficiary(userId, body);
       case "delete_transfer_beneficiary":
         return await handleDeleteTransferBeneficiary(userId, body);
+      case "pin_transfer_beneficiary":
+        return await handlePinTransferBeneficiary(userId, body);
 
 
       default:
@@ -3107,9 +3109,26 @@ async function handleListTransferBeneficiaries(userId: string) {
     .from("vfd_sandbox_transfer_beneficiaries")
     .select("*")
     .eq("user_id", userId)
+    .order("pinned", { ascending: false })
     .order("last_used_at", { ascending: false, nullsFirst: false });
   if (error) return jsonResponse({ error: error.message }, 500);
   return jsonResponse({ data: data || [] });
+}
+
+async function handlePinTransferBeneficiary(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const id = String(body.id || "");
+  const pinned = Boolean(body.pinned);
+  if (!id) return jsonResponse({ error: "id required" }, 400);
+  const { data, error } = await db
+    .from("vfd_sandbox_transfer_beneficiaries")
+    .update({ pinned })
+    .eq("id", id)
+    .eq("user_id", userId)
+    .select()
+    .single();
+  if (error) return jsonResponse({ error: error.message }, 500);
+  return jsonResponse({ data });
 }
 
 async function handleSaveTransferBeneficiary(userId: string, body: Record<string, unknown>) {

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Send, RefreshCw, CheckCircle2, Search, X, Users, Trash2 } from "lucide-react";
+import { ArrowLeft, Send, RefreshCw, CheckCircle2, Search, X, Users, Trash2, Pin, PinOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,6 +19,7 @@ interface Beneficiary {
   bank_code: string;
   bank_name: string;
   beneficiary_name: string;
+  pinned?: boolean;
 }
 
 interface Props {
@@ -36,7 +37,7 @@ interface Props {
 
 export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, onValidate, onTransfer, onBack }: Props) {
   const { toast } = useToast();
-  const { listTransferBeneficiaries, saveTransferBeneficiary, deleteTransferBeneficiary } = useVfdBanking();
+  const { listTransferBeneficiaries, saveTransferBeneficiary, deleteTransferBeneficiary, pinTransferBeneficiary } = useVfdBanking();
   const [form, setForm] = useState({
     toAccount: "", bankCode: "", amount: "", narration: "", beneficiaryName: "",
   });
@@ -121,6 +122,24 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
     await deleteTransferBeneficiary(id);
     setBeneficiaries(prev => prev.filter(b => b.id !== id));
     toast({ title: "Beneficiary removed" });
+  };
+
+  const togglePinBeneficiary = async (b: Beneficiary, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const next = !b.pinned;
+    // Optimistic update + re-sort (pinned first)
+    setBeneficiaries(prev =>
+      [...prev.map(x => x.id === b.id ? { ...x, pinned: next } : x)]
+        .sort((a, c) => Number(c.pinned || false) - Number(a.pinned || false))
+    );
+    const r = await pinTransferBeneficiary(b.id, next);
+    if (!r?.data) {
+      // revert on failure
+      setBeneficiaries(prev => prev.map(x => x.id === b.id ? { ...x, pinned: !next } : x));
+      toast({ title: "Couldn't update pin", variant: "destructive" });
+      return;
+    }
+    toast({ title: next ? "Pinned beneficiary" : "Unpinned beneficiary" });
   };
 
   const handleTransferRequest = () => {
@@ -231,13 +250,23 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
                     <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold shrink-0">
                       {b.alias.slice(0, 2).toUpperCase()}
                     </div>
-                    <button
-                      onClick={(e) => removeBeneficiary(b.id, e)}
-                      className="p-1 -mr-1 -mt-1 text-muted-foreground hover:text-destructive"
-                      aria-label="Remove beneficiary"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                    <div className="flex items-center -mr-1 -mt-1">
+                      <button
+                        onClick={(e) => togglePinBeneficiary(b, e)}
+                        className={`p-1 ${b.pinned ? "text-primary" : "text-muted-foreground hover:text-primary"}`}
+                        aria-label={b.pinned ? "Unpin beneficiary" : "Pin beneficiary"}
+                        title={b.pinned ? "Unpin" : "Pin to top"}
+                      >
+                        {b.pinned ? <Pin className="h-3.5 w-3.5 fill-current" /> : <PinOff className="h-3.5 w-3.5" />}
+                      </button>
+                      <button
+                        onClick={(e) => removeBeneficiary(b.id, e)}
+                        className="p-1 text-muted-foreground hover:text-destructive"
+                        aria-label="Remove beneficiary"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
                   <p className="text-sm font-semibold mt-2 truncate">{b.alias}</p>
                   <p className="text-[11px] text-muted-foreground truncate">{b.bank_name}</p>

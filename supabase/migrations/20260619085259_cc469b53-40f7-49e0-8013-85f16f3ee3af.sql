@@ -1,0 +1,2 @@
+ALTER TABLE public.vfd_sandbox_transfer_beneficiaries ADD COLUMN IF NOT EXISTS pinned boolean NOT NULL DEFAULT false;
+CREATE INDEX IF NOT EXISTS idx_transfer_benef_user_pinned ON public.vfd_sandbox_transfer_beneficiaries (user_id, pinned DESC, last_used_at DESC NULLS LAST);
