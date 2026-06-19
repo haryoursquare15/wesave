@@ -97,14 +97,14 @@ export function VestaraInvestmentsTab() {
       if (userIds.length) {
         const { data: profiles } = await supabase
           .from("profiles")
-          .select("id, full_name, username, email, phone")
+          .select("id, full_name, username, email")
           .in("id", userIds);
         profileMap = Object.fromEntries(
           (profiles || []).map(p => [p.id, {
             full_name: p.full_name || "—",
-            username: (p as any).username || "—",
+            username: (p as { username?: string }).username || "—",
             email: p.email || "—",
-            phone: p.phone,
+            phone: null,
           }])
         );
       }
