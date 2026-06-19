@@ -539,6 +539,18 @@ serve(async (req) => {
         if (!beneficiary_id || !campaign_id || !amount)
           return err("beneficiary_id, campaign_id, and amount are required");
 
+        // Authorization: only the campaign creator or a platform super_admin
+        // can disburse a campaign's pooled funds.
+        const { data: campaign } = await supabase
+          .from("crowdfunding_campaigns")
+          .select("creator_id")
+          .eq("id", campaign_id)
+          .maybeSingle();
+        const isOwner = !!campaign && campaign.creator_id === userId;
+        if (!isOwner && !(await requireSuperAdmin(userId!))) {
+          return err("Only the campaign creator or a platform admin can disburse this campaign", 403);
+        }
+
         const { data } = await supabase.rpc("vestara_crowdfund_disburse", {
           _beneficiary_id: beneficiary_id,
           _campaign_id: campaign_id,
@@ -556,6 +568,11 @@ serve(async (req) => {
         if (!target_user_id || !amount || !reference)
           return err("target_user_id, amount, and reference are required");
 
+        // Authorization: cron jobs OR super_admin only — never end-users.
+        if (!(await callerIsCronOrAdmin())) {
+          return err("Forbidden", 403);
+        }
+
         const { data } = await supabase.rpc("vestara_accrue_interest", {
           _user_id: target_user_id,
           _amount: amount,
@@ -565,6 +582,7 @@ serve(async (req) => {
         result = data;
         break;
       }
+
 
       // ── Batch accrue interest for ALL locked accounts (cron) ──
       case "accrue_interest_batch": {
