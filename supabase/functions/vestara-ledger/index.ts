@@ -676,6 +676,12 @@ serve(async (req) => {
         if (!original_reference || !reason)
           return err("original_reference and reason are required");
 
+        // Authorization: super_admin / admin only — reversing a posted
+        // ledger entry must never be triggerable by an end user.
+        if (!(await requireSuperAdmin(userId!))) {
+          return err("Forbidden", 403);
+        }
+
         const { data } = await supabase.rpc("vestara_reverse_transaction", {
           _original_reference: original_reference,
           _reason: reason,
@@ -685,6 +691,7 @@ serve(async (req) => {
         result = data;
         break;
       }
+
 
       // ── Reconcile (cron) — improved with per-account drift ──
       case "reconcile": {
