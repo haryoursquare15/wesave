@@ -20,22 +20,41 @@ function err(message: string, status = 400) {
   });
 }
 
-// ── Webhook signature verification ──
-function verifyWebhookSignature(req: Request, body: string): boolean {
+// ── Webhook signature verification (HMAC-SHA256) ──
+async function verifyWebhookSignature(req: Request, body: string): Promise<boolean> {
   const webhookSecret = Deno.env.get("VFD_WEBHOOK_SECRET");
-  // In sandbox mode without a configured secret, allow through but log warning
+  // Hard-fail when the signing secret is not configured — refusing to
+  // process webhooks is much safer than blindly accepting them.
   if (!webhookSecret) {
-    console.warn("[vestara-ledger] VFD_WEBHOOK_SECRET not configured — skipping signature check (sandbox only)");
-    return true;
+    console.error("[vestara-ledger] VFD_WEBHOOK_SECRET not configured — rejecting webhook");
+    return false;
   }
   const signature = req.headers.get("x-vfd-signature") || req.headers.get("x-webhook-signature");
   if (!signature) {
     console.error("[vestara-ledger] Missing webhook signature header");
     return false;
   }
-  // HMAC-SHA256 verification (production pattern)
-  // For sandbox, we accept if secret matches signature directly
-  return signature === webhookSecret;
+  try {
+    const enc = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      "raw",
+      enc.encode(webhookSecret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"],
+    );
+    const macBytes = new Uint8Array(await crypto.subtle.sign("HMAC", key, enc.encode(body)));
+    const expected = Array.from(macBytes).map(b => b.toString(16).padStart(2, "0")).join("");
+    // Constant-time compare
+    const provided = signature.toLowerCase().replace(/^sha256=/, "");
+    if (expected.length !== provided.length) return false;
+    let diff = 0;
+    for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ provided.charCodeAt(i);
+    return diff === 0;
+  } catch (e) {
+    console.error("[vestara-ledger] HMAC verification error:", e);
+    return false;
+  }
 }
 
 function toNumber(value: unknown): number {
