@@ -250,7 +250,7 @@ serve(async (req) => {
           targetUserId = user.id;
         } else {
           // External webhook — verify signature
-          if (!verifyWebhookSignature(req, rawBody)) {
+          if (!(await verifyWebhookSignature(req, rawBody))) {
             return err("Invalid webhook signature", 403);
           }
 
