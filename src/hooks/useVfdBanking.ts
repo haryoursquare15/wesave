@@ -304,6 +304,10 @@ export function useVfdBanking() {
     (id: string) => invokeVfd("delete_transfer_beneficiary", { id }),
     [invokeVfd]
   );
+  const pinTransferBeneficiary = useCallback(
+    (id: string, pinned: boolean) => invokeVfd("pin_transfer_beneficiary", { id, pinned }),
+    [invokeVfd]
+  );
 
   return {
     loading,
