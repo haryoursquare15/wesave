@@ -571,11 +571,11 @@ export default function Wallet() {
             </div>
             
             {/* Saved Bank Details */}
-            {profile?.bank_name && profile?.bank_account ? (
+            {maskedBankName && maskedBankAccount ? (
               <div className="p-3 rounded-lg bg-success/5 border border-success/20">
                 <p className="text-sm text-muted-foreground">Saved Withdrawal Bank</p>
-                <p className="font-medium text-foreground">{profile.bank_name}</p>
-                <p className="text-sm text-muted-foreground">****{profile.bank_account.slice(-4)}</p>
+                <p className="font-medium text-foreground">{maskedBankName}</p>
+                <p className="text-sm text-muted-foreground">{maskedBankAccount}</p>
               </div>
             ) : null}
             
@@ -589,7 +589,7 @@ export default function Wallet() {
               <div className="flex items-center gap-2">
                 <Building2 className="h-4 w-4 text-primary" />
                 <p className="text-sm font-medium text-foreground">
-                  {profile?.bank_name ? "Update Withdrawal Bank" : "Set Up Withdrawal Bank"}
+                  {maskedBankName ? "Update Withdrawal Bank" : "Set Up Withdrawal Bank"}
                 </p>
               </div>
             </button>
