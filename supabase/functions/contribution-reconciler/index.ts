@@ -22,6 +22,25 @@ serve(async (req) => {
     const body = await req.json();
     const { action } = body;
 
+    // SECURITY: reconcile actions are cron-only — require CRON_SECRET (manual_verify auths below)
+    if (action === 'reconcile' || action === 'reconcile_splits') {
+      const cronSecret = Deno.env.get('CRON_SECRET');
+      const provided =
+        req.headers.get('x-cron-secret') ||
+        (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+      if (!cronSecret) {
+        return new Response(JSON.stringify({ success: false, error: 'Server not configured' }), {
+          status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      if (provided !== cronSecret) {
+        return new Response(JSON.stringify({ success: false, error: 'Forbidden' }), {
+          status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
+
     // ================================================================
     // ACTION: RECONCILE — Process any remaining legacy pending card charges
     // Card charges are sunsetted; this only handles already-pending legacy records
