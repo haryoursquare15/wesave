@@ -2035,12 +2035,9 @@ export type Database = {
         Row: {
           account_status: string | null
           avatar_url: string | null
-          bank_account: string | null
           bank_account_encrypted: string | null
           bank_details_changed_at: string | null
-          bank_name: string | null
           bank_name_encrypted: string | null
-          bvn: string | null
           bvn_encrypted: string | null
           completed_cycles: number | null
           created_at: string | null
@@ -2056,14 +2053,12 @@ export type Database = {
           full_name: string | null
           id: string
           id_document_url: string | null
-          id_number: string | null
           id_number_encrypted: string | null
           id_type: string | null
           kyc_status: string | null
           last_security_review: string | null
           membership_tier: Database["public"]["Enums"]["membership_tier"]
           onboarding_completed: boolean | null
-          phone: string | null
           phone_encrypted: string | null
           referral_code: string | null
           referred_by: string | null
@@ -2075,12 +2070,9 @@ export type Database = {
         Insert: {
           account_status?: string | null
           avatar_url?: string | null
-          bank_account?: string | null
           bank_account_encrypted?: string | null
           bank_details_changed_at?: string | null
-          bank_name?: string | null
           bank_name_encrypted?: string | null
-          bvn?: string | null
           bvn_encrypted?: string | null
           completed_cycles?: number | null
           created_at?: string | null
@@ -2096,14 +2088,12 @@ export type Database = {
           full_name?: string | null
           id: string
           id_document_url?: string | null
-          id_number?: string | null
           id_number_encrypted?: string | null
           id_type?: string | null
           kyc_status?: string | null
           last_security_review?: string | null
           membership_tier?: Database["public"]["Enums"]["membership_tier"]
           onboarding_completed?: boolean | null
-          phone?: string | null
           phone_encrypted?: string | null
           referral_code?: string | null
           referred_by?: string | null
@@ -2115,12 +2105,9 @@ export type Database = {
         Update: {
           account_status?: string | null
           avatar_url?: string | null
-          bank_account?: string | null
           bank_account_encrypted?: string | null
           bank_details_changed_at?: string | null
-          bank_name?: string | null
           bank_name_encrypted?: string | null
-          bvn?: string | null
           bvn_encrypted?: string | null
           completed_cycles?: number | null
           created_at?: string | null
@@ -2136,14 +2123,12 @@ export type Database = {
           full_name?: string | null
           id?: string
           id_document_url?: string | null
-          id_number?: string | null
           id_number_encrypted?: string | null
           id_type?: string | null
           kyc_status?: string | null
           last_security_review?: string | null
           membership_tier?: Database["public"]["Enums"]["membership_tier"]
           onboarding_completed?: boolean | null
-          phone?: string | null
           phone_encrypted?: string | null
           referral_code?: string | null
           referred_by?: string | null
