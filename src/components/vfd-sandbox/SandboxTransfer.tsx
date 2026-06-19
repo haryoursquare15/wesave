@@ -250,13 +250,23 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
                     <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold shrink-0">
                       {b.alias.slice(0, 2).toUpperCase()}
                     </div>
-                    <button
-                      onClick={(e) => removeBeneficiary(b.id, e)}
-                      className="p-1 -mr-1 -mt-1 text-muted-foreground hover:text-destructive"
-                      aria-label="Remove beneficiary"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                    <div className="flex items-center -mr-1 -mt-1">
+                      <button
+                        onClick={(e) => togglePinBeneficiary(b, e)}
+                        className={`p-1 ${b.pinned ? "text-primary" : "text-muted-foreground hover:text-primary"}`}
+                        aria-label={b.pinned ? "Unpin beneficiary" : "Pin beneficiary"}
+                        title={b.pinned ? "Unpin" : "Pin to top"}
+                      >
+                        {b.pinned ? <Pin className="h-3.5 w-3.5 fill-current" /> : <PinOff className="h-3.5 w-3.5" />}
+                      </button>
+                      <button
+                        onClick={(e) => removeBeneficiary(b.id, e)}
+                        className="p-1 text-muted-foreground hover:text-destructive"
+                        aria-label="Remove beneficiary"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
                   <p className="text-sm font-semibold mt-2 truncate">{b.alias}</p>
                   <p className="text-[11px] text-muted-foreground truncate">{b.bank_name}</p>
