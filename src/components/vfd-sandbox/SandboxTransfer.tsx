@@ -37,7 +37,7 @@ interface Props {
 
 export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, onValidate, onTransfer, onBack }: Props) {
   const { toast } = useToast();
-  const { listTransferBeneficiaries, saveTransferBeneficiary, deleteTransferBeneficiary } = useVfdBanking();
+  const { listTransferBeneficiaries, saveTransferBeneficiary, deleteTransferBeneficiary, pinTransferBeneficiary } = useVfdBanking();
   const [form, setForm] = useState({
     toAccount: "", bankCode: "", amount: "", narration: "", beneficiaryName: "",
   });
