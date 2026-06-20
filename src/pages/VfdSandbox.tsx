@@ -182,6 +182,11 @@ function VfdSandboxInner() {
     const userId = user?.id;
     if (!userId || !session?.access_token || !kycDone) return;
 
+    // Initial fetch so VFD reference + session id are available even before
+    // any realtime event fires (e.g. opening history right after page load).
+    void fetchVfdTransactions();
+
+
     const refreshNow = () => {
       void Promise.all([
         refreshVestaraBalance(),
