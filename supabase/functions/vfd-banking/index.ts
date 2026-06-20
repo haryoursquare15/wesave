@@ -1307,7 +1307,7 @@ async function handleTransfer(
           400
         );
       }
-      const walletPrefix2 = Deno.env.get("VFD_WALLET_NAME") || "WeSave";
+      const walletPrefix2 = Deno.env.get("VFD_WALLET_NAME") || "VFD";
       const ref2 = `${walletPrefix2}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
       const narration = (body.narration as string) || (body.remark as string) || "Transfer";
       const benName = (body.beneficiaryName as string) || recipient.full_name || toAccount;
@@ -1596,7 +1596,7 @@ async function handleTransfer(
   const signature = await generateTransferSignature(fromAccount, toAccount);
 
   // Step 3: Build VFD transfer payload
-  const walletPrefix = Deno.env.get("VFD_WALLET_NAME") || "WeSave";
+  const walletPrefix = Deno.env.get("VFD_WALLET_NAME") || "VFD";
   const reference = body.reference as string || `${walletPrefix}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
   // VFD: bankCode "999999" = intra-bank (within VFD); anything else = inter-bank
   const transferType = (body.transferType as string) || (body.bankCode === "999999" ? "intra" : "inter");
@@ -1922,7 +1922,7 @@ async function handleSandboxCredit(userId: string, accountNo: string, amount: nu
     );
   }
 
-  const reference = `WeSave-credit-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+  const reference = `VFD-credit-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
 
   // ─── PHASE 1: idempotency for sandbox credit ───
   const idemKey = reference;
