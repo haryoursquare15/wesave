@@ -525,7 +525,7 @@ function VfdSandboxInner() {
               <SandboxTransactions
                 transactions={mappedTransactions}
                 loading={vestara.loading}
-                onRefresh={refreshVestaraTransactions}
+                onRefresh={() => { void refreshVestaraTransactions(); void fetchVfdTransactions(); }}
                 onBack={goBack}
               />
             )}
