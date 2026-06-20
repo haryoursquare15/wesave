@@ -1844,6 +1844,105 @@ async function handleTransfer(
       }
     })();
 
+    // ─── HYBRID LEDGER MIRROR ───
+    // VFD has already moved real money between NUBANs. Mirror the movement on
+    // the Vestara double-entry ledger so groups/savings/audit stay accurate,
+    // and ensure recipient sees the credit in their history + notifications.
+    try {
+      // Sender debit on Vestara wallet (mirrors VFD debit).
+      const { data: senderWd, error: senderWdErr } = await supabaseAdmin.rpc("vestara_withdraw", {
+        _user_id: userId,
+        _amount: Number(body.amount),
+        _reference: `${reference}-OUT`,
+        _metadata: {
+          source: "vfd_transfer_mirror",
+          transfer_type: transferType,
+          from_account: displayFromAccount,
+          to_account: toAccount,
+          bank_code: bankCode,
+          beneficiary_name: body.beneficiaryName ?? null,
+          vfd_reference: vfdTxnId,
+          session_id: sessionId,
+        },
+      });
+      const senderWdRes = senderWd as { success?: boolean; error?: string } | null;
+      if (senderWdErr || !senderWdRes?.success) {
+        console.error("[VFD Transfer] sender vestara_withdraw mirror failed:", senderWdErr || senderWdRes);
+      }
+
+      // If the recipient is a Vestara user (intra-Vestara), credit their
+      // Vestara wallet, insert a credit transaction row for history, push a
+      // notification, and refresh their cached VFD balance row.
+      const { data: rcptClient } = await supabaseAdmin
+        .from("vfd_sandbox_clients")
+        .select("user_id, full_name, vfd_account_number")
+        .eq("vfd_account_number", toAccount)
+        .maybeSingle();
+      const rcptUserId = (rcptClient as { user_id?: string } | null)?.user_id;
+      if (rcptUserId) {
+        const { data: rcptDep, error: rcptDepErr } = await supabaseAdmin.rpc("vestara_deposit", {
+          _user_id: rcptUserId,
+          _amount: Number(body.amount),
+          _reference: `${reference}-IN`,
+          _metadata: {
+            source: "vfd_transfer_mirror",
+            transfer_type: transferType,
+            from_user_id: userId,
+            from_account: displayFromAccount,
+            to_account: toAccount,
+            sender_name: body.beneficiaryName ?? null,
+            vfd_reference: vfdTxnId,
+            session_id: sessionId,
+          },
+        });
+        const rcptDepRes = rcptDep as { success?: boolean; error?: string } | null;
+        if (rcptDepErr || !rcptDepRes?.success) {
+          console.error("[VFD Transfer] recipient vestara_deposit mirror failed:", rcptDepErr || rcptDepRes);
+        }
+
+        // Insert a credit row in vfd_sandbox_transactions for recipient's history.
+        await supabaseAdmin.from("vfd_sandbox_transactions").insert({
+          user_id: rcptUserId,
+          vfd_account_number: toAccount,
+          amount: Number(body.amount),
+          transaction_type: "credit",
+          status: "completed",
+          reference: `${reference}-IN`,
+          vfd_reference: vfdTxnId,
+          session_id: sessionId,
+          beneficiary_account: displayFromAccount,
+          beneficiary_name: body.beneficiaryName ?? null,
+          description: (body.narration as string) || "Transfer received",
+          committed_at: nowIso,
+          metadata: {
+            source: "vfd_transfer_mirror",
+            from_user_id: userId,
+            session_id: sessionId,
+            bank_transaction_id: vfdTxnId,
+          },
+        });
+
+        // Refresh recipient's cached VFD balance.
+        await ensureBalanceRow(supabaseAdmin, rcptUserId, {
+          accountNo: toAccount,
+          preserveExisting: false,
+        });
+
+        // Notify recipient.
+        try {
+          await supabaseAdmin.from("vfd_sandbox_notifications").insert({
+            user_id: rcptUserId,
+            title: "Money received",
+            message: `You received ₦${Number(body.amount).toLocaleString()} from ${body.beneficiaryName || displayFromAccount}. Ref: ${reference}`,
+            notification_type: "transfer_received",
+          });
+        } catch (_) { /* best-effort */ }
+      }
+    } catch (mirrorErr) {
+      console.error("[VFD Transfer] hybrid ledger mirror error:", mirrorErr);
+    }
+
+
 
     // ─── INTERBANK FEE + STAMP DUTY ───
     // Only inter (NIBSS) transfers incur fee + stamp duty. Intra transfers are
