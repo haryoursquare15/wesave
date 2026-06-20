@@ -182,6 +182,11 @@ function VfdSandboxInner() {
     const userId = user?.id;
     if (!userId || !session?.access_token || !kycDone) return;
 
+    // Initial fetch so VFD reference + session id are available even before
+    // any realtime event fires (e.g. opening history right after page load).
+    void fetchVfdTransactions();
+
+
     const refreshNow = () => {
       void Promise.all([
         refreshVestaraBalance(),
@@ -219,12 +224,22 @@ function VfdSandboxInner() {
     };
   }, [user?.id, session?.access_token, kycDone, refreshVestaraBalance, refreshVestaraTransactions, fetchVfdTransactions]);
 
-  // Map vestara transactions — show net amount and platform fee for payouts
+  // Map vestara transactions — show net amount and platform fee for payouts.
+  // Also enrich with VFD reference + NIBSS session id (looked up by reference)
+  // so each receipt row carries the bank-side identifiers.
+  const vfdRefIndex = new Map<string, { vfd_reference: string | null; session_id: string | null }>();
+  for (const v of vfd.transactions) {
+    if (v.reference) {
+      vfdRefIndex.set(v.reference, { vfd_reference: v.vfd_reference, session_id: v.session_id });
+    }
+  }
+
   const mappedTransactions = vestara.transactions.flatMap((tx) => {
     const fee = Number((tx.metadata as Record<string, unknown>)?.fee || 0);
     const gross = Number(tx.amount);
     const isPayout = tx.type === "thrift_payout";
     const net = isPayout && fee > 0 ? gross - fee : gross;
+    const vfdMeta = (tx.reference && vfdRefIndex.get(tx.reference)) || { vfd_reference: null, session_id: null };
 
     const base = {
       id: tx.id,
@@ -242,6 +257,8 @@ function VfdSandboxInner() {
         ? `thrift payout (₦${gross.toLocaleString()} − ₦${fee.toLocaleString()} fee)`
         : tx.type.replace(/_/g, " "),
       reference: tx.reference,
+      vfd_reference: vfdMeta.vfd_reference,
+      session_id: vfdMeta.session_id,
       status: tx.status,
       created_at: tx.created_at,
     };
@@ -256,6 +273,8 @@ function VfdSandboxInner() {
           amount: fee,
           description: "Platform fee (thrift payout)",
           reference: `${tx.reference}-fee`,
+          vfd_reference: null,
+          session_id: null,
           status: tx.status,
           created_at: tx.created_at,
         },
@@ -511,7 +530,7 @@ function VfdSandboxInner() {
               <SandboxTransactions
                 transactions={mappedTransactions}
                 loading={vestara.loading}
-                onRefresh={refreshVestaraTransactions}
+                onRefresh={() => { void refreshVestaraTransactions(); void fetchVfdTransactions(); }}
                 onBack={goBack}
               />
             )}

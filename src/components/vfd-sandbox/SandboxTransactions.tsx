@@ -1,11 +1,13 @@
 import { motion } from "framer-motion";
 import {
   ArrowLeft, ArrowDownLeft, ArrowUpRight, Lock, Users,
-  RefreshCw, CreditCard, Receipt,
+  RefreshCw, CreditCard, Receipt, Copy, Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useState } from "react";
+import { useToast } from "@/hooks/use-toast";
 
 interface Transaction {
   id: string;
@@ -13,6 +15,8 @@ interface Transaction {
   amount: number;
   description: string | null;
   reference: string | null;
+  vfd_reference?: string | null;
+  session_id?: string | null;
   status: string;
   created_at: string;
 }
@@ -95,6 +99,20 @@ function getStatusStyle(status: string) {
 }
 
 export function SandboxTransactions({ transactions, loading, onRefresh, onBack }: Props) {
+  const { toast } = useToast();
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const copy = async (label: string, value: string, key: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedKey(key);
+      toast({ title: `${label} copied`, description: value });
+      setTimeout(() => setCopiedKey((k) => (k === key ? null : k)), 1500);
+    } catch {
+      toast({ title: "Copy failed", variant: "destructive" });
+    }
+  };
+
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-3">
@@ -137,28 +155,61 @@ export function SandboxTransactions({ transactions, loading, onRefresh, onBack }
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.03 }}
-                className="bg-card rounded-xl border border-border/50 p-3 flex items-center gap-3"
+                className="bg-card rounded-xl border border-border/50 p-3"
               >
-                <div className={`w-10 h-10 rounded-xl ${bg} flex items-center justify-center shrink-0`}>
-                  <Icon className={`h-4 w-4 ${color}`} />
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-xl ${bg} flex items-center justify-center shrink-0`}>
+                    <Icon className={`h-4 w-4 ${color}`} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{displayLabel}</p>
+                    <p className="text-[10px] text-muted-foreground truncate">
+                      {tx.description || tx.reference || "—"}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {new Date(tx.created_at).toLocaleDateString("en-NG", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className={`text-sm font-semibold ${isCredit ? "text-success" : "text-destructive"}`}>
+                      {isCredit ? "+" : "-"}₦{tx.amount.toLocaleString()}
+                    </p>
+                    <Badge variant="outline" className={`text-[9px] ${getStatusStyle(tx.status)}`}>
+                      {tx.status}
+                    </Badge>
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{displayLabel}</p>
-                  <p className="text-[10px] text-muted-foreground truncate">
-                    {tx.description || tx.reference || "—"}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground">
-                    {new Date(tx.created_at).toLocaleDateString("en-NG", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                  </p>
-                </div>
-                <div className="text-right shrink-0">
-                  <p className={`text-sm font-semibold ${isCredit ? "text-success" : "text-destructive"}`}>
-                    {isCredit ? "+" : "-"}₦{tx.amount.toLocaleString()}
-                  </p>
-                  <Badge variant="outline" className={`text-[9px] ${getStatusStyle(tx.status)}`}>
-                    {tx.status}
-                  </Badge>
-                </div>
+
+                {(tx.vfd_reference || tx.session_id) && (
+                  <div className="mt-2 pt-2 border-t border-border/40 space-y-1">
+                    {tx.vfd_reference && (
+                      <button
+                        type="button"
+                        onClick={() => copy("VFD reference", tx.vfd_reference!, `${tx.id}-ref`)}
+                        className="w-full flex items-center justify-between gap-2 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <span className="shrink-0">VFD ref</span>
+                        <span className="font-mono truncate flex-1 text-right">{tx.vfd_reference}</span>
+                        {copiedKey === `${tx.id}-ref`
+                          ? <Check className="h-3 w-3 text-success shrink-0" />
+                          : <Copy className="h-3 w-3 shrink-0 opacity-60" />}
+                      </button>
+                    )}
+                    {tx.session_id && (
+                      <button
+                        type="button"
+                        onClick={() => copy("Session ID", tx.session_id!, `${tx.id}-sid`)}
+                        className="w-full flex items-center justify-between gap-2 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <span className="shrink-0">Session ID</span>
+                        <span className="font-mono truncate flex-1 text-right">{tx.session_id}</span>
+                        {copiedKey === `${tx.id}-sid`
+                          ? <Check className="h-3 w-3 text-success shrink-0" />
+                          : <Copy className="h-3 w-3 shrink-0 opacity-60" />}
+                      </button>
+                    )}
+                  </div>
+                )}
               </motion.div>
             );
           })}
