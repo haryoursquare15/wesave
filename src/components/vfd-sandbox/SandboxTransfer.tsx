@@ -159,15 +159,23 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
     setPreviewOpen(true);
   };
 
+  const [submitting, setSubmitting] = useState(false);
+
   const executeTransfer = async () => {
     const amount = parseFloat(form.amount);
     const bankName = banks.find(b => b.code === form.bankCode)?.name || form.bankCode;
-    const result = await onTransfer({
-      fromAccount: accountNumber, toAccount: form.toAccount,
-      bankCode: form.bankCode, amount,
-      narration: form.narration || "Sandbox Transfer",
-      beneficiaryName: form.beneficiaryName,
-    });
+    setSubmitting(true);
+    let result: unknown = null;
+    try {
+      result = await onTransfer({
+        fromAccount: accountNumber, toAccount: form.toAccount,
+        bankCode: form.bankCode, amount,
+        narration: form.narration || "Sandbox Transfer",
+        beneficiaryName: form.beneficiaryName,
+      });
+    } finally {
+      setSubmitting(false);
+    }
     const transferResult = result as {
       reference?: string;
       transactionId?: string;
@@ -180,6 +188,7 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
         || transferResult.transactionId;
       if (!ref) return;
       setSuccessPayload({
+
         title: "Transfer Successful",
         description: `Your transfer of ₦${amount.toLocaleString()} has been sent.`,
         details: [
@@ -422,10 +431,11 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
         </div>
 
         <Button onClick={handleTransferRequest}
-          disabled={loading || !form.toAccount || !form.bankCode || !form.amount || !form.beneficiaryName}
+          disabled={submitting || verifying || !form.toAccount || !form.bankCode || !form.amount || !form.beneficiaryName}
           className="w-full h-12" variant="hero">
-          {loading ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+          {submitting ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
           Send Transfer
+
         </Button>
       </motion.div>
 
