@@ -1,11 +1,13 @@
 import { motion } from "framer-motion";
 import {
   ArrowLeft, ArrowDownLeft, ArrowUpRight, Lock, Users,
-  RefreshCw, CreditCard, Receipt,
+  RefreshCw, CreditCard, Receipt, Copy, Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useState } from "react";
+import { useToast } from "@/hooks/use-toast";
 
 interface Transaction {
   id: string;
@@ -13,6 +15,8 @@ interface Transaction {
   amount: number;
   description: string | null;
   reference: string | null;
+  vfd_reference?: string | null;
+  session_id?: string | null;
   status: string;
   created_at: string;
 }
