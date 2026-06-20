@@ -2223,9 +2223,13 @@ async function handleGetLockConfigs() {
 
 // Get user balance (internal ledger)
 async function handleGetUserBalance(userId: string) {
-  // VFD source of truth: always hit /account/enquiry on the user's unique NUBAN
-  // so the dashboard, transfer screens, and withdrawal screens read directly
-  // from VFD instead of any cached vestara balance.
+  // Source of truth for the spendable wallet:
+  //   • Real VFD-provisioned NUBANs (typically "1xxxxxxxxx") → /account/enquiry live.
+  //   • Virtual platform NUBANs ("9xxxxxxxxx") provisioned only inside Vestara
+  //     do NOT exist at VFD — hitting /account/enquiry returns "Invalid wallet
+  //     token" / 0 and would freeze the dashboard at a stale cached figure.
+  //     For these we recompute from the internal sandbox ledger so credits and
+  //     debits show up immediately after every transfer.
   const supabaseAdmin = getSupabaseAdmin();
   const { data: client } = await supabaseAdmin
     .from("vfd_sandbox_clients")
@@ -2237,19 +2241,32 @@ async function handleGetUserBalance(userId: string) {
     return jsonResponse({ data: null, error: "No VFD account found" }, 200);
   }
 
-  // Live VFD balance
+  const accountNo = client.vfd_account_number;
+  const isVirtualNuban = accountNo.startsWith("9");
+
   let liveBalance = 0;
   let vfdRaw: unknown = null;
   let vfdStatus = 0;
-  try {
-    const res = await vfdRequest("/account/enquiry", "GET", undefined, {
-      accountNumber: client.vfd_account_number,
-    });
-    vfdRaw = res.data;
-    vfdStatus = res.status;
-    liveBalance = extractVfdBalance(res.data);
-  } catch (err) {
-    console.error("[VFD get_user_balance] live enquiry failed", err);
+  let source: "vfd_live" | "internal_ledger" | "cached_fallback" = "cached_fallback";
+
+  if (isVirtualNuban) {
+    liveBalance = await getRecordedSandboxBalance(supabaseAdmin, userId);
+    source = "internal_ledger";
+  } else {
+    try {
+      const res = await vfdRequest("/account/enquiry", "GET", undefined, {
+        accountNumber: accountNo,
+      });
+      vfdRaw = res.data;
+      vfdStatus = res.status;
+      const parsedStatus = (res.data as { status?: string } | null)?.status;
+      if (vfdStatus === 200 && parsedStatus === "00") {
+        liveBalance = extractVfdBalance(res.data);
+        source = "vfd_live";
+      }
+    } catch (err) {
+      console.error("[VFD get_user_balance] live enquiry failed", err);
+    }
   }
 
   // Lock + savings come from our DB (VFD doesn't model them)
@@ -2261,8 +2278,10 @@ async function handleGetUserBalance(userId: string) {
 
   const lockedBalance = toNumber(existing?.locked_balance);
   const savingsBalance = toNumber(existing?.savings_balance);
-  // If VFD is reachable, trust it; otherwise fall back to the cached total so the UI doesn't go blank.
-  const totalBalance = vfdStatus === 200 ? liveBalance : toNumber(existing?.total_balance);
+  // If we got a live/ledger figure, trust it; otherwise fall back to cache so UI doesn't blank.
+  const totalBalance = source === "cached_fallback"
+    ? toNumber(existing?.total_balance)
+    : liveBalance;
   const availableBalance = Math.max(totalBalance - lockedBalance - savingsBalance, 0);
   const timestamp = new Date().toISOString();
 
@@ -2291,18 +2310,19 @@ async function handleGetUserBalance(userId: string) {
   return jsonResponse({
     data: {
       user_id: userId,
-      vfd_account_number: client.vfd_account_number,
+      vfd_account_number: accountNo,
       total_balance: totalBalance,
       available_balance: availableBalance,
       locked_balance: lockedBalance,
       savings_balance: savingsBalance,
       last_synced_at: timestamp,
-      source: vfdStatus === 200 ? "vfd_live" : "cached_fallback",
+      source,
     },
     vfd_status: vfdStatus,
     vfd_raw: vfdRaw,
   });
 }
+
 
 // Sync VFD balance to internal ledger
 async function handleSyncBalance(userId: string) {
