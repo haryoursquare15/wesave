@@ -2064,56 +2064,151 @@ async function handleWebhook(req: Request) {
 
   console.log("[VFD Webhook]", JSON.stringify(payload));
 
-  // ─── PHASE 1: idempotent state transition for transfer webhooks ───
-  // Extract a reference / outcome from VFD's payload shape.
+  // VFD docs use snake_case for inward-credit fields; transfer status webhooks
+  // (if VFD ever ships them) tend toward camelCase under `data`. Normalise both.
   const inner = (payload?.data as Record<string, unknown>) ?? {};
-  const reference =
-    (payload?.reference as string) ||
-    (inner?.reference as string) ||
-    (inner?.sessionId as string) ||
-    (payload?.sessionId as string) ||
-    null;
-  const vfdStatus =
-    (payload?.status as string) ||
-    (inner?.status as string) ||
-    (payload?.transactionStatus as string) ||
-    (inner?.transactionStatus as string) ||
-    null;
+  const pickStr = (...vals: unknown[]) =>
+    vals.map(v => (v === undefined || v === null ? "" : String(v))).find(v => v.length > 0) ?? null;
 
-  if (!reference) {
-    await pushWebhookToDlq(supabaseAdmin, {
-      event_type: eventType,
-      reference: null,
-      payload,
-      error: "Webhook missing reference",
-    });
-    return jsonResponse({ status: "received", queued: "dlq" });
-  }
+  const reference = pickStr(
+    payload?.reference, inner?.reference,
+    payload?.txnId, inner?.txnId, payload?.TxnId, inner?.TxnId,
+  );
+  const sessionId = pickStr(
+    payload?.session_id, payload?.sessionId, payload?.SessionId,
+    inner?.session_id, inner?.sessionId, inner?.SessionId,
+  );
+  const vfdStatus = pickStr(
+    payload?.status, inner?.status,
+    payload?.transactionStatus, inner?.transactionStatus,
+  );
+  const accountNumber = pickStr(payload?.account_number, payload?.accountNumber, inner?.account_number, inner?.accountNumber);
+  const amount = Number(payload?.amount ?? inner?.amount ?? 0);
+
+  // ─── INWARD CREDIT: VFD pushes funding notifications (NIP/USSD/NQR) here ───
+  // Detect by presence of an account_number + originator_* fields and no
+  // pre-existing reserved tx in our DB.
+  const looksLikeInwardCredit =
+    !!accountNumber && amount > 0 &&
+    (payload?.originator_account_number || payload?.originator_account_name ||
+     payload?.transaction_channel || payload?.initialCreditRequest);
 
   try {
-    const { data: tx } = await supabaseAdmin
+    if (looksLikeInwardCredit) {
+      // Idempotency: dedupe on session_id (preferred) or reference.
+      const dedupeKey = sessionId || reference;
+      if (dedupeKey) {
+        const { data: existing } = await supabaseAdmin
+          .from("vfd_sandbox_transactions")
+          .select("id")
+          .or(`session_id.eq.${dedupeKey},reference.eq.${dedupeKey}`)
+          .maybeSingle();
+        if (existing) {
+          return jsonResponse({ status: "duplicate_ignored", reference: dedupeKey });
+        }
+      }
+
+      // Map account → user
+      const { data: client } = await supabaseAdmin
+        .from("vfd_sandbox_clients")
+        .select("user_id")
+        .eq("vfd_account_number", accountNumber)
+        .maybeSingle();
+
+      if (!client?.user_id) {
+        await pushWebhookToDlq(supabaseAdmin, {
+          event_type: "inward_credit",
+          reference,
+          payload,
+          error: `No user mapped to account ${accountNumber}`,
+        });
+        return jsonResponse({ status: "received", queued: "dlq" });
+      }
+
+      const nowIso = new Date().toISOString();
+      const { data: creditRow } = await supabaseAdmin
+        .from("vfd_sandbox_transactions")
+        .insert({
+          user_id: client.user_id,
+          vfd_account_number: accountNumber,
+          amount,
+          transaction_type: "credit",
+          status: "completed",
+          reference: reference || `INWARD-${sessionId || crypto.randomUUID()}`,
+          session_id: sessionId,
+          committed_at: nowIso,
+          description: (payload?.originator_narration as string) || "Inward credit",
+          metadata: {
+            ...(payload as Record<string, unknown>),
+            stage: "inward_credit",
+            originator_account_number: payload?.originator_account_number ?? null,
+            originator_account_name: payload?.originator_account_name ?? null,
+            originator_bank: payload?.originator_bank ?? null,
+            transaction_channel: payload?.transaction_channel ?? null,
+          },
+          source: "vfd_webhook",
+        })
+        .select("id")
+        .maybeSingle();
+
+      await recordTxEvent(supabaseAdmin, {
+        transaction_id: creditRow?.id ?? null,
+        user_id: client.user_id,
+        reference,
+        event_type: "webhook.inward_credit",
+        actor: "webhook",
+        to_status: "completed",
+        payload: { amount, session_id: sessionId, channel: payload?.transaction_channel ?? null },
+      });
+
+      // Refresh balance cache so dashboards see funds immediately.
+      await ensureBalanceRow(supabaseAdmin, client.user_id, {
+        accountNo: accountNumber,
+        preserveExisting: false,
+      });
+
+      try {
+        await supabaseAdmin.from("vfd_sandbox_notifications").insert({
+          user_id: client.user_id,
+          title: "Funds received",
+          message: `₦${amount.toLocaleString()} received from ${payload?.originator_account_name || "external sender"}.`,
+          notification_type: "credit_received",
+        });
+      } catch (_) { /* best-effort */ }
+
+      return jsonResponse({ status: "processed", outcome: "credited", reference, session_id: sessionId });
+    }
+
+    // ─── OUTWARD STATUS WEBHOOK (or transfer notification) ───
+    if (!reference && !sessionId) {
+      await pushWebhookToDlq(supabaseAdmin, {
+        event_type: eventType,
+        reference: null,
+        payload,
+        error: "Webhook missing reference and session_id",
+      });
+      return jsonResponse({ status: "received", queued: "dlq" });
+    }
+
+    let txQuery = supabaseAdmin
       .from("vfd_sandbox_transactions")
-      .select("id, status, user_id, amount, vfd_account_number, beneficiary_name, beneficiary_account")
-      .eq("reference", reference)
-      .maybeSingle();
+      .select("id, status, user_id, amount, vfd_account_number, beneficiary_name, beneficiary_account");
+    if (reference) txQuery = txQuery.eq("reference", reference);
+    else txQuery = txQuery.eq("session_id", sessionId!);
+    const { data: tx } = await txQuery.maybeSingle();
 
     if (!tx) {
       await pushWebhookToDlq(supabaseAdmin, {
         event_type: eventType,
         reference,
         payload,
-        error: "No transaction found for reference",
+        error: "No transaction found for reference/session_id",
       });
       return jsonResponse({ status: "received", queued: "dlq" });
     }
 
     // Terminal-state guard — webhook deliveries can duplicate; never re-apply.
     if (tx.status === "completed" || tx.status === "reversed" || tx.status === "failed") {
-      await supabaseAdmin
-        .from("vfd_sandbox_webhook_logs")
-        .update({ processed: true, processed_at: new Date().toISOString() })
-        .eq("payload", payload as never)
-        .is("processed_at", null);
       return jsonResponse({ status: "duplicate_ignored", reference });
     }
 
@@ -2126,6 +2221,7 @@ async function handleWebhook(req: Request) {
         status: success ? "completed" : "reversed",
         committed_at: success ? nowIso : null,
         reversed_at: success ? null : nowIso,
+        session_id: sessionId ?? undefined,
         metadata: { ...(payload as Record<string, unknown>), stage: success ? "webhook_committed" : "webhook_reversed" },
       })
       .eq("id", tx.id);
@@ -2138,10 +2234,10 @@ async function handleWebhook(req: Request) {
       actor: "webhook",
       from_status: "reserved",
       to_status: success ? "completed" : "reversed",
-      payload: { vfd_status: vfdStatus, event: eventType },
+      payload: { vfd_status: vfdStatus, event: eventType, session_id: sessionId },
     });
 
-    if (success && tx.user_id) {
+    if (tx.user_id) {
       await ensureBalanceRow(supabaseAdmin, tx.user_id, {
         accountNo: tx.vfd_account_number ?? null,
         preserveExisting: false,
