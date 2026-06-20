@@ -2660,8 +2660,8 @@ async function processStuckReservedTransactions(opts: { olderThanMinutes?: numbe
 
   const { data: stuck, error } = await supabaseAdmin
     .from("vfd_sandbox_transactions")
-    .select("id, user_id, amount, reference, vfd_account_number, beneficiary_name, beneficiary_account, idempotency_key")
-    .eq("status", "reserved")
+    .select("id, user_id, amount, reference, session_id, vfd_reference, vfd_account_number, beneficiary_name, beneficiary_account, idempotency_key, status")
+    .in("status", ["reserved", "pending"])
     .lt("reserved_at", cutoff)
     .order("reserved_at", { ascending: true })
     .limit(limit);
@@ -2677,12 +2677,16 @@ async function processStuckReservedTransactions(opts: { olderThanMinutes?: numbe
   let pending = 0;
 
   for (const tx of stuck ?? []) {
-    if (!tx.reference) {
+    if (!tx.reference && !tx.session_id) {
       pending++;
       continue;
     }
     try {
-      const { data: query } = await vfdRequest("/transactions", "GET", undefined, { reference: tx.reference });
+      // Prefer sessionId (more authoritative on NIBSS) when we captured it.
+      const tsqParams: Record<string, string> = {};
+      if (tx.session_id) tsqParams.sessionId = tx.session_id;
+      else if (tx.reference) tsqParams.reference = tx.reference;
+      const { data: query } = await vfdRequest("/transactions", "GET", undefined, tsqParams);
       const inner = (query as Record<string, unknown>)?.data as Record<string, unknown> | undefined;
       const vfdStatus = (inner?.transactionStatus as string) || (inner?.status as string) || (query as Record<string, unknown>)?.status as string;
       const txnId = (inner?.txnId ?? inner?.sessionId)?.toString() ?? null;
