@@ -1802,6 +1802,49 @@ async function handleTransfer(
       preserveExisting: false,
     });
 
+    // ─── POST-TRANSFER TSQ ───
+    // /transfer (intra) omits sessionId; /transfer (inter) sometimes omits
+    // bankTransactionId. Hit /transactions once to capture both into the row
+    // before any webhook arrives. Fire-and-forget — failures here don't
+    // unwind the (already-committed) transfer.
+    (async () => {
+      try {
+        const tsqParams: Record<string, string> = { reference };
+        if (sessionId) tsqParams.sessionId = sessionId;
+        const { data: tsq } = await vfdRequest("/transactions", "GET", undefined, tsqParams);
+        const tsqInner = (tsq as Record<string, unknown>)?.data as Record<string, unknown> | undefined;
+        const tsqSessionId =
+          (tsqInner?.sessionId as string | undefined) ||
+          (tsqInner?.SessionId as string | undefined) ||
+          sessionId || null;
+        const tsqBankTxnId =
+          (tsqInner?.bankTransactionId as string | undefined) ||
+          (tsqInner?.BankTransactionId as string | undefined) || null;
+        const tsqTxnId =
+          (tsqInner?.TxnId as string | undefined) ||
+          (tsqInner?.txnId as string | undefined) || vfdTxnId;
+        if (reservedTx?.id && (tsqSessionId || tsqBankTxnId || tsqTxnId)) {
+          await supabaseAdmin
+            .from("vfd_sandbox_transactions")
+            .update({
+              session_id: tsqSessionId,
+              vfd_reference: tsqTxnId,
+              metadata: {
+                ...(data as Record<string, unknown>),
+                stage: "committed",
+                session_id: tsqSessionId,
+                bank_transaction_id: tsqBankTxnId,
+                tsq_response: tsq,
+              },
+            })
+            .eq("id", reservedTx.id);
+        }
+      } catch (err) {
+        console.warn("[VFD Transfer] post-transfer TSQ failed:", err instanceof Error ? err.message : String(err));
+      }
+    })();
+
+
     // ─── INTERBANK FEE + STAMP DUTY ───
     // Only inter (NIBSS) transfers incur fee + stamp duty. Intra transfers are
     // routed through the virtual-account short-circuit above and never reach
