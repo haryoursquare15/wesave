@@ -1807,7 +1807,7 @@ async function handleTransfer(
     // bankTransactionId. Hit /transactions once to capture both into the row
     // before any webhook arrives. Fire-and-forget — failures here don't
     // unwind the (already-committed) transfer.
-    (async () => {
+    await (async () => {
       try {
         const tsqParams: Record<string, string> = { reference };
         if (sessionId) tsqParams.sessionId = sessionId;
