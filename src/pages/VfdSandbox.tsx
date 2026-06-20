@@ -146,18 +146,26 @@ function VfdSandboxInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, user, session?.access_token]);
 
-  /* ─── Vestara Balance (SINGLE SOURCE OF TRUTH) ─── */
+  /* ─── Balance: VFD live wallet + Vestara locked/interest ─── */
   const refreshVestaraBalance = useCallback(async () => {
+    // 1) VFD is the source of truth for the spendable wallet on the user's unique NUBAN.
+    const vfdRes = await vfd.getUserBalance();
+    const vfdWallet = Number(
+      (vfdRes?.data as { available_balance?: number } | null)?.available_balance ?? 0
+    );
+
+    // 2) Vestara still owns locked savings + accrued interest (VFD doesn't model these).
     const summary = await getVestaraBalanceSummary();
-    if (summary) {
-      setVestaraBalance({
-        total_balance: summary.total,
-        available_balance: summary.wallet,
-        locked_balance: summary.locked_savings,
-        savings_balance: summary.accrued_interest,
-      });
-    }
-  }, [getVestaraBalanceSummary]);
+    const locked = Number(summary?.locked_savings ?? 0);
+    const interest = Number(summary?.accrued_interest ?? 0);
+
+    setVestaraBalance({
+      total_balance: vfdWallet + locked + interest,
+      available_balance: vfdWallet,
+      locked_balance: locked,
+      savings_balance: interest,
+    });
+  }, [getVestaraBalanceSummary, vfd]);
 
   /* ─── Vestara Locked Funds ─── */
   const refreshVestaraLockedFunds = useCallback(async () => {
