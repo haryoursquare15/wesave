@@ -431,10 +431,11 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
         </div>
 
         <Button onClick={handleTransferRequest}
-          disabled={loading || !form.toAccount || !form.bankCode || !form.amount || !form.beneficiaryName}
+          disabled={submitting || verifying || !form.toAccount || !form.bankCode || !form.amount || !form.beneficiaryName}
           className="w-full h-12" variant="hero">
-          {loading ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+          {submitting ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
           Send Transfer
+
         </Button>
       </motion.div>
 
