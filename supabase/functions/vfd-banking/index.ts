@@ -918,40 +918,10 @@ async function handleBankList() {
 
 // Validate Beneficiary - VFD uses GET with query params
 async function handleValidateBeneficiary(accountNo: string, bankCode: string, transferType: string = "inter") {
-  // First, check our own sandbox clients — virtual NUBANs (e.g. 9xxxxxxxxx)
-  // minted locally won't exist on VFD, so resolve them from our DB.
-  if (transferType === "intra" || accountNo.startsWith("9")) {
-    const admin = getSupabaseAdmin();
-    const { data: localClient } = await admin
-      .from("vfd_sandbox_clients")
-      .select("full_name, user_id, vfd_account_number")
-      .eq("vfd_account_number", accountNo)
-      .maybeSingle();
-    let resolvedName: string | null = localClient?.full_name ?? null;
-    // Fall back to the linked profile if the client row has no name yet.
-    if (!resolvedName && localClient?.user_id) {
-      const { data: profile } = await admin
-        .from("profiles")
-        .select("full_name")
-        .eq("id", localClient.user_id)
-        .maybeSingle();
-      resolvedName = profile?.full_name ?? null;
-      // Backfill so subsequent lookups are instant.
-      if (resolvedName) {
-        await admin
-          .from("vfd_sandbox_clients")
-          .update({ full_name: resolvedName })
-          .eq("vfd_account_number", accountNo);
-      }
-    }
-    if (resolvedName) {
-      return jsonResponse({
-        data: { accountName: resolvedName, source: "local" },
-        accountName: resolvedName,
-        vfd_status: 200,
-      });
-    }
-  }
+  // Always defer to VFD /transfer/recipient for name enquiry — even for intra-Vestara
+  // NUBANs — so the resolved account name matches VFD's records exactly. We no
+  // longer short-circuit virtual NUBANs to our local clients table.
+
 
   const { data, status } = await vfdRequest("/transfer/recipient", "GET", undefined, {
     accountNo,
