@@ -330,7 +330,7 @@ export function SandboxKYC({ vfd, onComplete }: SandboxKYCProps) {
             {reactivating ? (
               <><RefreshCw className="h-4 w-4 mr-2 animate-spin" /> Provisioning…</>
             ) : (
-              <>Reactivate account <ArrowRight className="h-4 w-4 ml-2" /></>
+              <>{hasVirtualNuban ? "Reprovision NUBAN" : "Reactivate account"} <ArrowRight className="h-4 w-4 ml-2" /></>
             )}
           </Button>
           <p className="text-[11px] text-muted-foreground text-center">
