@@ -100,7 +100,8 @@ export function SandboxKYC({ vfd, onComplete }: SandboxKYCProps) {
   const [reactivating, setReactivating] = useState(false);
 
   const currentTierNum = vfd.client?.tier ? parseInt(vfd.client.tier.replace("tier", "")) : 0;
-  const needsReactivation = currentTierNum > 0 && !vfd.client?.vfd_account_number;
+  const hasVirtualNuban = !!vfd.client?.vfd_account_number && vfd.client.vfd_account_number.startsWith("9");
+  const needsReactivation = currentTierNum > 0 && (!vfd.client?.vfd_account_number || hasVirtualNuban);
 
   const handleReactivate = async () => {
     const c = vfd.client;
@@ -121,14 +122,25 @@ export function SandboxKYC({ vfd, onComplete }: SandboxKYCProps) {
       const vfdData = result?.data as Record<string, unknown> | undefined;
       if (vfdData?.status === "00" || vfdData?.status === "01") {
         await vfd.fetchClient();
-        toast({ title: "Account reactivated", description: "Your unique NUBAN has been provisioned." });
-        onComplete();
+        const innerData = (vfdData?.data || {}) as Record<string, unknown>;
+        const newNuban = innerData?.accountNo?.toString() || "";
+        const stillVirtual = !newNuban || newNuban.startsWith("9") || newNuban === "1001695610";
+        if (stillVirtual) {
+          toast({
+            title: "VFD still returned the pool account",
+            description: "Your KYC details did not map to a unique VFD sub-NUBAN. Contact support so we can assign a real sandbox sub-account.",
+            variant: "destructive",
+          });
+        } else {
+          toast({ title: "NUBAN provisioned", description: `Your real VFD account ${newNuban} is now active.` });
+          onComplete();
+        }
       } else {
         const code = (result as Record<string, unknown> | null)?.code;
         const msg = code === "POOL_NUBAN_REJECTED"
           ? "VFD echoed the platform pool account. Please retry in a moment."
           : vfdData?.message?.toString() || "Reactivation failed";
-        toast({ title: "Reactivation failed", description: getUserFriendlyError(msg), variant: "destructive" });
+        toast({ title: "Reprovision failed", description: getUserFriendlyError(msg), variant: "destructive" });
       }
     } finally {
       setReactivating(false);
@@ -313,9 +325,11 @@ export function SandboxKYC({ vfd, onComplete }: SandboxKYCProps) {
               <RefreshCw className="h-5 w-5 text-primary" />
             </div>
             <div className="flex-1">
-              <h2 className="text-base font-bold">Reactivate your account</h2>
+              <h2 className="text-base font-bold">{hasVirtualNuban ? "Reprovision your VFD NUBAN" : "Reactivate your account"}</h2>
               <p className="text-xs text-muted-foreground mt-1">
-                You're already on Tier {currentTierNum}. We just need to provision your unique VFD account number — no need to re-enter your details.
+                {hasVirtualNuban
+                  ? `You're currently on a virtual NUBAN (${vfd.client?.vfd_account_number}). We'll provision a real VFD sub-account using your KYC on file — no need to re-enter your details.`
+                  : `You're already on Tier ${currentTierNum}. We just need to provision your unique VFD account number — no need to re-enter your details.`}
               </p>
             </div>
           </div>
@@ -327,7 +341,7 @@ export function SandboxKYC({ vfd, onComplete }: SandboxKYCProps) {
             {reactivating ? (
               <><RefreshCw className="h-4 w-4 mr-2 animate-spin" /> Provisioning…</>
             ) : (
-              <>Reactivate account <ArrowRight className="h-4 w-4 ml-2" /></>
+              <>{hasVirtualNuban ? "Reprovision NUBAN" : "Reactivate account"} <ArrowRight className="h-4 w-4 ml-2" /></>
             )}
           </Button>
           <p className="text-[11px] text-muted-foreground text-center">
