@@ -2729,7 +2729,7 @@ async function processStuckReservedTransactions(opts: { olderThanMinutes?: numbe
         await recordTxEvent(supabaseAdmin, {
           transaction_id: tx.id, user_id: tx.user_id, reference: tx.reference,
           event_type: "reconcile.reversed", actor: "cron",
-          from_status: "reserved", to_status: "reversed",
+          from_status: tx.status ?? "reserved", to_status: "reversed",
           payload: { vfd_status: vfdStatus },
         });
         if (tx.user_id) {
