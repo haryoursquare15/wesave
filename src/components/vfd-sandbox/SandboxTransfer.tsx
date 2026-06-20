@@ -159,15 +159,23 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
     setPreviewOpen(true);
   };
 
+  const [submitting, setSubmitting] = useState(false);
+
   const executeTransfer = async () => {
     const amount = parseFloat(form.amount);
     const bankName = banks.find(b => b.code === form.bankCode)?.name || form.bankCode;
-    const result = await onTransfer({
-      fromAccount: accountNumber, toAccount: form.toAccount,
-      bankCode: form.bankCode, amount,
-      narration: form.narration || "Sandbox Transfer",
-      beneficiaryName: form.beneficiaryName,
-    });
+    setSubmitting(true);
+    let result: unknown = null;
+    try {
+      result = await onTransfer({
+        fromAccount: accountNumber, toAccount: form.toAccount,
+        bankCode: form.bankCode, amount,
+        narration: form.narration || "Sandbox Transfer",
+        beneficiaryName: form.beneficiaryName,
+      });
+    } finally {
+      setSubmitting(false);
+    }
     const transferResult = result as {
       reference?: string;
       transactionId?: string;
@@ -180,6 +188,7 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
         || transferResult.transactionId;
       if (!ref) return;
       setSuccessPayload({
+
         title: "Transfer Successful",
         description: `Your transfer of ₦${amount.toLocaleString()} has been sent.`,
         details: [
