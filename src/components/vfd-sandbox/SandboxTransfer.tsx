@@ -78,18 +78,23 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
 
   const lastVerifiedRef = useRef<string>("");
   const [verifying, setVerifying] = useState(false);
+  const [verifyFailed, setVerifyFailed] = useState(false);
+  const [manualName, setManualName] = useState("");
 
   const runVerify = async (account: string, bankCode: string) => {
     const key = `${bankCode}:${account}`;
     if (lastVerifiedRef.current === key) return;
     lastVerifiedRef.current = key;
     setVerifying(true);
+    setVerifyFailed(false);
     try {
       const name = await onValidate(account, bankCode);
       if (name) {
         setForm(p => ({ ...p, beneficiaryName: name }));
+        setVerifyFailed(false);
       } else {
         setForm(p => ({ ...p, beneficiaryName: "" }));
+        setVerifyFailed(true);
         lastVerifiedRef.current = "";
       }
     } finally {
