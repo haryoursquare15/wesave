@@ -314,9 +314,11 @@ export function SandboxKYC({ vfd, onComplete }: SandboxKYCProps) {
               <RefreshCw className="h-5 w-5 text-primary" />
             </div>
             <div className="flex-1">
-              <h2 className="text-base font-bold">Reactivate your account</h2>
+              <h2 className="text-base font-bold">{hasVirtualNuban ? "Reprovision your VFD NUBAN" : "Reactivate your account"}</h2>
               <p className="text-xs text-muted-foreground mt-1">
-                You're already on Tier {currentTierNum}. We just need to provision your unique VFD account number — no need to re-enter your details.
+                {hasVirtualNuban
+                  ? `You're currently on a virtual NUBAN (${vfd.client?.vfd_account_number}). We'll provision a real VFD sub-account using your KYC on file — no need to re-enter your details.`
+                  : `You're already on Tier ${currentTierNum}. We just need to provision your unique VFD account number — no need to re-enter your details.`}
               </p>
             </div>
           </div>
