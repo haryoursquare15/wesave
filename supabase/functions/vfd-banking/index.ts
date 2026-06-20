@@ -2253,15 +2253,85 @@ async function handleGetLockConfigs() {
 
 // Get user balance (internal ledger)
 async function handleGetUserBalance(userId: string) {
+  // VFD source of truth: always hit /account/enquiry on the user's unique NUBAN
+  // so the dashboard, transfer screens, and withdrawal screens read directly
+  // from VFD instead of any cached vestara balance.
   const supabaseAdmin = getSupabaseAdmin();
-  const { data, error } = await supabaseAdmin
+  const { data: client } = await supabaseAdmin
+    .from("vfd_sandbox_clients")
+    .select("vfd_account_number")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (!client?.vfd_account_number) {
+    return jsonResponse({ data: null, error: "No VFD account found" }, 200);
+  }
+
+  // Live VFD balance
+  let liveBalance = 0;
+  let vfdRaw: unknown = null;
+  let vfdStatus = 0;
+  try {
+    const res = await vfdRequest("/account/enquiry", "GET", undefined, {
+      accountNumber: client.vfd_account_number,
+    });
+    vfdRaw = res.data;
+    vfdStatus = res.status;
+    liveBalance = extractVfdBalance(res.data);
+  } catch (err) {
+    console.error("[VFD get_user_balance] live enquiry failed", err);
+  }
+
+  // Lock + savings come from our DB (VFD doesn't model them)
+  const { data: existing } = await supabaseAdmin
     .from("vfd_user_balances")
     .select("*")
     .eq("user_id", userId)
     .maybeSingle();
 
-  if (error) return jsonResponse({ error: error.message }, 500);
-  return jsonResponse({ data });
+  const lockedBalance = toNumber(existing?.locked_balance);
+  const savingsBalance = toNumber(existing?.savings_balance);
+  // If VFD is reachable, trust it; otherwise fall back to the cached total so the UI doesn't go blank.
+  const totalBalance = vfdStatus === 200 ? liveBalance : toNumber(existing?.total_balance);
+  const availableBalance = Math.max(totalBalance - lockedBalance - savingsBalance, 0);
+  const timestamp = new Date().toISOString();
+
+  // Persist the freshly fetched balance so cached consumers (admin, audit) stay aligned.
+  if (existing) {
+    await supabaseAdmin
+      .from("vfd_user_balances")
+      .update({
+        total_balance: totalBalance,
+        locked_balance: lockedBalance,
+        savings_balance: savingsBalance,
+        last_synced_at: timestamp,
+        updated_at: timestamp,
+      })
+      .eq("user_id", userId);
+  } else {
+    await supabaseAdmin.from("vfd_user_balances").insert({
+      user_id: userId,
+      total_balance: totalBalance,
+      locked_balance: lockedBalance,
+      savings_balance: savingsBalance,
+      last_synced_at: timestamp,
+    });
+  }
+
+  return jsonResponse({
+    data: {
+      user_id: userId,
+      vfd_account_number: client.vfd_account_number,
+      total_balance: totalBalance,
+      available_balance: availableBalance,
+      locked_balance: lockedBalance,
+      savings_balance: savingsBalance,
+      last_synced_at: timestamp,
+      source: vfdStatus === 200 ? "vfd_live" : "cached_fallback",
+    },
+    vfd_status: vfdStatus,
+    vfd_raw: vfdRaw,
+  });
 }
 
 // Sync VFD balance to internal ledger
