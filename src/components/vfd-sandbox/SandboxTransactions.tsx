@@ -99,6 +99,20 @@ function getStatusStyle(status: string) {
 }
 
 export function SandboxTransactions({ transactions, loading, onRefresh, onBack }: Props) {
+  const { toast } = useToast();
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const copy = async (label: string, value: string, key: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedKey(key);
+      toast({ title: `${label} copied`, description: value });
+      setTimeout(() => setCopiedKey((k) => (k === key ? null : k)), 1500);
+    } catch {
+      toast({ title: "Copy failed", variant: "destructive" });
+    }
+  };
+
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-3">
