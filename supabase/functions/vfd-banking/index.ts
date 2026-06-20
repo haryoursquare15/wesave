@@ -918,40 +918,10 @@ async function handleBankList() {
 
 // Validate Beneficiary - VFD uses GET with query params
 async function handleValidateBeneficiary(accountNo: string, bankCode: string, transferType: string = "inter") {
-  // First, check our own sandbox clients — virtual NUBANs (e.g. 9xxxxxxxxx)
-  // minted locally won't exist on VFD, so resolve them from our DB.
-  if (transferType === "intra" || accountNo.startsWith("9")) {
-    const admin = getSupabaseAdmin();
-    const { data: localClient } = await admin
-      .from("vfd_sandbox_clients")
-      .select("full_name, user_id, vfd_account_number")
-      .eq("vfd_account_number", accountNo)
-      .maybeSingle();
-    let resolvedName: string | null = localClient?.full_name ?? null;
-    // Fall back to the linked profile if the client row has no name yet.
-    if (!resolvedName && localClient?.user_id) {
-      const { data: profile } = await admin
-        .from("profiles")
-        .select("full_name")
-        .eq("id", localClient.user_id)
-        .maybeSingle();
-      resolvedName = profile?.full_name ?? null;
-      // Backfill so subsequent lookups are instant.
-      if (resolvedName) {
-        await admin
-          .from("vfd_sandbox_clients")
-          .update({ full_name: resolvedName })
-          .eq("vfd_account_number", accountNo);
-      }
-    }
-    if (resolvedName) {
-      return jsonResponse({
-        data: { accountName: resolvedName, source: "local" },
-        accountName: resolvedName,
-        vfd_status: 200,
-      });
-    }
-  }
+  // Always defer to VFD /transfer/recipient for name enquiry — even for intra-Vestara
+  // NUBANs — so the resolved account name matches VFD's records exactly. We no
+  // longer short-circuit virtual NUBANs to our local clients table.
+
 
   const { data, status } = await vfdRequest("/transfer/recipient", "GET", undefined, {
     accountNo,
@@ -1785,7 +1755,15 @@ async function handleTransfer(
 
   const vfdData = data as Record<string, unknown>;
   const isSuccess = vfdData?.status === "00";
-  const vfdTxnId = vfdData?.data ? (vfdData.data as Record<string, unknown>)?.txnId?.toString() ?? null : null;
+  const vfdInner = (vfdData?.data as Record<string, unknown> | undefined) || {};
+  const vfdTxnId = vfdInner?.txnId?.toString() ?? null;
+  // VFD returns the NIBSS session id alongside txnId; capture every common spelling.
+  const sessionId =
+    (vfdInner?.sessionId as string | undefined)?.toString() ||
+    (vfdInner?.SessionId as string | undefined)?.toString() ||
+    (vfdInner?.sessionID as string | undefined)?.toString() ||
+    (vfdData?.sessionId as string | undefined)?.toString() ||
+    null;
   const nowIso = new Date().toISOString();
 
   // Transition the reserved tx → completed or reversed.
@@ -1796,7 +1774,8 @@ async function handleTransfer(
       committed_at: isSuccess ? nowIso : null,
       reversed_at: isSuccess ? null : nowIso,
       vfd_reference: vfdTxnId,
-      metadata: { ...(data as Record<string, unknown>), stage: isSuccess ? "committed" : "reversed" },
+      session_id: sessionId,
+      metadata: { ...(data as Record<string, unknown>), stage: isSuccess ? "committed" : "reversed", session_id: sessionId },
     })
     .eq("id", reservedTx?.id);
 
@@ -2244,15 +2223,85 @@ async function handleGetLockConfigs() {
 
 // Get user balance (internal ledger)
 async function handleGetUserBalance(userId: string) {
+  // VFD source of truth: always hit /account/enquiry on the user's unique NUBAN
+  // so the dashboard, transfer screens, and withdrawal screens read directly
+  // from VFD instead of any cached vestara balance.
   const supabaseAdmin = getSupabaseAdmin();
-  const { data, error } = await supabaseAdmin
+  const { data: client } = await supabaseAdmin
+    .from("vfd_sandbox_clients")
+    .select("vfd_account_number")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (!client?.vfd_account_number) {
+    return jsonResponse({ data: null, error: "No VFD account found" }, 200);
+  }
+
+  // Live VFD balance
+  let liveBalance = 0;
+  let vfdRaw: unknown = null;
+  let vfdStatus = 0;
+  try {
+    const res = await vfdRequest("/account/enquiry", "GET", undefined, {
+      accountNumber: client.vfd_account_number,
+    });
+    vfdRaw = res.data;
+    vfdStatus = res.status;
+    liveBalance = extractVfdBalance(res.data);
+  } catch (err) {
+    console.error("[VFD get_user_balance] live enquiry failed", err);
+  }
+
+  // Lock + savings come from our DB (VFD doesn't model them)
+  const { data: existing } = await supabaseAdmin
     .from("vfd_user_balances")
     .select("*")
     .eq("user_id", userId)
     .maybeSingle();
 
-  if (error) return jsonResponse({ error: error.message }, 500);
-  return jsonResponse({ data });
+  const lockedBalance = toNumber(existing?.locked_balance);
+  const savingsBalance = toNumber(existing?.savings_balance);
+  // If VFD is reachable, trust it; otherwise fall back to the cached total so the UI doesn't go blank.
+  const totalBalance = vfdStatus === 200 ? liveBalance : toNumber(existing?.total_balance);
+  const availableBalance = Math.max(totalBalance - lockedBalance - savingsBalance, 0);
+  const timestamp = new Date().toISOString();
+
+  // Persist the freshly fetched balance so cached consumers (admin, audit) stay aligned.
+  if (existing) {
+    await supabaseAdmin
+      .from("vfd_user_balances")
+      .update({
+        total_balance: totalBalance,
+        locked_balance: lockedBalance,
+        savings_balance: savingsBalance,
+        last_synced_at: timestamp,
+        updated_at: timestamp,
+      })
+      .eq("user_id", userId);
+  } else {
+    await supabaseAdmin.from("vfd_user_balances").insert({
+      user_id: userId,
+      total_balance: totalBalance,
+      locked_balance: lockedBalance,
+      savings_balance: savingsBalance,
+      last_synced_at: timestamp,
+    });
+  }
+
+  return jsonResponse({
+    data: {
+      user_id: userId,
+      vfd_account_number: client.vfd_account_number,
+      total_balance: totalBalance,
+      available_balance: availableBalance,
+      locked_balance: lockedBalance,
+      savings_balance: savingsBalance,
+      last_synced_at: timestamp,
+      source: vfdStatus === 200 ? "vfd_live" : "cached_fallback",
+    },
+    vfd_status: vfdStatus,
+    vfd_raw: vfdRaw,
+  });
 }
 
 // Sync VFD balance to internal ledger
@@ -2611,8 +2660,8 @@ async function processStuckReservedTransactions(opts: { olderThanMinutes?: numbe
 
   const { data: stuck, error } = await supabaseAdmin
     .from("vfd_sandbox_transactions")
-    .select("id, user_id, amount, reference, vfd_account_number, beneficiary_name, beneficiary_account, idempotency_key")
-    .eq("status", "reserved")
+    .select("id, user_id, amount, reference, session_id, vfd_reference, vfd_account_number, beneficiary_name, beneficiary_account, idempotency_key, status")
+    .in("status", ["reserved", "pending"])
     .lt("reserved_at", cutoff)
     .order("reserved_at", { ascending: true })
     .limit(limit);
@@ -2628,12 +2677,16 @@ async function processStuckReservedTransactions(opts: { olderThanMinutes?: numbe
   let pending = 0;
 
   for (const tx of stuck ?? []) {
-    if (!tx.reference) {
+    if (!tx.reference && !tx.session_id) {
       pending++;
       continue;
     }
     try {
-      const { data: query } = await vfdRequest("/transactions", "GET", undefined, { reference: tx.reference });
+      // Prefer sessionId (more authoritative on NIBSS) when we captured it.
+      const tsqParams: Record<string, string> = {};
+      if (tx.session_id) tsqParams.sessionId = tx.session_id;
+      else if (tx.reference) tsqParams.reference = tx.reference;
+      const { data: query } = await vfdRequest("/transactions", "GET", undefined, tsqParams);
       const inner = (query as Record<string, unknown>)?.data as Record<string, unknown> | undefined;
       const vfdStatus = (inner?.transactionStatus as string) || (inner?.status as string) || (query as Record<string, unknown>)?.status as string;
       const txnId = (inner?.txnId ?? inner?.sessionId)?.toString() ?? null;
@@ -2651,7 +2704,7 @@ async function processStuckReservedTransactions(opts: { olderThanMinutes?: numbe
         await recordTxEvent(supabaseAdmin, {
           transaction_id: tx.id, user_id: tx.user_id, reference: tx.reference,
           event_type: "reconcile.committed", actor: "cron",
-          from_status: "reserved", to_status: "completed",
+          from_status: tx.status ?? "reserved", to_status: "completed",
           payload: { vfd_status: vfdStatus, vfd_txn_id: txnId },
         });
         if (tx.user_id) {
@@ -2676,7 +2729,7 @@ async function processStuckReservedTransactions(opts: { olderThanMinutes?: numbe
         await recordTxEvent(supabaseAdmin, {
           transaction_id: tx.id, user_id: tx.user_id, reference: tx.reference,
           event_type: "reconcile.reversed", actor: "cron",
-          from_status: "reserved", to_status: "reversed",
+          from_status: tx.status ?? "reserved", to_status: "reversed",
           payload: { vfd_status: vfdStatus },
         });
         if (tx.user_id) {

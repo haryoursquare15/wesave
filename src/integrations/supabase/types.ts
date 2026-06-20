@@ -5813,6 +5813,7 @@ export type Database = {
           reference: string | null
           reserved_at: string | null
           reversed_at: string | null
+          session_id: string | null
           source: string | null
           status: string | null
           transaction_type: string
@@ -5836,6 +5837,7 @@ export type Database = {
           reference?: string | null
           reserved_at?: string | null
           reversed_at?: string | null
+          session_id?: string | null
           source?: string | null
           status?: string | null
           transaction_type: string
@@ -5859,6 +5861,7 @@ export type Database = {
           reference?: string | null
           reserved_at?: string | null
           reversed_at?: string | null
+          session_id?: string | null
           source?: string | null
           status?: string | null
           transaction_type?: string
