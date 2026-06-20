@@ -100,7 +100,8 @@ export function SandboxKYC({ vfd, onComplete }: SandboxKYCProps) {
   const [reactivating, setReactivating] = useState(false);
 
   const currentTierNum = vfd.client?.tier ? parseInt(vfd.client.tier.replace("tier", "")) : 0;
-  const needsReactivation = currentTierNum > 0 && !vfd.client?.vfd_account_number;
+  const hasVirtualNuban = !!vfd.client?.vfd_account_number && vfd.client.vfd_account_number.startsWith("9");
+  const needsReactivation = currentTierNum > 0 && (!vfd.client?.vfd_account_number || hasVirtualNuban);
 
   const handleReactivate = async () => {
     const c = vfd.client;
