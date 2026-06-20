@@ -1785,7 +1785,15 @@ async function handleTransfer(
 
   const vfdData = data as Record<string, unknown>;
   const isSuccess = vfdData?.status === "00";
-  const vfdTxnId = vfdData?.data ? (vfdData.data as Record<string, unknown>)?.txnId?.toString() ?? null : null;
+  const vfdInner = (vfdData?.data as Record<string, unknown> | undefined) || {};
+  const vfdTxnId = vfdInner?.txnId?.toString() ?? null;
+  // VFD returns the NIBSS session id alongside txnId; capture every common spelling.
+  const sessionId =
+    (vfdInner?.sessionId as string | undefined)?.toString() ||
+    (vfdInner?.SessionId as string | undefined)?.toString() ||
+    (vfdInner?.sessionID as string | undefined)?.toString() ||
+    (vfdData?.sessionId as string | undefined)?.toString() ||
+    null;
   const nowIso = new Date().toISOString();
 
   // Transition the reserved tx → completed or reversed.
@@ -1796,7 +1804,8 @@ async function handleTransfer(
       committed_at: isSuccess ? nowIso : null,
       reversed_at: isSuccess ? null : nowIso,
       vfd_reference: vfdTxnId,
-      metadata: { ...(data as Record<string, unknown>), stage: isSuccess ? "committed" : "reversed" },
+      session_id: sessionId,
+      metadata: { ...(data as Record<string, unknown>), stage: isSuccess ? "committed" : "reversed", session_id: sessionId },
     })
     .eq("id", reservedTx?.id);
 
