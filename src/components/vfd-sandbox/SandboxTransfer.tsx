@@ -78,18 +78,23 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
 
   const lastVerifiedRef = useRef<string>("");
   const [verifying, setVerifying] = useState(false);
+  const [verifyFailed, setVerifyFailed] = useState(false);
+  const [manualName, setManualName] = useState("");
 
   const runVerify = async (account: string, bankCode: string) => {
     const key = `${bankCode}:${account}`;
     if (lastVerifiedRef.current === key) return;
     lastVerifiedRef.current = key;
     setVerifying(true);
+    setVerifyFailed(false);
     try {
       const name = await onValidate(account, bankCode);
       if (name) {
         setForm(p => ({ ...p, beneficiaryName: name }));
+        setVerifyFailed(false);
       } else {
         setForm(p => ({ ...p, beneficiaryName: "" }));
+        setVerifyFailed(true);
         lastVerifiedRef.current = "";
       }
     } finally {
@@ -358,7 +363,11 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
           <div className="relative mt-1">
             <Input
               value={form.toAccount}
-              onChange={(e) => setForm(p => ({ ...p, toAccount: e.target.value.replace(/\D/g, "").slice(0, 10), beneficiaryName: "" }))}
+              onChange={(e) => {
+                setForm(p => ({ ...p, toAccount: e.target.value.replace(/\D/g, "").slice(0, 10), beneficiaryName: "" }));
+                setVerifyFailed(false);
+                setManualName("");
+              }}
               placeholder="10-digit account"
               maxLength={10}
               inputMode="numeric"
@@ -371,8 +380,30 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
             <p className="text-xs text-success mt-1.5 flex items-center gap-1">
               <CheckCircle2 className="h-3 w-3" /> {form.beneficiaryName}
             </p>
-          ) : form.toAccount.length === 10 && form.bankCode && !verifying ? (
+          ) : verifying ? (
             <p className="text-xs text-muted-foreground mt-1.5">Verifying…</p>
+          ) : verifyFailed && form.toAccount.length === 10 && form.bankCode ? (
+            <div className="mt-2 space-y-2">
+              <p className="text-xs text-destructive">
+                Could not auto-verify this account. Enter the beneficiary name to continue.
+              </p>
+              <Input
+                value={manualName}
+                onChange={(e) => {
+                  setManualName(e.target.value);
+                  setForm(p => ({ ...p, beneficiaryName: e.target.value }));
+                }}
+                placeholder="Beneficiary name"
+                className="h-10"
+              />
+              <button
+                type="button"
+                onClick={() => { lastVerifiedRef.current = ""; runVerify(form.toAccount, form.bankCode); }}
+                className="text-xs text-primary underline"
+              >
+                Retry verification
+              </button>
+            </div>
           ) : null}
         </div>
 

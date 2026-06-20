@@ -106,6 +106,11 @@ export function useVfdBanking() {
         if (embeddedError || (embeddedStatus && embeddedStatus !== "00")) {
           const embeddedCode = response?.code || response?.data?.code || "";
           const embeddedMsg = embeddedError || response?.data?.message || response?.message;
+          // Name enquiry is a soft check; let the caller render an inline
+          // message instead of a destructive global toast.
+          if (action === "validate_beneficiary") {
+            return { ...(response || {}), accountName: null, error: embeddedMsg };
+          }
           toast({
             title: embeddedCode === "TIER_LIMIT_EXCEEDED" || embeddedCode === "TIER_DAILY_LIMIT_EXCEEDED"
               ? "Transaction limit reached"
