@@ -122,14 +122,25 @@ export function SandboxKYC({ vfd, onComplete }: SandboxKYCProps) {
       const vfdData = result?.data as Record<string, unknown> | undefined;
       if (vfdData?.status === "00" || vfdData?.status === "01") {
         await vfd.fetchClient();
-        toast({ title: "Account reactivated", description: "Your unique NUBAN has been provisioned." });
-        onComplete();
+        const innerData = (vfdData?.data || {}) as Record<string, unknown>;
+        const newNuban = innerData?.accountNo?.toString() || "";
+        const stillVirtual = !newNuban || newNuban.startsWith("9") || newNuban === "1001695610";
+        if (stillVirtual) {
+          toast({
+            title: "VFD still returned the pool account",
+            description: "Your KYC details did not map to a unique VFD sub-NUBAN. Contact support so we can assign a real sandbox sub-account.",
+            variant: "destructive",
+          });
+        } else {
+          toast({ title: "NUBAN provisioned", description: `Your real VFD account ${newNuban} is now active.` });
+          onComplete();
+        }
       } else {
         const code = (result as Record<string, unknown> | null)?.code;
         const msg = code === "POOL_NUBAN_REJECTED"
           ? "VFD echoed the platform pool account. Please retry in a moment."
           : vfdData?.message?.toString() || "Reactivation failed";
-        toast({ title: "Reactivation failed", description: getUserFriendlyError(msg), variant: "destructive" });
+        toast({ title: "Reprovision failed", description: getUserFriendlyError(msg), variant: "destructive" });
       }
     } finally {
       setReactivating(false);
