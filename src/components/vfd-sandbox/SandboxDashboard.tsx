@@ -18,6 +18,8 @@ interface BalanceData {
   savingsBalance: number;
   accountNumber: string;
   fullName: string;
+  noVfdAccount?: boolean;
+  stale?: boolean;
 }
 
 interface Transaction {
