@@ -264,6 +264,18 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
             </motion.h2>
           </AnimatePresence>
 
+          {balance.noVfdAccount && (
+            <p className="text-[11px] opacity-80 mb-3 leading-snug">
+              No VFD account yet — complete KYC to activate your unique NUBAN and start receiving funds.
+            </p>
+          )}
+          {!balance.noVfdAccount && balance.stale && (
+            <p className="text-[11px] opacity-80 mb-3 leading-snug">
+              Live balance unavailable — showing last known figure. Pull to refresh.
+            </p>
+          )}
+
+
           {/* Account number — never show the platform pool (1001695610) as a user NUBAN */}
           {(() => {
             const POOL = "1001695610";
