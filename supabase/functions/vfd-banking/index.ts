@@ -1866,7 +1866,7 @@ async function handleTransfer(
           transfer_type: transferType,
           from_account: displayFromAccount,
           to_account: toAccount,
-          bank_code: bankCode,
+          bank_code: body.bankCode as string,
           beneficiary_name: body.beneficiaryName ?? null,
           vfd_reference: vfdTxnId,
           session_id: sessionId,
