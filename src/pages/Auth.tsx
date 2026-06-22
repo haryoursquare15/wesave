@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import wesaveLogoNew from "@/assets/wesave-logo-new.png";
+import wesaveLogoNew from "@/assets/vestara-logo.jpg";
 import { motion } from "framer-motion";
 import { Mail, Lock, User, Eye, EyeOff, ArrowRight, Users, CheckCircle } from "lucide-react";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";

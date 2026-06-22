@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import wesaveLogo from "@/assets/wesave-logo-new.png";
+import wesaveLogo from "@/assets/vestara-logo.jpg";
 
 interface VestaraLogoProps {
   className?: string;

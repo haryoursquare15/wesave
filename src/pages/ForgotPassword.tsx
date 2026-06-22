@@ -1,5 +1,5 @@
 import { useState } from "react";
-import wesaveLogoNew from "@/assets/wesave-logo-new.png";
+import wesaveLogoNew from "@/assets/vestara-logo.jpg";
 import { motion } from "framer-motion";
 import { Mail, ArrowLeft, Users } from "lucide-react";
 import { Link } from "react-router-dom";
