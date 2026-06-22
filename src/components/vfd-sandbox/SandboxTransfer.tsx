@@ -179,13 +179,22 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
     const transferResult = result as {
       reference?: string;
       transactionId?: string;
-      data?: { status?: string; txnId?: string; reference?: string; message?: string };
+      vfd_reference?: string;
+      session_id?: string;
+      bank_transaction_id?: string;
+      data?: { status?: string; txnId?: string; reference?: string; sessionId?: string; bankTransactionId?: string; message?: string };
     } | null;
     if (transferResult?.data?.status === "00") {
       const ref = transferResult.reference
         || transferResult.data?.reference
         || transferResult.data?.txnId
         || transferResult.transactionId;
+      const vfdRef = transferResult.vfd_reference
+        || transferResult.data?.reference
+        || transferResult.bank_transaction_id
+        || transferResult.data?.bankTransactionId
+        || null;
+      const sessionId = transferResult.session_id || transferResult.data?.sessionId || null;
       if (!ref) {
         toast({ title: "Transfer confirmed", description: "The transfer succeeded, but no bank reference was returned yet. Refresh history in a moment." });
         return;
@@ -202,6 +211,8 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
           { label: "Account", value: form.toAccount },
           ...(form.narration ? [{ label: "Narration", value: form.narration }] : []),
           { label: "Date", value: new Date().toLocaleString("en-NG") },
+          ...(vfdRef ? [{ label: "VFD reference", value: vfdRef }] : []),
+          ...(sessionId ? [{ label: "NIBSS session", value: sessionId }] : []),
         ],
         reference: ref,
         primaryLabel: "Done",
