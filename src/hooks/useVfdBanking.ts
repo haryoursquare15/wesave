@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
 import { useToast } from "@/hooks/use-toast";
 
@@ -52,7 +52,8 @@ export function useVfdBanking() {
 
   const invokeVfd = useCallback(
     async (action: string, body: Record<string, unknown> = {}) => {
-      const accessToken = session?.access_token;
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token || session?.access_token;
       if (!accessToken) {
         toast({ title: "Not authenticated", variant: "destructive" });
         return null;
@@ -60,12 +61,23 @@ export function useVfdBanking() {
 
       setLoading(true);
       try {
-        const { data, error } = await supabase.functions.invoke("vfd-banking", {
-          body: { action, ...body },
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        });
+        let data: any = null;
+        let error: any = null;
+        const isSendError = (err: unknown) => {
+          const msg = err instanceof Error ? err.message : String(err || "");
+          return /failed to send|unable to send|networkerror|temporarily unavailable|service_degraded/i.test(msg);
+        };
+
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          const result = await supabase.functions.invoke("vfd-banking", {
+            body: { action, ...body },
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+          data = result.data;
+          error = result.error;
+          if (!error || !isSendError(error) || attempt === 1) break;
+          await new Promise((resolve) => setTimeout(resolve, 350));
+        }
 
         if (error) {
           // Pull the real backend error body (FunctionsHttpError hides it
@@ -85,7 +97,9 @@ export function useVfdBanking() {
             title: backendCode === "TIER_LIMIT_EXCEEDED" || backendCode === "TIER_DAILY_LIMIT_EXCEEDED"
               ? "Transaction limit reached"
               : "Transaction failed",
-            description: backendMsg || getUserFriendlyError(error.message),
+            description: backendMsg || (isSendError(error)
+              ? "We couldn't reach the banking service. Please try again in a moment."
+              : getUserFriendlyError(error instanceof Error ? error.message : String(error))),
             variant: "destructive",
           });
           return null;
@@ -139,7 +153,7 @@ export function useVfdBanking() {
         setLoading(false);
       }
     },
-    [session?.access_token, toast]
+    [session?.access_token, supabase, toast]
   );
 
   const fetchClient = useCallback(async () => {
@@ -153,34 +167,6 @@ export function useVfdBanking() {
     if (result?.data) setTransactions(result.data);
     return result;
   }, [invokeVfd]);
-
-  // Auto-refresh transactions via realtime subscription
-  useEffect(() => {
-    const userId = session?.user?.id;
-    if (!userId) return;
-
-    const channel = supabase
-      .channel(`vfd-tx-${userId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'vfd_sandbox_transactions',
-          filter: `user_id=eq.${userId}`,
-        },
-        () => {
-          invokeVfd("get_transactions").then((result) => {
-            if (result?.data) setTransactions(result.data);
-          });
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [session?.user?.id, invokeVfd]);
 
   const lookupBvn = useCallback(
     (bvn: string) => invokeVfd("bvn_lookup", { bvn }),
