@@ -232,8 +232,20 @@ function VfdSandboxInner() {
       )
       .subscribe();
 
+    // Force a fresh VFD enquiry whenever the tab regains focus or becomes
+    // visible, so the displayed balance always reflects the actual VFD
+    // figure rather than any cached value the user last saw.
+    const onFocus = () => refreshNow();
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") refreshNow();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+
     return () => {
       void sandboxSupabase.removeChannel(channel);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [user?.id, session?.access_token, kycDone, refreshVestaraBalance, refreshVestaraTransactions, fetchVfdTransactions]);
 
