@@ -55,19 +55,24 @@ async function vfdAccountEnquiry(accountNumber: string): Promise<{
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
-  // Auth: CRON_SECRET required (cron-only).
-  const cronSecret = Deno.env.get("CRON_SECRET");
-  const provided =
-    req.headers.get("x-cron-secret") ||
-    (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
-  if (!cronSecret || provided !== cronSecret) {
-    return json({ success: false, error: "Forbidden" }, 403);
-  }
-
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
+
+  // Auth: cron token stored in internal_cron_tokens (service-role readable only).
+  const provided =
+    req.headers.get("x-cron-secret") ||
+    (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+  const { data: tokenRow } = await supabase
+    .from("internal_cron_tokens")
+    .select("token")
+    .eq("name", "vfd_pool_reconciler")
+    .maybeSingle();
+  if (!tokenRow?.token || provided !== tokenRow.token) {
+    return json({ success: false, error: "Forbidden" }, 403);
+  }
+
 
   const body = await req.json().catch(() => ({}));
   const mode = (body.mode as string) || "corporate_pool"; // 'corporate_pool' | 'per_nuban' | 'both'
