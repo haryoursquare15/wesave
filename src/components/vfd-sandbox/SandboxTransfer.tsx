@@ -186,7 +186,10 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
         || transferResult.data?.reference
         || transferResult.data?.txnId
         || transferResult.transactionId;
-      if (!ref) return;
+      if (!ref) {
+        toast({ title: "Transfer confirmed", description: "The transfer succeeded, but no bank reference was returned yet. Refresh history in a moment." });
+        return;
+      }
       setSuccessPayload({
 
         title: "Transfer Successful",
@@ -431,7 +434,7 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
         </div>
 
         <Button onClick={handleTransferRequest}
-          disabled={submitting || verifying || !form.toAccount || !form.bankCode || !form.amount || !form.beneficiaryName}
+          disabled={submitting || verifying || !form.toAccount || !form.bankCode || !(parseFloat(form.amount) > 0) || !form.beneficiaryName}
           className="w-full h-12" variant="hero">
           {submitting ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
           Send Transfer
