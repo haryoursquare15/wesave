@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
 import { useToast } from "@/hooks/use-toast";
 
@@ -167,34 +167,6 @@ export function useVfdBanking() {
     if (result?.data) setTransactions(result.data);
     return result;
   }, [invokeVfd]);
-
-  // Auto-refresh transactions via realtime subscription
-  useEffect(() => {
-    const userId = session?.user?.id;
-    if (!userId) return;
-
-    const channel = supabase
-      .channel(`vfd-tx-${userId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'vfd_sandbox_transactions',
-          filter: `user_id=eq.${userId}`,
-        },
-        () => {
-          invokeVfd("get_transactions").then((result) => {
-            if (result?.data) setTransactions(result.data);
-          });
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [session?.user?.id, invokeVfd]);
 
   const lookupBvn = useCallback(
     (bvn: string) => invokeVfd("bvn_lookup", { bvn }),
