@@ -1199,6 +1199,27 @@ export type Database = {
           },
         ]
       }
+      internal_cron_tokens: {
+        Row: {
+          created_at: string
+          name: string
+          token: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          name: string
+          token: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          name?: string
+          token?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       intra_transfer_reports: {
         Row: {
           amount: number
