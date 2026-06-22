@@ -1020,8 +1020,37 @@ async function quoteTransferFees(
   amount: number,
   transferType: "intra" | "inter",
 ): Promise<TransferFeeQuote> {
-  const snap = await getVestaraSettlementSnapshot(admin, userId);
-  const walletBalance = Number(snap.walletBalance || 0);
+  // Source of truth for the sender's wallet shown in the transfer preview
+  // must match the dashboard: live VFD /account/enquiry for real NUBANs,
+  // internal ledger only as a fallback. Using vestara_accounts.balance here
+  // caused the preview ("Wallet ₦21k") to diverge from the dashboard
+  // ("Available ₦55k") for users with a real VFD account.
+  let walletBalance = 0;
+  try {
+    const { data: client } = await admin
+      .from("vfd_sandbox_clients")
+      .select("vfd_account_number")
+      .eq("user_id", userId)
+      .maybeSingle();
+    const accountNo = (client as { vfd_account_number?: string } | null)?.vfd_account_number;
+    if (accountNo && !accountNo.startsWith("9")) {
+      try {
+        const res = await vfdRequest("/account/enquiry", "GET", undefined, { accountNumber: accountNo });
+        const parsed = (res.data as { status?: string } | null)?.status;
+        if (res.status === 200 && parsed === "00") {
+          walletBalance = extractVfdBalance(res.data);
+        }
+      } catch (err) {
+        console.error("[quoteTransferFees] live VFD enquiry failed", err);
+      }
+    }
+  } catch (err) {
+    console.error("[quoteTransferFees] client lookup failed", err);
+  }
+  if (!walletBalance) {
+    const snap = await getVestaraSettlementSnapshot(admin, userId);
+    walletBalance = Number(snap.walletBalance || 0);
+  }
 
   if (transferType === "intra") {
     return {
