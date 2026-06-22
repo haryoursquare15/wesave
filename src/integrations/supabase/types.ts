@@ -2196,6 +2196,45 @@ export type Database = {
         }
         Relationships: []
       }
+      reconciliation_runs: {
+        Row: {
+          created_at: string
+          details: Json | null
+          id: string
+          ledger_sum: number | null
+          notes: string | null
+          run_at: string
+          run_type: string
+          status: string
+          variance: number | null
+          vfd_corporate_balance: number | null
+        }
+        Insert: {
+          created_at?: string
+          details?: Json | null
+          id?: string
+          ledger_sum?: number | null
+          notes?: string | null
+          run_at?: string
+          run_type?: string
+          status: string
+          variance?: number | null
+          vfd_corporate_balance?: number | null
+        }
+        Update: {
+          created_at?: string
+          details?: Json | null
+          id?: string
+          ledger_sum?: number | null
+          notes?: string | null
+          run_at?: string
+          run_type?: string
+          status?: string
+          variance?: number | null
+          vfd_corporate_balance?: number | null
+        }
+        Relationships: []
+      }
       recurring_webhook_logs_test: {
         Row: {
           amount: number | null
