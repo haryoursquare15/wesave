@@ -61,8 +61,8 @@ export function useVfdBanking() {
 
       setLoading(true);
       try {
-        let data: unknown = null;
-        let error: unknown = null;
+        let data: any = null;
+        let error: any = null;
         const isSendError = (err: unknown) => {
           const msg = err instanceof Error ? err.message : String(err || "");
           return /failed to send|unable to send|networkerror|temporarily unavailable|service_degraded/i.test(msg);
