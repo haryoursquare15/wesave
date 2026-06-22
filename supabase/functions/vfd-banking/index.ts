@@ -2597,9 +2597,6 @@ async function handleGetUserBalance(userId: string) {
         ? { live_balance: vfdLiveBalance, ok: vfdOk, swept_to_pool: vfdOk && vfdLiveBalance !== null && vfdLiveBalance < totalBalance }
         : null,
     },
-
-    vfd_status: vfdStatus,
-    vfd_raw: vfdRaw,
   });
 }
 
