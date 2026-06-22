@@ -1849,9 +1849,18 @@ async function handleTransfer(
         const tsqBankTxnId =
           (tsqInner?.bankTransactionId as string | undefined) ||
           (tsqInner?.BankTransactionId as string | undefined) || null;
-        const tsqTxnId =
+        const tsqReference =
+          (tsqInner?.reference as string | number | undefined)?.toString() || null;
+        const tsqInnerTxnId =
           (tsqInner?.TxnId as string | undefined) ||
-          (tsqInner?.txnId as string | undefined) || vfdTxnId;
+          (tsqInner?.txnId as string | undefined) || null;
+        // Same precedence as the main path: real VFD reference > bank txn id >
+        // echoed txnId (only if it differs from our client reference).
+        const tsqTxnId =
+          tsqReference ||
+          tsqBankTxnId ||
+          (tsqInnerTxnId && tsqInnerTxnId !== reference ? tsqInnerTxnId : null) ||
+          vfdTxnId;
         if (reservedTx?.id && (tsqSessionId || tsqBankTxnId || tsqTxnId)) {
           await supabaseAdmin
             .from("vfd_sandbox_transactions")
@@ -1863,6 +1872,7 @@ async function handleTransfer(
                 stage: "committed",
                 session_id: tsqSessionId,
                 bank_transaction_id: tsqBankTxnId,
+                vfd_reference: tsqReference,
                 tsq_response: tsq,
               },
             })
