@@ -2015,7 +2015,14 @@ async function handleTransfer(
     } catch (_) { /* best-effort */ }
   }
 
-  return jsonResponse({ data, vfd_status: status, reference });
+  return jsonResponse({
+    data,
+    vfd_status: status,
+    reference,
+    vfd_reference: vfdTxnId,
+    session_id: sessionId,
+    bank_transaction_id: vfdBankTxnId,
+  });
 }
 
 // Sandbox Credit - per VFD docs requires senderAccountNo and senderBank
