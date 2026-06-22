@@ -198,10 +198,10 @@ export function SandboxTransactions({ transactions, loading, onRefresh, onBack }
                     {tx.session_id && (
                       <button
                         type="button"
-                        onClick={() => copy("Session ID", tx.session_id!, `${tx.id}-sid`)}
+                        onClick={() => copy("NIBSS session ID", tx.session_id!, `${tx.id}-sid`)}
                         className="w-full flex items-center justify-between gap-2 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
                       >
-                        <span className="shrink-0">Session ID</span>
+                        <span className="shrink-0">NIBSS session</span>
                         <span className="font-mono truncate flex-1 text-right">{tx.session_id}</span>
                         {copiedKey === `${tx.id}-sid`
                           ? <Check className="h-3 w-3 text-success shrink-0" />
