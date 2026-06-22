@@ -433,7 +433,7 @@ function VfdSandboxInner() {
     );
   }
 
-  // Use Vestara ledger balance as sole source of truth
+  // VFD live balance is the source of truth for the spendable wallet.
   const balanceData = {
     totalBalance: vestaraBalance ? vestaraBalance.total_balance : 0,
     availableBalance: vestaraBalance ? vestaraBalance.available_balance : 0,
@@ -441,6 +441,8 @@ function VfdSandboxInner() {
     savingsBalance: vestaraBalance ? vestaraBalance.savings_balance : 0,
     accountNumber: vfd.client?.vfd_account_number || "—",
     fullName: vfd.client?.full_name || "—",
+    noVfdAccount: vestaraBalance ? !!vestaraBalance.no_vfd_account : false,
+    stale: vestaraBalance ? !!vestaraBalance.stale : false,
   };
 
   // Compute accrued interest per lock from accrued_interest accounts
