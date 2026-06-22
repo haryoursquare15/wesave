@@ -308,22 +308,20 @@ function VfdSandboxInner() {
     return [base];
   });
 
-  /* ─── Fund via Vestara Deposit ONLY (no dual-write) ─── */
+  /* ─── Fund via VFD sandbox credit; backend mirrors successful credit to ledger. ─── */
   const handleFund = async (amount: number) => {
-    const result = await vestara.deposit(amount);
-    if (result) {
-      toast({ title: "Account funded!", description: `₦${amount.toLocaleString()} credited via ledger` });
-      // Also credit VFD sandbox for external parity (async, non-blocking)
-      if (vfd.client?.vfd_account_number) {
-        vfd.sandboxCredit(vfd.client.vfd_account_number, amount).catch(() => {
-          console.warn("VFD sandbox credit failed (non-critical)");
-        });
-      }
-      setTimeout(async () => {
-        await refreshVestaraBalance();
-        await refreshVestaraTransactions();
-      }, 500);
+    const accountNo = vfd.client?.vfd_account_number;
+    if (!accountNo || accountNo === "—") {
+      toast({ title: "Account not ready", description: "Complete KYC first, then try funding again.", variant: "destructive" });
+      return false;
     }
+
+    const result = await vfd.sandboxCredit(accountNo, amount);
+    if (!result) return false;
+
+    toast({ title: "Account funded!", description: `₦${amount.toLocaleString()} credited to your wallet` });
+    await Promise.all([refreshVestaraBalance(), refreshVestaraTransactions(), fetchVfdTransactions()]);
+    return true;
   };
 
   /* ─── Transfer ───

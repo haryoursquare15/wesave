@@ -2056,6 +2056,7 @@ async function handleSandboxCredit(userId: string, accountNo: string, amount: nu
   }
 
   const reference = `VFD-credit-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+  const ledgerReference = `${reference}-LEDGER`;
 
   // ─── PHASE 1: idempotency for sandbox credit ───
   const idemKey = reference;
@@ -2140,11 +2141,42 @@ async function handleSandboxCredit(userId: string, accountNo: string, amount: nu
     http_status: status,
   });
 
-  // Auto-sync internal ledger after successful credit
+  // Auto-settle internal ledger after successful VFD sandbox credit. The VFD
+  // history row alone is not spendable balance; Vestara's double-entry ledger
+  // is the authoritative wallet balance used by dashboard + transfer checks.
   if (isSuccess) {
+    const { data: ledgerDeposit, error: ledgerErr } = await supabaseAdmin.rpc("vestara_deposit", {
+      _user_id: userId,
+      _amount: amount,
+      _reference: ledgerReference,
+      _metadata: {
+        source: "vfd_sandbox_credit",
+        vfd_reference: reference,
+        account_no: accountNo,
+        vfd_response: data,
+      },
+    });
+    const ledgerResult = ledgerDeposit as { success?: boolean; error?: string } | null;
+    if (ledgerErr || !ledgerResult?.success) {
+      console.error("[VFD sandbox_credit] vestara_deposit failed:", ledgerErr || ledgerResult);
+      await supabaseAdmin
+        .from("vfd_sandbox_transactions")
+        .update({
+          status: "failed",
+          metadata: { ...(data as Record<string, unknown>), ledger_error: ledgerErr?.message || ledgerResult?.error || "ledger_deposit_failed" },
+        })
+        .eq("reference", reference);
+      await settleIdempotencyKey(supabaseAdmin, idemKey, {
+        status: "failed",
+        response: { error: "Ledger settlement failed", vfd_response: data },
+        http_status: status,
+      });
+      return jsonResponse({ error: "Credit could not be settled. Please try again.", code: "LEDGER_SETTLEMENT_FAILED", reference }, 500);
+    }
+
     await ensureBalanceRow(supabaseAdmin, userId, {
       accountNo,
-      preserveExisting: true,
+      preserveExisting: false,
     });
     try {
       await supabaseAdmin.from("vfd_sandbox_notifications").insert({
