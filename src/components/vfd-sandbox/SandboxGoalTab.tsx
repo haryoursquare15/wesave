@@ -227,7 +227,7 @@ export function SandboxGoalTab() {
           <SocialShareButtons
             url={`${window.location.origin}/goal/${c.campaign_slug || c.id}`}
             title={c.title}
-            message={`Help support "${c.title}" on Wesave`}
+            message={`Help support "${c.title}" on Vestara`}
           />
         </div>
 
@@ -257,7 +257,7 @@ export function SandboxGoalTab() {
           <div className="flex items-start gap-2">
             <AlertTriangle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
             <p className="text-xs text-muted-foreground">
-              Contributions are held in campaign escrow and can be withdrawn by the campaign owner to their wallet. Wesave coordinates the escrow but does not own or control the funds.
+              Contributions are held in campaign escrow and can be withdrawn by the campaign owner to their wallet. Vestara coordinates the escrow but does not own or control the funds.
             </p>
           </div>
         </div>
@@ -339,7 +339,7 @@ export function SandboxGoalTab() {
                 </Button>
               </div>
               <p className="text-[11px] text-muted-foreground p-2 rounded bg-muted/30">
-                Contributions are held in this campaign's escrow until you withdraw them to your wallet. Wesave does not access or hold escrow funds for any other purpose.
+                Contributions are held in this campaign's escrow until you withdraw them to your wallet. Vestara does not access or hold escrow funds for any other purpose.
               </p>
             </TabsContent>
           )}
@@ -365,7 +365,7 @@ export function SandboxGoalTab() {
         <div className="flex items-start gap-2">
           <AlertTriangle className="h-4 w-4 text-primary mt-0.5" />
           <p className="text-xs text-muted-foreground">
-            Contributions are held in each campaign's escrow until the owner withdraws them to their wallet. Wesave coordinates the escrow but does not own or use the funds.
+            Contributions are held in each campaign's escrow until the owner withdraws them to their wallet. Vestara coordinates the escrow but does not own or use the funds.
           </p>
         </div>
       </div>

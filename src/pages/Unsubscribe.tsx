@@ -82,7 +82,7 @@ export default function Unsubscribe() {
         {state === "ready" && (
           <>
             <p className="text-muted-foreground mb-6">
-              Click below to unsubscribe from WeSave emails. You can still receive critical account and transaction emails.
+              Click below to unsubscribe from Vestara emails. You can still receive critical account and transaction emails.
             </p>
             <Button className="w-full" onClick={confirm}>Confirm Unsubscribe</Button>
           </>

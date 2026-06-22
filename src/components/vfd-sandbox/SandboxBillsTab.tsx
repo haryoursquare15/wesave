@@ -404,7 +404,7 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
     }
   };
 
-  /* ─── Split: search WeSave users for invite ─── */
+  /* ─── Split: search Vestara users for invite ─── */
   useEffect(() => {
     if (splitStage !== "invite") return;
     const q = splitSearch.trim();

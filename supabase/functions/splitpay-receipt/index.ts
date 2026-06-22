@@ -61,7 +61,7 @@ function buildReceiptHtml(
           <!-- Logo -->
           <tr>
             <td style="padding:0 0 24px;">
-              <img src="${BRAND.logoUrl}" width="48" height="48" alt="WeSave" style="border-radius:8px;display:block;" />
+              <img src="${BRAND.logoUrl}" width="48" height="48" alt="Vestara" style="border-radius:8px;display:block;" />
             </td>
           </tr>
 
@@ -176,8 +176,8 @@ function buildReceiptHtml(
           <!-- CTA -->
           <tr>
             <td style="padding:0 0 28px;">
-              <a href="https://app.wesave.ng/split-pay" style="display:inline-block;background-color:${BRAND.orange};color:${BRAND.orangeLight};font-size:15px;font-weight:600;text-decoration:none;border-radius:12px;padding:14px 28px;">
-                View in WeSave
+              <a href="https://app.vestara.ng/split-pay" style="display:inline-block;background-color:${BRAND.orange};color:${BRAND.orangeLight};font-size:15px;font-weight:600;text-decoration:none;border-radius:12px;padding:14px 28px;">
+                View in Vestara
               </a>
             </td>
           </tr>
@@ -193,10 +193,10 @@ function buildReceiptHtml(
           <tr>
             <td>
               <p style="margin:0 0 8px;font-size:12px;color:${BRAND.textMuted};line-height:1.5;">
-                This is a transaction receipt from WeSave SplitPay. Payments were made directly from participant wallets.
+                This is a transaction receipt from Vestara SplitPay. Payments were made directly from participant wallets.
               </p>
               <p style="margin:0;font-size:12px;color:${BRAND.orange};font-weight:500;">
-                WeSave — Save Together, Grow Together 🌍
+                Vestara — Save Together, Grow Together 🌍
               </p>
             </td>
           </tr>
@@ -317,9 +317,9 @@ serve(async (req) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          from: 'WeSave <notify@wesave.ng>',
+          from: 'Vestara <notify@vestara.ng>',
           to: [profile.email],
-          subject: `🧾 WeSave — SplitPay Receipt: ${splitReq.purpose}`,
+          subject: `🧾 Vestara — SplitPay Receipt: ${splitReq.purpose}`,
           html,
         }),
       });

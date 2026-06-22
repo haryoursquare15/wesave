@@ -55,7 +55,7 @@ serve(async (req) => {
     async function getChargeEmail(tokenData: any): Promise<string> {
       if (tokenData.charge_email) return tokenData.charge_email;
       const { data: profile } = await supabase.from('profiles').select('email').eq('id', tokenData.user_id).single();
-      return profile?.email || 'test@wesave.ng';
+      return profile?.email || 'test@vestara.ng';
     }
 
     // ========== HELPER: Get next payment cycle ==========
@@ -185,7 +185,7 @@ serve(async (req) => {
               amount,
               email: chargeEmail,
               tx_ref: txRef,
-              narration: `WeSave Cron Recurring Test - Cycle ${nextCycle}`,
+              narration: `Vestara Cron Recurring Test - Cycle ${nextCycle}`,
             }),
           });
 
@@ -266,8 +266,8 @@ serve(async (req) => {
           amount: amount || 1000,
           currency: 'NGN',
           redirect_url: redirectUrl,
-          customer: { email: email || 'test@wesave.ng', name: name || 'Test User' },
-          customizations: { title: 'WeSave Recurring Test', description: 'Card tokenization test' },
+          customer: { email: email || 'test@vestara.ng', name: name || 'Test User' },
+          customizations: { title: 'Vestara Recurring Test', description: 'Card tokenization test' },
           meta: { test_mode: true, purpose: 'recurring_token_generation' },
         },
       }), {
@@ -327,7 +327,7 @@ serve(async (req) => {
             amount,
             email: userEmail,
             tx_ref: txRef,
-            narration: `WeSave Recurring Test - Cycle ${nextCycle}`,
+            narration: `Vestara Recurring Test - Cycle ${nextCycle}`,
           }),
         });
 

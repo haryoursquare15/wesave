@@ -168,11 +168,11 @@ serve(async (req) => {
         account_number: merchant_account,
         amount: merchant_amount,
         currency: 'NGN',
-        narration: `WeSave SplitPay settlement for "${purpose}"`,
+        narration: `Vestara SplitPay settlement for "${purpose}"`,
         reference: transferRef,
         debit_currency: 'NGN',
         meta: [{
-          sender: 'WeSave',
+          sender: 'Vestara',
           sender_country: 'NG',
           mobile_number: '08000000000',
         }],

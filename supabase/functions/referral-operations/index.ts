@@ -45,7 +45,7 @@ serve(async (req) => {
 
       return new Response(JSON.stringify({
         referral_code: profile?.referral_code,
-        referral_link: `https://app.wesave.ng/auth?mode=signup&ref=${profile?.referral_code}`,
+        referral_link: `https://app.vestara.ng/auth?mode=signup&ref=${profile?.referral_code}`,
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });

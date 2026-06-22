@@ -2,7 +2,7 @@ import { motion } from "framer-motion";
 import { ArrowRight, Star, Check } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { WeSaveLogo } from "@/components/WeSaveLogo";
+import { VestaraLogo } from "@/components/VestaraLogo";
 
 const benefits = [
   "Automated contributions & payouts",
@@ -20,7 +20,7 @@ export function LandingHero() {
         {/* Nav */}
         <nav className="flex items-center justify-between mb-16">
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
-            <WeSaveLogo className="h-12" />
+            <VestaraLogo className="h-12" />
           </motion.div>
           <motion.div
             initial={{ opacity: 0, x: 20 }}

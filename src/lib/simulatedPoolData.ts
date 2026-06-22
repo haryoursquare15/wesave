@@ -68,7 +68,7 @@ const ACTIVITY_TEMPLATES: Omit<ActivityMessage, "id" | "timeAgo">[] = [
   { emoji: "🌟", message: "The Force welcomed a new member — 2 spots left.", type: "slots" },
   { emoji: "📈", message: "Naija Builders is growing — 3 members and counting.", type: "milestone" },
   { emoji: "🏅", message: "Weekly Risers members earned credit score boosts after completing Cycle 1.", type: "badge" },
-  { emoji: "🚀", message: "8 thrift groups created in WeSave's first 2 months!", type: "milestone" },
+  { emoji: "🚀", message: "8 thrift groups created in Vestara's first 2 months!", type: "milestone" },
 ];
 
 const TIME_AGOS = [

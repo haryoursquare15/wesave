@@ -180,7 +180,7 @@ serve(async (req) => {
               account_number: PLATFORM_BANK_ACCOUNT,
               amount: settleAmount,
               currency: 'NGN',
-              narration: `WeSave platform settlement - ${transferRef}`,
+              narration: `Vestara platform settlement - ${transferRef}`,
               reference: transferRef,
               debit_currency: 'NGN',
             }),

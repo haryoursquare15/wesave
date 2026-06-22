@@ -411,10 +411,10 @@ serve(async (req) => {
             account_number: accountNumber,
             amount: transferAmount,
             currency: 'NGN',
-            narration: 'WeSave withdrawal',
+            narration: 'Vestara withdrawal',
             reference: withdrawRef,
             debit_currency: 'NGN',
-            meta: [{ sender: 'WeSave', sender_country: 'NG', mobile_number: '' }],
+            meta: [{ sender: 'Vestara', sender_country: 'NG', mobile_number: '' }],
           }),
         });
 

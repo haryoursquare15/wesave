@@ -5,7 +5,7 @@ const testimonials = [
   {
     name: "Chioma A.",
     role: "Lagos, Nigeria",
-    quote: "WeSave helped me save ₦500,000 for my shop renovation. The auto-debit feature made it effortless!",
+    quote: "Vestara helped me save ₦500,000 for my shop renovation. The auto-debit feature made it effortless!",
     rating: 5,
   },
   {
@@ -17,7 +17,7 @@ const testimonials = [
   {
     name: "Fatima B.",
     role: "Kano, Nigeria",
-    quote: "My women's group has been using WeSave for 6 months. The trust rating system keeps everyone accountable.",
+    quote: "My women's group has been using Vestara for 6 months. The trust rating system keeps everyone accountable.",
     rating: 5,
   },
 ];
@@ -37,7 +37,7 @@ export function LandingTestimonials() {
             What Our Users Say
           </h2>
           <p className="text-muted-foreground max-w-2xl mx-auto">
-            Thousands of Nigerians trust WeSave to manage their rotating savings.
+            Thousands of Nigerians trust Vestara to manage their rotating savings.
           </p>
         </motion.div>
 

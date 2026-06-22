@@ -224,7 +224,7 @@ function UserActionsDialog({ user, onClose, onAction }: UserActionsDialogProps) 
               )}
             </div>
             <p className="text-xs text-muted-foreground">
-              Avoid common words/dates (e.g. "password123", "WeSave2024"). The system rejects leaked or weak passwords. Share securely; user should change after sign-in.
+              Avoid common words/dates (e.g. "password123", "Vestara2024"). The system rejects leaked or weak passwords. Share securely; user should change after sign-in.
             </p>
           </div>
         )}

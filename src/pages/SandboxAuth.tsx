@@ -113,8 +113,8 @@ export default function SandboxAuth() {
 
           <p className="text-sm text-muted-foreground mb-6">
             {isSignUp
-              ? "Create a separate test account to validate KYC and onboarding flows without touching your WeSave account."
-              : "Sign in with a sandbox account. This session is independent from your main WeSave login."}
+              ? "Create a separate test account to validate KYC and onboarding flows without touching your Vestara account."
+              : "Sign in with a sandbox account. This session is independent from your main Vestara login."}
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -211,7 +211,7 @@ export default function SandboxAuth() {
           <div className="mt-6 p-3 rounded-lg bg-muted/50 border border-border/50">
             <p className="text-xs text-muted-foreground">
               💡 <strong>Tip:</strong> Use any email like <code className="text-foreground">test1@sandbox.local</code>.
-              You can stay logged into WeSave in another tab while you test here.
+              You can stay logged into Vestara in another tab while you test here.
             </p>
           </div>
         </div>

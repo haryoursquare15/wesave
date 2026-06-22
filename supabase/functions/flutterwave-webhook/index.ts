@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const ALLOWED_ORIGINS = [
-  'https://app.wesave.ng',
+  'https://app.vestara.ng',
   'https://wesave.lovable.app',
   'https://thrift-harmony-hub.lovable.app',
   'https://id-preview--52f5b582-a468-4659-81c8-2245803e62d4.lovable.app',
@@ -58,7 +58,7 @@ serve(async (req) => {
       const txRef = url.searchParams.get('tx_ref') || '';
       
       // Determine the app origin - use production custom domain
-      const appOrigin = 'https://app.wesave.ng';
+      const appOrigin = 'https://app.vestara.ng';
       const redirectUrl = status === 'successful' 
         ? `${appOrigin}/wallet?funding=success&tx_ref=${encodeURIComponent(txRef)}`
         : `${appOrigin}/wallet?funding=failed`;

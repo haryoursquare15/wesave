@@ -53,11 +53,11 @@ export default function AppHome() {
   const goToSlide = useCallback((index: number) => setCurrentSlide(index), []);
 
   const handleGetStarted = () => {
-    window.location.href = "https://app.wesave.ng/auth?mode=signup";
+    window.location.href = "https://app.vestara.ng/auth?mode=signup";
   };
 
   const handleSignIn = () => {
-    window.location.href = "https://app.wesave.ng/auth";
+    window.location.href = "https://app.vestara.ng/auth";
   };
 
   // Splash Screen
@@ -72,7 +72,7 @@ export default function AppHome() {
         >
           <motion.img
             src={wesaveLogo}
-            alt="WeSave"
+            alt="Vestara"
             className="h-24 w-auto rounded-2xl shadow-xl"
             animate={{ scale: [1, 1.05, 1] }}
             transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
@@ -83,7 +83,7 @@ export default function AppHome() {
             transition={{ delay: 0.5 }}
             className="text-center"
           >
-            <h1 className="text-3xl font-bold text-primary-foreground">WeSave</h1>
+            <h1 className="text-3xl font-bold text-primary-foreground">Vestara</h1>
             <p className="text-primary-foreground/70 text-sm mt-1">Save Together, Grow Together</p>
           </motion.div>
           {/* Loading indicator */}

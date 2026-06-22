@@ -168,7 +168,7 @@ export function VfdAuditTab() {
         <CardContent className="space-y-3">
           <div className="flex gap-2">
             <Input
-              placeholder="Transaction reference (e.g. WeSave-transfer-…)"
+              placeholder="Transaction reference (e.g. Vestara-transfer-…)"
               value={refQuery}
               onChange={(e) => setRefQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && lookupEvents()}

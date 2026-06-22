@@ -3109,7 +3109,7 @@ async function handleCreateVirtualCard(userId: string, _body: Record<string, unk
     body: JSON.stringify({
       accountNo: client.vfd_account_number,
       primaryPhoneNo: client.phone || "09000000000",
-      emailAddress: client.email || "user@wesave.app",
+      emailAddress: client.email || "user@vestara.app",
     }),
   });
   const data = await safeJson(resp);
@@ -3400,7 +3400,7 @@ async function handleInviteGroupMember(userId: string, body: Record<string, unkn
 
   const { data: group } = await db.from("vfd_sandbox_groups").select("*").eq("id", groupId).single();
   if (!group) return jsonResponse({ error: "Group not found" }, 404);
-  // Only the group admin can invite members (mirrors WeSave thrift group rules)
+  // Only the group admin can invite members (mirrors Vestara thrift group rules)
   if (group.admin_id !== userId) return jsonResponse({ error: "Only the group admin can invite members" }, 403);
   // Allow inviting while group is pending OR active-but-not-full
   if (group.status === "completed") return jsonResponse({ error: "Group has already completed" }, 400);

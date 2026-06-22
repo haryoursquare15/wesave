@@ -551,7 +551,7 @@ function VfdSandboxInner() {
 /**
  * Provides the sandbox session to all hooks via SandboxModeContext, so that
  * useVfdBanking / useVestaraLedger talk to the sandbox Supabase client (and
- * the sandbox-authenticated user) instead of the main WeSave session.
+ * the sandbox-authenticated user) instead of the main Vestara session.
  */
 function SandboxSessionBridge({ children }: { children: React.ReactNode }) {
   const { session } = useSandboxAuth();

@@ -831,18 +831,18 @@ serve(async (req) => {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            from: 'WeSave <noreply@wesave.ng>',
+            from: 'Vestara <noreply@vestara.ng>',
             to: [userEmail],
-            subject: 'WeSave — Bank Change Verification Code',
+            subject: 'Vestara — Bank Change Verification Code',
             html: `
               <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 20px;">
                 <h2 style="color: #1a1a1a;">Bank Detail Change Verification</h2>
-                <p>You requested to change your bank details on WeSave. Use the code below to verify this action:</p>
+                <p>You requested to change your bank details on Vestara. Use the code below to verify this action:</p>
                 <div style="background: #f5f5f5; border-radius: 8px; padding: 20px; text-align: center; margin: 20px 0;">
                   <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #1a1a1a;">${otpCode}</span>
                 </div>
                 <p style="color: #666; font-size: 14px;">This code expires in 5 minutes. If you didn't request this, please ignore this email and secure your account.</p>
-                <p style="color: #999; font-size: 12px; margin-top: 30px;">— WeSave Team</p>
+                <p style="color: #999; font-size: 12px; margin-top: 30px;">— Vestara Team</p>
               </div>
             `,
           }),

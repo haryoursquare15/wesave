@@ -19,7 +19,7 @@ export default function PrivacyPolicy() {
       </header>
 
       <main className="container mx-auto px-4 py-8 max-w-3xl prose prose-sm dark:prose-invert">
-        <h1 className="text-2xl font-bold text-foreground mb-6">WESAVE – PRIVACY POLICY</h1>
+        <h1 className="text-2xl font-bold text-foreground mb-6">VESTARA – PRIVACY POLICY</h1>
 
         <section className="space-y-6">
           <div>
@@ -39,7 +39,7 @@ export default function PrivacyPolicy() {
           <div>
             <h2 className="text-lg font-semibold text-foreground">3. Payment Processing</h2>
             <p className="text-muted-foreground">
-              Wesave does not directly store card details. Payments are processed securely by licensed providers such as Flutterwave.
+              Vestara does not directly store card details. Payments are processed securely by licensed providers such as Flutterwave.
             </p>
           </div>
 
@@ -80,7 +80,7 @@ export default function PrivacyPolicy() {
 
           <div className="pt-4 border-t border-border">
             <h3 className="text-base font-semibold text-foreground">Contact Information</h3>
-            <p className="text-muted-foreground">Email: contact@wesave.ng</p>
+            <p className="text-muted-foreground">Email: contact@vestara.ng</p>
             <p className="text-muted-foreground">Phone: 09039479554</p>
             <p className="text-muted-foreground">Address: Lagos, Nigeria</p>
           </div>
