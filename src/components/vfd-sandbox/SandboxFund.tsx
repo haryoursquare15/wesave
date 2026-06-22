@@ -14,7 +14,7 @@ interface Props {
   accountNumber: string;
   bankName?: string;
   fullName?: string;
-  onFund: (amount: number) => Promise<void>;
+  onFund: (amount: number) => Promise<boolean>;
   onBack: () => void;
 }
 
@@ -64,12 +64,16 @@ export function SandboxFund({
   const [channel, setChannel] = useState<FundingChannel>("select");
   const [amount, setAmount] = useState("");
   const [funded, setFunded] = useState(false);
+  const [funding, setFunding] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
+  const canFund = parseFloat(amount) > 0;
 
   const handleFund = async () => {
     const amt = parseFloat(amount);
-    if (isNaN(amt) || amt <= 0) return;
-    await onFund(amt);
+    if (funding || !canFund) return;
+    setFunding(true);
+    const ok = await onFund(amt).catch(() => false).finally(() => setFunding(false));
+    if (!ok) return;
     setFunded(true);
     setTimeout(() => {
       setFunded(false);
@@ -89,7 +93,7 @@ export function SandboxFund({
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5" aria-busy={loading || funding}>
       {/* Header */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={goBack}>
@@ -236,11 +240,11 @@ export function SandboxFund({
 
             <Button
               onClick={handleFund}
-              disabled={loading || !amount || funded}
+              disabled={funding || !canFund || funded}
               className="w-full h-12"
               variant={funded ? "success" : "hero"}
             >
-              <FundButtonContent loading={loading} funded={funded} amount={amount} label="Pay with Card" />
+              <FundButtonContent loading={funding} funded={funded} amount={amount} label="Pay with Card" />
             </Button>
           </motion.div>
         )}
@@ -324,11 +328,11 @@ export function SandboxFund({
 
             <Button
               onClick={handleFund}
-              disabled={loading || !amount || funded}
+              disabled={funding || !canFund || funded}
               className="w-full h-12"
               variant={funded ? "success" : "hero"}
             >
-              <FundButtonContent loading={loading} funded={funded} amount={amount} label="Credit Account" />
+              <FundButtonContent loading={funding} funded={funded} amount={amount} label="Credit Account" />
             </Button>
           </motion.div>
         )}

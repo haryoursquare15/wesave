@@ -1020,37 +1020,10 @@ async function quoteTransferFees(
   amount: number,
   transferType: "intra" | "inter",
 ): Promise<TransferFeeQuote> {
-  // Source of truth for the sender's wallet shown in the transfer preview
-  // must match the dashboard: live VFD /account/enquiry for real NUBANs,
-  // internal ledger only as a fallback. Using vestara_accounts.balance here
-  // caused the preview ("Wallet ₦21k") to diverge from the dashboard
-  // ("Available ₦55k") for users with a real VFD account.
-  let walletBalance = 0;
-  try {
-    const { data: client } = await admin
-      .from("vfd_sandbox_clients")
-      .select("vfd_account_number")
-      .eq("user_id", userId)
-      .maybeSingle();
-    const accountNo = (client as { vfd_account_number?: string } | null)?.vfd_account_number;
-    if (accountNo && !accountNo.startsWith("9")) {
-      try {
-        const res = await vfdRequest("/account/enquiry", "GET", undefined, { accountNumber: accountNo });
-        const parsed = (res.data as { status?: string } | null)?.status;
-        if (res.status === 200 && parsed === "00") {
-          walletBalance = extractVfdBalance(res.data);
-        }
-      } catch (err) {
-        console.error("[quoteTransferFees] live VFD enquiry failed", err);
-      }
-    }
-  } catch (err) {
-    console.error("[quoteTransferFees] client lookup failed", err);
-  }
-  if (!walletBalance) {
-    const snap = await getVestaraSettlementSnapshot(admin, userId);
-    walletBalance = Number(snap.walletBalance || 0);
-  }
+  // Vestara's immutable ledger is the spendable-balance source of truth.
+  // VFD sub-account balances can be swept to the pool and are audit-only.
+  const snap = await getVestaraSettlementSnapshot(admin, userId);
+  const walletBalance = Number(snap.walletBalance || 0);
 
   if (transferType === "intra") {
     return {
@@ -1893,7 +1866,7 @@ async function handleTransfer(
           transfer_type: transferType,
           from_account: displayFromAccount,
           to_account: toAccount,
-          bank_code: bankCode,
+          bank_code: body.bankCode as string,
           beneficiary_name: body.beneficiaryName ?? null,
           vfd_reference: vfdTxnId,
           session_id: sessionId,
@@ -2056,6 +2029,7 @@ async function handleSandboxCredit(userId: string, accountNo: string, amount: nu
   }
 
   const reference = `VFD-credit-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+  const ledgerReference = reference;
 
   // ─── PHASE 1: idempotency for sandbox credit ───
   const idemKey = reference;
@@ -2140,11 +2114,42 @@ async function handleSandboxCredit(userId: string, accountNo: string, amount: nu
     http_status: status,
   });
 
-  // Auto-sync internal ledger after successful credit
+  // Auto-settle internal ledger after successful VFD sandbox credit. The VFD
+  // history row alone is not spendable balance; Vestara's double-entry ledger
+  // is the authoritative wallet balance used by dashboard + transfer checks.
   if (isSuccess) {
+    const { data: ledgerDeposit, error: ledgerErr } = await supabaseAdmin.rpc("vestara_deposit", {
+      _user_id: userId,
+      _amount: amount,
+      _reference: ledgerReference,
+      _metadata: {
+        source: "vfd_sandbox_credit",
+        vfd_reference: reference,
+        account_no: accountNo,
+        vfd_response: data,
+      },
+    });
+    const ledgerResult = ledgerDeposit as { success?: boolean; error?: string } | null;
+    if (ledgerErr || !ledgerResult?.success) {
+      console.error("[VFD sandbox_credit] vestara_deposit failed:", ledgerErr || ledgerResult);
+      await supabaseAdmin
+        .from("vfd_sandbox_transactions")
+        .update({
+          status: "failed",
+          metadata: { ...(data as Record<string, unknown>), ledger_error: ledgerErr?.message || ledgerResult?.error || "ledger_deposit_failed" },
+        })
+        .eq("reference", reference);
+      await settleIdempotencyKey(supabaseAdmin, idemKey, {
+        status: "failed",
+        response: { error: "Ledger settlement failed", vfd_response: data },
+        http_status: status,
+      });
+      return jsonResponse({ error: "Credit could not be settled. Please try again.", code: "LEDGER_SETTLEMENT_FAILED", reference }, 500);
+    }
+
     await ensureBalanceRow(supabaseAdmin, userId, {
       accountNo,
-      preserveExisting: true,
+      preserveExisting: false,
     });
     try {
       await supabaseAdmin.from("vfd_sandbox_notifications").insert({
