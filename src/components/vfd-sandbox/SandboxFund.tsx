@@ -14,7 +14,7 @@ interface Props {
   accountNumber: string;
   bankName?: string;
   fullName?: string;
-  onFund: (amount: number) => Promise<void>;
+  onFund: (amount: number) => Promise<boolean>;
   onBack: () => void;
 }
 
@@ -64,12 +64,15 @@ export function SandboxFund({
   const [channel, setChannel] = useState<FundingChannel>("select");
   const [amount, setAmount] = useState("");
   const [funded, setFunded] = useState(false);
+  const [funding, setFunding] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
 
   const handleFund = async () => {
     const amt = parseFloat(amount);
-    if (isNaN(amt) || amt <= 0) return;
-    await onFund(amt);
+    if (funding || isNaN(amt) || amt <= 0) return;
+    setFunding(true);
+    const ok = await onFund(amt).finally(() => setFunding(false));
+    if (!ok) return;
     setFunded(true);
     setTimeout(() => {
       setFunded(false);
@@ -324,11 +327,11 @@ export function SandboxFund({
 
             <Button
               onClick={handleFund}
-              disabled={loading || !amount || funded}
+              disabled={funding || !amount || funded}
               className="w-full h-12"
               variant={funded ? "success" : "hero"}
             >
-              <FundButtonContent loading={loading} funded={funded} amount={amount} label="Credit Account" />
+              <FundButtonContent loading={funding} funded={funded} amount={amount} label="Credit Account" />
             </Button>
           </motion.div>
         )}
