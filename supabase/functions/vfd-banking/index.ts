@@ -1647,14 +1647,15 @@ async function handleTransfer(
 
 
   // POOL implementation: VFD provisions every user NUBAN as a sub-account of
-  // the corporate pool. `uniqueSenderAccountId` MUST identify the real
-  // sub-account that originated the debit so the receiving bank/customer sees
-  // the user as the sender (not the pool) and so VFD attributes the outflow
-  // to the correct sub-account. We always send the user's own NUBAN
-  // (displayFromAccount) — for virtual NUBANs this is the user-facing number,
-  // for real NUBANs it equals fromAccount. Callers may still override.
+  // the corporate pool. `uniqueSenderAccountId` MUST be a NUBAN that VFD
+  // actually recognises. For VIRTUAL NUBANs (issued internally because VFD
+  // echoed the pool for the shared sandbox BVN) the user-facing NUBAN does
+  // NOT exist on VFD's side — sending it yields "invalid unique sender
+  // accountid". In that case we send the real pool NUBAN (== fromAccount
+  // after the virtual→pool swap above). For real NUBANs, displayFromAccount
+  // equals fromAccount and is VFD-registered. Callers may still override.
   transferPayload.uniqueSenderAccountId =
-    (body.uniqueSenderAccountId as string) || displayFromAccount;
+    (body.uniqueSenderAccountId as string) || fromAccount;
 
   console.log("[VFD Transfer] Payload:", JSON.stringify(transferPayload));
 
