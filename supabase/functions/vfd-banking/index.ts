@@ -1583,19 +1583,60 @@ async function handleTransfer(
   }
   // ─── END TIER ENFORCEMENT ───
 
-  // Step 1: Get sender account details via enquiry
+  // Step 1: ALWAYS enquire on the user's OWN sub-account NUBAN
+  // (displayFromAccount) — never on the pool/settlement account. VFD's
+  // /account/enquiry returns the sub-account's internal savings id which
+  // /transfer requires as `uniqueSenderAccountId`. Sending the pool's id, the
+  // NUBAN itself, or an empty value yields status 98 "Invalid
+  // uniqueSenderAccountId".
+  const senderEnquiryNuban = displayFromAccount;
+  if (senderEnquiryNuban === PLATFORM_POOL_NUBAN) {
+    return jsonResponse({
+      error: "Refusing to enquire on the settlement/pool account as a sender.",
+      code: "SENDER_IS_POOL",
+    }, 400);
+  }
   const { data: senderEnquiry, status: senderStatus } = await vfdRequest("/account/enquiry", "GET", undefined, {
-    accountNumber: fromAccount,
+    accountNumber: senderEnquiryNuban,
   });
 
   if (senderStatus !== 200 || (senderEnquiry as Record<string, unknown>)?.status !== "00") {
     return jsonResponse({ error: "Could not retrieve sender account details", data: senderEnquiry }, 400);
   }
 
-  const senderData = (senderEnquiry as Record<string, unknown>)?.data as Record<string, unknown>;
+  // VFD response shape can be either { data: { accountId, ... } } or
+  // { data: { account: { id, ... } } } depending on endpoint version.
+  const senderEnvelope = (senderEnquiry as Record<string, unknown>)?.data as Record<string, unknown>;
+  const senderAccountObj = (senderEnvelope?.account as Record<string, unknown> | undefined) || senderEnvelope;
+  const senderData = senderEnvelope;
+  const senderSavingsId =
+    (senderAccountObj?.id?.toString?.() ||
+      senderEnvelope?.accountId?.toString?.() ||
+      "");
 
-  // Step 2: Generate signature
-  const signature = await generateTransferSignature(fromAccount, toAccount);
+  if (!senderSavingsId) {
+    return jsonResponse({
+      error: "VFD enquiry returned no account id for the sender sub-account.",
+      data: senderEnquiry,
+    }, 400);
+  }
+
+  // Sanity: the enquiry must be for the user's own sub-account NUBAN,
+  // never the pool. Catches any accidental substitution upstream.
+  const enquiredNuban = (senderAccountObj?.accountNo?.toString?.() ||
+    senderEnvelope?.accountNo?.toString?.() ||
+    "");
+  if (enquiredNuban && enquiredNuban !== senderEnquiryNuban) {
+    return jsonResponse({
+      error: "Sender enquiry returned a different NUBAN than requested.",
+      code: "SENDER_ENQUIRY_MISMATCH",
+      expected: senderEnquiryNuban,
+      got: enquiredNuban,
+    }, 400);
+  }
+
+  // Step 2: Generate signature (use the user sub-account NUBAN, matches /transfer fromAccount)
+  const signature = await generateTransferSignature(senderEnquiryNuban, toAccount);
 
   // Step 3: Build VFD transfer payload
   const walletPrefix = Deno.env.get("VFD_WALLET_NAME") || "VFD";
@@ -1615,21 +1656,24 @@ async function handleTransfer(
       accountNumber: toAccount,
     });
     if (benStatus === 200 && (benEnquiry as Record<string, unknown>)?.status === "00") {
-      const bd = (benEnquiry as Record<string, unknown>).data as Record<string, unknown>;
-      toClientId = toClientId || bd?.clientId?.toString() || "";
-      toSavingsId = toSavingsId || bd?.accountId?.toString() || "";
-      toBvn = toBvn || bd?.bvn?.toString() || "";
-      toClient = toClient || bd?.client?.toString() || "";
+      const bdEnv = (benEnquiry as Record<string, unknown>).data as Record<string, unknown>;
+      const bdAcct = (bdEnv?.account as Record<string, unknown> | undefined) || bdEnv;
+      toClientId = toClientId || bdEnv?.clientId?.toString() || bdAcct?.clientId?.toString() || "";
+      toSavingsId = toSavingsId || bdAcct?.id?.toString() || bdEnv?.accountId?.toString() || "";
+      toBvn = toBvn || bdEnv?.bvn?.toString() || "";
+      toClient = toClient || bdEnv?.client?.toString() || bdAcct?.client?.toString() || "";
     } else {
       return jsonResponse({ error: "Could not retrieve beneficiary VFD account details for intra transfer", data: benEnquiry }, 400);
     }
   }
 
   const transferPayload: Record<string, unknown> = {
-    fromAccount,
+    // fromAccount must be the user sub-account's own NUBAN, matching the
+    // enquiry above — NOT the pool/settlement NUBAN.
+    fromAccount: senderEnquiryNuban,
     fromClientId: senderData?.clientId?.toString() || "",
     fromClient: senderData?.client?.toString() || "",
-    fromSavingsId: senderData?.accountId?.toString() || "",
+    fromSavingsId: senderSavingsId,
     fromBvn: senderData?.bvn?.toString() || "",
     toAccount,
     toBank: body.bankCode as string || "",
@@ -1643,21 +1687,10 @@ async function handleTransfer(
     remark: body.narration as string || body.remark as string || "Transfer",
     transferType,
     reference,
+    // ALWAYS the sender sub-account's internal savings id from the fresh
+    // enquiry above. Never a NUBAN, never blank, never the pool's id.
+    uniqueSenderAccountId: senderSavingsId,
   };
-
-
-  // VFD expects `uniqueSenderAccountId` to be a SAVINGS ID (`accountId` from
-  // account enquiry), not a NUBAN. Sending the user's NUBAN here is what causes
-  // "Invalid uniqueSenderAccountId" for the Test 7 VFD NUBAN account. The
-  // field is optional, so default it to empty unless a caller explicitly sends
-  // a savings-id value. If a legacy caller sends the sender NUBAN, translate it
-  // to the sender accountId from the enquiry response.
-  const explicitUniqueSender = (body.uniqueSenderAccountId as string | undefined)?.trim() || "";
-  const senderSavingsId = senderData?.accountId?.toString() || "";
-  transferPayload.uniqueSenderAccountId =
-    explicitUniqueSender === displayFromAccount || explicitUniqueSender === fromAccount
-      ? senderSavingsId
-      : explicitUniqueSender;
 
   console.log("[VFD Transfer] Payload:", JSON.stringify(transferPayload));
 
