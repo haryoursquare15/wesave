@@ -2459,15 +2459,19 @@ async function handleGetLockConfigs() {
   return jsonResponse({ data });
 }
 
-// Get user balance (internal ledger)
+// Get user balance — VFD live enquiry is the source of truth.
+//
+// Rules (per "harmonize to actual VFD balance"):
+//   • Real VFD-provisioned NUBANs ("1xxxxxxxxx") → force-refresh from
+//     /account/enquiry on every call. If VFD is unreachable we surface
+//     `stale: true` instead of silently returning a stale cache, so the
+//     UI can show a "balance unavailable, retry" state.
+//   • Virtual platform NUBANs ("9xxxxxxxxx") do NOT exist at VFD. These
+//     users have no real VFD account, so we return zero across the board
+//     with `no_vfd_account: true` and let the UI prompt them to complete
+//     KYC to get provisioned a real NUBAN. We no longer fabricate a
+//     balance from the internal sandbox ledger for them.
 async function handleGetUserBalance(userId: string) {
-  // Source of truth for the spendable wallet:
-  //   • Real VFD-provisioned NUBANs (typically "1xxxxxxxxx") → /account/enquiry live.
-  //   • Virtual platform NUBANs ("9xxxxxxxxx") provisioned only inside Vestara
-  //     do NOT exist at VFD — hitting /account/enquiry returns "Invalid wallet
-  //     token" / 0 and would freeze the dashboard at a stale cached figure.
-  //     For these we recompute from the internal sandbox ledger so credits and
-  //     debits show up immediately after every transfer.
   const supabaseAdmin = getSupabaseAdmin();
   const { data: client } = await supabaseAdmin
     .from("vfd_sandbox_clients")
@@ -2476,38 +2480,62 @@ async function handleGetUserBalance(userId: string) {
     .maybeSingle();
 
   if (!client?.vfd_account_number) {
-    return jsonResponse({ data: null, error: "No VFD account found" }, 200);
+    return jsonResponse({
+      data: {
+        user_id: userId,
+        vfd_account_number: null,
+        total_balance: 0,
+        available_balance: 0,
+        locked_balance: 0,
+        savings_balance: 0,
+        last_synced_at: new Date().toISOString(),
+        source: "no_vfd_account",
+        no_vfd_account: true,
+      },
+    });
   }
 
   const accountNo = client.vfd_account_number;
   const isVirtualNuban = accountNo.startsWith("9");
 
+  // Virtual NUBAN → no real VFD account → always show zero.
+  if (isVirtualNuban) {
+    return jsonResponse({
+      data: {
+        user_id: userId,
+        vfd_account_number: accountNo,
+        total_balance: 0,
+        available_balance: 0,
+        locked_balance: 0,
+        savings_balance: 0,
+        last_synced_at: new Date().toISOString(),
+        source: "no_vfd_account",
+        no_vfd_account: true,
+      },
+    });
+  }
+
+  // Real NUBAN → always hit VFD live.
   let liveBalance = 0;
   let vfdRaw: unknown = null;
   let vfdStatus = 0;
-  let source: "vfd_live" | "internal_ledger" | "cached_fallback" = "cached_fallback";
-
-  if (isVirtualNuban) {
-    liveBalance = await getRecordedSandboxBalance(supabaseAdmin, userId);
-    source = "internal_ledger";
-  } else {
-    try {
-      const res = await vfdRequest("/account/enquiry", "GET", undefined, {
-        accountNumber: accountNo,
-      });
-      vfdRaw = res.data;
-      vfdStatus = res.status;
-      const parsedStatus = (res.data as { status?: string } | null)?.status;
-      if (vfdStatus === 200 && parsedStatus === "00") {
-        liveBalance = extractVfdBalance(res.data);
-        source = "vfd_live";
-      }
-    } catch (err) {
-      console.error("[VFD get_user_balance] live enquiry failed", err);
+  let vfdOk = false;
+  try {
+    const res = await vfdRequest("/account/enquiry", "GET", undefined, {
+      accountNumber: accountNo,
+    });
+    vfdRaw = res.data;
+    vfdStatus = res.status;
+    const parsedStatus = (res.data as { status?: string } | null)?.status;
+    if (vfdStatus === 200 && parsedStatus === "00") {
+      liveBalance = extractVfdBalance(res.data);
+      vfdOk = true;
     }
+  } catch (err) {
+    console.error("[VFD get_user_balance] live enquiry failed", err);
   }
 
-  // Lock + savings come from our DB (VFD doesn't model them)
+  // Lock + savings come from our DB (VFD doesn't model them).
   const { data: existing } = await supabaseAdmin
     .from("vfd_user_balances")
     .select("*")
@@ -2516,33 +2544,32 @@ async function handleGetUserBalance(userId: string) {
 
   const lockedBalance = toNumber(existing?.locked_balance);
   const savingsBalance = toNumber(existing?.savings_balance);
-  // If we got a live/ledger figure, trust it; otherwise fall back to cache so UI doesn't blank.
-  const totalBalance = source === "cached_fallback"
-    ? toNumber(existing?.total_balance)
-    : liveBalance;
+  const totalBalance = vfdOk ? liveBalance : toNumber(existing?.total_balance);
   const availableBalance = Math.max(totalBalance - lockedBalance - savingsBalance, 0);
   const timestamp = new Date().toISOString();
 
-  // Persist the freshly fetched balance so cached consumers (admin, audit) stay aligned.
-  if (existing) {
-    await supabaseAdmin
-      .from("vfd_user_balances")
-      .update({
+  // Persist only when VFD answered, so the cache always mirrors VFD truth.
+  if (vfdOk) {
+    if (existing) {
+      await supabaseAdmin
+        .from("vfd_user_balances")
+        .update({
+          total_balance: totalBalance,
+          locked_balance: lockedBalance,
+          savings_balance: savingsBalance,
+          last_synced_at: timestamp,
+          updated_at: timestamp,
+        })
+        .eq("user_id", userId);
+    } else {
+      await supabaseAdmin.from("vfd_user_balances").insert({
+        user_id: userId,
         total_balance: totalBalance,
         locked_balance: lockedBalance,
         savings_balance: savingsBalance,
         last_synced_at: timestamp,
-        updated_at: timestamp,
-      })
-      .eq("user_id", userId);
-  } else {
-    await supabaseAdmin.from("vfd_user_balances").insert({
-      user_id: userId,
-      total_balance: totalBalance,
-      locked_balance: lockedBalance,
-      savings_balance: savingsBalance,
-      last_synced_at: timestamp,
-    });
+      });
+    }
   }
 
   return jsonResponse({
@@ -2553,8 +2580,9 @@ async function handleGetUserBalance(userId: string) {
       available_balance: availableBalance,
       locked_balance: lockedBalance,
       savings_balance: savingsBalance,
-      last_synced_at: timestamp,
-      source,
+      last_synced_at: vfdOk ? timestamp : (existing?.last_synced_at ?? null),
+      source: vfdOk ? "vfd_live" : "cached_fallback",
+      stale: !vfdOk,
     },
     vfd_status: vfdStatus,
     vfd_raw: vfdRaw,

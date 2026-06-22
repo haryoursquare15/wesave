@@ -32,6 +32,7 @@ import { getUserFriendlyError } from "@/lib/errorMessages";
 interface LockConfig { id: string; duration_months: number; interest_rate: number; early_withdrawal_penalty: number; }
 interface UserBalance {
   total_balance: number; locked_balance: number; savings_balance: number; available_balance: number;
+  no_vfd_account?: boolean; stale?: boolean;
 }
 
 type View = "dashboard" | "fund" | "transfer" | "lock" | "history" | "ajo" | "target" | "goal" | "split" | "association" | "bills" | "card" | "kyc";
@@ -146,16 +147,26 @@ function VfdSandboxInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, user, session?.access_token]);
 
-  /* ─── Balance: VFD live wallet + Vestara locked/interest ─── */
+  /* ─── Balance: VFD live wallet + Vestara locked/interest ───
+   * We force-refresh from VFD /account/enquiry on every call so the
+   * dashboard never shows a stale cached figure. For users without a real
+   * VFD account (virtual NUBAN or no NUBAN at all) the backend returns
+   * `no_vfd_account: true` and we show ₦0.
+   */
   const refreshVestaraBalance = useCallback(async () => {
-    // 1) VFD is the source of truth for the spendable wallet on the user's unique NUBAN.
     const vfdRes = await vfd.getUserBalance();
-    const vfdWallet = Number(
-      (vfdRes?.data as { available_balance?: number } | null)?.available_balance ?? 0
-    );
+    const vfdData = (vfdRes?.data as {
+      available_balance?: number;
+      no_vfd_account?: boolean;
+      stale?: boolean;
+    } | null) ?? null;
 
-    // 2) Vestara still owns locked savings + accrued interest (VFD doesn't model these).
-    const summary = await getVestaraBalanceSummary();
+    const noVfdAccount = !!vfdData?.no_vfd_account;
+    const stale = !!vfdData?.stale;
+    const vfdWallet = noVfdAccount ? 0 : Number(vfdData?.available_balance ?? 0);
+
+    // Vestara still owns locked savings + accrued interest (VFD doesn't model these).
+    const summary = noVfdAccount ? null : await getVestaraBalanceSummary();
     const locked = Number(summary?.locked_savings ?? 0);
     const interest = Number(summary?.accrued_interest ?? 0);
 
@@ -164,6 +175,8 @@ function VfdSandboxInner() {
       available_balance: vfdWallet,
       locked_balance: locked,
       savings_balance: interest,
+      no_vfd_account: noVfdAccount,
+      stale,
     });
   }, [getVestaraBalanceSummary, vfd]);
 
@@ -219,8 +232,20 @@ function VfdSandboxInner() {
       )
       .subscribe();
 
+    // Force a fresh VFD enquiry whenever the tab regains focus or becomes
+    // visible, so the displayed balance always reflects the actual VFD
+    // figure rather than any cached value the user last saw.
+    const onFocus = () => refreshNow();
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") refreshNow();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+
     return () => {
       void sandboxSupabase.removeChannel(channel);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [user?.id, session?.access_token, kycDone, refreshVestaraBalance, refreshVestaraTransactions, fetchVfdTransactions]);
 
@@ -408,7 +433,7 @@ function VfdSandboxInner() {
     );
   }
 
-  // Use Vestara ledger balance as sole source of truth
+  // VFD live balance is the source of truth for the spendable wallet.
   const balanceData = {
     totalBalance: vestaraBalance ? vestaraBalance.total_balance : 0,
     availableBalance: vestaraBalance ? vestaraBalance.available_balance : 0,
@@ -416,6 +441,8 @@ function VfdSandboxInner() {
     savingsBalance: vestaraBalance ? vestaraBalance.savings_balance : 0,
     accountNumber: vfd.client?.vfd_account_number || "—",
     fullName: vfd.client?.full_name || "—",
+    noVfdAccount: vestaraBalance ? !!vestaraBalance.no_vfd_account : false,
+    stale: vestaraBalance ? !!vestaraBalance.stale : false,
   };
 
   // Compute accrued interest per lock from accrued_interest accounts
