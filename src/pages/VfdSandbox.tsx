@@ -32,6 +32,7 @@ import { getUserFriendlyError } from "@/lib/errorMessages";
 interface LockConfig { id: string; duration_months: number; interest_rate: number; early_withdrawal_penalty: number; }
 interface UserBalance {
   total_balance: number; locked_balance: number; savings_balance: number; available_balance: number;
+  no_vfd_account?: boolean; stale?: boolean;
 }
 
 type View = "dashboard" | "fund" | "transfer" | "lock" | "history" | "ajo" | "target" | "goal" | "split" | "association" | "bills" | "card" | "kyc";
