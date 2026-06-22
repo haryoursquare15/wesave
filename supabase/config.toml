@@ -51,3 +51,6 @@ project_id = "sdwkqwmqgpsjrmijkdix"
     verify_jwt = false
   [functions.handle-email-suppression]
     verify_jwt = false
+  [functions.vfd-pool-reconciler]
+    verify_jwt = false
+
