@@ -1646,16 +1646,18 @@ async function handleTransfer(
   };
 
 
-  // POOL implementation: VFD provisions every user NUBAN as a sub-account of
-  // the corporate pool. `uniqueSenderAccountId` MUST be a NUBAN that VFD
-  // actually recognises. For VIRTUAL NUBANs (issued internally because VFD
-  // echoed the pool for the shared sandbox BVN) the user-facing NUBAN does
-  // NOT exist on VFD's side — sending it yields "invalid unique sender
-  // accountid". In that case we send the real pool NUBAN (== fromAccount
-  // after the virtual→pool swap above). For real NUBANs, displayFromAccount
-  // equals fromAccount and is VFD-registered. Callers may still override.
+  // VFD expects `uniqueSenderAccountId` to be a SAVINGS ID (`accountId` from
+  // account enquiry), not a NUBAN. Sending the user's NUBAN here is what causes
+  // "Invalid uniqueSenderAccountId" for the Test 7 VFD NUBAN account. The
+  // field is optional, so default it to empty unless a caller explicitly sends
+  // a savings-id value. If a legacy caller sends the sender NUBAN, translate it
+  // to the sender accountId from the enquiry response.
+  const explicitUniqueSender = (body.uniqueSenderAccountId as string | undefined)?.trim() || "";
+  const senderSavingsId = senderData?.accountId?.toString() || "";
   transferPayload.uniqueSenderAccountId =
-    (body.uniqueSenderAccountId as string) || fromAccount;
+    explicitUniqueSender === displayFromAccount || explicitUniqueSender === fromAccount
+      ? senderSavingsId
+      : explicitUniqueSender;
 
   console.log("[VFD Transfer] Payload:", JSON.stringify(transferPayload));
 
