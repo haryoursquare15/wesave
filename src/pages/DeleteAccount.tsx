@@ -47,7 +47,7 @@ export default function DeleteAccount() {
         <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
         <h1 className="text-xl font-bold text-foreground mb-2">Delete Your Account</h1>
         <p className="text-muted-foreground mb-6 max-w-sm">
-          To delete your WeSave account, you need to sign in first so we can verify your identity.
+          To delete your Vestara account, you need to sign in first so we can verify your identity.
         </p>
         <Button onClick={() => navigate("/auth")}>Sign In</Button>
       </div>

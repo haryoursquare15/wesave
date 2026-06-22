@@ -192,7 +192,7 @@ export default function RecurringTestDashboard() {
   const initiateTestPayment = async () => {
     setActionLoading('initiate');
     try {
-      const userEmail = user?.email || 'test@wesave.ng';
+      const userEmail = user?.email || 'test@vestara.ng';
       const resp = await supabase.functions.invoke('recurring-test-charge', {
         body: { action: 'initiate_payment', email: userEmail, name: 'Test User', amount: 1000 },
       });

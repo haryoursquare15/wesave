@@ -66,13 +66,13 @@ export function AdminEmailTab() {
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f4f4f5;">
           <tr><td align="center" style="padding:40px 20px;">
             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:480px;background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-              <tr><td style="background-color:#E8621A;padding:24px 30px;"><h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:700;">WeSave</h1></td></tr>
+              <tr><td style="background-color:#E8621A;padding:24px 30px;"><h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:700;">Vestara</h1></td></tr>
               <tr><td style="padding:30px;">
                 <h2 style="margin:0 0 12px;color:#1a1a1a;font-size:18px;font-weight:600;">Hi John 👋</h2>
                 <div style="margin:0 0 24px;color:#4b5563;font-size:15px;line-height:1.6;">${(customBody || "Your message here...").replace(/\n/g, "<br/>")}</div>
-                <a href="#" style="display:inline-block;background-color:#E8621A;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:600;">Open WeSave</a>
+                <a href="#" style="display:inline-block;background-color:#E8621A;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:600;">Open Vestara</a>
               </td></tr>
-              <tr><td style="padding:20px 30px;border-top:1px solid #e5e7eb;"><p style="margin:0;color:#9ca3af;font-size:12px;line-height:1.5;">You're receiving this because you have an account on WeSave.</p></td></tr>
+              <tr><td style="padding:20px 30px;border-top:1px solid #e5e7eb;"><p style="margin:0;color:#9ca3af;font-size:12px;line-height:1.5;">You're receiving this because you have an account on Vestara.</p></td></tr>
             </table>
           </td></tr>
         </table>
@@ -82,20 +82,20 @@ export function AdminEmailTab() {
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f4f4f5;">
           <tr><td align="center" style="padding:40px 20px;">
             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:480px;background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-              <tr><td style="background-color:#E8621A;padding:24px 30px;"><h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:700;">WeSave</h1></td></tr>
+              <tr><td style="background-color:#E8621A;padding:24px 30px;"><h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:700;">Vestara</h1></td></tr>
               <tr><td style="padding:30px;">
                 <h2 style="margin:0 0 12px;color:#1a1a1a;font-size:18px;font-weight:600;">Hey John, you're missing out! 👋</h2>
-                <p style="margin:0 0 16px;color:#4b5563;font-size:15px;line-height:1.6;">You signed up for WeSave but haven't joined a savings group yet. Here's what you're missing:</p>
+                <p style="margin:0 0 16px;color:#4b5563;font-size:15px;line-height:1.6;">You signed up for Vestara but haven't joined a savings group yet. Here's what you're missing:</p>
                 <ul style="margin:0 0 20px;padding-left:20px;color:#4b5563;font-size:15px;line-height:1.8;">
                   <li><strong>Save Together</strong> — Join a group and contribute alongside trusted members</li>
                   <li><strong>Earn Payouts</strong> — Receive your lump-sum payout when it's your turn</li>
-                  <li><strong>Build Credit</strong> — Boost your WeSave credit score with every on-time contribution</li>
+                  <li><strong>Build Credit</strong> — Boost your Vestara credit score with every on-time contribution</li>
                   <li><strong>Zero Fees to Join</strong> — Getting started is completely free</li>
                 </ul>
                 <p style="margin:0 0 24px;color:#4b5563;font-size:15px;line-height:1.6;">It only takes a minute to create or join a group. Start saving smarter today!</p>
                 <a href="#" style="display:inline-block;background-color:#E8621A;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:600;">Explore Groups</a>
               </td></tr>
-              <tr><td style="padding:20px 30px;border-top:1px solid #e5e7eb;"><p style="margin:0;color:#9ca3af;font-size:12px;line-height:1.5;">You're receiving this because you have an account on WeSave.</p></td></tr>
+              <tr><td style="padding:20px 30px;border-top:1px solid #e5e7eb;"><p style="margin:0;color:#9ca3af;font-size:12px;line-height:1.5;">You're receiving this because you have an account on Vestara.</p></td></tr>
             </table>
           </td></tr>
         </table>

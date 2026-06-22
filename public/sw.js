@@ -1,4 +1,4 @@
-// WeSave Push Notification Service Worker
+// Vestara Push Notification Service Worker
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -15,13 +15,13 @@ self.addEventListener("push", (event) => {
   try {
     data = event.data.json();
   } catch {
-    data = { title: "WeSave", body: event.data.text() };
+    data = { title: "Vestara", body: event.data.text() };
   }
 
   const options = {
     body: data.body || data.message || "",
-    icon: "/wesave-logo.jpg",
-    badge: "/wesave-logo.jpg",
+    icon: "/vestara-logo.jpg",
+    badge: "/vestara-logo.jpg",
     tag: data.tag || "wesave-notification",
     data: {
       url: data.url || "/dashboard",
@@ -32,7 +32,7 @@ self.addEventListener("push", (event) => {
   };
 
   event.waitUntil(
-    self.registration.showNotification(data.title || "WeSave", options)
+    self.registration.showNotification(data.title || "Vestara", options)
   );
 });
 

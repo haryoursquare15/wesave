@@ -123,7 +123,7 @@ export function TwoFactorEnforcement({ onComplete }: TwoFactorEnforcementProps) 
               Secure Your Account
             </DialogTitle>
             <DialogDescription className="text-center">
-              WeSave is a wallet-based platform. Two-factor authentication is required to protect your funds.
+              Vestara is a wallet-based platform. Two-factor authentication is required to protect your funds.
             </DialogDescription>
           </DialogHeader>
 

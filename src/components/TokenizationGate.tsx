@@ -263,7 +263,7 @@ export function TokenizationGate({
                 </div>
                 <div className="flex items-center gap-2 text-sm">
                   <CheckCircle className="h-4 w-4 text-success" />
-                  <span>Amount charged is deposited into your WeSave wallet</span>
+                  <span>Amount charged is deposited into your Vestara wallet</span>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
                   <CreditCard className="h-4 w-4 text-muted-foreground" />

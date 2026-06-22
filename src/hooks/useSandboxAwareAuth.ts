@@ -18,7 +18,7 @@ interface SandboxAware {
 /**
  * Returns the session + Supabase client appropriate for the current context.
  * - Inside <SandboxModeContext.Provider>: uses the sandbox client + sandbox session.
- * - Anywhere else: falls back to the main WeSave auth context + main client.
+ * - Anywhere else: falls back to the main Vestara auth context + main client.
  *
  * This lets shared hooks (useVfdBanking, useVestaraLedger) be reused from both
  * the main app and the isolated sandbox without forking them.

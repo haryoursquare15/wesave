@@ -118,7 +118,7 @@ export default function CreateGoalCampaign() {
           <div className="flex items-start gap-3">
             <AlertTriangle className="h-5 w-5 text-primary mt-0.5" />
             <p className="text-xs text-muted-foreground">
-              Wesave facilitates contributions. Payments go directly to the campaign beneficiary. Wesave does not hold or manage contributed funds.
+              Vestara facilitates contributions. Payments go directly to the campaign beneficiary. Vestara does not hold or manage contributed funds.
             </p>
           </div>
         </motion.div>

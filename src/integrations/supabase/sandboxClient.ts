@@ -1,6 +1,6 @@
 // Independent Supabase client for the VFD Sandbox.
 // Uses a SEPARATE storage key so the sandbox session does not collide with
-// the main WeSave session. This lets a developer be signed in to WeSave in
+// the main Vestara session. This lets a developer be signed in to Vestara in
 // one tab and signed in as a different "test" user in the sandbox tab.
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "./types";

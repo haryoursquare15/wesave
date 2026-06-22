@@ -161,7 +161,7 @@ export function SandboxSplitTab() {
           </CardContent>
         </Card>
 
-        {/* Wallet balance check (WeSave parity) */}
+        {/* Wallet balance check (Vestara parity) */}
         {s.status === "active" && myParticipation?.status === "pending" && walletBalance !== null && (
           <div className={`rounded-xl p-3 border ${hasEnoughBalance ? "bg-secondary/10 border-secondary/20" : "bg-destructive/10 border-destructive/20"}`}>
             <p className="text-sm font-semibold flex items-center gap-1">
@@ -200,7 +200,7 @@ export function SandboxSplitTab() {
           />
         )}
 
-        {/* Action buttons (WeSave parity: only when I'm a pending participant) */}
+        {/* Action buttons (Vestara parity: only when I'm a pending participant) */}
         {s.status === "active" && myParticipation?.status === "pending" && (
           <div className="flex gap-2">
             <Button className="flex-1" disabled={products.loading || Boolean(payBlockedReason)} onClick={async () => {
@@ -509,7 +509,7 @@ function SplitInviteBlock({ splitId, title, slotsRemaining, onInvited }: { split
           <Badge variant="outline" className="text-[10px]">{slotsRemaining} slot{slotsRemaining !== 1 ? "s" : ""} left</Badge>
         </div>
 
-        {/* Search WeSave users to invite directly */}
+        {/* Search Vestara users to invite directly */}
         <div className="space-y-2">
           <Label className="text-xs">Search by username or name</Label>
           <Input

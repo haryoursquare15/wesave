@@ -1,43 +1,6 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { LandingHero } from "@/components/landing/LandingHero";
-import { LandingStats } from "@/components/landing/LandingStats";
-import { LandingFeatures } from "@/components/landing/LandingFeatures";
-import { LandingHowItWorks } from "@/components/landing/LandingHowItWorks";
-import { LandingDemo } from "@/components/landing/LandingDemo";
-import { LandingTestimonials } from "@/components/landing/LandingTestimonials";
-import { LandingFAQ } from "@/components/landing/LandingFAQ";
-import { LandingCTA } from "@/components/landing/LandingCTA";
-import { LandingFooter } from "@/components/landing/LandingFooter";
 import VestaraLanding from "@/components/landing/VestaraLanding";
 
 export default function Landing() {
-  const navigate = useNavigate();
-  const [isVestara, setIsVestara] = useState(false);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const host = window.location.hostname.toLowerCase();
-      if (host === "vestara.ng" || host === "www.vestara.ng") {
-        setIsVestara(true);
-      }
-    }
-  }, [navigate]);
-
-  if (isVestara) return <VestaraLanding />;
-
-
-  return (
-    <div className="min-h-screen min-h-[100dvh] bg-background">
-      <LandingHero />
-      <LandingStats />
-      <LandingFeatures />
-      <LandingHowItWorks />
-      <LandingDemo />
-      <LandingTestimonials />
-      <LandingFAQ />
-      <LandingCTA />
-      <LandingFooter />
-    </div>
-  );
+  // Unified Vestara landing across all hosts (legacy WeSave landing retired).
+  return <VestaraLanding />;
 }

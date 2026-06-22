@@ -150,7 +150,7 @@ export default function GoalCampaignDetail() {
             <div className="flex items-start gap-2">
               <AlertTriangle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
               <p className="text-xs text-muted-foreground">
-                Wesave provides a platform for coordinating contributions. Payments are made directly to the campaign beneficiary. Wesave does not hold or manage contributed funds.
+                Vestara provides a platform for coordinating contributions. Payments are made directly to the campaign beneficiary. Vestara does not hold or manage contributed funds.
               </p>
             </div>
           </div>

@@ -87,7 +87,7 @@ export default function KycPolicy() {
 
           <div>
             <h2 className="text-lg font-semibold text-foreground">8. Refusal & Termination</h2>
-            <p className="text-muted-foreground">Wesave may decline onboarding or terminate relationships where KYC requirements cannot be satisfied or where false information is detected.</p>
+            <p className="text-muted-foreground">Vestara may decline onboarding or terminate relationships where KYC requirements cannot be satisfied or where false information is detected.</p>
           </div>
 
           <div className="pt-4 border-t border-border">

@@ -30,8 +30,8 @@ export default function Referrals() {
     if (navigator.share && referralLink) {
       try {
         await navigator.share({
-          title: "Join WeSave",
-          text: "Save together, grow together! Join WeSave with my referral link and we both earn rewards.",
+          title: "Join Vestara",
+          text: "Save together, grow together! Join Vestara with my referral link and we both earn rewards.",
           url: referralLink,
         });
       } catch {

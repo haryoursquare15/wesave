@@ -57,7 +57,7 @@ export function SandboxFund({
   loading,
   accountNumber,
   bankName = "VFD Microfinance Bank",
-  fullName = "WeSave User",
+  fullName = "Vestara User",
   onFund,
   onBack,
 }: Props) {

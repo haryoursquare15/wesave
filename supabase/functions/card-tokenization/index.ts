@@ -148,10 +148,10 @@ serve(async (req) => {
           redirect_url: redirectUrl,
           customer: {
             email: profile?.email || '',
-            name: profile?.full_name || 'WeSave User',
+            name: profile?.full_name || 'Vestara User',
           },
           customizations: {
-            title: 'WeSave Card Authorization',
+            title: 'Vestara Card Authorization',
             description: `Authorize recurring payments for ${group?.name || 'your group'}`,
           },
           meta: {
@@ -493,10 +493,10 @@ serve(async (req) => {
           redirect_url: redirectUrl,
           customer: {
             email: profile?.email || '',
-            name: profile?.full_name || 'WeSave User',
+            name: profile?.full_name || 'Vestara User',
           },
           customizations: {
-            title: 'WeSave Card Update',
+            title: 'Vestara Card Update',
             description: 'Authorize your new card for recurring payments',
           },
           meta: {

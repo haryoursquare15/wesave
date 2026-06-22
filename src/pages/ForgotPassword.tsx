@@ -1,5 +1,5 @@
 import { useState } from "react";
-import wesaveLogoNew from "@/assets/wesave-logo-new.png";
+import wesaveLogoNew from "@/assets/vestara-logo.jpg";
 import { motion } from "framer-motion";
 import { Mail, ArrowLeft, Users } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -42,7 +42,7 @@ export default function ForgotPassword() {
       {/* Left Panel - Branding */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-primary via-primary to-primary/80 p-12 flex-col justify-between">
         <Link to="/" className="flex items-center gap-2">
-          <img src={wesaveLogoNew} alt="WeSave" className="h-12 bg-white/90 rounded-lg p-1" />
+          <img src={wesaveLogoNew} alt="Vestara" className="h-12 bg-white/90 rounded-lg p-1" />
         </Link>
 
         <motion.div
@@ -72,7 +72,7 @@ export default function ForgotPassword() {
         >
           {/* Mobile Logo */}
           <Link to="/" className="flex lg:hidden items-center gap-2 mb-8">
-            <img src={wesaveLogoNew} alt="WeSave" className="h-12 rounded-lg" />
+            <img src={wesaveLogoNew} alt="Vestara" className="h-12 rounded-lg" />
           </Link>
 
           <Link

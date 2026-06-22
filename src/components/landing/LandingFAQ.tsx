@@ -8,9 +8,9 @@ import {
 
 const faqs = [
   {
-    question: "What is WeSave?",
+    question: "What is Vestara?",
     answer:
-      "WeSave is a digital platform for Ajo/Esusu — the traditional African rotating savings scheme. We bring it online with automated payments, trust ratings, and full transparency.",
+      "Vestara is a digital platform for Ajo/Esusu — the traditional African rotating savings scheme. We bring it online with automated payments, trust ratings, and full transparency.",
   },
   {
     question: "Is my money safe?",
@@ -28,9 +28,9 @@ const faqs = [
       "Defaulters' trust scores drop, affecting their ability to join future groups. Groups can also enable auto-debit to prevent missed payments entirely.",
   },
   {
-    question: "What fees does WeSave charge?",
+    question: "What fees does Vestara charge?",
     answer:
-      "WeSave charges a small percentage fee only on payouts. There are no hidden charges — contributions, wallet funding, and group creation are free.",
+      "Vestara charges a small percentage fee only on payouts. There are no hidden charges — contributions, wallet funding, and group creation are free.",
   },
   {
     question: "Can I create a private group?",

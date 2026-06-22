@@ -82,7 +82,7 @@ export default function SandboxForgotPassword() {
             <>
               <p className="text-sm text-muted-foreground mb-6">
                 Enter your sandbox email and we'll send you a link to set a new password. This is
-                independent of your main WeSave account.
+                independent of your main Vestara account.
               </p>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">

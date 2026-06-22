@@ -215,10 +215,10 @@ export default function Settings() {
           transition={{ delay: 0.2 }}
           className="text-center text-sm text-muted-foreground pt-4 space-y-1"
         >
-          <p>WeSave v1.0.0</p>
-          <p>© 2025 WeSave. All rights reserved.</p>
+          <p>Vestara v1.0.0</p>
+          <p>© 2025 Vestara. All rights reserved.</p>
           <p>Owned by LLH Premium Enterprise. Technology supported by Flutterwave.</p>
-          <p>Contact: 09039479954 | IG: @Wesave.ng</p>
+          <p>Contact: 09039479954 | IG: @Vestara.ng</p>
         </motion.div>
       </main>
 

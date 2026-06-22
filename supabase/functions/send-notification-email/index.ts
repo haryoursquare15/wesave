@@ -20,38 +20,38 @@ interface NotificationPayload {
 function getEmailSubject(type: string, title: string): string {
   switch (type) {
     case 'contribution_success':
-      return '✅ WeSave — Contribution Successful';
+      return '✅ Vestara — Contribution Successful';
     case 'contribution_failed':
     case 'contribution_defaulted':
-      return '⚠️ WeSave — Contribution Issue';
+      return '⚠️ Vestara — Contribution Issue';
     case 'contribution_retry':
-      return '🔄 WeSave — Contribution Retry';
+      return '🔄 Vestara — Contribution Retry';
     case 'card_fallback_success':
-      return '✅ WeSave — Card Payment Successful';
+      return '✅ Vestara — Card Payment Successful';
     case 'card_fallback_failed':
-      return '⚠️ WeSave — Card Payment Failed';
+      return '⚠️ Vestara — Card Payment Failed';
     case 'wallet_funding_reminder':
-      return '💰 WeSave — Fund Your Wallet';
+      return '💰 Vestara — Fund Your Wallet';
     case 'payout_received':
-      return '🎉 WeSave — Payout Received!';
+      return '🎉 Vestara — Payout Received!';
     case 'withdrawal_initiated':
-      return '💸 WeSave — Withdrawal Initiated';
+      return '💸 Vestara — Withdrawal Initiated';
     case 'withdrawal_completed':
-      return '✅ WeSave — Withdrawal Completed';
+      return '✅ Vestara — Withdrawal Completed';
     case 'withdrawal_failed':
-      return '⚠️ WeSave — Withdrawal Failed';
+      return '⚠️ Vestara — Withdrawal Failed';
     case 'wallet_credited':
-      return '💰 WeSave — Wallet Funded';
+      return '💰 Vestara — Wallet Funded';
     case 'invite_received':
-      return '📨 WeSave — Group Invitation';
+      return '📨 Vestara — Group Invitation';
     case 'group_joined':
-      return '🤝 WeSave — Welcome to the Group!';
+      return '🤝 Vestara — Welcome to the Group!';
     case 'cycle_started':
-      return '🔄 WeSave — New Cycle Started';
+      return '🔄 Vestara — New Cycle Started';
     case 'referral_reward':
-      return '🎁 WeSave — Referral Bonus Earned!';
+      return '🎁 Vestara — Referral Bonus Earned!';
     default:
-      return `WeSave — ${title}`;
+      return `Vestara — ${title}`;
   }
 }
 
@@ -99,15 +99,15 @@ function getCTALabel(type: string): string {
   if (type.includes('contribution') || type.includes('cycle')) return 'View Group';
   if (type.includes('invite') || type.includes('group')) return 'View Groups';
   if (type === 'referral_reward') return 'View Referrals';
-  return 'Open WeSave';
+  return 'Open Vestara';
 }
 
 function getCTAUrl(type: string): string {
-  if (type.includes('wallet') || type === 'payout_received' || type.includes('withdrawal')) return 'https://app.wesave.ng/wallet';
-  if (type.includes('contribution') || type.includes('cycle')) return 'https://app.wesave.ng/groups';
-  if (type.includes('invite') || type.includes('group')) return 'https://app.wesave.ng/groups';
-  if (type === 'referral_reward') return 'https://app.wesave.ng/referrals';
-  return 'https://app.wesave.ng/dashboard';
+  if (type.includes('wallet') || type === 'payout_received' || type.includes('withdrawal')) return 'https://app.vestara.ng/wallet';
+  if (type.includes('contribution') || type.includes('cycle')) return 'https://app.vestara.ng/groups';
+  if (type.includes('invite') || type.includes('group')) return 'https://app.vestara.ng/groups';
+  if (type === 'referral_reward') return 'https://app.vestara.ng/referrals';
+  return 'https://app.vestara.ng/dashboard';
 }
 
 function buildEmailHtml(title: string, message: string, type: string, userName?: string): string {
@@ -133,7 +133,7 @@ function buildEmailHtml(title: string, message: string, type: string, userName?:
           <!-- Logo -->
           <tr>
             <td style="padding:0 0 24px;">
-              <img src="${BRAND.logoUrl}" width="48" height="48" alt="WeSave" style="border-radius:8px;display:block;" />
+              <img src="${BRAND.logoUrl}" width="48" height="48" alt="Vestara" style="border-radius:8px;display:block;" />
             </td>
           </tr>
 
@@ -197,10 +197,10 @@ function buildEmailHtml(title: string, message: string, type: string, userName?:
           <tr>
             <td>
               <p style="margin:0 0 8px;font-size:12px;color:${BRAND.textMuted};line-height:1.5;">
-                You're receiving this because you have a WeSave account. Update your notification preferences in the app.
+                You're receiving this because you have a Vestara account. Update your notification preferences in the app.
               </p>
               <p style="margin:0;font-size:12px;color:${BRAND.orange};font-weight:500;">
-                WeSave — Save Together, Grow Together 🌍
+                Vestara — Save Together, Grow Together 🌍
               </p>
             </td>
           </tr>
@@ -268,7 +268,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: 'WeSave <no-reply@wesave.ng>',
+        from: 'Vestara <no-reply@vestara.ng>',
         to: [profile.email],
         subject,
         html,
