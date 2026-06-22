@@ -66,12 +66,13 @@ export function SandboxFund({
   const [funded, setFunded] = useState(false);
   const [funding, setFunding] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
+  const canFund = parseFloat(amount) > 0;
 
   const handleFund = async () => {
     const amt = parseFloat(amount);
-    if (funding || isNaN(amt) || amt <= 0) return;
+    if (funding || !canFund) return;
     setFunding(true);
-    const ok = await onFund(amt).finally(() => setFunding(false));
+    const ok = await onFund(amt).catch(() => false).finally(() => setFunding(false));
     if (!ok) return;
     setFunded(true);
     setTimeout(() => {
@@ -92,7 +93,7 @@ export function SandboxFund({
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5" aria-busy={loading || funding}>
       {/* Header */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={goBack}>
@@ -239,11 +240,11 @@ export function SandboxFund({
 
             <Button
               onClick={handleFund}
-              disabled={loading || !amount || funded}
+              disabled={funding || !canFund || funded}
               className="w-full h-12"
               variant={funded ? "success" : "hero"}
             >
-              <FundButtonContent loading={loading} funded={funded} amount={amount} label="Pay with Card" />
+              <FundButtonContent loading={funding} funded={funded} amount={amount} label="Pay with Card" />
             </Button>
           </motion.div>
         )}
@@ -327,7 +328,7 @@ export function SandboxFund({
 
             <Button
               onClick={handleFund}
-              disabled={funding || !amount || funded}
+              disabled={funding || !canFund || funded}
               className="w-full h-12"
               variant={funded ? "success" : "hero"}
             >

@@ -2029,7 +2029,7 @@ async function handleSandboxCredit(userId: string, accountNo: string, amount: nu
   }
 
   const reference = `VFD-credit-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
-  const ledgerReference = `${reference}-LEDGER`;
+  const ledgerReference = reference;
 
   // ─── PHASE 1: idempotency for sandbox credit ───
   const idemKey = reference;
