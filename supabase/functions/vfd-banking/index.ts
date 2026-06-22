@@ -1766,7 +1766,20 @@ async function handleTransfer(
   const vfdData = data as Record<string, unknown>;
   const isSuccess = vfdData?.status === "00";
   const vfdInner = (vfdData?.data as Record<string, unknown> | undefined) || {};
-  const vfdTxnId = vfdInner?.txnId?.toString() ?? null;
+  // VFD echoes our client `reference` as `txnId`. The real VFD-issued
+  // identifier is `data.reference` (numeric) with `bankTransactionId` as a
+  // secondary identifier. Prefer those for `vfd_reference`; only fall back to
+  // `txnId` if it differs from the client reference we submitted.
+  const vfdInnerTxnId = vfdInner?.txnId?.toString() ?? null;
+  const vfdInnerReference = (vfdInner?.reference as string | number | undefined)?.toString() || null;
+  const vfdBankTxnId =
+    (vfdInner?.bankTransactionId as string | undefined)?.toString() ||
+    (vfdInner?.BankTransactionId as string | undefined)?.toString() ||
+    null;
+  const vfdTxnId =
+    vfdInnerReference ||
+    vfdBankTxnId ||
+    (vfdInnerTxnId && vfdInnerTxnId !== reference ? vfdInnerTxnId : null);
   // VFD returns the NIBSS session id alongside txnId; capture every common spelling.
   const sessionId =
     (vfdInner?.sessionId as string | undefined)?.toString() ||
@@ -1785,7 +1798,13 @@ async function handleTransfer(
       reversed_at: isSuccess ? null : nowIso,
       vfd_reference: vfdTxnId,
       session_id: sessionId,
-      metadata: { ...(data as Record<string, unknown>), stage: isSuccess ? "committed" : "reversed", session_id: sessionId },
+      metadata: {
+        ...(data as Record<string, unknown>),
+        stage: isSuccess ? "committed" : "reversed",
+        session_id: sessionId,
+        bank_transaction_id: vfdBankTxnId,
+        vfd_reference: vfdInnerReference,
+      },
     })
     .eq("id", reservedTx?.id);
 
