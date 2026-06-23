@@ -955,8 +955,8 @@ serve(async (req) => {
           .from("vestara_rate_configs").select("user_rate,vfd_rate")
           .eq("product_code", "goalsave").eq("is_active", true).eq("frequency", fq)
           .order("priority", { ascending: false }).limit(1).maybeSingle();
-        const userRate = Number(cfg?.user_rate || (fq === "weekly" ? 9 : 12));
-        const vfdRate = Number(cfg?.vfd_rate || userRate);
+        const userRate = Number(cfg?.user_rate || 12);
+        const vfdRate = Number(cfg?.vfd_rate || 14);
 
         const start = new Date();
         const sched: { seq: number; scheduled_at: string; amount: number }[] = [];
