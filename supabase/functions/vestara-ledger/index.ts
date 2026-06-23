@@ -897,7 +897,7 @@ serve(async (req) => {
           .order("priority", { ascending: false })
           .limit(1)
           .maybeSingle();
-        const rate = Number(cfg?.user_rate || (frequency === "weekly" ? 9 : 12));
+        const rate = Number(cfg?.user_rate || 12);
 
         const start = new Date();
         const schedule: { seq: number; scheduled_at: string; amount: number }[] = [];
