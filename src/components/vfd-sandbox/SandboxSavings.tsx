@@ -293,7 +293,14 @@ export function SandboxSavings({ userBalance, onRefresh, onBack }: Props) {
       )}
 
       {/* Create flow */}
-      {!showCreate ? (
+      {/* Goal Savings 2.0 wizard takes over the whole create area */}
+      {showGoalV2 ? (
+        <GoalSavingsV2Wizard
+          onClose={() => { setShowGoalV2(false); loadAll(); onRefresh(); }}
+          onCreated={() => { loadAll(); onRefresh(); }}
+          walletAvailable={availableBalance}
+        />
+      ) : !showCreate ? (
         <Button onClick={() => setShowCreate(true)} className="w-full h-12" variant="hero">
           <Sparkles className="h-4 w-4 mr-2" /> Start a New Savings
         </Button>
