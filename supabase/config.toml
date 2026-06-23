@@ -53,4 +53,6 @@ project_id = "sdwkqwmqgpsjrmijkdix"
     verify_jwt = false
   [functions.vfd-pool-reconciler]
     verify_jwt = false
+  [functions.goalsave-debit-worker]
+    verify_jwt = false
 
