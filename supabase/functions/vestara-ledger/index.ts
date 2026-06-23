@@ -878,6 +878,222 @@ serve(async (req) => {
         break;
       }
 
+      // ─────────── Goal Savings 2.0 (commitment + DDM) ───────────
+      case "goalsave_v2_quote": {
+        const amount = Number(params.amount);
+        const frequency = String(params.frequency || "");
+        const tenor_count = Number(params.tenor_count);
+        if (!Number.isFinite(amount) || amount < 1000) return err("Minimum contribution is ₦1,000");
+        if (!["weekly", "monthly"].includes(frequency)) return err("frequency must be weekly or monthly");
+        if (!Number.isFinite(tenor_count) || tenor_count < 1) return err("Invalid tenor");
+        if (frequency === "weekly" && tenor_count < 4) return err("Weekly plans need at least 4 weeks");
+
+        const { data: cfg } = await supabase
+          .from("vestara_rate_configs")
+          .select("user_rate,vfd_rate")
+          .eq("product_code", "goalsave")
+          .eq("is_active", true)
+          .eq("frequency", frequency)
+          .order("priority", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        const rate = Number(cfg?.user_rate || (frequency === "weekly" ? 9 : 12));
+
+        const start = new Date();
+        const schedule: { seq: number; scheduled_at: string; amount: number }[] = [];
+        for (let i = 0; i < tenor_count; i++) {
+          const d = new Date(start);
+          if (frequency === "weekly") d.setDate(d.getDate() + (i + 1) * 7);
+          else d.setMonth(d.getMonth() + (i + 1));
+          schedule.push({ seq: i + 1, scheduled_at: d.toISOString(), amount });
+        }
+        const maturity = new Date(schedule[schedule.length - 1].scheduled_at);
+        const tenor_days = Math.max(1, Math.round((maturity.getTime() - start.getTime()) / 86400000));
+        const total_contrib = amount * tenor_count;
+
+        // Interest accrues per installment on remaining time to maturity (simple-interest approx)
+        let projected_interest = 0;
+        for (const s of schedule) {
+          const remainingDays = Math.max(0, (maturity.getTime() - new Date(s.scheduled_at).getTime()) / 86400000);
+          projected_interest += s.amount * (rate / 100) * (remainingDays / 365);
+        }
+        projected_interest = Math.round(projected_interest * 100) / 100;
+
+        const mandate_fee = Number(Deno.env.get("VFD_MANDATE_FEE") || "100");
+        result = {
+          success: true,
+          rate,
+          frequency,
+          tenor_count,
+          tenor_days,
+          contribution_amount: amount,
+          total_contributions: total_contrib,
+          projected_interest,
+          projected_maturity_value: Math.round((total_contrib + projected_interest) * 100) / 100,
+          maturity_date: maturity.toISOString(),
+          start_date: start.toISOString(),
+          mandate_fee,
+          schedule,
+        };
+        break;
+      }
+
+      case "goalsave_v2_create": {
+        const {
+          amount, frequency, tenor_count,
+          goal_name, goal_purpose,
+        } = params as Record<string, unknown>;
+        const amt = Number(amount), tc = Number(tenor_count), fq = String(frequency || "");
+        if (!Number.isFinite(amt) || amt < 1000) return err("Minimum contribution is ₦1,000");
+        if (!["weekly", "monthly"].includes(fq)) return err("frequency must be weekly or monthly");
+        if (!Number.isFinite(tc) || tc < 1) return err("Invalid tenor");
+        if (fq === "weekly" && tc < 4) return err("Weekly plans need at least 4 weeks");
+        if (!goal_name || typeof goal_name !== "string") return err("goal_name is required");
+
+        // Re-quote server-side (don't trust client)
+        const { data: cfg } = await supabase
+          .from("vestara_rate_configs").select("user_rate,vfd_rate")
+          .eq("product_code", "goalsave").eq("is_active", true).eq("frequency", fq)
+          .order("priority", { ascending: false }).limit(1).maybeSingle();
+        const userRate = Number(cfg?.user_rate || (fq === "weekly" ? 9 : 12));
+        const vfdRate = Number(cfg?.vfd_rate || userRate);
+
+        const start = new Date();
+        const sched: { seq: number; scheduled_at: string; amount: number }[] = [];
+        for (let i = 0; i < tc; i++) {
+          const d = new Date(start);
+          if (fq === "weekly") d.setDate(d.getDate() + (i + 1) * 7);
+          else d.setMonth(d.getMonth() + (i + 1));
+          sched.push({ seq: i + 1, scheduled_at: d.toISOString(), amount: amt });
+        }
+        const maturity = new Date(sched[sched.length - 1].scheduled_at);
+        const tenor_days = Math.max(1, Math.round((maturity.getTime() - start.getTime()) / 86400000));
+
+        // Fetch product + ensure lock account
+        const { data: product } = await supabase
+          .from("vestara_products").select("id").eq("code", "goalsave").maybeSingle();
+        if (!product?.id) return err("Goal Savings product is not configured");
+
+        let { data: lockAcc } = await supabase
+          .from("vestara_accounts").select("id")
+          .eq("user_id", userId!).eq("account_type", "locked_savings").maybeSingle();
+        if (!lockAcc) {
+          const { data: newAcc, error: aErr } = await supabase
+            .from("vestara_accounts")
+            .insert({ user_id: userId!, account_type: "locked_savings", balance: 0, currency: "NGN", metadata: { product_code: "goalsave" } })
+            .select("id").single();
+          if (aErr) return err(aErr.message);
+          lockAcc = newAcc;
+        }
+
+        const mandate_fee = Number(Deno.env.get("VFD_MANDATE_FEE") || "100");
+
+        const { data: savings, error: sErr } = await supabase.from("vestara_savings").insert({
+          user_id: userId!,
+          product_id: product.id,
+          product_code: "goalsave",
+          lock_account_id: lockAcc!.id,
+          principal: 0,
+          original_principal: 0,
+          user_rate: userRate,
+          vfd_rate: vfdRate,
+          tenor_days,
+          start_date: start.toISOString(),
+          maturity_date: maturity.toISOString(),
+          status: "active",
+          commitment_frequency: fq,
+          commitment_amount: amt,
+          tenor_count: tc,
+          next_debit_at: sched[0].scheduled_at,
+          mandate_status: "pending",
+          mandate_fee,
+          activation_status: "pending_mandate",
+          metadata: { goal_name, goal_purpose: goal_purpose ?? null, v2: true },
+        }).select().single();
+        if (sErr) return err(sErr.message);
+
+        const rows = sched.map(s => ({
+          savings_id: savings.id,
+          user_id: userId!,
+          seq: s.seq,
+          scheduled_at: s.scheduled_at,
+          amount: s.amount,
+          status: "scheduled",
+        }));
+        const { error: schErr } = await supabase.from("vfd_savings_debit_schedule").insert(rows);
+        if (schErr) {
+          // rollback savings row
+          await supabase.from("vestara_savings").delete().eq("id", savings.id);
+          return err(schErr.message);
+        }
+
+        result = { success: true, savings_id: savings.id, mandate_fee, maturity_date: maturity.toISOString() };
+        break;
+      }
+
+      case "goalsave_v2_authorize_mandate":
+      case "goalsave_v2_retry_mandate": {
+        const savings_id = String((params as Record<string, unknown>).savings_id || "");
+        const fee_consent = Boolean((params as Record<string, unknown>).fee_consent);
+        if (!savings_id) return err("savings_id is required");
+        if (!fee_consent) return err("Mandate fee consent is required");
+
+        const { data: s, error: gErr } = await supabase
+          .from("vestara_savings").select("*").eq("id", savings_id).maybeSingle();
+        if (gErr || !s) return err("Savings plan not found");
+        if (s.user_id !== userId) return err("Not authorized", 403);
+        if (s.activation_status === "active") return err("Mandate already active");
+
+        const fee = Number(s.mandate_fee || 0);
+        // Charge wallet (best-effort, only if a fee is configured)
+        if (fee > 0) {
+          const ref = `MND-${savings_id.slice(0, 8)}-${Date.now()}`;
+          const { error: wErr } = await supabase.rpc("vestara_withdraw", {
+            _user_id: userId,
+            _amount: fee,
+            _reference: ref,
+            _metadata: { source: "mandate_setup_fee", savings_id },
+          });
+          if (wErr) return err(`Insufficient wallet balance for mandate fee (₦${fee})`);
+          await supabase.from("vestara_fee_ledger").insert({
+            user_id: userId, fee_type: "mandate_setup", amount: fee,
+            reference: ref, tx_reference: ref,
+            metadata: { savings_id },
+          });
+        }
+
+        // TODO: call VFD Direct Debit Mandate API once credentials/endpoint confirmed.
+        // For now, mint a stub mandate id and authorize immediately so the flow is testable end-to-end.
+        const mandateId = `VFD-MND-${crypto.randomUUID().slice(0, 12)}`;
+
+        const { error: uErr } = await supabase.from("vestara_savings").update({
+          mandate_id: mandateId,
+          mandate_status: "authorized",
+          activation_status: "active",
+        }).eq("id", savings_id);
+        if (uErr) return err(uErr.message);
+
+        await supabase.from("vfd_savings_mandate_events").insert({
+          savings_id, user_id: userId!, mandate_id: mandateId,
+          event_type: "authorized",
+          payload: { stub: true, charged_fee: fee },
+        });
+
+        result = { success: true, mandate_id: mandateId, mandate_status: "authorized", activation_status: "active" };
+        break;
+      }
+
+      case "goalsave_v2_get_schedule": {
+        const savings_id = String((params as Record<string, unknown>).savings_id || "");
+        if (!savings_id) return err("savings_id is required");
+        const { data, error: e } = await supabase
+          .from("vfd_savings_debit_schedule").select("*")
+          .eq("savings_id", savings_id).order("seq", { ascending: true });
+        if (e) return err(e.message);
+        result = { success: true, schedule: data };
+        break;
+      }
+
       default:
         return err(`Unknown action: ${action}`);
     }

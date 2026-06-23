@@ -3608,6 +3608,7 @@ export type Database = {
         Row: {
           created_at: string
           created_by: string | null
+          frequency: string | null
           id: string
           is_active: boolean
           max_amount: number | null
@@ -3624,6 +3625,7 @@ export type Database = {
         Insert: {
           created_at?: string
           created_by?: string | null
+          frequency?: string | null
           id?: string
           is_active?: boolean
           max_amount?: number | null
@@ -3640,6 +3642,7 @@ export type Database = {
         Update: {
           created_at?: string
           created_by?: string | null
+          frequency?: string | null
           id?: string
           is_active?: boolean
           max_amount?: number | null
@@ -3721,14 +3724,21 @@ export type Database = {
       vestara_savings: {
         Row: {
           accrued_interest: number
+          activation_status: string | null
+          commitment_amount: number | null
+          commitment_frequency: string | null
           created_at: string
           discounted_interest_paid: number
           effective_rate: number | null
           id: string
           lock_account_id: string
+          mandate_fee: number | null
+          mandate_id: string | null
+          mandate_status: string | null
           matured_at: string | null
           maturity_date: string
           metadata: Json
+          next_debit_at: string | null
           original_principal: number
           penalty_amount: number
           principal: number
@@ -3736,6 +3746,7 @@ export type Database = {
           product_id: string
           start_date: string
           status: Database["public"]["Enums"]["vestara_savings_status"]
+          tenor_count: number | null
           tenor_days: number
           updated_at: string
           user_id: string
@@ -3745,14 +3756,21 @@ export type Database = {
         }
         Insert: {
           accrued_interest?: number
+          activation_status?: string | null
+          commitment_amount?: number | null
+          commitment_frequency?: string | null
           created_at?: string
           discounted_interest_paid?: number
           effective_rate?: number | null
           id?: string
           lock_account_id: string
+          mandate_fee?: number | null
+          mandate_id?: string | null
+          mandate_status?: string | null
           matured_at?: string | null
           maturity_date: string
           metadata?: Json
+          next_debit_at?: string | null
           original_principal: number
           penalty_amount?: number
           principal: number
@@ -3760,6 +3778,7 @@ export type Database = {
           product_id: string
           start_date?: string
           status?: Database["public"]["Enums"]["vestara_savings_status"]
+          tenor_count?: number | null
           tenor_days: number
           updated_at?: string
           user_id: string
@@ -3769,14 +3788,21 @@ export type Database = {
         }
         Update: {
           accrued_interest?: number
+          activation_status?: string | null
+          commitment_amount?: number | null
+          commitment_frequency?: string | null
           created_at?: string
           discounted_interest_paid?: number
           effective_rate?: number | null
           id?: string
           lock_account_id?: string
+          mandate_fee?: number | null
+          mandate_id?: string | null
+          mandate_status?: string | null
           matured_at?: string | null
           maturity_date?: string
           metadata?: Json
+          next_debit_at?: string | null
           original_principal?: number
           penalty_amount?: number
           principal?: number
@@ -3784,6 +3810,7 @@ export type Database = {
           product_id?: string
           start_date?: string
           status?: Database["public"]["Enums"]["vestara_savings_status"]
+          tenor_count?: number | null
           tenor_days?: number
           updated_at?: string
           user_id?: string
@@ -6054,6 +6081,100 @@ export type Database = {
           processed_at?: string | null
         }
         Relationships: []
+      }
+      vfd_savings_debit_schedule: {
+        Row: {
+          amount: number
+          attempt_count: number
+          collected_at: string | null
+          created_at: string
+          failed_reason: string | null
+          id: string
+          savings_id: string
+          scheduled_at: string
+          seq: number
+          status: string
+          updated_at: string
+          user_id: string
+          vfd_reference: string | null
+        }
+        Insert: {
+          amount: number
+          attempt_count?: number
+          collected_at?: string | null
+          created_at?: string
+          failed_reason?: string | null
+          id?: string
+          savings_id: string
+          scheduled_at: string
+          seq: number
+          status?: string
+          updated_at?: string
+          user_id: string
+          vfd_reference?: string | null
+        }
+        Update: {
+          amount?: number
+          attempt_count?: number
+          collected_at?: string | null
+          created_at?: string
+          failed_reason?: string | null
+          id?: string
+          savings_id?: string
+          scheduled_at?: string
+          seq?: number
+          status?: string
+          updated_at?: string
+          user_id?: string
+          vfd_reference?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vfd_savings_debit_schedule_savings_id_fkey"
+            columns: ["savings_id"]
+            isOneToOne: false
+            referencedRelation: "vestara_savings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vfd_savings_mandate_events: {
+        Row: {
+          created_at: string
+          event_type: string
+          id: string
+          mandate_id: string | null
+          payload: Json
+          savings_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          event_type: string
+          id?: string
+          mandate_id?: string | null
+          payload?: Json
+          savings_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          event_type?: string
+          id?: string
+          mandate_id?: string | null
+          payload?: Json
+          savings_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vfd_savings_mandate_events_savings_id_fkey"
+            columns: ["savings_id"]
+            isOneToOne: false
+            referencedRelation: "vestara_savings"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vfd_settings: {
         Row: {
