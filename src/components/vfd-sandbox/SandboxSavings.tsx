@@ -16,6 +16,7 @@ import {
 } from "@/hooks/useVestaraLedger";
 import { TransactionPinGate } from "@/components/security/TransactionPinGate";
 import { TransactionSuccessModal, TransactionSuccessPayload } from "@/components/feedback/TransactionSuccessModal";
+import { GoalSavingsV2Wizard } from "./GoalSavingsV2Wizard";
 
 interface UserBalance {
   total_balance: number; locked_balance: number; savings_balance: number; available_balance: number;
@@ -52,6 +53,7 @@ export function SandboxSavings({ userBalance, onRefresh, onBack }: Props) {
   const [loadingData, setLoadingData] = useState(true);
 
   const [showCreate, setShowCreate] = useState(false);
+  const [showGoalV2, setShowGoalV2] = useState(false);
   const [step, setStep] = useState<FlowStep>("product");
   const [selectedProduct, setSelectedProduct] = useState<VestaraProduct | null>(null);
   const [amount, setAmount] = useState("");
@@ -321,7 +323,15 @@ export function SandboxSavings({ userBalance, onRefresh, onBack }: Props) {
                     return (
                       <button
                         key={p.id}
-                        onClick={() => { setSelectedProduct(p); setStep("amount"); }}
+                        onClick={() => {
+                          if (p.code === "goalsave") {
+                            setShowCreate(false);
+                            setShowGoalV2(true);
+                            return;
+                          }
+                          setSelectedProduct(p);
+                          setStep("amount");
+                        }}
                         className={`text-left rounded-2xl border bg-gradient-to-br ${grad} p-4 hover:shadow-md transition-all`}
                       >
                         <div className="flex items-start justify-between">
