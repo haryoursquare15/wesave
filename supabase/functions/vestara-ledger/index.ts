@@ -976,11 +976,11 @@ serve(async (req) => {
 
         let { data: lockAcc } = await supabase
           .from("vestara_accounts").select("id")
-          .eq("user_id", userId!).eq("account_type", "savings").maybeSingle();
+          .eq("user_id", userId!).eq("account_type", "locked_savings").maybeSingle();
         if (!lockAcc) {
           const { data: newAcc, error: aErr } = await supabase
             .from("vestara_accounts")
-            .insert({ user_id: userId!, account_type: "savings", balance: 0, currency: "NGN", metadata: { product_code: "goalsave" } })
+            .insert({ user_id: userId!, account_type: "locked_savings", balance: 0, currency: "NGN", metadata: { product_code: "goalsave" } })
             .select("id").single();
           if (aErr) return err(aErr.message);
           lockAcc = newAcc;
