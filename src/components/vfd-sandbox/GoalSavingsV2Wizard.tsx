@@ -462,7 +462,7 @@ export function GoalSavingsV2Wizard({ onClose, onCreated, walletAvailable }: Pro
           onOpenChange={(o) => { if (!o) setPinGate(null); }}
           purpose={pinGate.purpose}
           description={pinGate.description}
-          onAuthorized={async () => {
+          onVerified={async () => {
             const fn = pinGate.onAuthorized;
             setPinGate(null);
             await fn();
