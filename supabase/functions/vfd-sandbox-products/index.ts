@@ -1029,8 +1029,16 @@ async function handleContributeTarget(userId: string, body: Record<string, unkno
   if (!membership) return jsonResponse({ error: "You must be a member to contribute" }, 400);
 
   const amount = Number(target.contribution_amount);
-  const debited = await debitForSavings(userId, amount);
-  if (!debited) return jsonResponse({ error: "Insufficient available balance. Please fund your wallet first." }, 400);
+  const isDdm = (target.funding_mode as string) === "ddm";
+  if (isDdm) {
+    if (target.mandate_status !== "authorized") {
+      return jsonResponse({ error: "Direct Debit Mandate is not authorized yet. Ask your admin to complete DDM setup." }, 400);
+    }
+    // DDM-funded — bank debit handled externally; skip wallet hold.
+  } else {
+    const debited = await debitForSavings(userId, amount);
+    if (!debited) return jsonResponse({ error: "Insufficient available balance. Please fund your wallet first." }, 400);
+  }
 
   const txRef = `target-${targetId}-${userId}-${Date.now()}`;
   await db.from("vfd_sandbox_target_contributions").insert({
