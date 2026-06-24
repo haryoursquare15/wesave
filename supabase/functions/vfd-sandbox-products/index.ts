@@ -3986,15 +3986,25 @@ async function handleUpdateGroupSettings(userId: string, body: Record<string, un
   const allowed = ["auto_debit", "contribution_hour", "contribution_minute", "contribution_day_of_week", "contribution_day_of_month", "description"] as const;
   for (const k of allowed) if (body[k] !== undefined) updates[k] = body[k];
 
-  // Funding mode toggle (wallet ↔ ddm)
+  // Funding mode toggle (wallet ↔ ddm). Switching TO ddm requires each
+  // member to individually accept the DDM mandate (₦100 fee), so the
+  // group-level status starts as "pending" — it flips to "authorized"
+  // automatically once every active member has signed.
   if (body.funding_mode !== undefined) {
     const fm = (body.funding_mode as string) === "ddm" ? "ddm" : "wallet";
     updates.funding_mode = fm;
     if (fm === "ddm") {
-      updates.mandate_status = "authorized";
+      updates.mandate_status = "pending";
       updates.mandate_reference = group.mandate_reference || `VES-DDM-AJO-${groupId}`;
+      // Reset all active members to pending so they re-authorize.
+      await db.from("vfd_sandbox_group_members")
+        .update({ mandate_status: "pending" })
+        .eq("group_id", groupId).eq("status", "active");
     } else {
       updates.mandate_status = "not_required";
+      await db.from("vfd_sandbox_group_members")
+        .update({ mandate_status: "not_required" })
+        .eq("group_id", groupId);
     }
   }
 
