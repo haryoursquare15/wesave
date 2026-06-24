@@ -158,7 +158,34 @@ export function SandboxTargetTab() {
             {isIndependent ? <User className="h-3 w-3" /> : <Users className="h-3 w-3" />}
             {isIndependent ? "Independent" : "Group Wallet"}
           </Badge>
+          <Badge variant={t.funding_mode === "ddm" ? "default" : "outline"}>
+            Funding: {t.funding_mode === "ddm" ? "DDM (bank)" : "Wallet"}
+          </Badge>
         </div>
+
+        {/* Admin: funding-mode toggle */}
+        {!isClosed && t.admin_id === currentUserId && (
+          <div className="p-3 rounded-xl border bg-card flex items-center justify-between gap-3">
+            <div className="text-xs">
+              <p className="font-medium">Funding mode</p>
+              <p className="text-muted-foreground">
+                {t.funding_mode === "ddm"
+                  ? "Direct Debit Mandate — contributions are pulled from members' banks."
+                  : "Wallet debit — contributions are pulled from members' Vestara wallets."}
+              </p>
+              {t.funding_mode === "ddm" && t.mandate_reference && (
+                <p className="text-[10px] font-mono mt-1">{t.mandate_reference}</p>
+              )}
+            </div>
+            <Button size="sm" variant="outline" disabled={products.loading} onClick={async () => {
+              const next = t.funding_mode === "ddm" ? "wallet" : "ddm";
+              const r = await products.updateTargetSettings({ target_id: t.id, funding_mode: next });
+              if (r?.data) { toast({ title: `Switched to ${next.toUpperCase()}` }); loadDetail(t.id); }
+            }}>
+              Switch to {t.funding_mode === "ddm" ? "Wallet" : "DDM"}
+            </Button>
+          </div>
+        )}
 
         {t.reason && <p className="text-sm text-muted-foreground">{t.reason}</p>}
         {t.description && <p className="text-sm text-muted-foreground">{t.description}</p>}
