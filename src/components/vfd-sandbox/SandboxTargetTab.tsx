@@ -24,6 +24,10 @@ interface TargetGroup {
   frequency: string; max_members: number; member_count: number;
   total_contributed: number; savings_type: string; status: string;
   target_date: string | null; description?: string; reason?: string;
+  admin_id?: string;
+  funding_mode?: "wallet" | "ddm";
+  mandate_status?: string;
+  mandate_reference?: string | null;
 }
 
 const fmt = (n: number) => new Intl.NumberFormat("en-NG").format(n);
