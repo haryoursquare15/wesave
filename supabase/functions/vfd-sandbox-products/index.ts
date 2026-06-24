@@ -285,7 +285,11 @@ async function handleCreateGroup(userId: string, body: Record<string, unknown>) 
   if (maxMembers < 3 || maxMembers > 20) return jsonResponse({ error: "Members must be between 3 and 20" }, 400);
   if (amount < 5000 || amount > 500000) return jsonResponse({ error: "Contribution must be between ₦5,000 and ₦500,000" }, 400);
 
-  const mandateStatus = fundingMode === "ddm" ? "authorized" : "not_required";
+  // Group-level mandate is "pending" until ALL members individually authorize
+  // their own DDM mandate (which costs a ₦100 setup fee per member). It flips
+  // to "authorized" automatically inside handleAcceptGroupMandate once every
+  // active member has signed.
+  const mandateStatus = fundingMode === "ddm" ? "pending" : "not_required";
 
   const { data: group, error } = await db.from("vfd_sandbox_groups").insert({
     name, admin_id: userId, contribution_amount: amount,
@@ -307,12 +311,15 @@ async function handleCreateGroup(userId: string, body: Record<string, unknown>) 
     group.mandate_reference = ref;
   }
 
+  // Admin is the first member. For DDM groups they must still accept the
+  // mandate (₦100 fee) themselves — flagged via mandate_status="pending".
   await db.from("vfd_sandbox_group_members").insert({
     group_id: group.id, user_id: userId, status: "active",
+    mandate_status: fundingMode === "ddm" ? "pending" : "not_required",
   });
 
   const fundingNote = fundingMode === "ddm"
-    ? "Group created with DDM funding. Members' banks will be debited automatically each cycle."
+    ? "Group created with DDM funding. Each member (including the admin) must accept the Direct Debit Mandate (₦100 one-time setup fee) before contributions can run."
     : "Group created. Waiting for members to join.";
   await postChatMessage(group.id, userId, fundingNote, "system");
 
@@ -414,10 +421,22 @@ async function handleJoinGroup(userId: string, body: Record<string, unknown>) {
   }
 
   const newCount = group.member_count + 1;
+  const isDdmGroup = (group.funding_mode as string) === "ddm";
   const { error } = await db.from("vfd_sandbox_group_members").insert({
     group_id: groupId, user_id: userId, status: "active",
+    mandate_status: isDdmGroup ? "pending" : "not_required",
   });
   if (error) return jsonResponse({ error: error.message }, 500);
+
+  if (isDdmGroup) {
+    await sendNotification(
+      userId,
+      "Authorize Direct Debit Mandate",
+      `You joined ${group.name}. A ₦100 one-time mandate setup fee is required to authorize automatic bank debits for cycle contributions.`,
+      "ddm_mandate_required",
+      groupId,
+    );
+  }
 
   await db.from("vfd_sandbox_groups").update({
     member_count: newCount, updated_at: new Date().toISOString(),
@@ -616,9 +635,12 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
   const isDdm = fundingMode === "ddm";
 
   if (isDdm) {
-    if (group.mandate_status !== "authorized") {
+    // Each member has their own mandate. Check this user's.
+    const { data: myMember } = await db.from("vfd_sandbox_group_members")
+      .select("mandate_status").eq("group_id", groupId).eq("user_id", userId).maybeSingle();
+    if (!myMember || myMember.mandate_status !== "authorized") {
       return jsonResponse({
-        error: "Direct Debit Mandate is not authorized yet. Ask your admin to complete DDM setup.",
+        error: "Your Direct Debit Mandate is not authorized yet. Please accept the mandate (₦100 setup fee) to enable automatic bank debits.",
         code: "MANDATE_NOT_AUTHORIZED",
       }, 400);
     }
