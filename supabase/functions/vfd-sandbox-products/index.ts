@@ -929,6 +929,8 @@ async function handleCreateTarget(userId: string, body: Record<string, unknown>)
   const savingsType = (body.savings_type as string) || "group";
   const description = (body.description as string) || null;
   const reason = (body.reason as string) || null;
+  const fundingModeRaw = (body.funding_mode as string) || "wallet";
+  const fundingMode = fundingModeRaw === "ddm" ? "ddm" : "wallet";
 
   if (!name || !goalAmount) return jsonResponse({ error: "Name and goal amount required" }, 400);
   if (goalAmount < 1000) return jsonResponse({ error: "Target must be at least ₦1,000" }, 400);
@@ -948,17 +950,25 @@ async function handleCreateTarget(userId: string, body: Record<string, unknown>)
   else targetDate.setMonth(targetDate.getMonth() + maxMembers);
 
   const inviteLimit = isIndependent ? 0 : Math.max(0, maxMembers - 1);
+  const mandateStatus = fundingMode === "ddm" ? "authorized" : "not_required";
 
   const { data: target, error } = await db.from("vfd_sandbox_targets").insert({
     name, admin_id: userId, goal_amount: goalAmount,
     contribution_amount: contributionAmount, frequency, max_members: maxMembers,
     savings_type: savingsType, target_date: targetDate.toISOString(), status: "active",
     description, reason, invite_limit: inviteLimit,
+    funding_mode: fundingMode, mandate_status: mandateStatus,
   }).select().single();
 
   if (error) {
     console.error("[create_target] insert failed", error);
     return jsonResponse({ error: error.message || "Could not create target" }, 500);
+  }
+
+  if (fundingMode === "ddm") {
+    const ref = `VES-DDM-TARGET-${target.id}`;
+    await db.from("vfd_sandbox_targets").update({ mandate_reference: ref }).eq("id", target.id);
+    target.mandate_reference = ref;
   }
 
   const { error: memberErr } = await db.from("vfd_sandbox_target_members")
