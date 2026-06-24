@@ -1111,15 +1111,15 @@ serve(async (req) => {
           const mandatePayload = {
             accountNo: client?.vfd_account_number || "",
             productCode: "GOALSAVE",
-            mandateCode: `VST-MND-${savings_id.slice(0, 12)}`,
-            amount: fee || s.commitment_amount,
+            mandateCode: `VES-MND-${savings_id.slice(0, 12)}`,
+            amount: s.commitment_amount,
             frequency: String(s.commitment_frequency || "").toUpperCase(),
             startDate,
             endDate,
             narration: `Vestara Goal Savings mandate ${savings_id.slice(0, 8)}`,
             payerName: [client?.first_name, client?.last_name].filter(Boolean).join(" ") || "Vestara Customer",
             payerPhone: client?.phone_number || "",
-            reference: `VST-MND-${savings_id}`,
+            reference: `VES-MND-${savings_id}`,
           };
 
           const ddmRes = await fetch(VFD_MANDATE_URL, {
