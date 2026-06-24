@@ -491,6 +491,13 @@ export function SandboxAjoTab() {
                 <div className="flex justify-between"><span className="text-muted-foreground">Day of month</span><span className="font-medium">{g.contribution_day_of_month ?? "—"}</span></div>
               )}
               <div className="flex justify-between"><span className="text-muted-foreground">Auto-debit (wallet)</span><span className="font-medium">{g.auto_debit ? "On" : "Off"}</span></div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Funding mode</span>
+                <span className="font-medium uppercase">{g.funding_mode === "ddm" ? "DDM (bank)" : "Wallet"}</span>
+              </div>
+              {g.funding_mode === "ddm" && (
+                <div className="flex justify-between"><span className="text-muted-foreground">Mandate ref</span><span className="font-mono text-[10px]">{g.mandate_reference || "—"}</span></div>
+              )}
             </div>
             {isAdmin && g.status === "active" && (
               <div className="rounded-xl border bg-card p-3 space-y-2">
@@ -499,6 +506,11 @@ export function SandboxAjoTab() {
                   const r = await products.updateGroupSettings({ group_id: g.id, auto_debit: !g.auto_debit });
                   if (r?.data) { toast({ title: `Auto-debit ${!g.auto_debit ? "enabled" : "disabled"}` }); loadDetail(g.id); }
                 }}>Toggle auto-debit</Button>
+                <Button size="sm" variant="outline" disabled={products.loading} onClick={async () => {
+                  const next = g.funding_mode === "ddm" ? "wallet" : "ddm";
+                  const r = await products.updateGroupSettings({ group_id: g.id, funding_mode: next });
+                  if (r?.data) { toast({ title: `Funding mode set to ${next.toUpperCase()}` }); loadDetail(g.id); }
+                }}>Switch to {g.funding_mode === "ddm" ? "Wallet" : "DDM"} funding</Button>
                 <Button size="sm" variant="outline" disabled={products.loading} onClick={async () => {
                   const r = await products.sandboxAutoContribute(g.id);
                   if (r?.data) { toast({ title: "Auto-sweep triggered", description: `Processed ${r.data.processed_count} group(s)` }); loadDetail(g.id); }
