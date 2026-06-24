@@ -4018,14 +4018,60 @@ async function handleUpdateGroupSettings(userId: string, body: Record<string, un
 }
 
 // =============================================
-// ACCEPT GROUP DDM MANDATE (per-member)
+// ACCEPT GROUP DDM MANDATE (per-member, VFD-backed)
 // =============================================
-// Each member of a DDM-funded thrift group must individually authorize the
-// Direct Debit Mandate. We charge a one-time ₦100 setup fee from their
-// Vestara wallet, then (in sandbox) instantly mark the member's mandate
-// as authorized. Once every active member is authorized, the group-level
-// mandate_status flips to "authorized".
+// Each member of a DDM-funded thrift group must individually authorize their
+// Direct Debit Mandate at VFD. Flow:
+//   1. Charge ₦100 setup fee from member's Vestara wallet (one-time).
+//   2. Fetch a VFD BaaS access token via consumerKey/consumerSecret.
+//   3. POST mandate payload to
+//      https://api-devapps.vfdbank.systems/vtech-mandate/api/v2/directdebit
+//   4. On VFD success (status "00" or HTTP 2xx), mark the member's mandate
+//      as authorized and store the returned mandateId as mandate_reference.
+//   5. Once every active member is authorized, flip the group-level
+//      mandate_status to "authorized" and post a chat note.
+// On VFD failure the fee is NOT refunded (matches goalsave behavior); the
+// member stays "pending" with the failure payload stored in mandate_payload
+// so the client can retry.
 const AJO_DDM_MANDATE_FEE = 100;
+const VFD_MANDATE_URL = "https://api-devapps.vfdbank.systems/vtech-mandate/api/v2/directdebit";
+const VFD_TOKEN_URL = "https://api-devapps.vfdbank.systems/vfd-tech/baas-portal/v1.1/baasauth/token";
+
+async function getVfdAccessToken(): Promise<string> {
+  const consumerKey = Deno.env.get("VFD_CONSUMER_KEY");
+  const consumerSecret = Deno.env.get("VFD_CONSUMER_SECRET");
+  const staticToken = Deno.env.get("VFD_ACCESS_TOKEN");
+  if (consumerKey && consumerSecret) {
+    const tokRes = await fetch(VFD_TOKEN_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "-1" }),
+    });
+    const tokData = await tokRes.json().catch(() => ({}));
+    if (tokData?.data?.access_token) return String(tokData.data.access_token);
+  }
+  return staticToken || "";
+}
+
+function mapAjoFrequencyToVfd(period: string): string {
+  const p = (period || "").toLowerCase();
+  if (p === "daily") return "DAILY";
+  if (p === "weekly") return "WEEKLY";
+  if (p === "monthly") return "MONTHLY";
+  return "MONTHLY";
+}
+
+function computeMandateEndDate(period: string, totalCycles: number): string {
+  const start = new Date();
+  const cycles = Math.max(1, Number(totalCycles) || 1);
+  const p = (period || "").toLowerCase();
+  // Add a 2-cycle safety buffer so the mandate doesn't expire before the last debit.
+  const buffered = cycles + 2;
+  if (p === "daily") start.setUTCDate(start.getUTCDate() + buffered);
+  else if (p === "weekly") start.setUTCDate(start.getUTCDate() + buffered * 7);
+  else start.setUTCMonth(start.getUTCMonth() + buffered);
+  return start.toISOString().split("T")[0];
+}
 
 async function handleAcceptGroupMandate(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
@@ -4033,7 +4079,7 @@ async function handleAcceptGroupMandate(userId: string, body: Record<string, unk
   if (!groupId) return jsonResponse({ error: "group_id required" }, 400);
 
   const { data: group } = await db.from("vfd_sandbox_groups")
-    .select("id, name, funding_mode, mandate_status, mandate_reference, admin_id")
+    .select("id, name, funding_mode, mandate_status, mandate_reference, admin_id, contribution_amount, period, total_cycles")
     .eq("id", groupId).maybeSingle();
   if (!group) return jsonResponse({ error: "Group not found" }, 404);
   if (group.funding_mode !== "ddm") {
@@ -4049,10 +4095,21 @@ async function handleAcceptGroupMandate(userId: string, body: Record<string, unk
     return jsonResponse({ data: { success: true, already_authorized: true, mandate_reference: member.mandate_reference } });
   }
 
-  const fee = AJO_DDM_MANDATE_FEE;
-  const feeRef = `VES-AJO-MND-${groupId}-${userId}-${Date.now()}`;
+  // Fetch the customer's VFD account/BVN for the debtor side of the mandate.
+  const { data: client } = await db.from("vfd_sandbox_clients")
+    .select("vfd_account_number, bvn, first_name, last_name, phone_number")
+    .eq("user_id", userId).maybeSingle();
+  if (!client?.vfd_account_number) {
+    return jsonResponse({
+      error: "No VFD account found for your profile. Complete KYC and provision your wallet before authorizing a Direct Debit Mandate.",
+      code: "VFD_ACCOUNT_MISSING",
+    }, 400);
+  }
 
-  // Debit the ₦100 setup fee from wallet (same pattern as goalsave_mandate_setup).
+  const fee = AJO_DDM_MANDATE_FEE;
+  const feeRef = `VES-AJO-MND-${groupId}-${userId.slice(0, 8)}-${Date.now()}`;
+
+  // 1) Debit the ₦100 setup fee from wallet.
   const { error: wErr } = await db.rpc("vestara_withdraw", {
     _user_id: userId,
     _amount: fee,
@@ -4082,17 +4139,82 @@ async function handleAcceptGroupMandate(userId: string, body: Record<string, unk
     metadata: { group_id: groupId, product_code: "ajo_ddm" },
   });
 
-  const memberMandateRef = `VES-DDM-AJO-${groupId}-${userId.slice(0, 8)}`;
+  // 2) Call VFD DDM API.
+  const mandateCode = `VES-DDM-AJO-${groupId.slice(0, 8)}-${userId.slice(0, 8)}`;
+  const startDate = new Date().toISOString().split("T")[0];
+  const endDate = computeMandateEndDate(group.period as string, group.total_cycles as number);
+  const mandatePayload = {
+    accountNo: client.vfd_account_number,
+    productCode: "AJO_DDM",
+    mandateCode,
+    amount: Number(group.contribution_amount),
+    frequency: mapAjoFrequencyToVfd(group.period as string),
+    startDate,
+    endDate,
+    narration: `Vestara Ajo ${String(group.name).slice(0, 32)} mandate`,
+    payerName: [client.first_name, client.last_name].filter(Boolean).join(" ") || "Vestara Customer",
+    payerPhone: client.phone_number || "",
+    reference: mandateCode,
+  };
+
+  let vfdResponsePayload: Record<string, unknown> = {};
+  let memberMandateRef = mandateCode;
+  let vfdAuthorized = false;
+
+  try {
+    const accessToken = await getVfdAccessToken();
+    if (!accessToken) throw new Error("VFD credentials not configured");
+
+    const ddmRes = await fetch(VFD_MANDATE_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", AccessToken: accessToken },
+      body: JSON.stringify(mandatePayload),
+    });
+    const ddmJson = await ddmRes.json().catch(() => ({} as Record<string, unknown>));
+    vfdResponsePayload = { request: mandatePayload, response: ddmJson, http_status: ddmRes.status };
+
+    const ok = (ddmJson as any)?.status === "00" || ddmRes.ok;
+    if (ok) {
+      memberMandateRef = String(
+        (ddmJson as any)?.data?.mandateId ||
+        (ddmJson as any)?.data?.mandateCode ||
+        (ddmJson as any)?.data?.reference ||
+        mandateCode,
+      );
+      vfdAuthorized = true;
+    }
+  } catch (e) {
+    vfdResponsePayload = { request: mandatePayload, error: e instanceof Error ? e.message : String(e) };
+  }
+
   const nowIso = new Date().toISOString();
+
+  if (!vfdAuthorized) {
+    // Persist the failure so the client can see it; keep status "pending"
+    // (fee already charged — matches goalsave mandate behavior).
+    await db.from("vfd_sandbox_group_members").update({
+      mandate_status: "failed",
+      mandate_payload: vfdResponsePayload,
+      mandate_fee_charged_at: nowIso,
+      mandate_fee_amount: fee,
+    }).eq("id", member.id);
+    return jsonResponse({
+      error: "VFD did not authorize the mandate. The ₦100 setup fee has been charged; please try again.",
+      code: "MANDATE_VFD_FAILED",
+      details: vfdResponsePayload,
+    }, 502);
+  }
+
   await db.from("vfd_sandbox_group_members").update({
     mandate_status: "authorized",
     mandate_reference: memberMandateRef,
     mandate_authorized_at: nowIso,
     mandate_fee_charged_at: nowIso,
     mandate_fee_amount: fee,
+    mandate_payload: vfdResponsePayload,
   }).eq("id", member.id);
 
-  // If every active member is now authorized, flip the group mandate too.
+  // If every active member is authorized, flip the group-level mandate.
   const { data: pendingMembers } = await db.from("vfd_sandbox_group_members")
     .select("id").eq("group_id", groupId).eq("status", "active").neq("mandate_status", "authorized");
   if (!pendingMembers || pendingMembers.length === 0) {
@@ -4109,7 +4231,7 @@ async function handleAcceptGroupMandate(userId: string, body: Record<string, unk
     `authorized the Direct Debit Mandate (₦${fee} setup fee charged).`,
     "system");
   await sendNotification(userId, "Mandate Authorized",
-    `Your Direct Debit Mandate for ${group.name} is now active. ₦${fee} was debited from your wallet for the one-time setup fee.`,
+    `Your Direct Debit Mandate for ${group.name} is now active (ref ${memberMandateRef}). ₦${fee} was debited from your wallet as the one-time setup fee.`,
     "ddm_mandate_authorized", groupId);
 
   return jsonResponse({
@@ -4119,6 +4241,7 @@ async function handleAcceptGroupMandate(userId: string, body: Record<string, unk
       mandate_reference: memberMandateRef,
       fee_charged: fee,
       fee_reference: feeRef,
+      vfd: vfdResponsePayload,
     },
   });
 }
