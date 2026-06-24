@@ -796,12 +796,19 @@ export function SandboxAjoTab() {
                     </div>
                   )}
 
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
+                    {mandatePending && (
+                      <Button size="sm" variant="default" className="bg-amber-600 hover:bg-amber-700" onClick={(e) => {
+                        e.stopPropagation();
+                        setMandateGroup(g);
+                      }}>
+                        Authorize DDM Mandate (₦{AJO_DDM_FEE})
+                      </Button>
+                    )}
                     {/* Joining is invite-only — admins invite via the group detail page,
                         invitees accept from the notification bell. No open "Join" button. */}
-                    {g.status === "active" && (g.vfd_sandbox_group_members || []).some((m: any) => m.user_id === currentUserId) && (() => {
-                      const myM = (g.vfd_sandbox_group_members || []).find((m: any) => m.user_id === currentUserId);
-                      const contributed = !!myM?.has_contributed_current;
+                    {g.status === "active" && isMember && !mandatePending && (() => {
+                      const contributed = !!myMember?.has_contributed_current;
                       return (
                         <Button size="sm" onClick={async (e) => {
                           e.stopPropagation();
