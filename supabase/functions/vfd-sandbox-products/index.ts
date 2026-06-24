@@ -301,11 +301,20 @@ async function handleCreateGroup(userId: string, body: Record<string, unknown>) 
 
   if (error) return jsonResponse({ error: error.message }, 500);
 
+  if (fundingMode === "ddm") {
+    const ref = `VES-DDM-AJO-${group.id}`;
+    await db.from("vfd_sandbox_groups").update({ mandate_reference: ref }).eq("id", group.id);
+    group.mandate_reference = ref;
+  }
+
   await db.from("vfd_sandbox_group_members").insert({
     group_id: group.id, user_id: userId, status: "active",
   });
 
-  await postChatMessage(group.id, userId, "Group created. Waiting for members to join.", "system");
+  const fundingNote = fundingMode === "ddm"
+    ? "Group created with DDM funding. Members' banks will be debited automatically each cycle."
+    : "Group created. Waiting for members to join.";
+  await postChatMessage(group.id, userId, fundingNote, "system");
 
   return jsonResponse({ data: group });
 }
