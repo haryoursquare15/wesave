@@ -48,6 +48,7 @@ export function SandboxTargetTab() {
   const [form, setForm] = useState({
     name: "", description: "", reason: "", goal_amount: "",
     max_members: "10", frequency: "monthly", savings_type: "group" as "group" | "independent",
+    funding_mode: "wallet" as "wallet" | "ddm",
   });
 
   const isIndependentForm = form.savings_type === "independent";
