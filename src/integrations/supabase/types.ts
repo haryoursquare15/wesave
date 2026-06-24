@@ -5171,9 +5171,12 @@ export type Database = {
           current_cycle: number
           current_payout_position: number | null
           description: string | null
+          funding_mode: string
           id: string
           invite_code: string | null
           is_full_at: string | null
+          mandate_reference: string | null
+          mandate_status: string
           max_members: number
           member_count: number
           name: string
@@ -5199,9 +5202,12 @@ export type Database = {
           current_cycle?: number
           current_payout_position?: number | null
           description?: string | null
+          funding_mode?: string
           id?: string
           invite_code?: string | null
           is_full_at?: string | null
+          mandate_reference?: string | null
+          mandate_status?: string
           max_members?: number
           member_count?: number
           name: string
@@ -5227,9 +5233,12 @@ export type Database = {
           current_cycle?: number
           current_payout_position?: number | null
           description?: string | null
+          funding_mode?: string
           id?: string
           invite_code?: string | null
           is_full_at?: string | null
+          mandate_reference?: string | null
+          mandate_status?: string
           max_members?: number
           member_count?: number
           name?: string
@@ -5831,9 +5840,12 @@ export type Database = {
           created_at: string
           description: string | null
           frequency: string
+          funding_mode: string
           goal_amount: number
           id: string
           invite_limit: number | null
+          mandate_reference: string | null
+          mandate_status: string
           max_members: number
           member_count: number
           name: string
@@ -5850,9 +5862,12 @@ export type Database = {
           created_at?: string
           description?: string | null
           frequency?: string
+          funding_mode?: string
           goal_amount: number
           id?: string
           invite_limit?: number | null
+          mandate_reference?: string | null
+          mandate_status?: string
           max_members?: number
           member_count?: number
           name: string
@@ -5869,9 +5884,12 @@ export type Database = {
           created_at?: string
           description?: string | null
           frequency?: string
+          funding_mode?: string
           goal_amount?: number
           id?: string
           invite_limit?: number | null
+          mandate_reference?: string | null
+          mandate_status?: string
           max_members?: number
           member_count?: number
           name?: string

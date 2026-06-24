@@ -28,6 +28,9 @@ interface Group {
   max_members: number; member_count: number; current_cycle: number;
   total_cycles: number; status: string; admin_id: string;
   auto_debit?: boolean;
+  funding_mode?: "wallet" | "ddm";
+  mandate_status?: string;
+  mandate_reference?: string | null;
   contribution_hour?: number; contribution_minute?: number;
   contribution_day_of_week?: number; contribution_day_of_month?: number;
   commenced_at?: string;
@@ -130,6 +133,7 @@ export function SandboxAjoTab() {
     contributionAmount: 10000,
     period: "weekly" as string,
     autoDebit: true,
+    fundingMode: "wallet" as "wallet" | "ddm",
     timeSlot: 18,
     dayOfWeek: 1,
     dayOfMonth: 1,
@@ -160,6 +164,7 @@ export function SandboxAjoTab() {
       max_members: form.maxMembers,
       period: form.period,
       auto_debit: form.autoDebit,
+      funding_mode: form.fundingMode,
       contribution_hour: slot?.hour ?? 9,
       contribution_minute: slot?.minute ?? 0,
       contribution_day_of_week: form.dayOfWeek,
@@ -167,11 +172,12 @@ export function SandboxAjoTab() {
     });
     if (result?.data) {
       toast({ title: "Group Created!", description: form.name });
-      setForm({ name: "", maxMembers: 5, contributionAmount: 10000, period: "weekly", autoDebit: true, timeSlot: 18, dayOfWeek: 1, dayOfMonth: 1 });
+      setForm({ name: "", maxMembers: 5, contributionAmount: 10000, period: "weekly", autoDebit: true, fundingMode: "wallet", timeSlot: 18, dayOfWeek: 1, dayOfMonth: 1 });
       setShowCreate(false);
       await loadGroups();
     }
   };
+
 
   const loadDetail = async (groupId: string) => {
     // If this group's swap window has already elapsed in the background,
@@ -485,6 +491,13 @@ export function SandboxAjoTab() {
                 <div className="flex justify-between"><span className="text-muted-foreground">Day of month</span><span className="font-medium">{g.contribution_day_of_month ?? "—"}</span></div>
               )}
               <div className="flex justify-between"><span className="text-muted-foreground">Auto-debit (wallet)</span><span className="font-medium">{g.auto_debit ? "On" : "Off"}</span></div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Funding mode</span>
+                <span className="font-medium uppercase">{g.funding_mode === "ddm" ? "DDM (bank)" : "Wallet"}</span>
+              </div>
+              {g.funding_mode === "ddm" && (
+                <div className="flex justify-between"><span className="text-muted-foreground">Mandate ref</span><span className="font-mono text-[10px]">{g.mandate_reference || "—"}</span></div>
+              )}
             </div>
             {isAdmin && g.status === "active" && (
               <div className="rounded-xl border bg-card p-3 space-y-2">
@@ -493,6 +506,11 @@ export function SandboxAjoTab() {
                   const r = await products.updateGroupSettings({ group_id: g.id, auto_debit: !g.auto_debit });
                   if (r?.data) { toast({ title: `Auto-debit ${!g.auto_debit ? "enabled" : "disabled"}` }); loadDetail(g.id); }
                 }}>Toggle auto-debit</Button>
+                <Button size="sm" variant="outline" disabled={products.loading} onClick={async () => {
+                  const next = g.funding_mode === "ddm" ? "wallet" : "ddm";
+                  const r = await products.updateGroupSettings({ group_id: g.id, funding_mode: next });
+                  if (r?.data) { toast({ title: `Funding mode set to ${next.toUpperCase()}` }); loadDetail(g.id); }
+                }}>Switch to {g.funding_mode === "ddm" ? "Wallet" : "DDM"} funding</Button>
                 <Button size="sm" variant="outline" disabled={products.loading} onClick={async () => {
                   const r = await products.sandboxAutoContribute(g.id);
                   if (r?.data) { toast({ title: "Auto-sweep triggered", description: `Processed ${r.data.processed_count} group(s)` }); loadDetail(g.id); }
@@ -589,6 +607,23 @@ export function SandboxAjoTab() {
                   <SelectItem value="monthly">Monthly</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Funding Mode (admin choice) */}
+            <div className="p-3 rounded-xl bg-card border border-border space-y-2">
+              <Label>Funding Mode</Label>
+              <Select value={form.fundingMode} onValueChange={(v) => setForm(p => ({ ...p, fundingMode: v as "wallet" | "ddm" }))}>
+                <SelectTrigger className="h-12"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="wallet">Wallet debit — pull from each member's Vestara wallet</SelectItem>
+                  <SelectItem value="ddm">Direct Debit Mandate — auto-debit each member's bank (VFD DDM)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">
+                {form.fundingMode === "ddm"
+                  ? "Contributions are collected straight from members' linked bank accounts. No wallet balance required."
+                  : "Members must have enough in their Vestara wallet on contribution day."}
+              </p>
             </div>
 
             {/* Auto-Debit */}

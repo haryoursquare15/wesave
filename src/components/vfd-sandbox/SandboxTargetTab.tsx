@@ -24,6 +24,10 @@ interface TargetGroup {
   frequency: string; max_members: number; member_count: number;
   total_contributed: number; savings_type: string; status: string;
   target_date: string | null; description?: string; reason?: string;
+  admin_id?: string;
+  funding_mode?: "wallet" | "ddm";
+  mandate_status?: string;
+  mandate_reference?: string | null;
 }
 
 const fmt = (n: number) => new Intl.NumberFormat("en-NG").format(n);
@@ -44,6 +48,7 @@ export function SandboxTargetTab() {
   const [form, setForm] = useState({
     name: "", description: "", reason: "", goal_amount: "",
     max_members: "10", frequency: "monthly", savings_type: "group" as "group" | "independent",
+    funding_mode: "wallet" as "wallet" | "ddm",
   });
 
   const isIndependentForm = form.savings_type === "independent";
@@ -104,10 +109,11 @@ export function SandboxTargetTab() {
       name: form.name, description: form.description, reason: form.reason,
       goal_amount: targetAmount, max_members: maxMembers,
       frequency: form.frequency, savings_type: form.savings_type,
+      funding_mode: form.funding_mode,
     });
     if (result?.data) {
       toast({ title: "Target Created!", description: form.name });
-      setForm({ name: "", description: "", reason: "", goal_amount: "", max_members: "10", frequency: "monthly", savings_type: "group" });
+      setForm({ name: "", description: "", reason: "", goal_amount: "", max_members: "10", frequency: "monthly", savings_type: "group", funding_mode: "wallet" });
       setShowCreate(false);
       await loadTargets();
     } else {
@@ -152,7 +158,34 @@ export function SandboxTargetTab() {
             {isIndependent ? <User className="h-3 w-3" /> : <Users className="h-3 w-3" />}
             {isIndependent ? "Independent" : "Group Wallet"}
           </Badge>
+          <Badge variant={t.funding_mode === "ddm" ? "default" : "outline"}>
+            Funding: {t.funding_mode === "ddm" ? "DDM (bank)" : "Wallet"}
+          </Badge>
         </div>
+
+        {/* Admin: funding-mode toggle */}
+        {!isClosed && t.admin_id === currentUserId && (
+          <div className="p-3 rounded-xl border bg-card flex items-center justify-between gap-3">
+            <div className="text-xs">
+              <p className="font-medium">Funding mode</p>
+              <p className="text-muted-foreground">
+                {t.funding_mode === "ddm"
+                  ? "Direct Debit Mandate — contributions are pulled from members' banks."
+                  : "Wallet debit — contributions are pulled from members' Vestara wallets."}
+              </p>
+              {t.funding_mode === "ddm" && t.mandate_reference && (
+                <p className="text-[10px] font-mono mt-1">{t.mandate_reference}</p>
+              )}
+            </div>
+            <Button size="sm" variant="outline" disabled={products.loading} onClick={async () => {
+              const next = t.funding_mode === "ddm" ? "wallet" : "ddm";
+              const r = await products.updateTargetSettings({ target_id: t.id, funding_mode: next });
+              if (r?.data) { toast({ title: `Switched to ${next.toUpperCase()}` }); loadDetail(t.id); }
+            }}>
+              Switch to {t.funding_mode === "ddm" ? "Wallet" : "DDM"}
+            </Button>
+          </div>
+        )}
 
         {t.reason && <p className="text-sm text-muted-foreground">{t.reason}</p>}
         {t.description && <p className="text-sm text-muted-foreground">{t.description}</p>}
@@ -442,6 +475,22 @@ export function SandboxTargetTab() {
               </div>
               <p className="text-lg font-bold">{format(autoTargetDate, "PPP")}</p>
               <p className="text-xs text-muted-foreground">{maxMembers} {freqLabel} from today</p>
+            </div>
+
+            <div className="p-3 rounded-lg bg-card border border-border space-y-2">
+              <Label>Funding Mode</Label>
+              <Select value={form.funding_mode} onValueChange={(v) => setForm(p => ({ ...p, funding_mode: v as "wallet" | "ddm" }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="wallet">Wallet debit (Vestara balance)</SelectItem>
+                  <SelectItem value="ddm">Direct Debit Mandate (VFD bank debit)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">
+                {form.funding_mode === "ddm"
+                  ? "Each contribution is pulled straight from members' bank accounts via VFD DDM — no wallet balance needed."
+                  : "Members fund their wallet and contributions are debited from there."}
+              </p>
             </div>
 
             <div className="p-3 rounded-lg bg-muted/30 border border-border">

@@ -274,6 +274,8 @@ async function handleCreateGroup(userId: string, body: Record<string, unknown>) 
   const period = (body.period as string) || "monthly";
   const description = (body.description as string) || null;
   const autoDebit = body.auto_debit !== false;
+  const fundingModeRaw = (body.funding_mode as string) || "wallet";
+  const fundingMode = fundingModeRaw === "ddm" ? "ddm" : "wallet";
   const contributionHour = Number(body.contribution_hour) || 16;
   const contributionMinute = Number(body.contribution_minute) || 0;
   const contributionDayOfWeek = Number(body.contribution_day_of_week) || 1;
@@ -283,11 +285,15 @@ async function handleCreateGroup(userId: string, body: Record<string, unknown>) 
   if (maxMembers < 3 || maxMembers > 20) return jsonResponse({ error: "Members must be between 3 and 20" }, 400);
   if (amount < 5000 || amount > 500000) return jsonResponse({ error: "Contribution must be between ₦5,000 and ₦500,000" }, 400);
 
+  const mandateStatus = fundingMode === "ddm" ? "authorized" : "not_required";
+
   const { data: group, error } = await db.from("vfd_sandbox_groups").insert({
     name, admin_id: userId, contribution_amount: amount,
     period, max_members: maxMembers, total_cycles: maxMembers,
     status: "pending",
     description, auto_debit: autoDebit,
+    funding_mode: fundingMode,
+    mandate_status: mandateStatus,
     contribution_hour: contributionHour, contribution_minute: contributionMinute,
     contribution_day_of_week: contributionDayOfWeek,
     contribution_day_of_month: contributionDayOfMonth,
@@ -295,11 +301,20 @@ async function handleCreateGroup(userId: string, body: Record<string, unknown>) 
 
   if (error) return jsonResponse({ error: error.message }, 500);
 
+  if (fundingMode === "ddm") {
+    const ref = `VES-DDM-AJO-${group.id}`;
+    await db.from("vfd_sandbox_groups").update({ mandate_reference: ref }).eq("id", group.id);
+    group.mandate_reference = ref;
+  }
+
   await db.from("vfd_sandbox_group_members").insert({
     group_id: group.id, user_id: userId, status: "active",
   });
 
-  await postChatMessage(group.id, userId, "Group created. Waiting for members to join.", "system");
+  const fundingNote = fundingMode === "ddm"
+    ? "Group created with DDM funding. Members' banks will be debited automatically each cycle."
+    : "Group created. Waiting for members to join.";
+  await postChatMessage(group.id, userId, fundingNote, "system");
 
   return jsonResponse({ data: group });
 }
@@ -597,34 +612,47 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
   if (existingContrib) return jsonResponse({ error: "Already contributed this cycle" }, 400);
 
   const amount = Number(group.contribution_amount);
-  const reference = `ajo-manual-${groupId}-${activeCycle.id}-${userId}`;
-  const debit = await debitVestaraForThrift(userId, groupId, amount, reference, {
-    cycle_id: activeCycle.id,
-    cycle_number: group.current_cycle,
-    source: "vfd_sandbox_ajo",
-  });
-  if (!debit.success) {
-    const available = await getVestaraWalletBalance(userId);
-    const rawErr = (debit.error || "").toString();
-    const isInsufficient = available < amount || /insufficient/i.test(rawErr);
-    if (isInsufficient) {
-      const shortfall = Math.max(0, amount - available);
+  const fundingMode = (group.funding_mode as string) || "wallet";
+  const isDdm = fundingMode === "ddm";
+
+  if (isDdm) {
+    if (group.mandate_status !== "authorized") {
       return jsonResponse({
-        error: `Insufficient wallet balance. You need ₦${amount.toLocaleString()} but have ₦${available.toLocaleString()} available. Please fund your wallet with at least ₦${shortfall.toLocaleString()}.`,
-        code: "INSUFFICIENT_BALANCE",
-        required: amount,
-        available,
-        shortfall,
+        error: "Direct Debit Mandate is not authorized yet. Ask your admin to complete DDM setup.",
+        code: "MANDATE_NOT_AUTHORIZED",
       }, 400);
     }
-    // Surface the real underlying error instead of masking it as "insufficient"
-    console.error(`[handleContributeGroup] debit failed group=${groupId} user=${userId} amount=${amount} available=${available} err=${rawErr}`);
-    return jsonResponse({
-      error: rawErr || "Contribution failed. Please try again.",
-      code: "CONTRIBUTION_FAILED",
-      required: amount,
-      available,
-    }, 400);
+    // DDM-funded: funds flow VFD bank → settlement pool → group pool. Skip wallet debit.
+    // Sandbox simulates a successful DDM collection here.
+  } else {
+    const reference = `ajo-manual-${groupId}-${activeCycle.id}-${userId}`;
+    const debit = await debitVestaraForThrift(userId, groupId, amount, reference, {
+      cycle_id: activeCycle.id,
+      cycle_number: group.current_cycle,
+      source: "vfd_sandbox_ajo",
+    });
+    if (!debit.success) {
+      const available = await getVestaraWalletBalance(userId);
+      const rawErr = (debit.error || "").toString();
+      const isInsufficient = available < amount || /insufficient/i.test(rawErr);
+      if (isInsufficient) {
+        const shortfall = Math.max(0, amount - available);
+        return jsonResponse({
+          error: `Insufficient wallet balance. You need ₦${amount.toLocaleString()} but have ₦${available.toLocaleString()} available. Please fund your wallet with at least ₦${shortfall.toLocaleString()}.`,
+          code: "INSUFFICIENT_BALANCE",
+          required: amount,
+          available,
+          shortfall,
+        }, 400);
+      }
+      console.error(`[handleContributeGroup] debit failed group=${groupId} user=${userId} amount=${amount} available=${available} err=${rawErr}`);
+      return jsonResponse({
+        error: rawErr || "Contribution failed. Please try again.",
+        code: "CONTRIBUTION_FAILED",
+        required: amount,
+        available,
+      }, 400);
+    }
   }
 
   await db.from("vfd_sandbox_group_contributions").insert({
@@ -633,15 +661,20 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
 
   await db.from("vfd_sandbox_contribution_audit").insert({
     user_id: userId, group_id: groupId, cycle_id: activeCycle.id,
-    amount, contribution_type: "manual", status: "success",
+    amount, contribution_type: isDdm ? "ddm" : "manual", status: "success",
   });
 
   await db.from("vfd_sandbox_group_members").update({ has_contributed_current: true })
     .eq("group_id", groupId).eq("user_id", userId);
 
-  await postChatMessage(groupId, userId, `has contributed ₦${amount.toLocaleString()} to the pool`, "contribution_status");
+  const chatMsg = isDdm
+    ? `Direct debit of ₦${amount.toLocaleString()} collected (DDM) for cycle ${group.current_cycle}`
+    : `has contributed ₦${amount.toLocaleString()} to the pool`;
+  await postChatMessage(groupId, userId, chatMsg, "contribution_status");
   await sendNotification(userId, "Contribution Successful",
-    `Your contribution of ₦${amount.toLocaleString()} has been recorded.`,
+    isDdm
+      ? `Your bank was debited ₦${amount.toLocaleString()} via DDM for ${group.name}.`
+      : `Your contribution of ₦${amount.toLocaleString()} has been recorded.`,
     "contribution_success", groupId);
 
   const { count } = await db.from("vfd_sandbox_group_contributions")
@@ -659,7 +692,7 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
   return jsonResponse({
     data: {
       success: true, contributed: true, amount,
-      cycle: group.current_cycle, payment_source: "wallet",
+      cycle: group.current_cycle, payment_source: isDdm ? "ddm" : "wallet",
       all_contributed: allContributed, auto_payout: payoutResult,
       message: allContributed ? "All members have contributed!" : "Contribution recorded successfully",
     },
@@ -896,6 +929,8 @@ async function handleCreateTarget(userId: string, body: Record<string, unknown>)
   const savingsType = (body.savings_type as string) || "group";
   const description = (body.description as string) || null;
   const reason = (body.reason as string) || null;
+  const fundingModeRaw = (body.funding_mode as string) || "wallet";
+  const fundingMode = fundingModeRaw === "ddm" ? "ddm" : "wallet";
 
   if (!name || !goalAmount) return jsonResponse({ error: "Name and goal amount required" }, 400);
   if (goalAmount < 1000) return jsonResponse({ error: "Target must be at least ₦1,000" }, 400);
@@ -915,17 +950,25 @@ async function handleCreateTarget(userId: string, body: Record<string, unknown>)
   else targetDate.setMonth(targetDate.getMonth() + maxMembers);
 
   const inviteLimit = isIndependent ? 0 : Math.max(0, maxMembers - 1);
+  const mandateStatus = fundingMode === "ddm" ? "authorized" : "not_required";
 
   const { data: target, error } = await db.from("vfd_sandbox_targets").insert({
     name, admin_id: userId, goal_amount: goalAmount,
     contribution_amount: contributionAmount, frequency, max_members: maxMembers,
     savings_type: savingsType, target_date: targetDate.toISOString(), status: "active",
     description, reason, invite_limit: inviteLimit,
+    funding_mode: fundingMode, mandate_status: mandateStatus,
   }).select().single();
 
   if (error) {
     console.error("[create_target] insert failed", error);
     return jsonResponse({ error: error.message || "Could not create target" }, 500);
+  }
+
+  if (fundingMode === "ddm") {
+    const ref = `VES-DDM-TARGET-${target.id}`;
+    await db.from("vfd_sandbox_targets").update({ mandate_reference: ref }).eq("id", target.id);
+    target.mandate_reference = ref;
   }
 
   const { error: memberErr } = await db.from("vfd_sandbox_target_members")
@@ -986,8 +1029,16 @@ async function handleContributeTarget(userId: string, body: Record<string, unkno
   if (!membership) return jsonResponse({ error: "You must be a member to contribute" }, 400);
 
   const amount = Number(target.contribution_amount);
-  const debited = await debitForSavings(userId, amount);
-  if (!debited) return jsonResponse({ error: "Insufficient available balance. Please fund your wallet first." }, 400);
+  const isDdm = (target.funding_mode as string) === "ddm";
+  if (isDdm) {
+    if (target.mandate_status !== "authorized") {
+      return jsonResponse({ error: "Direct Debit Mandate is not authorized yet. Ask your admin to complete DDM setup." }, 400);
+    }
+    // DDM-funded — bank debit handled externally; skip wallet hold.
+  } else {
+    const debited = await debitForSavings(userId, amount);
+    if (!debited) return jsonResponse({ error: "Insufficient available balance. Please fund your wallet first." }, 400);
+  }
 
   const txRef = `target-${targetId}-${userId}-${Date.now()}`;
   await db.from("vfd_sandbox_target_contributions").insert({
@@ -1018,7 +1069,12 @@ async function handleContributeTarget(userId: string, body: Record<string, unkno
         // Use the stored contributed_amount (already updated for current user)
         const memberContributed = m.user_id === userId ? newMemberContributed : Number(m.contributed_amount);
         if (memberContributed > 0) {
-          await creditFromSavings(m.user_id, memberContributed);
+          if (isDdm) {
+            // DDM-funded: cash sat in the pool, credit member's wallet directly.
+            await creditWallet(m.user_id, memberContributed);
+          } else {
+            await creditFromSavings(m.user_id, memberContributed);
+          }
           await sendNotification(m.user_id, "🎯 Target Achieved!",
             `"${target.name}" has reached its savings target! ₦${memberContributed.toLocaleString()} has been released to your wallet.`,
             "target_achieved");
@@ -3900,7 +3956,7 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
 async function handleUpdateGroupSettings(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const groupId = body.group_id as string;
-  const { data: group } = await db.from("vfd_sandbox_groups").select("admin_id, status").eq("id", groupId).maybeSingle();
+  const { data: group } = await db.from("vfd_sandbox_groups").select("admin_id, status, funding_mode, mandate_reference").eq("id", groupId).maybeSingle();
   if (!group) return jsonResponse({ error: "Group not found" }, 404);
   if (group.admin_id !== userId) return jsonResponse({ error: "Only the admin can update settings" }, 403);
 
@@ -3908,9 +3964,49 @@ async function handleUpdateGroupSettings(userId: string, body: Record<string, un
   const allowed = ["auto_debit", "contribution_hour", "contribution_minute", "contribution_day_of_week", "contribution_day_of_month", "description"] as const;
   for (const k of allowed) if (body[k] !== undefined) updates[k] = body[k];
 
+  // Funding mode toggle (wallet ↔ ddm)
+  if (body.funding_mode !== undefined) {
+    const fm = (body.funding_mode as string) === "ddm" ? "ddm" : "wallet";
+    updates.funding_mode = fm;
+    if (fm === "ddm") {
+      updates.mandate_status = "authorized";
+      updates.mandate_reference = group.mandate_reference || `VES-DDM-AJO-${groupId}`;
+    } else {
+      updates.mandate_status = "not_required";
+    }
+  }
+
   const { error } = await db.from("vfd_sandbox_groups").update(updates).eq("id", groupId);
   if (error) return jsonResponse({ error: error.message }, 500);
-  await postChatMessage(groupId, userId, "Admin updated group settings", "system");
+  const note = body.funding_mode !== undefined
+    ? `Admin switched funding mode to ${(body.funding_mode as string).toUpperCase()}`
+    : "Admin updated group settings";
+  await postChatMessage(groupId, userId, note, "system");
+  return jsonResponse({ data: { success: true } });
+}
+
+async function handleUpdateTargetSettings(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const targetId = body.target_id as string;
+  const { data: target } = await db.from("vfd_sandbox_targets").select("admin_id, funding_mode, mandate_reference").eq("id", targetId).maybeSingle();
+  if (!target) return jsonResponse({ error: "Target not found" }, 404);
+  if (target.admin_id !== userId) return jsonResponse({ error: "Only the admin can update settings" }, 403);
+
+  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (body.description !== undefined) updates.description = body.description;
+  if (body.funding_mode !== undefined) {
+    const fm = (body.funding_mode as string) === "ddm" ? "ddm" : "wallet";
+    updates.funding_mode = fm;
+    if (fm === "ddm") {
+      updates.mandate_status = "authorized";
+      updates.mandate_reference = target.mandate_reference || `VES-DDM-TARGET-${targetId}`;
+    } else {
+      updates.mandate_status = "not_required";
+    }
+  }
+
+  const { error } = await db.from("vfd_sandbox_targets").update(updates).eq("id", targetId);
+  if (error) return jsonResponse({ error: error.message }, 500);
   return jsonResponse({ data: { success: true } });
 }
 
@@ -3985,6 +4081,7 @@ Deno.serve(async (req) => {
       case "request_target_withdrawal": return await handleRequestTargetWithdrawal(userId, body);
       case "vote_target_withdrawal": return await handleVoteTargetWithdrawal(userId, body);
       case "independent_withdrawal": return await handleIndependentWithdrawal(userId, body);
+      case "update_target_settings": return await handleUpdateTargetSettings(userId, body);
 
       // Goal Funding (full parity)
       case "create_campaign": return await handleCreateCampaign(userId, body);

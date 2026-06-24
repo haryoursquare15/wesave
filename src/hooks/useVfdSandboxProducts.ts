@@ -134,6 +134,7 @@ export function useVfdSandboxProducts() {
   const voteTargetWithdrawal = useCallback((request_id: string, vote: string) =>
     invoke("vote_target_withdrawal", { request_id, vote }), [invoke]);
   const independentWithdrawal = useCallback((target_id: string) => invoke("independent_withdrawal", { target_id }), [invoke]);
+  const updateTargetSettings = useCallback((body: Record<string, unknown>) => invoke("update_target_settings", body), [invoke]);
 
   // Goal Funding (full parity)
   const createCampaign = useCallback((body: Record<string, unknown>) => invoke("create_campaign", body), [invoke]);
@@ -202,7 +203,7 @@ export function useVfdSandboxProducts() {
     // Target Ajo
     createTarget, listTargets, contributeTarget, getTargetDetail,
     inviteTargetMember, respondTargetInvite, listPendingTargetInvites,
-    requestTargetWithdrawal, voteTargetWithdrawal, independentWithdrawal,
+    requestTargetWithdrawal, voteTargetWithdrawal, independentWithdrawal, updateTargetSettings,
     // Goal Funding
     createCampaign, listCampaigns, contributeCampaign, getCampaignDetail, postCampaignUpdate, withdrawCampaignEscrow,
     // SplitPay
