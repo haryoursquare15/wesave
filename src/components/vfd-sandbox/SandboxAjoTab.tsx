@@ -36,7 +36,7 @@ interface Group {
   commenced_at?: string;
   swap_window_ends_at?: string | null;
   is_full_at?: string | null;
-  vfd_sandbox_group_members?: { user_id: string; payout_position?: number; has_contributed_current?: boolean; has_received_payout?: boolean }[];
+  vfd_sandbox_group_members?: { user_id: string; payout_position?: number; has_contributed_current?: boolean; has_received_payout?: boolean; mandate_status?: string; mandate_reference?: string | null }[];
 }
 
 const daysOfWeek = [
@@ -126,6 +126,26 @@ export function SandboxAjoTab() {
   const [pendingInvites, setPendingInvites] = useState<any[]>([]);
   const [inviteGate, setInviteGate] = useState<{ invite: any; group: Group } | null>(null);
   const [inviteBusy, setInviteBusy] = useState(false);
+  const [mandateGroup, setMandateGroup] = useState<Group | null>(null);
+  const [mandateBusy, setMandateBusy] = useState(false);
+
+  const AJO_DDM_FEE = 100;
+
+  const acceptMandate = async () => {
+    if (!mandateGroup) return;
+    setMandateBusy(true);
+    const res = await products.acceptGroupMandate(mandateGroup.id);
+    setMandateBusy(false);
+    if (res?.data?.success) {
+      toast({
+        title: "DDM Mandate Authorized",
+        description: `₦${AJO_DDM_FEE} setup fee charged. ${mandateGroup.name} can now run automatic bank debits.`,
+      });
+      setMandateGroup(null);
+      await loadGroups();
+      if (detailGroup === mandateGroup.id) await loadDetail(mandateGroup.id);
+    }
+  };
 
   const [form, setForm] = useState({
     name: "",
@@ -172,9 +192,13 @@ export function SandboxAjoTab() {
     });
     if (result?.data) {
       toast({ title: "Group Created!", description: form.name });
+      const wasDdm = form.fundingMode === "ddm";
+      const createdGroup = result.data as Group;
       setForm({ name: "", maxMembers: 5, contributionAmount: 10000, period: "weekly", autoDebit: true, fundingMode: "wallet", timeSlot: 18, dayOfWeek: 1, dayOfMonth: 1 });
       setShowCreate(false);
       await loadGroups();
+      // DDM: prompt the admin to authorize their own mandate immediately.
+      if (wasDdm) setMandateGroup(createdGroup);
     }
   };
 
@@ -225,9 +249,12 @@ export function SandboxAjoTab() {
     if (accept) {
       toast({ title: "Invite accepted", description: `You joined "${inviteGate.group.name}".` });
       const gid = inviteGate.group.id;
+      const joinedGroup = inviteGate.group;
       setInviteGate(null);
       await loadGroups();
       await loadDetail(gid);
+      // DDM groups: immediately prompt the new member to authorize their mandate.
+      if (joinedGroup.funding_mode === "ddm") setMandateGroup(joinedGroup);
     } else {
       toast({ title: "Invite declined" });
       setInviteGate(null);
@@ -726,6 +753,10 @@ export function SandboxAjoTab() {
             const isMember = !!currentUserId && (g.vfd_sandbox_group_members || [])
               .some((m: any) => m.user_id === currentUserId && (m.status ?? "active") === "active");
             const hasInvite = !isMember && pendingInvites.some((i: any) => i.group_id === g.id);
+            const myMember = (g.vfd_sandbox_group_members || []).find((m: any) => m.user_id === currentUserId);
+            const isDdm = g.funding_mode === "ddm";
+            const myMandate = (myMember?.mandate_status as string) || "not_required";
+            const mandatePending = isMember && isDdm && myMandate !== "authorized";
             return (
               <Card key={g.id} className="cursor-pointer hover:border-primary/30 transition-colors" onClick={() => handleCardClick(g)}>
                 <CardContent className="p-4 space-y-3">
@@ -740,11 +771,19 @@ export function SandboxAjoTab() {
                       {hasInvite && (
                         <Badge className="bg-primary/15 text-primary border-primary/30">Invite pending</Badge>
                       )}
+                      {isMember && isDdm && (
+                        myMandate === "authorized" ? (
+                          <Badge variant="outline" className="text-[10px] text-green-600 border-green-500/40">DDM authorized</Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-500/40">DDM mandate pending</Badge>
+                        )
+                      )}
                       <Badge variant="outline" className={g.status === "active" ? "text-green-600 border-green-500" : g.status === "completed" ? "text-primary border-primary" : "text-muted-foreground"}>
                         {g.status}
                       </Badge>
                     </div>
                   </div>
+
 
 
                   {g.total_cycles > 0 && (
@@ -757,12 +796,19 @@ export function SandboxAjoTab() {
                     </div>
                   )}
 
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
+                    {mandatePending && (
+                      <Button size="sm" variant="default" className="bg-amber-600 hover:bg-amber-700" onClick={(e) => {
+                        e.stopPropagation();
+                        setMandateGroup(g);
+                      }}>
+                        Authorize DDM Mandate (₦{AJO_DDM_FEE})
+                      </Button>
+                    )}
                     {/* Joining is invite-only — admins invite via the group detail page,
                         invitees accept from the notification bell. No open "Join" button. */}
-                    {g.status === "active" && (g.vfd_sandbox_group_members || []).some((m: any) => m.user_id === currentUserId) && (() => {
-                      const myM = (g.vfd_sandbox_group_members || []).find((m: any) => m.user_id === currentUserId);
-                      const contributed = !!myM?.has_contributed_current;
+                    {g.status === "active" && isMember && !mandatePending && (() => {
+                      const contributed = !!myMember?.has_contributed_current;
                       return (
                         <Button size="sm" onClick={async (e) => {
                           e.stopPropagation();
@@ -784,6 +830,49 @@ export function SandboxAjoTab() {
           })}
         </div>
       )}
+
+      {/* DDM Mandate acceptance dialog: shown after group creation (admin) or after
+          accepting an invite (new member) when the group runs on DDM. Charges a
+          one-time ₦100 setup fee from the user's Vestara wallet, then activates
+          the per-member Direct Debit Mandate. */}
+      <Dialog open={!!mandateGroup} onOpenChange={(o) => { if (!o && !mandateBusy) setMandateGroup(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-base">Authorize Direct Debit Mandate</DialogTitle>
+            <DialogDescription className="text-xs">
+              {mandateGroup?.name} runs on Direct Debit (VFD DDM). Authorize the mandate so your bank can be auto-debited each cycle.
+            </DialogDescription>
+          </DialogHeader>
+          {mandateGroup && (
+            <div className="space-y-3">
+              <div className="p-3 rounded-xl bg-muted/40 space-y-1 text-xs">
+                <div className="flex justify-between"><span className="text-muted-foreground">Group</span><span className="font-medium">{mandateGroup.name}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Per-cycle debit</span><span className="font-medium">₦{fmt(Number(mandateGroup.contribution_amount))} / {mandateGroup.period}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Cycles</span><span className="font-medium">{mandateGroup.total_cycles}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Mandate reference</span><span className="font-mono text-[10px]">{mandateGroup.mandate_reference || "Auto-generated"}</span></div>
+              </div>
+              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs space-y-1">
+                <p className="font-semibold text-amber-700 dark:text-amber-400">One-time setup fee: ₦{AJO_DDM_FEE}</p>
+                <p className="text-muted-foreground">
+                  This ₦{AJO_DDM_FEE} will be debited from your Vestara wallet now to initiate the bank mandate. You can revoke the mandate any time from group settings (revocation does not refund the setup fee).
+                </p>
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                By tapping Authorize, you authorize Vestara, via VFD Microfinance Bank, to debit your linked bank account for each scheduled contribution to {mandateGroup.name} until the thrift completes or you revoke the mandate.
+              </p>
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="outline" disabled={mandateBusy} onClick={() => setMandateGroup(null)} className="h-11">
+              Not now
+            </Button>
+            <Button disabled={mandateBusy} onClick={acceptMandate} className="h-11">
+              {mandateBusy ? <RefreshCw className="h-4 w-4 animate-spin mr-1" /> : <Check className="h-4 w-4 mr-1" />}
+              Authorize
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Invite gate: non-members with a pending invite MUST accept or decline
           before they can enter the group detail. */}

@@ -285,7 +285,11 @@ async function handleCreateGroup(userId: string, body: Record<string, unknown>) 
   if (maxMembers < 3 || maxMembers > 20) return jsonResponse({ error: "Members must be between 3 and 20" }, 400);
   if (amount < 5000 || amount > 500000) return jsonResponse({ error: "Contribution must be between ₦5,000 and ₦500,000" }, 400);
 
-  const mandateStatus = fundingMode === "ddm" ? "authorized" : "not_required";
+  // Group-level mandate is "pending" until ALL members individually authorize
+  // their own DDM mandate (which costs a ₦100 setup fee per member). It flips
+  // to "authorized" automatically inside handleAcceptGroupMandate once every
+  // active member has signed.
+  const mandateStatus = fundingMode === "ddm" ? "pending" : "not_required";
 
   const { data: group, error } = await db.from("vfd_sandbox_groups").insert({
     name, admin_id: userId, contribution_amount: amount,
@@ -307,12 +311,15 @@ async function handleCreateGroup(userId: string, body: Record<string, unknown>) 
     group.mandate_reference = ref;
   }
 
+  // Admin is the first member. For DDM groups they must still accept the
+  // mandate (₦100 fee) themselves — flagged via mandate_status="pending".
   await db.from("vfd_sandbox_group_members").insert({
     group_id: group.id, user_id: userId, status: "active",
+    mandate_status: fundingMode === "ddm" ? "pending" : "not_required",
   });
 
   const fundingNote = fundingMode === "ddm"
-    ? "Group created with DDM funding. Members' banks will be debited automatically each cycle."
+    ? "Group created with DDM funding. Each member (including the admin) must accept the Direct Debit Mandate (₦100 one-time setup fee) before contributions can run."
     : "Group created. Waiting for members to join.";
   await postChatMessage(group.id, userId, fundingNote, "system");
 
@@ -322,7 +329,7 @@ async function handleCreateGroup(userId: string, body: Record<string, unknown>) 
 async function handleListGroups(userId: string) {
   const db = getSupabaseAdmin();
   const { data } = await db.from("vfd_sandbox_groups")
-    .select("*, vfd_sandbox_group_members(user_id, status, payout_position, has_contributed_current, has_received_payout)")
+    .select("*, vfd_sandbox_group_members(user_id, status, payout_position, has_contributed_current, has_received_payout, mandate_status, mandate_reference)")
     .order("created_at", { ascending: false });
   return jsonResponse({ data });
 }
@@ -414,10 +421,22 @@ async function handleJoinGroup(userId: string, body: Record<string, unknown>) {
   }
 
   const newCount = group.member_count + 1;
+  const isDdmGroup = (group.funding_mode as string) === "ddm";
   const { error } = await db.from("vfd_sandbox_group_members").insert({
     group_id: groupId, user_id: userId, status: "active",
+    mandate_status: isDdmGroup ? "pending" : "not_required",
   });
   if (error) return jsonResponse({ error: error.message }, 500);
+
+  if (isDdmGroup) {
+    await sendNotification(
+      userId,
+      "Authorize Direct Debit Mandate",
+      `You joined ${group.name}. A ₦100 one-time mandate setup fee is required to authorize automatic bank debits for cycle contributions.`,
+      "ddm_mandate_required",
+      groupId,
+    );
+  }
 
   await db.from("vfd_sandbox_groups").update({
     member_count: newCount, updated_at: new Date().toISOString(),
@@ -616,9 +635,12 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
   const isDdm = fundingMode === "ddm";
 
   if (isDdm) {
-    if (group.mandate_status !== "authorized") {
+    // Each member has their own mandate. Check this user's.
+    const { data: myMember } = await db.from("vfd_sandbox_group_members")
+      .select("mandate_status").eq("group_id", groupId).eq("user_id", userId).maybeSingle();
+    if (!myMember || myMember.mandate_status !== "authorized") {
       return jsonResponse({
-        error: "Direct Debit Mandate is not authorized yet. Ask your admin to complete DDM setup.",
+        error: "Your Direct Debit Mandate is not authorized yet. Please accept the mandate (₦100 setup fee) to enable automatic bank debits.",
         code: "MANDATE_NOT_AUTHORIZED",
       }, 400);
     }
@@ -3964,15 +3986,25 @@ async function handleUpdateGroupSettings(userId: string, body: Record<string, un
   const allowed = ["auto_debit", "contribution_hour", "contribution_minute", "contribution_day_of_week", "contribution_day_of_month", "description"] as const;
   for (const k of allowed) if (body[k] !== undefined) updates[k] = body[k];
 
-  // Funding mode toggle (wallet ↔ ddm)
+  // Funding mode toggle (wallet ↔ ddm). Switching TO ddm requires each
+  // member to individually accept the DDM mandate (₦100 fee), so the
+  // group-level status starts as "pending" — it flips to "authorized"
+  // automatically once every active member has signed.
   if (body.funding_mode !== undefined) {
     const fm = (body.funding_mode as string) === "ddm" ? "ddm" : "wallet";
     updates.funding_mode = fm;
     if (fm === "ddm") {
-      updates.mandate_status = "authorized";
+      updates.mandate_status = "pending";
       updates.mandate_reference = group.mandate_reference || `VES-DDM-AJO-${groupId}`;
+      // Reset all active members to pending so they re-authorize.
+      await db.from("vfd_sandbox_group_members")
+        .update({ mandate_status: "pending" })
+        .eq("group_id", groupId).eq("status", "active");
     } else {
       updates.mandate_status = "not_required";
+      await db.from("vfd_sandbox_group_members")
+        .update({ mandate_status: "not_required" })
+        .eq("group_id", groupId);
     }
   }
 
@@ -3983,6 +4015,112 @@ async function handleUpdateGroupSettings(userId: string, body: Record<string, un
     : "Admin updated group settings";
   await postChatMessage(groupId, userId, note, "system");
   return jsonResponse({ data: { success: true } });
+}
+
+// =============================================
+// ACCEPT GROUP DDM MANDATE (per-member)
+// =============================================
+// Each member of a DDM-funded thrift group must individually authorize the
+// Direct Debit Mandate. We charge a one-time ₦100 setup fee from their
+// Vestara wallet, then (in sandbox) instantly mark the member's mandate
+// as authorized. Once every active member is authorized, the group-level
+// mandate_status flips to "authorized".
+const AJO_DDM_MANDATE_FEE = 100;
+
+async function handleAcceptGroupMandate(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const groupId = body.group_id as string;
+  if (!groupId) return jsonResponse({ error: "group_id required" }, 400);
+
+  const { data: group } = await db.from("vfd_sandbox_groups")
+    .select("id, name, funding_mode, mandate_status, mandate_reference, admin_id")
+    .eq("id", groupId).maybeSingle();
+  if (!group) return jsonResponse({ error: "Group not found" }, 404);
+  if (group.funding_mode !== "ddm") {
+    return jsonResponse({ error: "This group is not on Direct Debit funding" }, 400);
+  }
+
+  const { data: member } = await db.from("vfd_sandbox_group_members")
+    .select("id, status, mandate_status, mandate_reference")
+    .eq("group_id", groupId).eq("user_id", userId).maybeSingle();
+  if (!member) return jsonResponse({ error: "You are not a member of this group" }, 403);
+  if (member.status !== "active") return jsonResponse({ error: "Membership is not active" }, 400);
+  if (member.mandate_status === "authorized") {
+    return jsonResponse({ data: { success: true, already_authorized: true, mandate_reference: member.mandate_reference } });
+  }
+
+  const fee = AJO_DDM_MANDATE_FEE;
+  const feeRef = `VES-AJO-MND-${groupId}-${userId}-${Date.now()}`;
+
+  // Debit the ₦100 setup fee from wallet (same pattern as goalsave_mandate_setup).
+  const { error: wErr } = await db.rpc("vestara_withdraw", {
+    _user_id: userId,
+    _amount: fee,
+    _reference: feeRef,
+    _metadata: {
+      source: "ajo_mandate_setup_fee",
+      product_code: "ajo_ddm",
+      group_id: groupId,
+    },
+  });
+  if (wErr) {
+    const available = await getVestaraWalletBalance(userId);
+    return jsonResponse({
+      error: `Insufficient wallet balance for the ₦${fee} mandate setup fee. You have ₦${available.toLocaleString()}. Please fund your wallet and try again.`,
+      code: "INSUFFICIENT_BALANCE",
+      required: fee,
+      available,
+    }, 400);
+  }
+
+  await db.from("vestara_fee_ledger").insert({
+    user_id: userId,
+    fee_type: "ajo_mandate_setup",
+    amount: fee,
+    reference: feeRef,
+    tx_reference: feeRef,
+    metadata: { group_id: groupId, product_code: "ajo_ddm" },
+  });
+
+  const memberMandateRef = `VES-DDM-AJO-${groupId}-${userId.slice(0, 8)}`;
+  const nowIso = new Date().toISOString();
+  await db.from("vfd_sandbox_group_members").update({
+    mandate_status: "authorized",
+    mandate_reference: memberMandateRef,
+    mandate_authorized_at: nowIso,
+    mandate_fee_charged_at: nowIso,
+    mandate_fee_amount: fee,
+  }).eq("id", member.id);
+
+  // If every active member is now authorized, flip the group mandate too.
+  const { data: pendingMembers } = await db.from("vfd_sandbox_group_members")
+    .select("id").eq("group_id", groupId).eq("status", "active").neq("mandate_status", "authorized");
+  if (!pendingMembers || pendingMembers.length === 0) {
+    await db.from("vfd_sandbox_groups").update({
+      mandate_status: "authorized",
+      updated_at: nowIso,
+    }).eq("id", groupId);
+    await postChatMessage(groupId, group.admin_id,
+      "All members have authorized the Direct Debit Mandate. The group is ready for automated cycle debits.",
+      "system");
+  }
+
+  await postChatMessage(groupId, userId,
+    `authorized the Direct Debit Mandate (₦${fee} setup fee charged).`,
+    "system");
+  await sendNotification(userId, "Mandate Authorized",
+    `Your Direct Debit Mandate for ${group.name} is now active. ₦${fee} was debited from your wallet for the one-time setup fee.`,
+    "ddm_mandate_authorized", groupId);
+
+  return jsonResponse({
+    data: {
+      success: true,
+      mandate_status: "authorized",
+      mandate_reference: memberMandateRef,
+      fee_charged: fee,
+      fee_reference: feeRef,
+    },
+  });
 }
 
 async function handleUpdateTargetSettings(userId: string, body: Record<string, unknown>) {
@@ -4063,6 +4201,7 @@ Deno.serve(async (req) => {
       case "post_group_chat": return await handlePostGroupChat(userId, body);
       case "list_group_chat": return await handleListGroupChat(userId, body);
       case "update_group_settings": return await handleUpdateGroupSettings(userId, body);
+      case "accept_group_mandate": return await handleAcceptGroupMandate(userId, body);
       case "sandbox_auto_contribute": return await handleSandboxAutoContribute(userId, body);
 
       // In-app notifications
