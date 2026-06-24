@@ -4151,9 +4151,18 @@ async function handleAcceptGroupMandate(userId: string, body: Record<string, unk
   }
 
   // Fetch the customer's VFD account + KYC details for the debtor side of the mandate.
-  const { data: client } = await db.from("vfd_sandbox_clients")
-    .select("vfd_account_number, bvn, first_name, last_name, phone, email, address")
+  const { data: client, error: clientErr } = await db.from("vfd_sandbox_clients")
+    .select("vfd_account_number, bvn, full_name, phone, address")
     .eq("user_id", userId).maybeSingle();
+  if (clientErr) {
+    console.error("[accept_group_mandate] client lookup error", clientErr);
+  }
+  // Pull email from auth.users since vfd_sandbox_clients does not store it.
+  let clientEmail = "";
+  try {
+    const { data: userRow } = await db.auth.admin.getUserById(userId);
+    clientEmail = userRow?.user?.email || "";
+  } catch (_) { /* non-fatal */ }
   if (!client?.vfd_account_number) {
     return jsonResponse({
       error: "No VFD account found for your profile. Complete KYC and provision your wallet before authorizing a Direct Debit Mandate.",
