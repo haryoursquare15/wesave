@@ -203,7 +203,7 @@ export function useVfdSandboxProducts() {
     // Target Ajo
     createTarget, listTargets, contributeTarget, getTargetDetail,
     inviteTargetMember, respondTargetInvite, listPendingTargetInvites,
-    requestTargetWithdrawal, voteTargetWithdrawal, independentWithdrawal,
+    requestTargetWithdrawal, voteTargetWithdrawal, independentWithdrawal, updateTargetSettings,
     // Goal Funding
     createCampaign, listCampaigns, contributeCampaign, getCampaignDetail, postCampaignUpdate, withdrawCampaignEscrow,
     // SplitPay
