@@ -4418,6 +4418,23 @@ async function handleCheckGroupMandateStatus(userId: string, body: Record<string
     return jsonResponse({ data: { success: true, mandate_status: "authorized", bank_approved: true } });
   }
 
+  // Dev override: when MANDATE_TEST_MODE is on, skip the live VFD call and
+  // immediately mark the mandate authorized so the rest of the commencement
+  // flow can be tested end-to-end without a real ₦50 NIBSS funding leg.
+  if (MANDATE_TEST_MODE) {
+    const nowIso = new Date().toISOString();
+    await db.from("vfd_sandbox_group_members").update({
+      mandate_status: "authorized",
+      mandate_authorized_at: nowIso,
+      mandate_payload: { ...(member.mandate_payload as Record<string, unknown> || {}), testModeOverride: true, authorized_at: nowIso },
+    }).eq("id", member.id);
+    await recordMandateEvent(groupId, userId, member.mandate_reference, member.mandate_code, "authorized", { testModeOverride: true });
+    await checkGroupCommencementReadiness(groupId);
+    await sendNotification(userId, "Mandate Approved (Test Mode)",
+      `Your Direct Debit Mandate for ${group.name} is authorized.`, "ddm_mandate_authorized", groupId);
+    return jsonResponse({ data: { success: true, mandate_status: "authorized", bank_approved: true, test_mode: true } });
+  }
+
   const accessToken = await getVfdAccessToken();
   if (!accessToken) return jsonResponse({ error: "VFD credentials not configured" }, 500);
 
