@@ -1047,7 +1047,7 @@ serve(async (req) => {
         const fee = Number(s.mandate_fee || 0);
         // Per-investment fee reference, so the platform fee ledger lines up
         // with the goal savings plan it belongs to.
-        const feeRef = `GOALSAVE-MND-${savings_id}-${Date.now()}`;
+        const feeRef = `VES-MND-FEE-${savings_id}-${Date.now()}`;
         if (fee > 0) {
           const { error: wErr } = await supabase.rpc("vestara_withdraw", {
             _user_id: userId,
@@ -1111,15 +1111,15 @@ serve(async (req) => {
           const mandatePayload = {
             accountNo: client?.vfd_account_number || "",
             productCode: "GOALSAVE",
-            mandateCode: `VST-MND-${savings_id.slice(0, 12)}`,
-            amount: fee || s.commitment_amount,
+            mandateCode: `VES-MND-${savings_id.slice(0, 12)}`,
+            amount: s.commitment_amount,
             frequency: String(s.commitment_frequency || "").toUpperCase(),
             startDate,
             endDate,
             narration: `Vestara Goal Savings mandate ${savings_id.slice(0, 8)}`,
             payerName: [client?.first_name, client?.last_name].filter(Boolean).join(" ") || "Vestara Customer",
             payerPhone: client?.phone_number || "",
-            reference: `VST-MND-${savings_id}`,
+            reference: `VES-MND-${savings_id}`,
           };
 
           const ddmRes = await fetch(VFD_MANDATE_URL, {
