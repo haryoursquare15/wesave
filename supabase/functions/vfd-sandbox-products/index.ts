@@ -4455,6 +4455,7 @@ Deno.serve(async (req) => {
       case "list_group_chat": return await handleListGroupChat(userId, body);
       case "update_group_settings": return await handleUpdateGroupSettings(userId, body);
       case "accept_group_mandate": return await handleAcceptGroupMandate(userId, body);
+      case "check_group_mandate_status": return await handleCheckGroupMandateStatus(userId, body);
       case "sandbox_auto_contribute": return await handleSandboxAutoContribute(userId, body);
 
       // In-app notifications
