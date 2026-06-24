@@ -850,48 +850,18 @@ export function SandboxAjoTab() {
         </div>
       )}
 
-      {/* DDM Mandate acceptance dialog: shown after group creation (admin) or after
-          accepting an invite (new member) when the group runs on DDM. Charges a
-          one-time ₦100 setup fee from the user's Vestara wallet, then activates
-          the per-member Direct Debit Mandate. */}
-      <Dialog open={!!mandateGroup} onOpenChange={(o) => { if (!o && !mandateBusy) setMandateGroup(null); }}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="text-base">Authorize Direct Debit Mandate</DialogTitle>
-            <DialogDescription className="text-xs">
-              {mandateGroup?.name} runs on Direct Debit (VFD DDM). Authorize the mandate so your bank can be auto-debited each cycle.
-            </DialogDescription>
-          </DialogHeader>
-          {mandateGroup && (
-            <div className="space-y-3">
-              <div className="p-3 rounded-xl bg-muted/40 space-y-1 text-xs">
-                <div className="flex justify-between"><span className="text-muted-foreground">Group</span><span className="font-medium">{mandateGroup.name}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Per-cycle debit</span><span className="font-medium">₦{fmt(Number(mandateGroup.contribution_amount))} / {mandateGroup.period}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Cycles</span><span className="font-medium">{mandateGroup.total_cycles}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Mandate reference</span><span className="font-mono text-[10px]">{mandateGroup.mandate_reference || "Auto-generated"}</span></div>
-              </div>
-              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs space-y-1">
-                <p className="font-semibold text-amber-700 dark:text-amber-400">One-time setup fee: ₦{AJO_DDM_FEE}</p>
-                <p className="text-muted-foreground">
-                  This ₦{AJO_DDM_FEE} will be debited from your Vestara wallet now to initiate the bank mandate. You can revoke the mandate any time from group settings (revocation does not refund the setup fee).
-                </p>
-              </div>
-              <p className="text-[10px] text-muted-foreground">
-                By tapping Authorize, you authorize Vestara, via VFD Microfinance Bank, to debit your linked bank account for each scheduled contribution to {mandateGroup.name} until the thrift completes or you revoke the mandate.
-              </p>
-            </div>
-          )}
-          <div className="grid grid-cols-2 gap-2">
-            <Button variant="outline" disabled={mandateBusy} onClick={() => setMandateGroup(null)} className="h-11">
-              Not now
-            </Button>
-            <Button disabled={mandateBusy} onClick={acceptMandate} className="h-11">
-              {mandateBusy ? <RefreshCw className="h-4 w-4 animate-spin mr-1" /> : <Check className="h-4 w-4 mr-1" />}
-              Authorize
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* DDM Mandate authorization: collects payer bank details, calls VFD
+          E-Mandate Create, then shows the ₦50 NIBSS authorization screen
+          and polls /mandate/status every 60s until the bank approves. */}
+      <MandateAuthorizationDialog
+        group={mandateGroup as any}
+        onClose={() => { if (!mandateBusy) setMandateGroup(null); }}
+        onAuthorized={async () => {
+          await loadGroups();
+          if (mandateGroup && detailGroup === mandateGroup.id) await loadDetail(mandateGroup.id);
+        }}
+      />
+
 
       {/* Invite gate: non-members with a pending invite MUST accept or decline
           before they can enter the group detail. */}
