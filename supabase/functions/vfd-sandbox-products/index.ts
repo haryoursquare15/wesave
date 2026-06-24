@@ -4307,7 +4307,11 @@ async function handleAcceptGroupMandate(userId: string, body: Record<string, unk
     const json = await res.json().catch(() => ({} as Record<string, unknown>));
     vfdResponsePayload = { step: "create", request: mandatePayload, response: json, http_status: res.status };
 
-    if ((json as any)?.status === "00") {
+    // VFD E-Mandate returns either status "00" (immediate) or HTTP 202 Accepted
+    // (NIBSS authorization pending). Both are success cases — we then poll
+    // mandate-status to surface the NIBSS account/message to the user.
+    const vfdStatus = String((json as any)?.status || "");
+    if (vfdStatus === "00" || res.status === 202 || (res.ok && vfdStatus !== "199")) {
       mandateCreated = true;
       mandateCode = String((json as any)?.data?.mandateCode || (json as any)?.data?.mandateId || "");
       nibssMessage = String((json as any)?.message || "");
