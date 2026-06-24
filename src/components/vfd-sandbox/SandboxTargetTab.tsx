@@ -109,10 +109,11 @@ export function SandboxTargetTab() {
       name: form.name, description: form.description, reason: form.reason,
       goal_amount: targetAmount, max_members: maxMembers,
       frequency: form.frequency, savings_type: form.savings_type,
+      funding_mode: form.funding_mode,
     });
     if (result?.data) {
       toast({ title: "Target Created!", description: form.name });
-      setForm({ name: "", description: "", reason: "", goal_amount: "", max_members: "10", frequency: "monthly", savings_type: "group" });
+      setForm({ name: "", description: "", reason: "", goal_amount: "", max_members: "10", frequency: "monthly", savings_type: "group", funding_mode: "wallet" });
       setShowCreate(false);
       await loadTargets();
     } else {
