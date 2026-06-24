@@ -450,6 +450,22 @@ export function SandboxTargetTab() {
               <p className="text-xs text-muted-foreground">{maxMembers} {freqLabel} from today</p>
             </div>
 
+            <div className="p-3 rounded-lg bg-card border border-border space-y-2">
+              <Label>Funding Mode</Label>
+              <Select value={form.funding_mode} onValueChange={(v) => setForm(p => ({ ...p, funding_mode: v as "wallet" | "ddm" }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="wallet">Wallet debit (Vestara balance)</SelectItem>
+                  <SelectItem value="ddm">Direct Debit Mandate (VFD bank debit)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">
+                {form.funding_mode === "ddm"
+                  ? "Each contribution is pulled straight from members' bank accounts via VFD DDM — no wallet balance needed."
+                  : "Members fund their wallet and contributions are debited from there."}
+              </p>
+            </div>
+
             <div className="p-3 rounded-lg bg-muted/30 border border-border">
               <p className="text-xs text-muted-foreground">
                 💡 When the target date arrives, each member's contributions are automatically returned to their personal wallet.
