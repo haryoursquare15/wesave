@@ -1047,7 +1047,7 @@ serve(async (req) => {
         const fee = Number(s.mandate_fee || 0);
         // Per-investment fee reference, so the platform fee ledger lines up
         // with the goal savings plan it belongs to.
-        const feeRef = `GOALSAVE-MND-${savings_id}-${Date.now()}`;
+        const feeRef = `VES-MND-FEE-${savings_id}-${Date.now()}`;
         if (fee > 0) {
           const { error: wErr } = await supabase.rpc("vestara_withdraw", {
             _user_id: userId,

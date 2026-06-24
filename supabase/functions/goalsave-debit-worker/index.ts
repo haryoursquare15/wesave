@@ -1,10 +1,11 @@
-// Goal Savings 2.0 — recurring debit worker.
-// Runs on cron. For every `vfd_savings_debit_schedule` row whose
-// `scheduled_at` is due and parent savings is active+authorized,
-// debits the user's wallet into their goal savings lock account
-// via the double-entry vestara_post_transaction RPC, marks the
-// schedule row succeeded, advances next_debit_at, and matures
-// the plan when the final installment lands.
+// Goal Savings 2.0 — recurring DDM settlement worker.
+//
+// IMPORTANT: Recurring contributions do NOT debit the user's Vestara wallet.
+// Funds flow VFD Direct Debit Mandate (DDM) → settlement pool → goal savings
+// lock account. This worker books the internal credit leg per scheduled
+// installment once the DDM has settled at VFD.
+//
+// Reference convention (Vestara-originated): VES-GOAL-DEBIT-<savings_id>-<seq>
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -36,6 +37,21 @@ Deno.serve(async (req) => {
 
   const supabase = admin();
   const now = new Date().toISOString();
+
+  // Resolve the single system settlement account (DDM funds land here from VFD)
+  const { data: settlement, error: setErr } = await supabase
+    .from("vestara_accounts")
+    .select("id")
+    .eq("account_type", "settlement")
+    .is("user_id", null)
+    .maybeSingle();
+
+  if (setErr || !settlement) {
+    return new Response(
+      JSON.stringify({ error: "Settlement account not configured" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
 
   // Pull due, scheduled debits (cap each run)
   const { data: due, error } = await supabase
@@ -70,50 +86,24 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // Wallet account
-      const { data: wallet } = await supabase
-        .from("vestara_accounts")
-        .select("id, balance")
-        .eq("user_id", s.user_id)
-        .eq("account_type", "wallet")
-        .maybeSingle();
-
-      if (!wallet || Number(wallet.balance) < Number(r.amount)) {
-        const attempts = (r.attempt_count || 0) + 1;
-        const next = attempts >= MAX_ATTEMPTS ? "failed" : "retrying";
-        await supabase.from("vfd_savings_debit_schedule")
-          .update({
-            status: next,
-            attempt_count: attempts,
-            failed_reason: "Insufficient wallet balance",
-          })
-          .eq("id", r.id);
-        // If still retryable, push 24h forward
-        if (next === "retrying") {
-          const retryAt = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
-          await supabase.from("vfd_savings_debit_schedule")
-            .update({ status: "scheduled", scheduled_at: retryAt })
-            .eq("id", r.id);
-        }
-        failed++;
-        continue;
-      }
-
-      const reference = `GOALSAVE-DEBIT-${r.savings_id}-${r.seq}`;
+      // Book the DDM-funded credit: settlement (debit) → user's lock account (credit)
+      // No user wallet involvement — funds came in via VFD DDM.
+      const reference = `VES-GOAL-DEBIT-${r.savings_id}-${r.seq}`;
       const { data: txResult, error: txErr } = await supabase.rpc("vestara_post_transaction", {
         _type: "lock",
         _reference: reference,
         _amount: r.amount,
         _initiated_by: s.user_id,
         _entries: [
-          { account_id: wallet.id, debit: r.amount, credit: 0 },
+          { account_id: settlement.id, debit: r.amount, credit: 0 },
           { account_id: s.lock_account_id, debit: 0, credit: r.amount },
         ],
         _metadata: {
-          source: "goalsave_recurring_debit",
+          source: "goalsave_ddm_settlement",
           product_code: "goalsave",
           savings_id: r.savings_id,
           seq: r.seq,
+          funding_channel: "vfd_direct_debit_mandate",
         },
       });
 
