@@ -4066,12 +4066,22 @@ async function handleUpdateGroupSettings(userId: string, body: Record<string, un
 // ---------------------------------------------------------------------------
 const AJO_DDM_MANDATE_FEE = 100;
 const VFD_MANDATE_BASE =
+  Deno.env.get("VFD_BASE_URL") ||
   Deno.env.get("VFD_MANDATE_BASE") ||
   "https://api-devapps.vfdbank.systems/vtech-mandate/api/v2/directdebit";
-// VFD pool (Vestara corporate NUBAN) — receiver of every mandate debit.
-const VFD_POOL_NUBAN = Deno.env.get("VFD_POOL_NUBAN") || "1001695610";
-const VFD_POOL_BANK_CODE = Deno.env.get("VFD_POOL_BANK_CODE") || "999999"; // VFD MFB
+// Single Vestara corporate pool NUBAN — receiver of EVERY mandate debit.
+// Per-group wallets are internal ledger constructs only; they do not map to
+// separate VFD accounts. DDM funds always land in this pool first, then the
+// thrift ledger logic routes them to the group/member payout balance.
+const VFD_POOL_NUBAN =
+  Deno.env.get("VFD_CORPORATE_ACCOUNT_NUMBER") || Deno.env.get("VFD_POOL_NUBAN") || "1001695610";
+const VFD_POOL_BANK_CODE =
+  Deno.env.get("VFD_CORPORATE_BANK_CODE") || Deno.env.get("VFD_POOL_BANK_CODE") || "999999"; // VFD MFB
 const VFD_PAYER_BANK_CODE = Deno.env.get("VFD_PAYER_BANK_CODE") || "999999"; // user's VFD account
+// Dev-only toggle: skip live VFD status calls and auto-approve mandates so the
+// commencement flow can be exercised end-to-end against the sandbox. MUST be
+// unset (or explicitly "false") before go-live.
+const MANDATE_TEST_MODE = (Deno.env.get("MANDATE_TEST_MODE") || "").toLowerCase() === "true";
 
 // Convert a Date to "DD Month YYYY" — VFD requires exactly this format.
 function formatVfdMandateDate(d: Date): string {
@@ -4357,6 +4367,7 @@ async function handleAcceptGroupMandate(userId: string, body: Record<string, unk
     mandate_end_date: endDateObj.toISOString().slice(0, 10),
     mandate_frequency: frequencyCode,
     mandate_created_at: nowIso,
+    mandate_expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
     mandate_fee_charged_at: nowIso,
     mandate_fee_amount: fee,
     mandate_payload: vfdResponsePayload,
@@ -4405,6 +4416,23 @@ async function handleCheckGroupMandateStatus(userId: string, body: Record<string
   if (!member.mandate_reference) return jsonResponse({ error: "No mandate to check. Please authorize a mandate first." }, 400);
   if (member.mandate_status === "authorized") {
     return jsonResponse({ data: { success: true, mandate_status: "authorized", bank_approved: true } });
+  }
+
+  // Dev override: when MANDATE_TEST_MODE is on, skip the live VFD call and
+  // immediately mark the mandate authorized so the rest of the commencement
+  // flow can be tested end-to-end without a real ₦50 NIBSS funding leg.
+  if (MANDATE_TEST_MODE) {
+    const nowIso = new Date().toISOString();
+    await db.from("vfd_sandbox_group_members").update({
+      mandate_status: "authorized",
+      mandate_authorized_at: nowIso,
+      mandate_payload: { ...(member.mandate_payload as Record<string, unknown> || {}), testModeOverride: true, authorized_at: nowIso },
+    }).eq("id", member.id);
+    await recordMandateEvent(groupId, userId, member.mandate_reference, member.mandate_code, "authorized", { testModeOverride: true });
+    await checkGroupCommencementReadiness(groupId);
+    await sendNotification(userId, "Mandate Approved (Test Mode)",
+      `Your Direct Debit Mandate for ${group.name} is authorized.`, "ddm_mandate_authorized", groupId);
+    return jsonResponse({ data: { success: true, mandate_status: "authorized", bank_approved: true, test_mode: true } });
   }
 
   const accessToken = await getVfdAccessToken();
@@ -4476,8 +4504,189 @@ async function handleUpdateTargetSettings(userId: string, body: Record<string, u
 }
 
 // =============================================
+// COMMENCEMENT READINESS + MANDATE DEBIT (DDM)
+// =============================================
+
+// Compute group's readiness to commence. Every member must either be a wallet
+// contributor, or have an authorized DDM mandate; the group must be full. Sets
+// commencement_status on vfd_sandbox_groups and returns the breakdown.
+async function checkGroupCommencementReadiness(groupId: string) {
+  const db = getSupabaseAdmin();
+  const { data: group } = await db.from("vfd_sandbox_groups")
+    .select("id, admin_id, max_members, member_count, commencement_status").eq("id", groupId).maybeSingle();
+  if (!group) return { ready: false, error: "Group not found" };
+  const { data: members } = await db.from("vfd_sandbox_group_members")
+    .select("id, contribution_method, mandate_status").eq("group_id", groupId).eq("status", "active");
+  const rows = members || [];
+  const total = rows.length;
+  const walletReady = rows.filter((m) => m.contribution_method === "wallet").length;
+  const ddmActive = rows.filter((m) => m.contribution_method === "direct_debit" && m.mandate_status === "authorized").length;
+  const ddmPending = rows.filter((m) => m.contribution_method === "direct_debit" && ["awaiting_approval", "pending_authorization", "pending"].includes(String(m.mandate_status))).length;
+  const ddmFailed = rows.filter((m) => m.contribution_method === "direct_debit" && ["failed", "expired"].includes(String(m.mandate_status))).length;
+  const slotsEmpty = Math.max(0, Number(group.max_members) - total);
+  const ready = total === Number(group.max_members) && (walletReady + ddmActive) === total;
+  const status = ready ? "ready" : (slotsEmpty > 0 ? "pending_members" : "pending_mandate_auth");
+  await db.from("vfd_sandbox_groups")
+    .update({ commencement_status: status, updated_at: new Date().toISOString() })
+    .eq("id", groupId);
+  if (ready) {
+    await sendNotification(group.admin_id, "Group Ready to Commence",
+      "All members are ready. You can now commence this thrift group.",
+      "group_ready_to_commence", groupId);
+  }
+  return { ready, status, breakdown: { total, walletReady, ddmActive, ddmPending, ddmFailed, slotsEmpty } };
+}
+
+async function handleCheckCommencementReadiness(userId: string, body: Record<string, unknown>) {
+  const groupId = body.group_id as string;
+  if (!groupId) return jsonResponse({ error: "group_id required" }, 400);
+  const result = await checkGroupCommencementReadiness(groupId);
+  return jsonResponse({ data: result });
+}
+
+// Cycle-time mandate debit. Called by the scheduler when a DDM member's
+// contribution is due. Inserts a pending ledger entry, calls VFD, then
+// confirms or fails the entry and updates the pool ledger balance.
+async function handleTriggerMandateDebit(_userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const groupId = body.group_id as string;
+  const targetUserId = body.user_id as string;
+  const cycleIndex = Number(body.cycle_index ?? 0);
+  if (!groupId || !targetUserId) return jsonResponse({ error: "group_id and user_id required" }, 400);
+
+  const { data: member } = await db.from("vfd_sandbox_group_members")
+    .select("id, mandate_status, mandate_code, mandate_reference, mandate_payer_account_number, mandate_payer_bank_code")
+    .eq("group_id", groupId).eq("user_id", targetUserId).maybeSingle();
+  if (!member) return jsonResponse({ error: "Member not found" }, 404);
+  if (member.mandate_status !== "authorized") {
+    await recordMandateEvent(groupId, targetUserId, member.mandate_reference, member.mandate_code, "debit_failed",
+      { reason: "Mandate not authorized", mandate_status: member.mandate_status });
+    return jsonResponse({ error: "Mandate not authorized — flagged for admin review", code: "MANDATE_NOT_ACTIVE" }, 400);
+  }
+
+  const { data: group } = await db.from("vfd_sandbox_groups")
+    .select("id, contribution_amount, name").eq("id", groupId).maybeSingle();
+  if (!group) return jsonResponse({ error: "Group not found" }, 404);
+
+  const amountNaira = Number(group.contribution_amount) || 0;
+  const amountKobo = Math.round(amountNaira * 100);
+  const cycleRef = `vestara-cycle-${groupId.slice(0, 8)}-${targetUserId.slice(0, 8)}-c${cycleIndex}-${Date.now()}`;
+
+  const { data: ledgerEntry } = await db.from("vfd_sandbox_thrift_ledger_entries").insert({
+    thrift_group_id: groupId,
+    member_user_id: targetUserId,
+    entry_type: "ddm_contribution",
+    amount_kobo: amountKobo,
+    direction: "credit",
+    cycle_index: cycleIndex,
+    payment_reference: cycleRef,
+    mandate_code: member.mandate_code,
+    status: "pending",
+    metadata: { mandate_reference: member.mandate_reference },
+  }).select("id").single();
+
+  await recordMandateEvent(groupId, targetUserId, member.mandate_reference, member.mandate_code, "debit_triggered",
+    { cycle_index: cycleIndex, amount_naira: amountNaira, reference: cycleRef });
+
+  const result = await vfdDebitMandate({
+    mandateReference: member.mandate_reference || "",
+    amount: amountNaira,
+    narration: `Vestara thrift cycle ${cycleIndex} - ${group.name}`,
+    transactionReference: cycleRef,
+  });
+
+  const nowIso = new Date().toISOString();
+  if (result.ok) {
+    const sessionId = String(((result.raw as any)?.response?.data?.sessionId) || "");
+    const paymentRef = String(((result.raw as any)?.response?.data?.reference) || cycleRef);
+    if (ledgerEntry?.id) {
+      await db.from("vfd_sandbox_thrift_ledger_entries").update({
+        status: "confirmed", confirmed_at: nowIso, vfd_session_id: sessionId, vfd_payment_reference: paymentRef,
+        metadata: { mandate_reference: member.mandate_reference, vfd: result.raw },
+      }).eq("id", ledgerEntry.id);
+    }
+    // Bump pool ledger balance on the group row (kobo).
+    const { data: g } = await db.from("vfd_sandbox_groups")
+      .select("pool_ledger_balance, total_contributed_kobo").eq("id", groupId).maybeSingle();
+    await db.from("vfd_sandbox_groups").update({
+      pool_ledger_balance: Number(g?.pool_ledger_balance || 0) + amountKobo,
+      total_contributed_kobo: Number(g?.total_contributed_kobo || 0) + amountKobo,
+      updated_at: nowIso,
+    }).eq("id", groupId);
+    await recordMandateEvent(groupId, targetUserId, member.mandate_reference, member.mandate_code, "debit_success",
+      { cycle_index: cycleIndex, amount_naira: amountNaira, vfd: result.raw });
+    return jsonResponse({ data: { success: true, reference: cycleRef, amount_kobo: amountKobo } });
+  }
+
+  if (ledgerEntry?.id) {
+    await db.from("vfd_sandbox_thrift_ledger_entries").update({
+      status: "failed", metadata: { mandate_reference: member.mandate_reference, vfd: result.raw },
+    }).eq("id", ledgerEntry.id);
+  }
+  await recordMandateEvent(groupId, targetUserId, member.mandate_reference, member.mandate_code, "debit_failed",
+    { cycle_index: cycleIndex, vfd: result.raw });
+  await sendNotification(targetUserId, "Direct Debit Failed",
+    `Your contribution for ${group.name} (cycle ${cycleIndex}) could not be debited. Please contact support.`,
+    "ddm_debit_failed", groupId);
+  return jsonResponse({ error: "VFD debit failed", code: "MANDATE_DEBIT_FAILED", details: result.raw }, 502);
+}
+
+// Scheduler-callable safety net for missed mandate webhooks. Polls every
+// pending mandate, activates approved ones, and expires those past their
+// 7-day NIBSS authorization window.
+async function handlePollPendingMandates() {
+  const db = getSupabaseAdmin();
+  const { data: pending } = await db.from("vfd_sandbox_group_members")
+    .select("id, group_id, user_id, mandate_reference, mandate_code, mandate_expires_at, mandate_created_at, mandate_payload")
+    .eq("mandate_status", "awaiting_approval")
+    .gte("mandate_created_at", new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString());
+  const rows = pending || [];
+  let activated = 0, expired = 0, failed = 0, stillPending = 0;
+  const accessToken = MANDATE_TEST_MODE ? "" : (await getVfdAccessToken()) || "";
+
+  for (const m of rows) {
+    const now = Date.now();
+    const expiresAt = m.mandate_expires_at ? new Date(m.mandate_expires_at as string).getTime() : 0;
+    if (expiresAt && expiresAt < now) {
+      await db.from("vfd_sandbox_group_members").update({ mandate_status: "expired" }).eq("id", m.id);
+      await recordMandateEvent(m.group_id as string, m.user_id as string, m.mandate_reference, m.mandate_code, "failed",
+        { reason: "expired_7_day_window" });
+      await sendNotification(m.user_id as string, "Mandate Expired",
+        "Your direct debit mandate expired. Please set up direct debit again.",
+        "ddm_mandate_expired", m.group_id as string);
+      expired++;
+      continue;
+    }
+    if (MANDATE_TEST_MODE || !accessToken) { stillPending++; continue; }
+    const approval = await checkVfdMandateApproval(m.mandate_reference as string, accessToken);
+    if (approval.approved) {
+      await db.from("vfd_sandbox_group_members").update({
+        mandate_status: "authorized", mandate_authorized_at: new Date().toISOString(),
+      }).eq("id", m.id);
+      await recordMandateEvent(m.group_id as string, m.user_id as string, m.mandate_reference, m.mandate_code, "authorized",
+        { source: "poll", raw: approval.raw });
+      await checkGroupCommencementReadiness(m.group_id as string);
+      await sendNotification(m.user_id as string, "Mandate Approved",
+        "Your direct debit mandate has been approved.", "ddm_mandate_authorized", m.group_id as string);
+      activated++;
+    } else if (/fail|reject|cancel/i.test(approval.status)) {
+      await db.from("vfd_sandbox_group_members").update({ mandate_status: "failed" }).eq("id", m.id);
+      await recordMandateEvent(m.group_id as string, m.user_id as string, m.mandate_reference, m.mandate_code, "failed",
+        { source: "poll", status: approval.status, raw: approval.raw });
+      failed++;
+    } else {
+      stillPending++;
+    }
+  }
+  return jsonResponse({ data: { processed: rows.length, activated, expired, failed, still_pending: stillPending } });
+}
+
+// =============================================
 // MAIN HANDLER
 // =============================================
+
+
+
 
 
 Deno.serve(async (req) => {
@@ -4498,6 +4707,9 @@ Deno.serve(async (req) => {
     }
     if (action === "send_bill_reminders") {
       return await handleSendBillReminders();
+    }
+    if (action === "poll_pending_mandates") {
+      return await handlePollPendingMandates();
     }
 
     const user = await getUserFromRequest(req);
@@ -4530,6 +4742,9 @@ Deno.serve(async (req) => {
       case "update_group_settings": return await handleUpdateGroupSettings(userId, body);
       case "accept_group_mandate": return await handleAcceptGroupMandate(userId, body);
       case "check_group_mandate_status": return await handleCheckGroupMandateStatus(userId, body);
+      case "check_commencement_readiness": return await handleCheckCommencementReadiness(userId, body);
+      case "trigger_mandate_debit": return await handleTriggerMandateDebit(userId, body);
+      case "poll_pending_mandates": return await handlePollPendingMandates();
       case "sandbox_auto_contribute": return await handleSandboxAutoContribute(userId, body);
 
       // In-app notifications
