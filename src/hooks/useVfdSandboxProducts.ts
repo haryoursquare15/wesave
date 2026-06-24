@@ -115,6 +115,7 @@ export function useVfdSandboxProducts() {
   const listGroupChat = useCallback((group_id: string) => invoke("list_group_chat", { group_id }), [invoke]);
   const updateGroupSettings = useCallback((body: Record<string, unknown>) => invoke("update_group_settings", body), [invoke]);
   const acceptGroupMandate = useCallback((group_id: string) => invoke("accept_group_mandate", { group_id }), [invoke]);
+  const checkGroupMandateStatus = useCallback((group_id: string) => invoke("check_group_mandate_status", { group_id }), [invoke]);
   const sandboxAutoContribute = useCallback((force_group_id?: string) => invoke("sandbox_auto_contribute", force_group_id ? { force_group_id } : {}), [invoke]);
 
   // In-app Notifications
