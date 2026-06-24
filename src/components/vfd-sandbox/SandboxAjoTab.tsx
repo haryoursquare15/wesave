@@ -133,6 +133,7 @@ export function SandboxAjoTab() {
     contributionAmount: 10000,
     period: "weekly" as string,
     autoDebit: true,
+    fundingMode: "wallet" as "wallet" | "ddm",
     timeSlot: 18,
     dayOfWeek: 1,
     dayOfMonth: 1,
@@ -163,6 +164,7 @@ export function SandboxAjoTab() {
       max_members: form.maxMembers,
       period: form.period,
       auto_debit: form.autoDebit,
+      funding_mode: form.fundingMode,
       contribution_hour: slot?.hour ?? 9,
       contribution_minute: slot?.minute ?? 0,
       contribution_day_of_week: form.dayOfWeek,
@@ -170,11 +172,12 @@ export function SandboxAjoTab() {
     });
     if (result?.data) {
       toast({ title: "Group Created!", description: form.name });
-      setForm({ name: "", maxMembers: 5, contributionAmount: 10000, period: "weekly", autoDebit: true, timeSlot: 18, dayOfWeek: 1, dayOfMonth: 1 });
+      setForm({ name: "", maxMembers: 5, contributionAmount: 10000, period: "weekly", autoDebit: true, fundingMode: "wallet", timeSlot: 18, dayOfWeek: 1, dayOfMonth: 1 });
       setShowCreate(false);
       await loadGroups();
     }
   };
+
 
   const loadDetail = async (groupId: string) => {
     // If this group's swap window has already elapsed in the background,
