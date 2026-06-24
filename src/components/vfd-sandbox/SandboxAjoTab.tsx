@@ -597,6 +597,23 @@ export function SandboxAjoTab() {
               </Select>
             </div>
 
+            {/* Funding Mode (admin choice) */}
+            <div className="p-3 rounded-xl bg-card border border-border space-y-2">
+              <Label>Funding Mode</Label>
+              <Select value={form.fundingMode} onValueChange={(v) => setForm(p => ({ ...p, fundingMode: v as "wallet" | "ddm" }))}>
+                <SelectTrigger className="h-12"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="wallet">Wallet debit — pull from each member's Vestara wallet</SelectItem>
+                  <SelectItem value="ddm">Direct Debit Mandate — auto-debit each member's bank (VFD DDM)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">
+                {form.fundingMode === "ddm"
+                  ? "Contributions are collected straight from members' linked bank accounts. No wallet balance required."
+                  : "Members must have enough in their Vestara wallet on contribution day."}
+              </p>
+            </div>
+
             {/* Auto-Debit */}
             <div className="flex items-center justify-between p-3 rounded-xl bg-card border border-border">
               <div className="flex items-center gap-3">
