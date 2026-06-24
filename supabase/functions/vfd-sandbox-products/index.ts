@@ -4148,13 +4148,55 @@ async function vfdDebitMandate(params: {
   }
 }
 
+// ---------------------------------------------------------------------------
+// VFD embeds the ₦50 NIBSS authorization account inside the human-readable
+// `message` string (e.g. "...send N50 to 1234567890 at GTBANK..."). Pull the
+// first 10-digit run we see and treat that as the NIBSS account.
+// ---------------------------------------------------------------------------
+function extractNibssAccountFromMessage(message: string): string {
+  if (!message) return "";
+  const m = message.match(/\b(\d{10})\b/);
+  return m ? m[1] : "";
+}
+
+async function recordMandateEvent(
+  groupId: string,
+  userId: string,
+  reference: string | null,
+  mandateCode: string | null,
+  eventType: string,
+  payload: Record<string, unknown>,
+) {
+  try {
+    const db = getSupabaseAdmin();
+    await db.from("vfd_sandbox_group_mandates").insert({
+      thrift_group_id: groupId,
+      member_user_id: userId,
+      mandate_reference: reference,
+      mandate_code: mandateCode,
+      event_type: eventType,
+      event_payload: payload,
+    });
+  } catch (e) {
+    console.error("[recordMandateEvent] insert failed", e);
+  }
+}
+
 async function handleAcceptGroupMandate(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const groupId = body.group_id as string;
   if (!groupId) return jsonResponse({ error: "group_id required" }, 400);
 
+  // Per-spec: payer details come from the user-submitted form, not auto-pulled
+  // from their VFD account. This lets users authorize any bank (e.g. GTBank).
+  const payerBankCode = String((body.payer_bank_code as string) || "").trim();
+  const payerAccountNumber = String((body.payer_account_number as string) || "").trim();
+  const payerPhone = String((body.payer_phone as string) || "").trim();
+  const payerEmail = String((body.payer_email as string) || "").trim();
+  const payerAddress = String((body.payer_address as string) || "").trim();
+
   const { data: group } = await db.from("vfd_sandbox_groups")
-    .select("id, name, funding_mode, mandate_status, mandate_reference, admin_id, contribution_amount, period, total_cycles")
+    .select("id, name, funding_mode, mandate_status, mandate_reference, admin_id, contribution_amount, period, total_cycles, max_members, commenced_at")
     .eq("id", groupId).maybeSingle();
   if (!group) return jsonResponse({ error: "Group not found" }, 404);
   if (group.funding_mode !== "ddm") {
@@ -4162,50 +4204,37 @@ async function handleAcceptGroupMandate(userId: string, body: Record<string, unk
   }
 
   const { data: member } = await db.from("vfd_sandbox_group_members")
-    .select("id, status, mandate_status, mandate_reference")
+    .select("id, status, mandate_status, mandate_reference, mandate_code")
     .eq("group_id", groupId).eq("user_id", userId).maybeSingle();
   if (!member) return jsonResponse({ error: "You are not a member of this group" }, 403);
   if (member.status !== "active") return jsonResponse({ error: "Membership is not active" }, 400);
   if (member.mandate_status === "authorized") {
-    return jsonResponse({ data: { success: true, already_authorized: true, mandate_reference: member.mandate_reference } });
+    return jsonResponse({ data: { success: true, already_authorized: true, mandate_reference: member.mandate_reference, mandate_code: member.mandate_code } });
   }
 
-  // Fetch the customer's VFD account + KYC details for the debtor side of the mandate.
-  const { data: client, error: clientErr } = await db.from("vfd_sandbox_clients")
-    .select("vfd_account_number, bvn, full_name, phone, address")
-    .eq("user_id", userId).maybeSingle();
-  if (clientErr) {
-    console.error("[accept_group_mandate] client lookup error", clientErr);
-  }
-  // Pull email from auth.users since vfd_sandbox_clients does not store it.
-  let clientEmail = "";
-  try {
-    const { data: userRow } = await db.auth.admin.getUserById(userId);
-    clientEmail = userRow?.user?.email || "";
-  } catch (_) { /* non-fatal */ }
-  if (!client?.vfd_account_number) {
+  // Validate payer form input. VFD requires all five fields.
+  if (!payerBankCode || !payerAccountNumber || !payerPhone || !payerEmail || !payerAddress) {
     return jsonResponse({
-      error: "No VFD account found for your profile. Complete KYC and provision your wallet before authorizing a Direct Debit Mandate.",
-      code: "VFD_ACCOUNT_MISSING",
+      error: "Bank, account number, phone, email and address are all required to authorize a Direct Debit Mandate.",
+      code: "PAYER_DETAILS_REQUIRED",
     }, 400);
   }
+  if (!/^\d{10}$/.test(payerAccountNumber)) {
+    return jsonResponse({ error: "Account number must be 10 digits.", code: "INVALID_ACCOUNT_NUMBER" }, 400);
+  }
 
-  // VFD requires minimum NGN 1,000 mandate amount.
+  // VFD minimum mandate amount is NGN 1,000.
   const mandateAmount = Math.max(1000, Number(group.contribution_amount) || 0);
 
   const fee = AJO_DDM_MANDATE_FEE;
   const feeRef = `VES-AJO-MND-${groupId}-${userId.slice(0, 8)}-${Date.now()}`;
 
-  // 1) Debit the ₦100 setup fee from wallet.
+  // 1) Debit ₦100 mandate-setup fee from wallet.
   const { error: wErr } = await db.rpc("vestara_withdraw", {
     _user_id: userId,
     _amount: fee,
     _reference: feeRef,
-    _metadata: {
-      source: "ajo_mandate_setup_fee",
-      product_code: "ajo_ddm",
-      group_id: groupId,
-    },
+    _metadata: { source: "ajo_mandate_setup_fee", product_code: "ajo_ddm", group_id: groupId },
   });
   if (wErr) {
     const available = await getVestaraWalletBalance(userId);
@@ -4216,7 +4245,6 @@ async function handleAcceptGroupMandate(userId: string, body: Record<string, unk
       available,
     }, 400);
   }
-
   await db.from("vestara_fee_ledger").insert({
     user_id: userId,
     fee_type: "ajo_mandate_setup",
@@ -4226,34 +4254,31 @@ async function handleAcceptGroupMandate(userId: string, body: Record<string, unk
     metadata: { group_id: groupId, product_code: "ajo_ddm" },
   });
 
-  // 2) Build the VFD E-mandate payload exactly per the docs.
-  //    Reference must be prefixed with the wallet name ("vestara-"). The
-  //    e-mandate flow is preferred because no signature image is collected
-  //    in-app; the bank N50 token funding is the customer's authorisation.
-  const reference = `vestara-AJO-${groupId.slice(0, 8)}-${userId.slice(0, 8)}-${Date.now()}`;
-  const startDate = formatVfdMandateDate(new Date());
-  const endDate = formatVfdMandateDate(computeMandateEndDate(group.period as string, group.total_cycles as number));
+  // 2) Build the VFD E-Mandate payload. Reference is prefixed "vestara-" so
+  //    VFD can map debits back to our wallet. End date = start + (cycles *
+  //    period) with a small safety buffer.
+  const reference = `vestara-ddm-${groupId.slice(0, 8)}-${userId.slice(0, 8)}-${Date.now()}`;
+  const startDateObj = group.commenced_at ? new Date(group.commenced_at as string) : new Date();
+  const totalCycles = Number(group.total_cycles) || Number(group.max_members) || 1;
+  const endDateObj = computeMandateEndDate(group.period as string, totalCycles);
+  const startDate = formatVfdMandateDate(startDateObj);
+  const endDate = formatVfdMandateDate(endDateObj);
+  const frequencyCode = mapAjoFrequencyToVfd(group.period as string);
+
   const mandatePayload = {
     reference,
-    payerBank: VFD_PAYER_BANK_CODE,
-    payerAccountNumber: client.vfd_account_number,
-    payerPhone: (client.phone && String(client.phone).trim()) || "08000000000",
-    payerEmailAddress: clientEmail,
-    payerAddress: client.address || "Not provided",
+    payerBank: payerBankCode,
+    payerAccountNumber,
+    payerPhone,
+    payerEmailAddress: payerEmail,
+    payerAddress,
     receiverBank: VFD_POOL_BANK_CODE,
     receiverAccountNumber: VFD_POOL_NUBAN,
     amount: String(mandateAmount),
     startDate,
     endDate,
-    frequency: mapAjoFrequencyToVfd(group.period as string),
+    frequency: frequencyCode,
   };
-
-  let vfdResponsePayload: Record<string, unknown> = {};
-  let mandateCode = "";
-  let mandateCreated = false;
-  let approvalStatus = "Unknown";
-  let bankApproved = false;
-  let approvalInstructions = "";
 
   const accessToken = await getVfdAccessToken();
   if (!accessToken) {
@@ -4263,12 +4288,18 @@ async function handleAcceptGroupMandate(userId: string, body: Record<string, unk
       mandate_fee_charged_at: new Date().toISOString(),
       mandate_fee_amount: fee,
     }).eq("id", member.id);
+    await recordMandateEvent(groupId, userId, reference, null, "failed", { reason: "VFD credentials not configured" });
     return jsonResponse({ error: "Mandate provider unavailable. The ₦100 setup fee has been charged; please contact support.", code: "VFD_AUTH_FAILED" }, 502);
   }
 
+  let vfdResponsePayload: Record<string, unknown> = {};
+  let mandateCode = "";
+  let nibssAccount = "";
+  let nibssMessage = "";
+  let mandateCreated = false;
+
   try {
-    // Step 1: E-MANDATE CREATE — POST /mandate/setup?e-mandate=true
-    const res = await fetch(`${VFD_MANDATE_BASE}/mandate/setup?e-mandate=true`, {
+    const res = await fetch(`${VFD_MANDATE_BASE}/emandate/create`, {
       method: "POST",
       headers: { "Content-Type": "application/json", AccessToken: accessToken },
       body: JSON.stringify(mandatePayload),
@@ -4276,11 +4307,11 @@ async function handleAcceptGroupMandate(userId: string, body: Record<string, unk
     const json = await res.json().catch(() => ({} as Record<string, unknown>));
     vfdResponsePayload = { step: "create", request: mandatePayload, response: json, http_status: res.status };
 
-    const ok = (json as any)?.status === "00";
-    if (ok) {
-      mandateCode = String((json as any)?.data?.mandateCode || "");
-      approvalInstructions = String((json as any)?.message || "");
+    if ((json as any)?.status === "00") {
       mandateCreated = true;
+      mandateCode = String((json as any)?.data?.mandateCode || (json as any)?.data?.mandateId || "");
+      nibssMessage = String((json as any)?.message || "");
+      nibssAccount = extractNibssAccountFromMessage(nibssMessage);
     }
   } catch (e) {
     vfdResponsePayload = { step: "create", request: mandatePayload, error: e instanceof Error ? e.message : String(e) };
@@ -4295,6 +4326,7 @@ async function handleAcceptGroupMandate(userId: string, body: Record<string, unk
       mandate_fee_charged_at: nowIso,
       mandate_fee_amount: fee,
     }).eq("id", member.id);
+    await recordMandateEvent(groupId, userId, reference, null, "failed", vfdResponsePayload);
     return jsonResponse({
       error: "VFD did not create the mandate. The ₦100 setup fee has been charged; please try again.",
       code: "MANDATE_VFD_FAILED",
@@ -4302,73 +4334,51 @@ async function handleAcceptGroupMandate(userId: string, body: Record<string, unk
     }, 502);
   }
 
-  // Step 2: MANDATE-APPROVAL-STATUS — GET /mandate/status?reference=...
-  // For e-mandate the customer must do an N50 NIBSS token funding before the
-  // bank approves, so the first poll will almost always be "awaiting_approval".
-  const approval = await checkVfdMandateApproval(reference, accessToken);
-  approvalStatus = approval.status;
-  bankApproved = approval.approved;
-  vfdResponsePayload = {
-    ...vfdResponsePayload,
-    mandate_code: mandateCode,
-    reference,
-    approval: approval.raw,
-    approval_status: approvalStatus,
-    approval_instructions: approvalInstructions,
-  };
-
-  const finalStatus = bankApproved ? "authorized" : "awaiting_approval";
-  const updates: Record<string, unknown> = {
-    mandate_status: finalStatus,
-    // We persist the e-mandate `reference` here because /mandate/status and
-    // /account/debit both key off the original reference, not mandateCode.
+  // 3) Persist mandate against the membership row. Status starts at
+  //    "awaiting_approval" — flips to "authorized" once the customer funds
+  //    the ₦50 NIBSS account and the bank approves.
+  await db.from("vfd_sandbox_group_members").update({
+    contribution_method: "direct_debit",
+    mandate_status: "awaiting_approval",
     mandate_reference: reference,
+    mandate_code: mandateCode,
+    mandate_nibss_account: nibssAccount,
+    mandate_nibss_message: nibssMessage,
+    mandate_payer_bank_code: payerBankCode,
+    mandate_payer_account_number: payerAccountNumber,
+    mandate_payer_phone: payerPhone,
+    mandate_payer_email: payerEmail,
+    mandate_payer_address: payerAddress,
+    mandate_start_date: startDateObj.toISOString().slice(0, 10),
+    mandate_end_date: endDateObj.toISOString().slice(0, 10),
+    mandate_frequency: frequencyCode,
+    mandate_created_at: nowIso,
     mandate_fee_charged_at: nowIso,
     mandate_fee_amount: fee,
     mandate_payload: vfdResponsePayload,
-  };
-  if (bankApproved) updates.mandate_authorized_at = nowIso;
-  await db.from("vfd_sandbox_group_members").update(updates).eq("id", member.id);
+  }).eq("id", member.id);
 
-  // Only flip group-level mandate when ALL active members are bank-approved.
-  if (bankApproved) {
-    const { data: pendingMembers } = await db.from("vfd_sandbox_group_members")
-      .select("id").eq("group_id", groupId).eq("status", "active").neq("mandate_status", "authorized");
-    if (!pendingMembers || pendingMembers.length === 0) {
-      await db.from("vfd_sandbox_groups").update({
-        mandate_status: "authorized",
-        updated_at: nowIso,
-      }).eq("id", groupId);
-      await postChatMessage(groupId, group.admin_id,
-        "All members have authorized the Direct Debit Mandate. The group is ready for automated cycle debits.",
-        "system");
-    }
-  }
+  await recordMandateEvent(groupId, userId, reference, mandateCode, "created", vfdResponsePayload);
 
   await postChatMessage(groupId, userId,
-    bankApproved
-      ? `authorized the Direct Debit Mandate (₦${fee} setup fee charged).`
-      : `submitted a Direct Debit Mandate (₦${fee} setup fee charged) — awaiting N50 bank token funding.`,
+    `submitted a Direct Debit Mandate (₦${fee} setup fee charged) — awaiting ₦50 NIBSS authorization on ${payerAccountNumber}.`,
     "system");
-  await sendNotification(userId,
-    bankApproved ? "Mandate Authorized" : "Mandate Submitted",
-    bankApproved
-      ? `Your Direct Debit Mandate for ${group.name} is now active (ref ${reference}). ₦${fee} was debited from your wallet as the one-time setup fee.`
-      : `Your Direct Debit Mandate for ${group.name} has been submitted. To complete approval, follow the bank's N50 token-funding instructions from VFD. We'll update you once the bank approves it.`,
-    bankApproved ? "ddm_mandate_authorized" : "ddm_mandate_submitted", groupId);
+  await sendNotification(userId, "Mandate Created — Authorize Now",
+    `Send ₦50 from your bank account ${payerAccountNumber} to NIBSS account ${nibssAccount || "(see in-app instructions)"} within 7 days to activate your Direct Debit Mandate for ${group.name}.`,
+    "ddm_mandate_submitted", groupId);
 
   return jsonResponse({
     data: {
       success: true,
-      mandate_status: finalStatus,
+      mandate_status: "awaiting_approval",
       mandate_reference: reference,
       mandate_code: mandateCode,
-      bank_approval_status: approvalStatus,
-      bank_approved: bankApproved,
-      approval_instructions: approvalInstructions,
+      nibss_account: nibssAccount,
+      nibss_message: nibssMessage,
+      payer_account_number: payerAccountNumber,
+      payer_bank_code: payerBankCode,
       fee_charged: fee,
       fee_reference: feeRef,
-      vfd: vfdResponsePayload,
     },
   });
 }
@@ -4385,7 +4395,7 @@ async function handleCheckGroupMandateStatus(userId: string, body: Record<string
   if (!group) return jsonResponse({ error: "Group not found" }, 404);
 
   const { data: member } = await db.from("vfd_sandbox_group_members")
-    .select("id, mandate_status, mandate_reference, mandate_payload")
+    .select("id, mandate_status, mandate_reference, mandate_code, mandate_payload")
     .eq("group_id", groupId).eq("user_id", userId).maybeSingle();
   if (!member) return jsonResponse({ error: "You are not a member of this group" }, 403);
   if (!member.mandate_reference) return jsonResponse({ error: "No mandate to check. Please authorize a mandate first." }, 400);
@@ -4403,6 +4413,10 @@ async function handleCheckGroupMandateStatus(userId: string, body: Record<string
   const updates: Record<string, unknown> = { mandate_status: newStatus, mandate_payload: merged };
   if (approval.approved) updates.mandate_authorized_at = nowIso;
   await db.from("vfd_sandbox_group_members").update(updates).eq("id", member.id);
+
+  await recordMandateEvent(groupId, userId, member.mandate_reference, member.mandate_code,
+    approval.approved ? "authorized" : "status_checked",
+    { approval_status: approval.status, raw: approval.raw });
 
   if (approval.approved) {
     const { data: pending } = await db.from("vfd_sandbox_group_members")
@@ -4428,6 +4442,7 @@ async function handleCheckGroupMandateStatus(userId: string, body: Record<string
     },
   });
 }
+
 
 
 
