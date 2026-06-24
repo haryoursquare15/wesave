@@ -5115,6 +5115,7 @@ export type Database = {
           mandate_code: string | null
           mandate_created_at: string | null
           mandate_end_date: string | null
+          mandate_expires_at: string | null
           mandate_fee_amount: number
           mandate_fee_charged_at: string | null
           mandate_frequency: string | null
@@ -5129,6 +5130,7 @@ export type Database = {
           mandate_reference: string | null
           mandate_start_date: string | null
           mandate_status: string
+          payout_order: number | null
           payout_position: number | null
           status: string | null
           terms_accepted_at: string | null
@@ -5148,6 +5150,7 @@ export type Database = {
           mandate_code?: string | null
           mandate_created_at?: string | null
           mandate_end_date?: string | null
+          mandate_expires_at?: string | null
           mandate_fee_amount?: number
           mandate_fee_charged_at?: string | null
           mandate_frequency?: string | null
@@ -5162,6 +5165,7 @@ export type Database = {
           mandate_reference?: string | null
           mandate_start_date?: string | null
           mandate_status?: string
+          payout_order?: number | null
           payout_position?: number | null
           status?: string | null
           terms_accepted_at?: string | null
@@ -5181,6 +5185,7 @@ export type Database = {
           mandate_code?: string | null
           mandate_created_at?: string | null
           mandate_end_date?: string | null
+          mandate_expires_at?: string | null
           mandate_fee_amount?: number
           mandate_fee_charged_at?: string | null
           mandate_frequency?: string | null
@@ -5195,6 +5200,7 @@ export type Database = {
           mandate_reference?: string | null
           mandate_start_date?: string | null
           mandate_status?: string
+          payout_order?: number | null
           payout_position?: number | null
           status?: string | null
           terms_accepted_at?: string | null
@@ -5260,6 +5266,7 @@ export type Database = {
           admin_id: string
           auto_debit: boolean
           commenced_at: string | null
+          commencement_status: string
           contribution_amount: number
           contribution_day_of_month: number | null
           contribution_day_of_week: number | null
@@ -5267,6 +5274,7 @@ export type Database = {
           contribution_minute: number | null
           created_at: string
           current_cycle: number
+          current_cycle_index: number
           current_payout_position: number | null
           description: string | null
           funding_mode: string
@@ -5282,15 +5290,19 @@ export type Database = {
           next_payout_date: string | null
           payout_order: string[] | null
           period: string
+          pool_ledger_balance: number
           status: string
           swap_window_ends_at: string | null
+          total_contributed_kobo: number
           total_cycles: number
+          total_paid_out_kobo: number
           updated_at: string
         }
         Insert: {
           admin_id: string
           auto_debit?: boolean
           commenced_at?: string | null
+          commencement_status?: string
           contribution_amount: number
           contribution_day_of_month?: number | null
           contribution_day_of_week?: number | null
@@ -5298,6 +5310,7 @@ export type Database = {
           contribution_minute?: number | null
           created_at?: string
           current_cycle?: number
+          current_cycle_index?: number
           current_payout_position?: number | null
           description?: string | null
           funding_mode?: string
@@ -5313,15 +5326,19 @@ export type Database = {
           next_payout_date?: string | null
           payout_order?: string[] | null
           period?: string
+          pool_ledger_balance?: number
           status?: string
           swap_window_ends_at?: string | null
+          total_contributed_kobo?: number
           total_cycles?: number
+          total_paid_out_kobo?: number
           updated_at?: string
         }
         Update: {
           admin_id?: string
           auto_debit?: boolean
           commenced_at?: string | null
+          commencement_status?: string
           contribution_amount?: number
           contribution_day_of_month?: number | null
           contribution_day_of_week?: number | null
@@ -5329,6 +5346,7 @@ export type Database = {
           contribution_minute?: number | null
           created_at?: string
           current_cycle?: number
+          current_cycle_index?: number
           current_payout_position?: number | null
           description?: string | null
           funding_mode?: string
@@ -5344,9 +5362,12 @@ export type Database = {
           next_payout_date?: string | null
           payout_order?: string[] | null
           period?: string
+          pool_ledger_balance?: number
           status?: string
           swap_window_ends_at?: string | null
+          total_contributed_kobo?: number
           total_cycles?: number
+          total_paid_out_kobo?: number
           updated_at?: string
         }
         Relationships: []
@@ -5999,6 +6020,68 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      vfd_sandbox_thrift_ledger_entries: {
+        Row: {
+          amount_kobo: number
+          confirmed_at: string | null
+          created_at: string
+          cycle_index: number | null
+          direction: string
+          entry_type: string
+          id: string
+          mandate_code: string | null
+          member_user_id: string | null
+          metadata: Json
+          payment_reference: string | null
+          status: string
+          thrift_group_id: string
+          vfd_payment_reference: string | null
+          vfd_session_id: string | null
+        }
+        Insert: {
+          amount_kobo: number
+          confirmed_at?: string | null
+          created_at?: string
+          cycle_index?: number | null
+          direction: string
+          entry_type: string
+          id?: string
+          mandate_code?: string | null
+          member_user_id?: string | null
+          metadata?: Json
+          payment_reference?: string | null
+          status?: string
+          thrift_group_id: string
+          vfd_payment_reference?: string | null
+          vfd_session_id?: string | null
+        }
+        Update: {
+          amount_kobo?: number
+          confirmed_at?: string | null
+          created_at?: string
+          cycle_index?: number | null
+          direction?: string
+          entry_type?: string
+          id?: string
+          mandate_code?: string | null
+          member_user_id?: string | null
+          metadata?: Json
+          payment_reference?: string | null
+          status?: string
+          thrift_group_id?: string
+          vfd_payment_reference?: string | null
+          vfd_session_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vfd_sandbox_thrift_ledger_entries_thrift_group_id_fkey"
+            columns: ["thrift_group_id"]
+            isOneToOne: false
+            referencedRelation: "vfd_sandbox_groups"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vfd_sandbox_transactions: {
         Row: {
