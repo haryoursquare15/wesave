@@ -753,6 +753,10 @@ export function SandboxAjoTab() {
             const isMember = !!currentUserId && (g.vfd_sandbox_group_members || [])
               .some((m: any) => m.user_id === currentUserId && (m.status ?? "active") === "active");
             const hasInvite = !isMember && pendingInvites.some((i: any) => i.group_id === g.id);
+            const myMember = (g.vfd_sandbox_group_members || []).find((m: any) => m.user_id === currentUserId);
+            const isDdm = g.funding_mode === "ddm";
+            const myMandate = (myMember?.mandate_status as string) || "not_required";
+            const mandatePending = isMember && isDdm && myMandate !== "authorized";
             return (
               <Card key={g.id} className="cursor-pointer hover:border-primary/30 transition-colors" onClick={() => handleCardClick(g)}>
                 <CardContent className="p-4 space-y-3">
@@ -767,11 +771,19 @@ export function SandboxAjoTab() {
                       {hasInvite && (
                         <Badge className="bg-primary/15 text-primary border-primary/30">Invite pending</Badge>
                       )}
+                      {isMember && isDdm && (
+                        myMandate === "authorized" ? (
+                          <Badge variant="outline" className="text-[10px] text-green-600 border-green-500/40">DDM authorized</Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-500/40">DDM mandate pending</Badge>
+                        )
+                      )}
                       <Badge variant="outline" className={g.status === "active" ? "text-green-600 border-green-500" : g.status === "completed" ? "text-primary border-primary" : "text-muted-foreground"}>
                         {g.status}
                       </Badge>
                     </div>
                   </div>
+
 
 
                   {g.total_cycles > 0 && (
