@@ -4367,6 +4367,7 @@ async function handleAcceptGroupMandate(userId: string, body: Record<string, unk
     mandate_end_date: endDateObj.toISOString().slice(0, 10),
     mandate_frequency: frequencyCode,
     mandate_created_at: nowIso,
+    mandate_expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
     mandate_fee_charged_at: nowIso,
     mandate_fee_amount: fee,
     mandate_payload: vfdResponsePayload,
