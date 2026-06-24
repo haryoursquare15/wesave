@@ -424,8 +424,14 @@ async function handleJoinGroup(userId: string, body: Record<string, unknown>) {
   const isDdmGroup = (group.funding_mode as string) === "ddm";
   const { error } = await db.from("vfd_sandbox_group_members").insert({
     group_id: groupId, user_id: userId, status: "active",
+    // For DDM groups every joiner — creator, invitee, link-joiner — defaults to
+    // the direct-debit contribution method so the commencement gate and cycle
+    // debits treat them uniformly. They flip to "wallet" only if they later
+    // opt out of DDM (not currently exposed in sandbox).
+    contribution_method: isDdmGroup ? "direct_debit" : "wallet",
     mandate_status: isDdmGroup ? "pending" : "not_required",
   });
+
   if (error) return jsonResponse({ error: error.message }, 500);
 
   if (isDdmGroup) {
