@@ -192,9 +192,13 @@ export function SandboxAjoTab() {
     });
     if (result?.data) {
       toast({ title: "Group Created!", description: form.name });
+      const wasDdm = form.fundingMode === "ddm";
+      const createdGroup = result.data as Group;
       setForm({ name: "", maxMembers: 5, contributionAmount: 10000, period: "weekly", autoDebit: true, fundingMode: "wallet", timeSlot: 18, dayOfWeek: 1, dayOfMonth: 1 });
       setShowCreate(false);
       await loadGroups();
+      // DDM: prompt the admin to authorize their own mandate immediately.
+      if (wasDdm) setMandateGroup(createdGroup);
     }
   };
 
@@ -245,9 +249,12 @@ export function SandboxAjoTab() {
     if (accept) {
       toast({ title: "Invite accepted", description: `You joined "${inviteGate.group.name}".` });
       const gid = inviteGate.group.id;
+      const joinedGroup = inviteGate.group;
       setInviteGate(null);
       await loadGroups();
       await loadDetail(gid);
+      // DDM groups: immediately prompt the new member to authorize their mandate.
+      if (joinedGroup.funding_mode === "ddm") setMandateGroup(joinedGroup);
     } else {
       toast({ title: "Invite declined" });
       setInviteGate(null);
