@@ -4742,6 +4742,9 @@ Deno.serve(async (req) => {
       case "update_group_settings": return await handleUpdateGroupSettings(userId, body);
       case "accept_group_mandate": return await handleAcceptGroupMandate(userId, body);
       case "check_group_mandate_status": return await handleCheckGroupMandateStatus(userId, body);
+      case "check_commencement_readiness": return await handleCheckCommencementReadiness(userId, body);
+      case "trigger_mandate_debit": return await handleTriggerMandateDebit(userId, body);
+      case "poll_pending_mandates": return await handlePollPendingMandates();
       case "sandbox_auto_contribute": return await handleSandboxAutoContribute(userId, body);
 
       // In-app notifications
