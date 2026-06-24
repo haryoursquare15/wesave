@@ -4081,6 +4081,7 @@ Deno.serve(async (req) => {
       case "request_target_withdrawal": return await handleRequestTargetWithdrawal(userId, body);
       case "vote_target_withdrawal": return await handleVoteTargetWithdrawal(userId, body);
       case "independent_withdrawal": return await handleIndependentWithdrawal(userId, body);
+      case "update_target_settings": return await handleUpdateTargetSettings(userId, body);
 
       // Goal Funding (full parity)
       case "create_campaign": return await handleCreateCampaign(userId, body);
