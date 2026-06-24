@@ -4033,50 +4033,89 @@ async function handleUpdateGroupSettings(userId: string, body: Record<string, un
 // On VFD failure the fee is NOT refunded (matches goalsave behavior); the
 // member stays "pending" with the failure payload stored in mandate_payload
 // so the client can retry.
+// ---------------------------------------------------------------------------
+// VFD Direct-Debit / E-mandate constants, aligned to the official docs:
+//   POST  {base}/mandate/setup?e-mandate=true       -> create e-mandate
+//   GET   {base}/mandate/status?reference=...       -> mandate approval status
+//   POST  {base}/account/debit                      -> debit the mandate
+//   GET   {base}/account/balance?reference=...      -> payer's balance
+// Auth header: AccessToken: <token>
+// Frequency: "1" daily, "2" weekly, "3" monthly. Dates: "DD Month YYYY".
+// Minimum mandate amount: NGN 1,000. Reference MUST be prefixed with the
+// wallet name (we use "vestara-" so VFD can map debits back to our pool).
+// ---------------------------------------------------------------------------
 const AJO_DDM_MANDATE_FEE = 100;
-const VFD_MANDATE_URL = "https://api-devapps.vfdbank.systems/vtech-mandate/api/v2/directdebit";
-const VFD_MANDATE_STATUS_URL = "https://api-devapps.vfdbank.systems/vtech-mandate/api/v2/directdebit/mandate-approval-status";
-const VFD_MANDATE_DEBIT_URL = "https://api-devapps.vfdbank.systems/vtech-mandate/api/v2/directdebit/account/debit";
-const VFD_TOKEN_URL = "https://api-devapps.vfdbank.systems/vfd-tech/baas-portal/v1.1/baasauth/token";
+const VFD_MANDATE_BASE =
+  Deno.env.get("VFD_MANDATE_BASE") ||
+  "https://api-devapps.vfdbank.systems/vtech-mandate/api/v2/directdebit";
+// VFD pool (Vestara corporate NUBAN) — receiver of every mandate debit.
+const VFD_POOL_NUBAN = Deno.env.get("VFD_POOL_NUBAN") || "1001695610";
+const VFD_POOL_BANK_CODE = Deno.env.get("VFD_POOL_BANK_CODE") || "999999"; // VFD MFB
+const VFD_PAYER_BANK_CODE = Deno.env.get("VFD_PAYER_BANK_CODE") || "999999"; // user's VFD account
 
-// Step 2 of VFD DDM flow: query the mandate approval status after creation.
-// Returns { approved: boolean, status: string, raw: any }.
-async function checkVfdMandateApproval(mandateCode: string, accessToken: string) {
+// Convert a Date to "DD Month YYYY" — VFD requires exactly this format.
+function formatVfdMandateDate(d: Date): string {
+  const months = ["January","February","March","April","May","June",
+    "July","August","September","October","November","December"];
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  return `${dd} ${months[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+}
+
+// VFD mandate frequency: daily=1, weekly=2, monthly=3.
+function mapAjoFrequencyToVfd(period: string): string {
+  const p = (period || "").toLowerCase();
+  if (p === "daily") return "1";
+  if (p === "weekly") return "2";
+  return "3"; // monthly (default + safest)
+}
+
+function computeMandateEndDate(period: string, totalCycles: number): Date {
+  const end = new Date();
+  const cycles = Math.max(1, Number(totalCycles) || 1);
+  const p = (period || "").toLowerCase();
+  // Add a 2-cycle safety buffer so the mandate doesn't expire before the last debit.
+  const buffered = cycles + 2;
+  if (p === "daily") end.setUTCDate(end.getUTCDate() + buffered);
+  else if (p === "weekly") end.setUTCDate(end.getUTCDate() + buffered * 7);
+  else end.setUTCMonth(end.getUTCMonth() + buffered);
+  return end;
+}
+
+// Query VFD MANDATE-APPROVAL-STATUS. The docs say to use the same `reference`
+// used at creation (NOT the returned mandateCode). Bank-approved when
+// data.mandateWorkflowStatusDescription === "Bank Approved".
+async function checkVfdMandateApproval(reference: string, accessToken: string) {
   try {
-    const url = `${VFD_MANDATE_STATUS_URL}?mandateCode=${encodeURIComponent(mandateCode)}`;
+    const url = `${VFD_MANDATE_BASE}/mandate/status?reference=${encodeURIComponent(reference)}`;
     const res = await fetch(url, { method: "GET", headers: { AccessToken: accessToken } });
     const json = await res.json().catch(() => ({} as Record<string, unknown>));
-    const status = String(
-      (json as any)?.data?.status ||
-      (json as any)?.data?.mandateStatus ||
-      (json as any)?.status ||
-      "Unknown",
-    );
-    const approved = /bank.?approved|approved|active|authorized/i.test(status);
-    return { approved, status, raw: json, http_status: res.status };
+    const data = (json as any)?.data || {};
+    const desc = String(data.mandateWorkflowStatusDescription || data.mandateWorkflowStatus || data.mandateState || "");
+    const approved = /bank.?approved|approved/i.test(desc) || String(data.mandateState || "").toUpperCase() === "ACTIVE";
+    return { approved, status: desc || String((json as any)?.message || "Unknown"), raw: json, http_status: res.status };
   } catch (e) {
     return { approved: false, status: "ERROR", raw: { error: e instanceof Error ? e.message : String(e) }, http_status: 0 };
   }
 }
 
-// Step 3 of VFD DDM flow: debit the customer's bank account against an
-// approved mandate. Exposed for the contribution flow / future cycle debits.
+// Debit a customer's account against an approved mandate.
+// POST /account/debit with { amount, narration, mandateReference, transactionReference }.
 async function vfdDebitMandate(params: {
-  mandateCode: string;
+  mandateReference: string;
   amount: number;
   narration: string;
-  reference: string;
+  transactionReference: string;
 }) {
   const accessToken = await getVfdAccessToken();
   if (!accessToken) return { ok: false, raw: { error: "VFD credentials not configured" }, http_status: 0 };
   const payload = {
-    mandateCode: params.mandateCode,
-    amount: params.amount,
+    amount: String(params.amount),
     narration: params.narration,
-    reference: params.reference,
+    mandateReference: params.mandateReference,
+    transactionReference: params.transactionReference,
   };
   try {
-    const res = await fetch(VFD_MANDATE_DEBIT_URL, {
+    const res = await fetch(`${VFD_MANDATE_BASE}/account/debit`, {
       method: "POST",
       headers: { "Content-Type": "application/json", AccessToken: accessToken },
       body: JSON.stringify(payload),
@@ -4087,42 +4126,6 @@ async function vfdDebitMandate(params: {
   } catch (e) {
     return { ok: false, raw: { request: payload, error: e instanceof Error ? e.message : String(e) }, http_status: 0 };
   }
-}
-
-async function getVfdAccessToken(): Promise<string> {
-  const consumerKey = Deno.env.get("VFD_CONSUMER_KEY");
-  const consumerSecret = Deno.env.get("VFD_CONSUMER_SECRET");
-  const staticToken = Deno.env.get("VFD_ACCESS_TOKEN");
-  if (consumerKey && consumerSecret) {
-    const tokRes = await fetch(VFD_TOKEN_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "-1" }),
-    });
-    const tokData = await tokRes.json().catch(() => ({}));
-    if (tokData?.data?.access_token) return String(tokData.data.access_token);
-  }
-  return staticToken || "";
-}
-
-function mapAjoFrequencyToVfd(period: string): string {
-  const p = (period || "").toLowerCase();
-  if (p === "daily") return "DAILY";
-  if (p === "weekly") return "WEEKLY";
-  if (p === "monthly") return "MONTHLY";
-  return "MONTHLY";
-}
-
-function computeMandateEndDate(period: string, totalCycles: number): string {
-  const start = new Date();
-  const cycles = Math.max(1, Number(totalCycles) || 1);
-  const p = (period || "").toLowerCase();
-  // Add a 2-cycle safety buffer so the mandate doesn't expire before the last debit.
-  const buffered = cycles + 2;
-  if (p === "daily") start.setUTCDate(start.getUTCDate() + buffered);
-  else if (p === "weekly") start.setUTCDate(start.getUTCDate() + buffered * 7);
-  else start.setUTCMonth(start.getUTCMonth() + buffered);
-  return start.toISOString().split("T")[0];
 }
 
 async function handleAcceptGroupMandate(userId: string, body: Record<string, unknown>) {
@@ -4147,9 +4150,9 @@ async function handleAcceptGroupMandate(userId: string, body: Record<string, unk
     return jsonResponse({ data: { success: true, already_authorized: true, mandate_reference: member.mandate_reference } });
   }
 
-  // Fetch the customer's VFD account/BVN for the debtor side of the mandate.
+  // Fetch the customer's VFD account + KYC details for the debtor side of the mandate.
   const { data: client } = await db.from("vfd_sandbox_clients")
-    .select("vfd_account_number, bvn, first_name, last_name, phone_number")
+    .select("vfd_account_number, bvn, first_name, last_name, phone, email, address")
     .eq("user_id", userId).maybeSingle();
   if (!client?.vfd_account_number) {
     return jsonResponse({
@@ -4157,6 +4160,9 @@ async function handleAcceptGroupMandate(userId: string, body: Record<string, unk
       code: "VFD_ACCOUNT_MISSING",
     }, 400);
   }
+
+  // VFD requires minimum NGN 1,000 mandate amount.
+  const mandateAmount = Math.max(1000, Number(group.contribution_amount) || 0);
 
   const fee = AJO_DDM_MANDATE_FEE;
   const feeRef = `VES-AJO-MND-${groupId}-${userId.slice(0, 8)}-${Date.now()}`;
@@ -4191,52 +4197,60 @@ async function handleAcceptGroupMandate(userId: string, body: Record<string, unk
     metadata: { group_id: groupId, product_code: "ajo_ddm" },
   });
 
-  // 2) Call VFD DDM API.
-  const mandateCode = `VES-DDM-AJO-${groupId.slice(0, 8)}-${userId.slice(0, 8)}`;
-  const startDate = new Date().toISOString().split("T")[0];
-  const endDate = computeMandateEndDate(group.period as string, group.total_cycles as number);
+  // 2) Build the VFD E-mandate payload exactly per the docs.
+  //    Reference must be prefixed with the wallet name ("vestara-"). The
+  //    e-mandate flow is preferred because no signature image is collected
+  //    in-app; the bank N50 token funding is the customer's authorisation.
+  const reference = `vestara-AJO-${groupId.slice(0, 8)}-${userId.slice(0, 8)}-${Date.now()}`;
+  const startDate = formatVfdMandateDate(new Date());
+  const endDate = formatVfdMandateDate(computeMandateEndDate(group.period as string, group.total_cycles as number));
   const mandatePayload = {
-    accountNo: client.vfd_account_number,
-    productCode: "AJO_DDM",
-    mandateCode,
-    amount: Number(group.contribution_amount),
-    frequency: mapAjoFrequencyToVfd(group.period as string),
+    reference,
+    payerBank: VFD_PAYER_BANK_CODE,
+    payerAccountNumber: client.vfd_account_number,
+    payerPhone: client.phone || "",
+    payerEmailAddress: client.email || "",
+    payerAddress: client.address || "Not provided",
+    receiverBank: VFD_POOL_BANK_CODE,
+    receiverAccountNumber: VFD_POOL_NUBAN,
+    amount: String(mandateAmount),
     startDate,
     endDate,
-    narration: `Vestara Ajo ${String(group.name).slice(0, 32)} mandate`,
-    payerName: [client.first_name, client.last_name].filter(Boolean).join(" ") || "Vestara Customer",
-    payerPhone: client.phone_number || "",
-    reference: mandateCode,
+    frequency: mapAjoFrequencyToVfd(group.period as string),
   };
 
   let vfdResponsePayload: Record<string, unknown> = {};
-  let memberMandateRef = mandateCode;
+  let mandateCode = "";
   let mandateCreated = false;
   let approvalStatus = "Unknown";
   let bankApproved = false;
-  let accessToken = "";
+  let approvalInstructions = "";
+
+  const accessToken = await getVfdAccessToken();
+  if (!accessToken) {
+    await db.from("vfd_sandbox_group_members").update({
+      mandate_status: "failed",
+      mandate_payload: { error: "VFD credentials not configured" },
+      mandate_fee_charged_at: new Date().toISOString(),
+      mandate_fee_amount: fee,
+    }).eq("id", member.id);
+    return jsonResponse({ error: "Mandate provider unavailable. The ₦100 setup fee has been charged; please contact support.", code: "VFD_AUTH_FAILED" }, 502);
+  }
 
   try {
-    accessToken = await getVfdAccessToken();
-    if (!accessToken) throw new Error("VFD credentials not configured");
-
-    // Step 1: DIRECT-MANDATE CREATE API.
-    const ddmRes = await fetch(VFD_MANDATE_URL, {
+    // Step 1: E-MANDATE CREATE — POST /mandate/setup?e-mandate=true
+    const res = await fetch(`${VFD_MANDATE_BASE}/mandate/setup?e-mandate=true`, {
       method: "POST",
       headers: { "Content-Type": "application/json", AccessToken: accessToken },
       body: JSON.stringify(mandatePayload),
     });
-    const ddmJson = await ddmRes.json().catch(() => ({} as Record<string, unknown>));
-    vfdResponsePayload = { step: "create", request: mandatePayload, response: ddmJson, http_status: ddmRes.status };
+    const json = await res.json().catch(() => ({} as Record<string, unknown>));
+    vfdResponsePayload = { step: "create", request: mandatePayload, response: json, http_status: res.status };
 
-    const ok = (ddmJson as any)?.status === "00" || ddmRes.ok;
+    const ok = (json as any)?.status === "00";
     if (ok) {
-      memberMandateRef = String(
-        (ddmJson as any)?.data?.mandateId ||
-        (ddmJson as any)?.data?.mandateCode ||
-        (ddmJson as any)?.data?.reference ||
-        mandateCode,
-      );
+      mandateCode = String((json as any)?.data?.mandateCode || "");
+      approvalInstructions = String((json as any)?.message || "");
       mandateCreated = true;
     }
   } catch (e) {
@@ -4259,17 +4273,27 @@ async function handleAcceptGroupMandate(userId: string, body: Record<string, unk
     }, 502);
   }
 
-  // Step 2: MANDATE-APPROVAL-STATUS API. The bank may take time to approve;
-  // we surface the live status to the client and let them re-poll later.
-  const approval = await checkVfdMandateApproval(memberMandateRef, accessToken);
+  // Step 2: MANDATE-APPROVAL-STATUS — GET /mandate/status?reference=...
+  // For e-mandate the customer must do an N50 NIBSS token funding before the
+  // bank approves, so the first poll will almost always be "awaiting_approval".
+  const approval = await checkVfdMandateApproval(reference, accessToken);
   approvalStatus = approval.status;
   bankApproved = approval.approved;
-  vfdResponsePayload = { ...vfdResponsePayload, approval: approval.raw, approval_status: approvalStatus };
+  vfdResponsePayload = {
+    ...vfdResponsePayload,
+    mandate_code: mandateCode,
+    reference,
+    approval: approval.raw,
+    approval_status: approvalStatus,
+    approval_instructions: approvalInstructions,
+  };
 
   const finalStatus = bankApproved ? "authorized" : "awaiting_approval";
   const updates: Record<string, unknown> = {
     mandate_status: finalStatus,
-    mandate_reference: memberMandateRef,
+    // We persist the e-mandate `reference` here because /mandate/status and
+    // /account/debit both key off the original reference, not mandateCode.
+    mandate_reference: reference,
     mandate_fee_charged_at: nowIso,
     mandate_fee_amount: fee,
     mandate_payload: vfdResponsePayload,
@@ -4295,22 +4319,24 @@ async function handleAcceptGroupMandate(userId: string, body: Record<string, unk
   await postChatMessage(groupId, userId,
     bankApproved
       ? `authorized the Direct Debit Mandate (₦${fee} setup fee charged).`
-      : `submitted a Direct Debit Mandate (₦${fee} setup fee charged) — awaiting bank approval.`,
+      : `submitted a Direct Debit Mandate (₦${fee} setup fee charged) — awaiting N50 bank token funding.`,
     "system");
   await sendNotification(userId,
     bankApproved ? "Mandate Authorized" : "Mandate Submitted",
     bankApproved
-      ? `Your Direct Debit Mandate for ${group.name} is now active (ref ${memberMandateRef}). ₦${fee} was debited from your wallet as the one-time setup fee.`
-      : `Your Direct Debit Mandate for ${group.name} has been submitted to the bank (ref ${memberMandateRef}). Status: ${approvalStatus}. We'll update you once the bank approves it.`,
+      ? `Your Direct Debit Mandate for ${group.name} is now active (ref ${reference}). ₦${fee} was debited from your wallet as the one-time setup fee.`
+      : `Your Direct Debit Mandate for ${group.name} has been submitted. To complete approval, follow the bank's N50 token-funding instructions from VFD. We'll update you once the bank approves it.`,
     bankApproved ? "ddm_mandate_authorized" : "ddm_mandate_submitted", groupId);
 
   return jsonResponse({
     data: {
       success: true,
       mandate_status: finalStatus,
-      mandate_reference: memberMandateRef,
+      mandate_reference: reference,
+      mandate_code: mandateCode,
       bank_approval_status: approvalStatus,
       bank_approved: bankApproved,
+      approval_instructions: approvalInstructions,
       fee_charged: fee,
       fee_reference: feeRef,
       vfd: vfdResponsePayload,
