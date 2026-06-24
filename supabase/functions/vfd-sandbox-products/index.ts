@@ -3956,7 +3956,7 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
 async function handleUpdateGroupSettings(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const groupId = body.group_id as string;
-  const { data: group } = await db.from("vfd_sandbox_groups").select("admin_id, status").eq("id", groupId).maybeSingle();
+  const { data: group } = await db.from("vfd_sandbox_groups").select("admin_id, status, funding_mode, mandate_reference").eq("id", groupId).maybeSingle();
   if (!group) return jsonResponse({ error: "Group not found" }, 404);
   if (group.admin_id !== userId) return jsonResponse({ error: "Only the admin can update settings" }, 403);
 
@@ -3964,9 +3964,49 @@ async function handleUpdateGroupSettings(userId: string, body: Record<string, un
   const allowed = ["auto_debit", "contribution_hour", "contribution_minute", "contribution_day_of_week", "contribution_day_of_month", "description"] as const;
   for (const k of allowed) if (body[k] !== undefined) updates[k] = body[k];
 
+  // Funding mode toggle (wallet ↔ ddm)
+  if (body.funding_mode !== undefined) {
+    const fm = (body.funding_mode as string) === "ddm" ? "ddm" : "wallet";
+    updates.funding_mode = fm;
+    if (fm === "ddm") {
+      updates.mandate_status = "authorized";
+      updates.mandate_reference = group.mandate_reference || `VES-DDM-AJO-${groupId}`;
+    } else {
+      updates.mandate_status = "not_required";
+    }
+  }
+
   const { error } = await db.from("vfd_sandbox_groups").update(updates).eq("id", groupId);
   if (error) return jsonResponse({ error: error.message }, 500);
-  await postChatMessage(groupId, userId, "Admin updated group settings", "system");
+  const note = body.funding_mode !== undefined
+    ? `Admin switched funding mode to ${(body.funding_mode as string).toUpperCase()}`
+    : "Admin updated group settings";
+  await postChatMessage(groupId, userId, note, "system");
+  return jsonResponse({ data: { success: true } });
+}
+
+async function handleUpdateTargetSettings(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const targetId = body.target_id as string;
+  const { data: target } = await db.from("vfd_sandbox_targets").select("admin_id, funding_mode, mandate_reference").eq("id", targetId).maybeSingle();
+  if (!target) return jsonResponse({ error: "Target not found" }, 404);
+  if (target.admin_id !== userId) return jsonResponse({ error: "Only the admin can update settings" }, 403);
+
+  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (body.description !== undefined) updates.description = body.description;
+  if (body.funding_mode !== undefined) {
+    const fm = (body.funding_mode as string) === "ddm" ? "ddm" : "wallet";
+    updates.funding_mode = fm;
+    if (fm === "ddm") {
+      updates.mandate_status = "authorized";
+      updates.mandate_reference = target.mandate_reference || `VES-DDM-TARGET-${targetId}`;
+    } else {
+      updates.mandate_status = "not_required";
+    }
+  }
+
+  const { error } = await db.from("vfd_sandbox_targets").update(updates).eq("id", targetId);
+  if (error) return jsonResponse({ error: error.message }, 500);
   return jsonResponse({ data: { success: true } });
 }
 
