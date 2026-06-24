@@ -4708,6 +4708,9 @@ Deno.serve(async (req) => {
     if (action === "send_bill_reminders") {
       return await handleSendBillReminders();
     }
+    if (action === "poll_pending_mandates") {
+      return await handlePollPendingMandates();
+    }
 
     const user = await getUserFromRequest(req);
     const userId = user.id;
