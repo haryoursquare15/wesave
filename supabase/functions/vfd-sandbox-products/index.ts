@@ -1069,7 +1069,12 @@ async function handleContributeTarget(userId: string, body: Record<string, unkno
         // Use the stored contributed_amount (already updated for current user)
         const memberContributed = m.user_id === userId ? newMemberContributed : Number(m.contributed_amount);
         if (memberContributed > 0) {
-          await creditFromSavings(m.user_id, memberContributed);
+          if (isDdm) {
+            // DDM-funded: cash sat in the pool, credit member's wallet directly.
+            await creditWallet(m.user_id, memberContributed);
+          } else {
+            await creditFromSavings(m.user_id, memberContributed);
+          }
           await sendNotification(m.user_id, "🎯 Target Achieved!",
             `"${target.name}" has reached its savings target! ₦${memberContributed.toLocaleString()} has been released to your wallet.`,
             "target_achieved");
