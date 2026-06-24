@@ -4217,7 +4217,7 @@ async function handleAcceptGroupMandate(userId: string, body: Record<string, unk
     reference,
     payerBank: VFD_PAYER_BANK_CODE,
     payerAccountNumber: client.vfd_account_number,
-    payerPhone: client.phone || "",
+    payerPhone: (client.phone && String(client.phone).trim()) || "08000000000",
     payerEmailAddress: clientEmail,
     payerAddress: client.address || "Not provided",
     receiverBank: VFD_POOL_BANK_CODE,
