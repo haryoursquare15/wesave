@@ -612,34 +612,47 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
   if (existingContrib) return jsonResponse({ error: "Already contributed this cycle" }, 400);
 
   const amount = Number(group.contribution_amount);
-  const reference = `ajo-manual-${groupId}-${activeCycle.id}-${userId}`;
-  const debit = await debitVestaraForThrift(userId, groupId, amount, reference, {
-    cycle_id: activeCycle.id,
-    cycle_number: group.current_cycle,
-    source: "vfd_sandbox_ajo",
-  });
-  if (!debit.success) {
-    const available = await getVestaraWalletBalance(userId);
-    const rawErr = (debit.error || "").toString();
-    const isInsufficient = available < amount || /insufficient/i.test(rawErr);
-    if (isInsufficient) {
-      const shortfall = Math.max(0, amount - available);
+  const fundingMode = (group.funding_mode as string) || "wallet";
+  const isDdm = fundingMode === "ddm";
+
+  if (isDdm) {
+    if (group.mandate_status !== "authorized") {
       return jsonResponse({
-        error: `Insufficient wallet balance. You need ₦${amount.toLocaleString()} but have ₦${available.toLocaleString()} available. Please fund your wallet with at least ₦${shortfall.toLocaleString()}.`,
-        code: "INSUFFICIENT_BALANCE",
-        required: amount,
-        available,
-        shortfall,
+        error: "Direct Debit Mandate is not authorized yet. Ask your admin to complete DDM setup.",
+        code: "MANDATE_NOT_AUTHORIZED",
       }, 400);
     }
-    // Surface the real underlying error instead of masking it as "insufficient"
-    console.error(`[handleContributeGroup] debit failed group=${groupId} user=${userId} amount=${amount} available=${available} err=${rawErr}`);
-    return jsonResponse({
-      error: rawErr || "Contribution failed. Please try again.",
-      code: "CONTRIBUTION_FAILED",
-      required: amount,
-      available,
-    }, 400);
+    // DDM-funded: funds flow VFD bank → settlement pool → group pool. Skip wallet debit.
+    // Sandbox simulates a successful DDM collection here.
+  } else {
+    const reference = `ajo-manual-${groupId}-${activeCycle.id}-${userId}`;
+    const debit = await debitVestaraForThrift(userId, groupId, amount, reference, {
+      cycle_id: activeCycle.id,
+      cycle_number: group.current_cycle,
+      source: "vfd_sandbox_ajo",
+    });
+    if (!debit.success) {
+      const available = await getVestaraWalletBalance(userId);
+      const rawErr = (debit.error || "").toString();
+      const isInsufficient = available < amount || /insufficient/i.test(rawErr);
+      if (isInsufficient) {
+        const shortfall = Math.max(0, amount - available);
+        return jsonResponse({
+          error: `Insufficient wallet balance. You need ₦${amount.toLocaleString()} but have ₦${available.toLocaleString()} available. Please fund your wallet with at least ₦${shortfall.toLocaleString()}.`,
+          code: "INSUFFICIENT_BALANCE",
+          required: amount,
+          available,
+          shortfall,
+        }, 400);
+      }
+      console.error(`[handleContributeGroup] debit failed group=${groupId} user=${userId} amount=${amount} available=${available} err=${rawErr}`);
+      return jsonResponse({
+        error: rawErr || "Contribution failed. Please try again.",
+        code: "CONTRIBUTION_FAILED",
+        required: amount,
+        available,
+      }, 400);
+    }
   }
 
   await db.from("vfd_sandbox_group_contributions").insert({
