@@ -28,6 +28,9 @@ interface Group {
   max_members: number; member_count: number; current_cycle: number;
   total_cycles: number; status: string; admin_id: string;
   auto_debit?: boolean;
+  funding_mode?: "wallet" | "ddm";
+  mandate_status?: string;
+  mandate_reference?: string | null;
   contribution_hour?: number; contribution_minute?: number;
   contribution_day_of_week?: number; contribution_day_of_month?: number;
   commenced_at?: string;
