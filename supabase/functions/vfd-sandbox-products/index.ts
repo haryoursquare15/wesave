@@ -471,6 +471,26 @@ async function handleCommenceGroup(userId: string, body: Record<string, unknown>
     return jsonResponse({ error: "Member count mismatch" }, 400);
   }
 
+  // ---------------------------------------------------------------------------
+  // DDM Commencement Gate: every member must be either wallet-funded OR have an
+  // active (bank-authorized) Direct Debit Mandate. Spec §8.
+  // ---------------------------------------------------------------------------
+  {
+    const { data: mandateCheck } = await db.from("vfd_sandbox_group_members")
+      .select("user_id, contribution_method, mandate_status")
+      .eq("group_id", groupId).eq("status", "active");
+    const blocking = (mandateCheck || []).filter((m: any) =>
+      m.contribution_method === "direct_debit" && m.mandate_status !== "authorized");
+    if (blocking.length > 0) {
+      return jsonResponse({
+        error: `${blocking.length} member(s) have a Direct Debit Mandate that is not yet bank-authorized. The group cannot commence until every DDM mandate is active.`,
+        code: "MANDATES_NOT_ACTIVE",
+        pending_user_ids: blocking.map((m: any) => m.user_id),
+      }, 400);
+    }
+  }
+
+
   const memberIds = members.map(m => m.user_id);
   const payoutOrder = fisherYatesShuffle(memberIds);
 
