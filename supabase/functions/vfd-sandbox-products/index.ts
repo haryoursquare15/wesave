@@ -661,15 +661,20 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
 
   await db.from("vfd_sandbox_contribution_audit").insert({
     user_id: userId, group_id: groupId, cycle_id: activeCycle.id,
-    amount, contribution_type: "manual", status: "success",
+    amount, contribution_type: isDdm ? "ddm" : "manual", status: "success",
   });
 
   await db.from("vfd_sandbox_group_members").update({ has_contributed_current: true })
     .eq("group_id", groupId).eq("user_id", userId);
 
-  await postChatMessage(groupId, userId, `has contributed ₦${amount.toLocaleString()} to the pool`, "contribution_status");
+  const chatMsg = isDdm
+    ? `Direct debit of ₦${amount.toLocaleString()} collected (DDM) for cycle ${group.current_cycle}`
+    : `has contributed ₦${amount.toLocaleString()} to the pool`;
+  await postChatMessage(groupId, userId, chatMsg, "contribution_status");
   await sendNotification(userId, "Contribution Successful",
-    `Your contribution of ₦${amount.toLocaleString()} has been recorded.`,
+    isDdm
+      ? `Your bank was debited ₦${amount.toLocaleString()} via DDM for ${group.name}.`
+      : `Your contribution of ₦${amount.toLocaleString()} has been recorded.`,
     "contribution_success", groupId);
 
   const { count } = await db.from("vfd_sandbox_group_contributions")
@@ -687,7 +692,7 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
   return jsonResponse({
     data: {
       success: true, contributed: true, amount,
-      cycle: group.current_cycle, payment_source: "wallet",
+      cycle: group.current_cycle, payment_source: isDdm ? "ddm" : "wallet",
       all_contributed: allContributed, auto_payout: payoutResult,
       message: allContributed ? "All members have contributed!" : "Contribution recorded successfully",
     },
