@@ -36,7 +36,7 @@ interface Group {
   commenced_at?: string;
   swap_window_ends_at?: string | null;
   is_full_at?: string | null;
-  vfd_sandbox_group_members?: { user_id: string; payout_position?: number; has_contributed_current?: boolean; has_received_payout?: boolean }[];
+  vfd_sandbox_group_members?: { user_id: string; payout_position?: number; has_contributed_current?: boolean; has_received_payout?: boolean; mandate_status?: string; mandate_reference?: string | null }[];
 }
 
 const daysOfWeek = [
@@ -126,6 +126,26 @@ export function SandboxAjoTab() {
   const [pendingInvites, setPendingInvites] = useState<any[]>([]);
   const [inviteGate, setInviteGate] = useState<{ invite: any; group: Group } | null>(null);
   const [inviteBusy, setInviteBusy] = useState(false);
+  const [mandateGroup, setMandateGroup] = useState<Group | null>(null);
+  const [mandateBusy, setMandateBusy] = useState(false);
+
+  const AJO_DDM_FEE = 100;
+
+  const acceptMandate = async () => {
+    if (!mandateGroup) return;
+    setMandateBusy(true);
+    const res = await products.acceptGroupMandate(mandateGroup.id);
+    setMandateBusy(false);
+    if (res?.data?.success) {
+      toast({
+        title: "DDM Mandate Authorized",
+        description: `₦${AJO_DDM_FEE} setup fee charged. ${mandateGroup.name} can now run automatic bank debits.`,
+      });
+      setMandateGroup(null);
+      await loadGroups();
+      if (detailGroup === mandateGroup.id) await loadDetail(mandateGroup.id);
+    }
+  };
 
   const [form, setForm] = useState({
     name: "",
