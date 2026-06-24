@@ -329,7 +329,7 @@ async function handleCreateGroup(userId: string, body: Record<string, unknown>) 
 async function handleListGroups(userId: string) {
   const db = getSupabaseAdmin();
   const { data } = await db.from("vfd_sandbox_groups")
-    .select("*, vfd_sandbox_group_members(user_id, status, payout_position, has_contributed_current, has_received_payout)")
+    .select("*, vfd_sandbox_group_members(user_id, status, payout_position, has_contributed_current, has_received_payout, mandate_status, mandate_reference)")
     .order("created_at", { ascending: false });
   return jsonResponse({ data });
 }
