@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { SandboxGroupInviteDialog } from "./SandboxGroupInviteDialog";
 import { SandboxGroupChat } from "./SandboxGroupChat";
+import { MandateAuthorizationDialog } from "./MandateAuthorizationDialog";
 import { Settings as SettingsIcon, MessageSquare, Check, X } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
