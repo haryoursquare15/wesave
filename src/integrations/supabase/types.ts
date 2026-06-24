@@ -5069,6 +5069,11 @@ export type Database = {
           has_used_swap: boolean | null
           id: string
           joined_at: string
+          mandate_authorized_at: string | null
+          mandate_fee_amount: number
+          mandate_fee_charged_at: string | null
+          mandate_reference: string | null
+          mandate_status: string
           payout_position: number | null
           status: string | null
           terms_accepted_at: string | null
@@ -5083,6 +5088,11 @@ export type Database = {
           has_used_swap?: boolean | null
           id?: string
           joined_at?: string
+          mandate_authorized_at?: string | null
+          mandate_fee_amount?: number
+          mandate_fee_charged_at?: string | null
+          mandate_reference?: string | null
+          mandate_status?: string
           payout_position?: number | null
           status?: string | null
           terms_accepted_at?: string | null
@@ -5097,6 +5107,11 @@ export type Database = {
           has_used_swap?: boolean | null
           id?: string
           joined_at?: string
+          mandate_authorized_at?: string | null
+          mandate_fee_amount?: number
+          mandate_fee_charged_at?: string | null
+          mandate_reference?: string | null
+          mandate_status?: string
           payout_position?: number | null
           status?: string | null
           terms_accepted_at?: string | null
