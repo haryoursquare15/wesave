@@ -4211,19 +4211,23 @@ async function handleAcceptGroupMandate(userId: string, body: Record<string, unk
 
   let vfdResponsePayload: Record<string, unknown> = {};
   let memberMandateRef = mandateCode;
-  let vfdAuthorized = false;
+  let mandateCreated = false;
+  let approvalStatus = "Unknown";
+  let bankApproved = false;
+  let accessToken = "";
 
   try {
-    const accessToken = await getVfdAccessToken();
+    accessToken = await getVfdAccessToken();
     if (!accessToken) throw new Error("VFD credentials not configured");
 
+    // Step 1: DIRECT-MANDATE CREATE API.
     const ddmRes = await fetch(VFD_MANDATE_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json", AccessToken: accessToken },
       body: JSON.stringify(mandatePayload),
     });
     const ddmJson = await ddmRes.json().catch(() => ({} as Record<string, unknown>));
-    vfdResponsePayload = { request: mandatePayload, response: ddmJson, http_status: ddmRes.status };
+    vfdResponsePayload = { step: "create", request: mandatePayload, response: ddmJson, http_status: ddmRes.status };
 
     const ok = (ddmJson as any)?.status === "00" || ddmRes.ok;
     if (ok) {
@@ -4233,17 +4237,15 @@ async function handleAcceptGroupMandate(userId: string, body: Record<string, unk
         (ddmJson as any)?.data?.reference ||
         mandateCode,
       );
-      vfdAuthorized = true;
+      mandateCreated = true;
     }
   } catch (e) {
-    vfdResponsePayload = { request: mandatePayload, error: e instanceof Error ? e.message : String(e) };
+    vfdResponsePayload = { step: "create", request: mandatePayload, error: e instanceof Error ? e.message : String(e) };
   }
 
   const nowIso = new Date().toISOString();
 
-  if (!vfdAuthorized) {
-    // Persist the failure so the client can see it; keep status "pending"
-    // (fee already charged — matches goalsave mandate behavior).
+  if (!mandateCreated) {
     await db.from("vfd_sandbox_group_members").update({
       mandate_status: "failed",
       mandate_payload: vfdResponsePayload,
@@ -4251,52 +4253,128 @@ async function handleAcceptGroupMandate(userId: string, body: Record<string, unk
       mandate_fee_amount: fee,
     }).eq("id", member.id);
     return jsonResponse({
-      error: "VFD did not authorize the mandate. The ₦100 setup fee has been charged; please try again.",
+      error: "VFD did not create the mandate. The ₦100 setup fee has been charged; please try again.",
       code: "MANDATE_VFD_FAILED",
       details: vfdResponsePayload,
     }, 502);
   }
 
-  await db.from("vfd_sandbox_group_members").update({
-    mandate_status: "authorized",
+  // Step 2: MANDATE-APPROVAL-STATUS API. The bank may take time to approve;
+  // we surface the live status to the client and let them re-poll later.
+  const approval = await checkVfdMandateApproval(memberMandateRef, accessToken);
+  approvalStatus = approval.status;
+  bankApproved = approval.approved;
+  vfdResponsePayload = { ...vfdResponsePayload, approval: approval.raw, approval_status: approvalStatus };
+
+  const finalStatus = bankApproved ? "authorized" : "awaiting_approval";
+  const updates: Record<string, unknown> = {
+    mandate_status: finalStatus,
     mandate_reference: memberMandateRef,
-    mandate_authorized_at: nowIso,
     mandate_fee_charged_at: nowIso,
     mandate_fee_amount: fee,
     mandate_payload: vfdResponsePayload,
-  }).eq("id", member.id);
+  };
+  if (bankApproved) updates.mandate_authorized_at = nowIso;
+  await db.from("vfd_sandbox_group_members").update(updates).eq("id", member.id);
 
-  // If every active member is authorized, flip the group-level mandate.
-  const { data: pendingMembers } = await db.from("vfd_sandbox_group_members")
-    .select("id").eq("group_id", groupId).eq("status", "active").neq("mandate_status", "authorized");
-  if (!pendingMembers || pendingMembers.length === 0) {
-    await db.from("vfd_sandbox_groups").update({
-      mandate_status: "authorized",
-      updated_at: nowIso,
-    }).eq("id", groupId);
-    await postChatMessage(groupId, group.admin_id,
-      "All members have authorized the Direct Debit Mandate. The group is ready for automated cycle debits.",
-      "system");
+  // Only flip group-level mandate when ALL active members are bank-approved.
+  if (bankApproved) {
+    const { data: pendingMembers } = await db.from("vfd_sandbox_group_members")
+      .select("id").eq("group_id", groupId).eq("status", "active").neq("mandate_status", "authorized");
+    if (!pendingMembers || pendingMembers.length === 0) {
+      await db.from("vfd_sandbox_groups").update({
+        mandate_status: "authorized",
+        updated_at: nowIso,
+      }).eq("id", groupId);
+      await postChatMessage(groupId, group.admin_id,
+        "All members have authorized the Direct Debit Mandate. The group is ready for automated cycle debits.",
+        "system");
+    }
   }
 
   await postChatMessage(groupId, userId,
-    `authorized the Direct Debit Mandate (₦${fee} setup fee charged).`,
+    bankApproved
+      ? `authorized the Direct Debit Mandate (₦${fee} setup fee charged).`
+      : `submitted a Direct Debit Mandate (₦${fee} setup fee charged) — awaiting bank approval.`,
     "system");
-  await sendNotification(userId, "Mandate Authorized",
-    `Your Direct Debit Mandate for ${group.name} is now active (ref ${memberMandateRef}). ₦${fee} was debited from your wallet as the one-time setup fee.`,
-    "ddm_mandate_authorized", groupId);
+  await sendNotification(userId,
+    bankApproved ? "Mandate Authorized" : "Mandate Submitted",
+    bankApproved
+      ? `Your Direct Debit Mandate for ${group.name} is now active (ref ${memberMandateRef}). ₦${fee} was debited from your wallet as the one-time setup fee.`
+      : `Your Direct Debit Mandate for ${group.name} has been submitted to the bank (ref ${memberMandateRef}). Status: ${approvalStatus}. We'll update you once the bank approves it.`,
+    bankApproved ? "ddm_mandate_authorized" : "ddm_mandate_submitted", groupId);
 
   return jsonResponse({
     data: {
       success: true,
-      mandate_status: "authorized",
+      mandate_status: finalStatus,
       mandate_reference: memberMandateRef,
+      bank_approval_status: approvalStatus,
+      bank_approved: bankApproved,
       fee_charged: fee,
       fee_reference: feeRef,
       vfd: vfdResponsePayload,
     },
   });
 }
+
+// Re-polls VFD MANDATE-APPROVAL-STATUS for a member whose mandate is
+// "awaiting_approval" and promotes it to "authorized" once the bank approves.
+async function handleCheckGroupMandateStatus(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const groupId = body.group_id as string;
+  if (!groupId) return jsonResponse({ error: "group_id required" }, 400);
+
+  const { data: group } = await db.from("vfd_sandbox_groups")
+    .select("id, name, admin_id, mandate_status").eq("id", groupId).maybeSingle();
+  if (!group) return jsonResponse({ error: "Group not found" }, 404);
+
+  const { data: member } = await db.from("vfd_sandbox_group_members")
+    .select("id, mandate_status, mandate_reference, mandate_payload")
+    .eq("group_id", groupId).eq("user_id", userId).maybeSingle();
+  if (!member) return jsonResponse({ error: "You are not a member of this group" }, 403);
+  if (!member.mandate_reference) return jsonResponse({ error: "No mandate to check. Please authorize a mandate first." }, 400);
+  if (member.mandate_status === "authorized") {
+    return jsonResponse({ data: { success: true, mandate_status: "authorized", bank_approved: true } });
+  }
+
+  const accessToken = await getVfdAccessToken();
+  if (!accessToken) return jsonResponse({ error: "VFD credentials not configured" }, 500);
+
+  const approval = await checkVfdMandateApproval(member.mandate_reference, accessToken);
+  const nowIso = new Date().toISOString();
+  const newStatus = approval.approved ? "authorized" : "awaiting_approval";
+  const merged = { ...(member.mandate_payload as Record<string, unknown> || {}), approval: approval.raw, approval_status: approval.status, last_checked_at: nowIso };
+  const updates: Record<string, unknown> = { mandate_status: newStatus, mandate_payload: merged };
+  if (approval.approved) updates.mandate_authorized_at = nowIso;
+  await db.from("vfd_sandbox_group_members").update(updates).eq("id", member.id);
+
+  if (approval.approved) {
+    const { data: pending } = await db.from("vfd_sandbox_group_members")
+      .select("id").eq("group_id", groupId).eq("status", "active").neq("mandate_status", "authorized");
+    if (!pending || pending.length === 0) {
+      await db.from("vfd_sandbox_groups").update({ mandate_status: "authorized", updated_at: nowIso }).eq("id", groupId);
+      await postChatMessage(groupId, group.admin_id,
+        "All members have authorized the Direct Debit Mandate. The group is ready for automated cycle debits.",
+        "system");
+    }
+    await sendNotification(userId, "Mandate Approved",
+      `Your Direct Debit Mandate for ${group.name} has been approved by the bank.`,
+      "ddm_mandate_authorized", groupId);
+  }
+
+  return jsonResponse({
+    data: {
+      success: true,
+      mandate_status: newStatus,
+      bank_approved: approval.approved,
+      bank_approval_status: approval.status,
+      vfd: approval.raw,
+    },
+  });
+}
+
+
 
 async function handleUpdateTargetSettings(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
