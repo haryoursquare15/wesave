@@ -774,6 +774,10 @@ export function SandboxAjoTab() {
                       {isMember && isDdm && (
                         myMandate === "authorized" ? (
                           <Badge variant="outline" className="text-[10px] text-green-600 border-green-500/40">DDM authorized</Badge>
+                        ) : myMandate === "awaiting_approval" ? (
+                          <Badge variant="outline" className="text-[10px] text-blue-600 border-blue-500/40">Awaiting bank approval</Badge>
+                        ) : myMandate === "failed" ? (
+                          <Badge variant="outline" className="text-[10px] text-red-600 border-red-500/40">DDM failed</Badge>
                         ) : (
                           <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-500/40">DDM mandate pending</Badge>
                         )
@@ -797,12 +801,26 @@ export function SandboxAjoTab() {
                   )}
 
                   <div className="flex gap-2 flex-wrap">
-                    {mandatePending && (
+                    {mandatePending && myMandate !== "awaiting_approval" && (
                       <Button size="sm" variant="default" className="bg-amber-600 hover:bg-amber-700" onClick={(e) => {
                         e.stopPropagation();
                         setMandateGroup(g);
                       }}>
                         Authorize DDM Mandate (₦{AJO_DDM_FEE})
+                      </Button>
+                    )}
+                    {myMandate === "awaiting_approval" && (
+                      <Button size="sm" variant="outline" onClick={async (e) => {
+                        e.stopPropagation();
+                        const r = await products.checkGroupMandateStatus(g.id);
+                        if ((r as any)?.data?.bank_approved) {
+                          toast({ title: "Mandate approved", description: "The bank has approved your Direct Debit Mandate." });
+                        } else {
+                          toast({ title: "Still awaiting bank approval", description: `Current status: ${(r as any)?.data?.bank_approval_status || "Pending"}` });
+                        }
+                        await products.refreshGroups?.();
+                      }}>
+                        Check bank approval
                       </Button>
                     )}
                     {/* Joining is invite-only — admins invite via the group detail page,
