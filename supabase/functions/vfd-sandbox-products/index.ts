@@ -4240,29 +4240,34 @@ async function handleAcceptGroupMandate(userId: string, body: Record<string, unk
   const feeRef = `VES-AJO-MND-${groupId}-${userId.slice(0, 8)}-${Date.now()}`;
 
   // 1) Debit ₦100 mandate-setup fee from wallet.
-  const { error: wErr } = await db.rpc("vestara_withdraw", {
-    _user_id: userId,
-    _amount: fee,
-    _reference: feeRef,
-    _metadata: { source: "ajo_mandate_setup_fee", product_code: "ajo_ddm", group_id: groupId },
-  });
-  if (wErr) {
-    const available = await getVestaraWalletBalance(userId);
-    return jsonResponse({
-      error: `Insufficient wallet balance for the ₦${fee} mandate setup fee. You have ₦${available.toLocaleString()}. Please fund your wallet and try again.`,
-      code: "INSUFFICIENT_BALANCE",
-      required: fee,
-      available,
-    }, 400);
+  //    In sandbox/test mode we skip the fee so testers don't need to fund a wallet
+  //    just to exercise the mandate flow.
+  if (!MANDATE_TEST_MODE) {
+    const { error: wErr } = await db.rpc("vestara_withdraw", {
+      _user_id: userId,
+      _amount: fee,
+      _reference: feeRef,
+      _metadata: { source: "ajo_mandate_setup_fee", product_code: "ajo_ddm", group_id: groupId },
+    });
+    if (wErr) {
+      const available = await getVestaraWalletBalance(userId);
+      return jsonResponse({
+        error: `Insufficient wallet balance for the ₦${fee} mandate setup fee. You have ₦${available.toLocaleString()}. Please fund your wallet and try again.`,
+        code: "INSUFFICIENT_BALANCE",
+        required: fee,
+        available,
+      }, 400);
+    }
+    await db.from("vestara_fee_ledger").insert({
+      user_id: userId,
+      fee_type: "ajo_mandate_setup",
+      amount: fee,
+      reference: feeRef,
+      tx_reference: feeRef,
+      metadata: { group_id: groupId, product_code: "ajo_ddm" },
+    });
   }
-  await db.from("vestara_fee_ledger").insert({
-    user_id: userId,
-    fee_type: "ajo_mandate_setup",
-    amount: fee,
-    reference: feeRef,
-    tx_reference: feeRef,
-    metadata: { group_id: groupId, product_code: "ajo_ddm" },
-  });
+
 
   // 2) Build the VFD E-Mandate payload. Reference is prefixed "vestara-" so
   //    VFD can map debits back to our wallet. End date = start + (cycles *
