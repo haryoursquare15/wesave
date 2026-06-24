@@ -818,7 +818,7 @@ export function SandboxAjoTab() {
                         } else {
                           toast({ title: "Still awaiting bank approval", description: `Current status: ${(r as any)?.data?.bank_approval_status || "Pending"}` });
                         }
-                        await products.refreshGroups?.();
+                        await loadGroups();
                       }}>
                         Check bank approval
                       </Button>
