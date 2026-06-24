@@ -5072,6 +5072,7 @@ export type Database = {
           mandate_authorized_at: string | null
           mandate_fee_amount: number
           mandate_fee_charged_at: string | null
+          mandate_payload: Json | null
           mandate_reference: string | null
           mandate_status: string
           payout_position: number | null
@@ -5091,6 +5092,7 @@ export type Database = {
           mandate_authorized_at?: string | null
           mandate_fee_amount?: number
           mandate_fee_charged_at?: string | null
+          mandate_payload?: Json | null
           mandate_reference?: string | null
           mandate_status?: string
           payout_position?: number | null
@@ -5110,6 +5112,7 @@ export type Database = {
           mandate_authorized_at?: string | null
           mandate_fee_amount?: number
           mandate_fee_charged_at?: string | null
+          mandate_payload?: Json | null
           mandate_reference?: string | null
           mandate_status?: string
           payout_position?: number | null
