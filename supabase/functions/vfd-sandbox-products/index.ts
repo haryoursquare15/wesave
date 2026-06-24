@@ -4066,12 +4066,22 @@ async function handleUpdateGroupSettings(userId: string, body: Record<string, un
 // ---------------------------------------------------------------------------
 const AJO_DDM_MANDATE_FEE = 100;
 const VFD_MANDATE_BASE =
+  Deno.env.get("VFD_BASE_URL") ||
   Deno.env.get("VFD_MANDATE_BASE") ||
   "https://api-devapps.vfdbank.systems/vtech-mandate/api/v2/directdebit";
-// VFD pool (Vestara corporate NUBAN) — receiver of every mandate debit.
-const VFD_POOL_NUBAN = Deno.env.get("VFD_POOL_NUBAN") || "1001695610";
-const VFD_POOL_BANK_CODE = Deno.env.get("VFD_POOL_BANK_CODE") || "999999"; // VFD MFB
+// Single Vestara corporate pool NUBAN — receiver of EVERY mandate debit.
+// Per-group wallets are internal ledger constructs only; they do not map to
+// separate VFD accounts. DDM funds always land in this pool first, then the
+// thrift ledger logic routes them to the group/member payout balance.
+const VFD_POOL_NUBAN =
+  Deno.env.get("VFD_CORPORATE_ACCOUNT_NUMBER") || Deno.env.get("VFD_POOL_NUBAN") || "1001695610";
+const VFD_POOL_BANK_CODE =
+  Deno.env.get("VFD_CORPORATE_BANK_CODE") || Deno.env.get("VFD_POOL_BANK_CODE") || "999999"; // VFD MFB
 const VFD_PAYER_BANK_CODE = Deno.env.get("VFD_PAYER_BANK_CODE") || "999999"; // user's VFD account
+// Dev-only toggle: skip live VFD status calls and auto-approve mandates so the
+// commencement flow can be exercised end-to-end against the sandbox. MUST be
+// unset (or explicitly "false") before go-live.
+const MANDATE_TEST_MODE = (Deno.env.get("MANDATE_TEST_MODE") || "").toLowerCase() === "true";
 
 // Convert a Date to "DD Month YYYY" — VFD requires exactly this format.
 function formatVfdMandateDate(d: Date): string {
