@@ -274,6 +274,8 @@ async function handleCreateGroup(userId: string, body: Record<string, unknown>) 
   const period = (body.period as string) || "monthly";
   const description = (body.description as string) || null;
   const autoDebit = body.auto_debit !== false;
+  const fundingModeRaw = (body.funding_mode as string) || "wallet";
+  const fundingMode = fundingModeRaw === "ddm" ? "ddm" : "wallet";
   const contributionHour = Number(body.contribution_hour) || 16;
   const contributionMinute = Number(body.contribution_minute) || 0;
   const contributionDayOfWeek = Number(body.contribution_day_of_week) || 1;
@@ -283,11 +285,15 @@ async function handleCreateGroup(userId: string, body: Record<string, unknown>) 
   if (maxMembers < 3 || maxMembers > 20) return jsonResponse({ error: "Members must be between 3 and 20" }, 400);
   if (amount < 5000 || amount > 500000) return jsonResponse({ error: "Contribution must be between ₦5,000 and ₦500,000" }, 400);
 
+  const mandateStatus = fundingMode === "ddm" ? "authorized" : "not_required";
+
   const { data: group, error } = await db.from("vfd_sandbox_groups").insert({
     name, admin_id: userId, contribution_amount: amount,
     period, max_members: maxMembers, total_cycles: maxMembers,
     status: "pending",
     description, auto_debit: autoDebit,
+    funding_mode: fundingMode,
+    mandate_status: mandateStatus,
     contribution_hour: contributionHour, contribution_minute: contributionMinute,
     contribution_day_of_week: contributionDayOfWeek,
     contribution_day_of_month: contributionDayOfMonth,
