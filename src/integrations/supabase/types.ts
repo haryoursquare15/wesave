@@ -5060,9 +5060,51 @@ export type Database = {
           },
         ]
       }
+      vfd_sandbox_group_mandates: {
+        Row: {
+          created_at: string
+          event_payload: Json
+          event_type: string
+          id: string
+          mandate_code: string | null
+          mandate_reference: string | null
+          member_user_id: string
+          thrift_group_id: string
+        }
+        Insert: {
+          created_at?: string
+          event_payload?: Json
+          event_type: string
+          id?: string
+          mandate_code?: string | null
+          mandate_reference?: string | null
+          member_user_id: string
+          thrift_group_id: string
+        }
+        Update: {
+          created_at?: string
+          event_payload?: Json
+          event_type?: string
+          id?: string
+          mandate_code?: string | null
+          mandate_reference?: string | null
+          member_user_id?: string
+          thrift_group_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vfd_sandbox_group_mandates_thrift_group_id_fkey"
+            columns: ["thrift_group_id"]
+            isOneToOne: false
+            referencedRelation: "vfd_sandbox_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vfd_sandbox_group_members: {
         Row: {
           continue_confirmed_at: string | null
+          contribution_method: string
           group_id: string
           has_contributed_current: boolean
           has_received_payout: boolean
@@ -5070,10 +5112,22 @@ export type Database = {
           id: string
           joined_at: string
           mandate_authorized_at: string | null
+          mandate_code: string | null
+          mandate_created_at: string | null
+          mandate_end_date: string | null
           mandate_fee_amount: number
           mandate_fee_charged_at: string | null
+          mandate_frequency: string | null
+          mandate_nibss_account: string | null
+          mandate_nibss_message: string | null
+          mandate_payer_account_number: string | null
+          mandate_payer_address: string | null
+          mandate_payer_bank_code: string | null
+          mandate_payer_email: string | null
+          mandate_payer_phone: string | null
           mandate_payload: Json | null
           mandate_reference: string | null
+          mandate_start_date: string | null
           mandate_status: string
           payout_position: number | null
           status: string | null
@@ -5083,6 +5137,7 @@ export type Database = {
         }
         Insert: {
           continue_confirmed_at?: string | null
+          contribution_method?: string
           group_id: string
           has_contributed_current?: boolean
           has_received_payout?: boolean
@@ -5090,10 +5145,22 @@ export type Database = {
           id?: string
           joined_at?: string
           mandate_authorized_at?: string | null
+          mandate_code?: string | null
+          mandate_created_at?: string | null
+          mandate_end_date?: string | null
           mandate_fee_amount?: number
           mandate_fee_charged_at?: string | null
+          mandate_frequency?: string | null
+          mandate_nibss_account?: string | null
+          mandate_nibss_message?: string | null
+          mandate_payer_account_number?: string | null
+          mandate_payer_address?: string | null
+          mandate_payer_bank_code?: string | null
+          mandate_payer_email?: string | null
+          mandate_payer_phone?: string | null
           mandate_payload?: Json | null
           mandate_reference?: string | null
+          mandate_start_date?: string | null
           mandate_status?: string
           payout_position?: number | null
           status?: string | null
@@ -5103,6 +5170,7 @@ export type Database = {
         }
         Update: {
           continue_confirmed_at?: string | null
+          contribution_method?: string
           group_id?: string
           has_contributed_current?: boolean
           has_received_payout?: boolean
@@ -5110,10 +5178,22 @@ export type Database = {
           id?: string
           joined_at?: string
           mandate_authorized_at?: string | null
+          mandate_code?: string | null
+          mandate_created_at?: string | null
+          mandate_end_date?: string | null
           mandate_fee_amount?: number
           mandate_fee_charged_at?: string | null
+          mandate_frequency?: string | null
+          mandate_nibss_account?: string | null
+          mandate_nibss_message?: string | null
+          mandate_payer_account_number?: string | null
+          mandate_payer_address?: string | null
+          mandate_payer_bank_code?: string | null
+          mandate_payer_email?: string | null
+          mandate_payer_phone?: string | null
           mandate_payload?: Json | null
           mandate_reference?: string | null
+          mandate_start_date?: string | null
           mandate_status?: string
           payout_position?: number | null
           status?: string | null

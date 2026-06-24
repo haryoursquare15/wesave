@@ -114,7 +114,11 @@ export function useVfdSandboxProducts() {
   const postGroupChat = useCallback((group_id: string, message: string) => invoke("post_group_chat", { group_id, message }), [invoke]);
   const listGroupChat = useCallback((group_id: string) => invoke("list_group_chat", { group_id }), [invoke]);
   const updateGroupSettings = useCallback((body: Record<string, unknown>) => invoke("update_group_settings", body), [invoke]);
-  const acceptGroupMandate = useCallback((group_id: string) => invoke("accept_group_mandate", { group_id }), [invoke]);
+  const acceptGroupMandate = useCallback(
+    (group_id: string, payer?: { payer_bank_code: string; payer_account_number: string; payer_phone: string; payer_email: string; payer_address: string }) =>
+      invoke("accept_group_mandate", { group_id, ...(payer || {}) }),
+    [invoke]
+  );
   const checkGroupMandateStatus = useCallback((group_id: string) => invoke("check_group_mandate_status", { group_id }), [invoke]);
   const sandboxAutoContribute = useCallback((force_group_id?: string) => invoke("sandbox_auto_contribute", force_group_id ? { force_group_id } : {}), [invoke]);
 
