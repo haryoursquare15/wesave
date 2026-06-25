@@ -130,6 +130,7 @@ const App = () => {
                 <Route path="/profile" element={<Profile />} />
                 <Route path="/wallet" element={<Wallet />} />
                 <Route path="/invite/:token" element={<Invite />} />
+                <Route path="/admin/login" element={<AdminLogin />} />
                 <Route path="/admin" element={<Admin />} />
                 <Route path="/admin/recurring-test" element={<RecurringTestDashboard />} />
                 <Route path="/settings" element={<Settings />} />
