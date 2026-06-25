@@ -142,6 +142,7 @@ const App = () => {
                 <Route path="/goal-funding" element={<GoalFunding />} />
                 <Route path="/goal-funding/create" element={<CreateGoalCampaign />} />
                 <Route path="/goal-funding/:campaignId" element={<GoalCampaignDetail />} />
+                <Route path="/goal/:slug" element={<PublicCampaignPay />} />
                 <Route path="/target-ajo" element={<TargetAjo />} />
                 <Route path="/target-ajo/create" element={<CreateTargetAjo />} />
                 <Route path="/target-ajo/:groupId" element={<TargetAjoDetail />} />
