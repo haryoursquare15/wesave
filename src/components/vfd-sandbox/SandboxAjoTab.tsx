@@ -854,7 +854,14 @@ export function SandboxAjoTab() {
           E-Mandate Create, then shows the ₦50 NIBSS authorization screen
           and polls /mandate/status every 60s until the bank approves. */}
       <MandateAuthorizationDialog
-        group={mandateGroup as any}
+        subject={mandateGroup ? {
+          kind: "group",
+          id: (mandateGroup as any).id,
+          name: (mandateGroup as any).name,
+          contribution_amount: Number((mandateGroup as any).contribution_amount) || 0,
+          period: String((mandateGroup as any).period || "monthly"),
+          total_cycles: Number((mandateGroup as any).total_cycles || (mandateGroup as any).max_members) || 1,
+        } : null}
         onClose={() => { if (!mandateBusy) setMandateGroup(null); }}
         onAuthorized={async () => {
           await loadGroups();

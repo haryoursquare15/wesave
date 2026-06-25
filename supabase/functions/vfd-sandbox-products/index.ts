@@ -998,7 +998,8 @@ async function handleCreateTarget(userId: string, body: Record<string, unknown>)
   else targetDate.setMonth(targetDate.getMonth() + maxMembers);
 
   const inviteLimit = isIndependent ? 0 : Math.max(0, maxMembers - 1);
-  const mandateStatus = fundingMode === "ddm" ? "authorized" : "not_required";
+  // DDM targets start with `pending_authorization` — each member must authorize their own mandate.
+  const mandateStatus = fundingMode === "ddm" ? "pending_authorization" : "not_required";
 
   const { data: target, error } = await db.from("vfd_sandbox_targets").insert({
     name, admin_id: userId, goal_amount: goalAmount,
@@ -1020,7 +1021,12 @@ async function handleCreateTarget(userId: string, body: Record<string, unknown>)
   }
 
   const { error: memberErr } = await db.from("vfd_sandbox_target_members")
-    .insert({ target_id: target.id, user_id: userId });
+    .insert({
+      target_id: target.id,
+      user_id: userId,
+      contribution_method: fundingMode === "ddm" ? "direct_debit" : "wallet",
+      mandate_status: fundingMode === "ddm" ? "pending" : "not_required",
+    });
   if (memberErr) console.error("[create_target] admin enrol failed", memberErr);
 
   // Independent targets never accept invites
@@ -1079,8 +1085,12 @@ async function handleContributeTarget(userId: string, body: Record<string, unkno
   const amount = Number(target.contribution_amount);
   const isDdm = (target.funding_mode as string) === "ddm";
   if (isDdm) {
-    if (target.mandate_status !== "authorized") {
-      return jsonResponse({ error: "Direct Debit Mandate is not authorized yet. Ask your admin to complete DDM setup." }, 400);
+    // Per-member enforcement: each member must have their own authorized mandate.
+    if (membership.mandate_status !== "authorized") {
+      return jsonResponse({
+        error: "Your Direct Debit Mandate is not authorized yet. Please complete bank authorization before contributing.",
+        code: "MEMBER_MANDATE_NOT_AUTHORIZED",
+      }, 400);
     }
     // DDM-funded — bank debit handled externally; skip wallet hold.
   } else {
@@ -1250,15 +1260,26 @@ async function handleRespondTargetInvite(userId: string, body: Record<string, un
     const { data: existing } = await db.from("vfd_sandbox_target_members")
       .select("id").eq("target_id", invite.target_id).eq("user_id", userId).maybeSingle();
     if (!existing) {
+      // Inherit funding mode from the target: DDM targets enrol members as
+      // direct-debit contributors with mandate_status="pending" (member must authorize).
+      const { data: targetMeta } = await db.from("vfd_sandbox_targets")
+        .select("member_count, funding_mode, name").eq("id", invite.target_id).single();
+      const isDdm = (targetMeta?.funding_mode as string) === "ddm";
       await db.from("vfd_sandbox_target_members").insert({
         target_id: invite.target_id, user_id: userId,
+        contribution_method: isDdm ? "direct_debit" : "wallet",
+        mandate_status: isDdm ? "pending" : "not_required",
       });
-      const { data: target } = await db.from("vfd_sandbox_targets").select("member_count").eq("id", invite.target_id).single();
-      if (target) {
+      if (targetMeta) {
         await db.from("vfd_sandbox_targets").update({
-          member_count: (target.member_count || 1) + 1,
+          member_count: (targetMeta.member_count || 1) + 1,
           updated_at: new Date().toISOString(),
         }).eq("id", invite.target_id);
+        if (isDdm) {
+          await sendNotification(userId, "Authorize Direct Debit Mandate",
+            `You joined "${targetMeta.name}" which requires a Direct Debit Mandate. Open the group to authorize your bank account.`,
+            "ddm_authorization_required");
+        }
       }
     }
   }
@@ -4502,7 +4523,9 @@ async function handleUpdateTargetSettings(userId: string, body: Record<string, u
     const fm = (body.funding_mode as string) === "ddm" ? "ddm" : "wallet";
     updates.funding_mode = fm;
     if (fm === "ddm") {
-      updates.mandate_status = "authorized";
+      // Switching to DDM puts the target in pending_authorization — each member
+      // must authorize their own mandate before contributing.
+      updates.mandate_status = "pending_authorization";
       updates.mandate_reference = target.mandate_reference || `VES-DDM-TARGET-${targetId}`;
     } else {
       updates.mandate_status = "not_required";
@@ -4692,6 +4715,481 @@ async function handlePollPendingMandates() {
   return jsonResponse({ data: { processed: rows.length, activated, expired, failed, still_pending: stillPending } });
 }
 
+// =============================================================================
+// E-MANDATE — TARGET AJO + GOAL SAVINGS
+// =============================================================================
+// Same VFD Direct Debit Mandate flow as thrift groups, extended to per-member
+// authorization on Target Ajo and per-savings authorization on Goal Savings 2.0.
+// Real VFD calls only (no MANDATE_TEST_MODE shortcuts in these handlers).
+
+interface VfdMandatePayer {
+  bankCode: string; accountNumber: string; phone: string; email: string; address: string;
+}
+
+function validatePayerInput(body: Record<string, unknown>): { ok: true; payer: VfdMandatePayer } | { ok: false; error: string; code: string } {
+  const bankCode = String((body.payer_bank_code as string) || "").trim();
+  const accountNumber = String((body.payer_account_number as string) || "").trim();
+  const phone = String((body.payer_phone as string) || "").trim();
+  const email = String((body.payer_email as string) || "").trim();
+  const address = String((body.payer_address as string) || "").trim();
+  if (!bankCode || !accountNumber || !phone || !email || !address) {
+    return { ok: false, error: "Bank, account number, phone, email and address are all required to authorize a Direct Debit Mandate.", code: "PAYER_DETAILS_REQUIRED" };
+  }
+  if (!/^\d{10}$/.test(accountNumber)) return { ok: false, error: "Account number must be 10 digits.", code: "INVALID_ACCOUNT_NUMBER" };
+  return { ok: true, payer: { bankCode, accountNumber, phone, email, address } };
+}
+
+// Charge the standard ₦100 mandate setup fee from the user's Vestara wallet.
+async function chargeMandateSetupFee(userId: string, feeRef: string, ctx: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const fee = AJO_DDM_MANDATE_FEE;
+  const { error: wErr } = await db.rpc("vestara_withdraw", {
+    _user_id: userId, _amount: fee, _reference: feeRef,
+    _metadata: { source: "mandate_setup_fee", ...ctx },
+  });
+  if (wErr) {
+    const available = await getVestaraWalletBalance(userId);
+    return { ok: false as const, available, fee };
+  }
+  await db.from("vestara_fee_ledger").insert({
+    user_id: userId, fee_type: "mandate_setup", amount: fee,
+    reference: feeRef, tx_reference: feeRef, metadata: ctx,
+  });
+  return { ok: true as const, fee };
+}
+
+// Build + POST the VFD /emandate/create payload. Returns normalised result.
+async function createVfdMandate(opts: {
+  reference: string; payer: VfdMandatePayer; amount: number; period: string;
+  totalCycles: number; startDate?: Date;
+}): Promise<{ created: boolean; mandateCode: string; nibssAccount: string; nibssMessage: string; raw: Record<string, unknown> }> {
+  const accessToken = await getVfdAccessToken();
+  if (!accessToken) return { created: false, mandateCode: "", nibssAccount: "", nibssMessage: "", raw: { error: "VFD credentials not configured" } };
+
+  const startObj = opts.startDate || new Date();
+  const endObj = computeMandateEndDate(opts.period, opts.totalCycles);
+  const payload = {
+    reference: opts.reference,
+    payerBank: opts.payer.bankCode,
+    payerAccountNumber: opts.payer.accountNumber,
+    payerPhone: opts.payer.phone,
+    payerEmailAddress: opts.payer.email,
+    payerAddress: opts.payer.address,
+    receiverBank: VFD_POOL_BANK_CODE,
+    receiverAccountNumber: VFD_POOL_NUBAN,
+    amount: String(Math.max(1000, opts.amount)),
+    startDate: formatVfdMandateDate(startObj),
+    endDate: formatVfdMandateDate(endObj),
+    frequency: mapAjoFrequencyToVfd(opts.period),
+  };
+
+  try {
+    const res = await fetch(`${VFD_MANDATE_BASE}/emandate/create`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", AccessToken: accessToken },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json().catch(() => ({} as Record<string, unknown>));
+    const vfdStatus = String((json as any)?.status || "");
+    const created = vfdStatus === "00" || res.status === 202 || (res.ok && vfdStatus !== "199");
+    const mandateCode = String((json as any)?.data?.mandateCode || (json as any)?.data?.mandateId || "");
+    const nibssMessage = String((json as any)?.message || "");
+    const nibssAccount = extractNibssAccountFromMessage(nibssMessage);
+    return { created, mandateCode, nibssAccount, nibssMessage, raw: { step: "create", request: payload, response: json, http_status: res.status } };
+  } catch (e) {
+    return { created: false, mandateCode: "", nibssAccount: "", nibssMessage: "", raw: { step: "create", request: payload, error: e instanceof Error ? e.message : String(e) } };
+  }
+}
+
+async function recordTargetMandateEvent(targetId: string, userId: string, reference: string | null, mandateCode: string | null, eventType: string, payload: Record<string, unknown>) {
+  try {
+    const db = getSupabaseAdmin();
+    await db.from("vfd_sandbox_target_mandates").insert({
+      target_id: targetId, member_user_id: userId,
+      mandate_reference: reference, mandate_code: mandateCode,
+      event_type: eventType, event_payload: payload,
+    });
+  } catch (e) { console.error("[recordTargetMandateEvent] insert failed", e); }
+}
+
+// ---- Target Ajo: accept mandate -------------------------------------------
+async function handleAcceptTargetMandate(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const targetId = body.target_id as string;
+  if (!targetId) return jsonResponse({ error: "target_id required" }, 400);
+
+  const payerCheck = validatePayerInput(body);
+  if (!payerCheck.ok) return jsonResponse({ error: payerCheck.error, code: payerCheck.code }, 400);
+
+  const { data: target } = await db.from("vfd_sandbox_targets")
+    .select("id, name, funding_mode, contribution_amount, frequency, max_members, admin_id")
+    .eq("id", targetId).maybeSingle();
+  if (!target) return jsonResponse({ error: "Target not found" }, 404);
+  if ((target.funding_mode as string) !== "ddm") return jsonResponse({ error: "This target is not on Direct Debit funding" }, 400);
+
+  const { data: member } = await db.from("vfd_sandbox_target_members")
+    .select("id, mandate_status, mandate_reference, mandate_code")
+    .eq("target_id", targetId).eq("user_id", userId).maybeSingle();
+  if (!member) return jsonResponse({ error: "You are not a member of this target" }, 403);
+  if (member.mandate_status === "authorized") {
+    return jsonResponse({ data: { success: true, already_authorized: true, mandate_reference: member.mandate_reference, mandate_code: member.mandate_code } });
+  }
+
+  const feeRef = `VES-TARGET-MND-${targetId.slice(0, 8)}-${userId.slice(0, 8)}-${Date.now()}`;
+  const feeResult = await chargeMandateSetupFee(userId, feeRef, { product_code: "target_ddm", target_id: targetId });
+  if (!feeResult.ok) {
+    return jsonResponse({
+      error: `Insufficient wallet balance for the ₦${feeResult.fee} mandate setup fee. You have ₦${feeResult.available.toLocaleString()}. Please fund your wallet and try again.`,
+      code: "INSUFFICIENT_BALANCE", required: feeResult.fee, available: feeResult.available,
+    }, 400);
+  }
+
+  const reference = `vestara-ddm-target-${targetId.slice(0, 8)}-${userId.slice(0, 8)}-${Date.now()}`;
+  const totalCycles = Number(target.max_members) || 1;
+  const vfd = await createVfdMandate({
+    reference, payer: payerCheck.payer, amount: Number(target.contribution_amount) || 0,
+    period: target.frequency as string, totalCycles,
+  });
+
+  const nowIso = new Date().toISOString();
+  if (!vfd.created) {
+    await db.from("vfd_sandbox_target_members").update({
+      mandate_status: "failed", mandate_payload: vfd.raw,
+      mandate_fee_charged_at: nowIso, mandate_fee_amount: feeResult.fee,
+    }).eq("id", member.id);
+    await recordTargetMandateEvent(targetId, userId, reference, null, "failed", vfd.raw);
+    return jsonResponse({ error: "VFD did not create the mandate. The ₦100 setup fee has been charged; please try again.", code: "MANDATE_VFD_FAILED", details: vfd.raw }, 502);
+  }
+
+  const startObj = new Date();
+  const endObj = computeMandateEndDate(target.frequency as string, totalCycles);
+  await db.from("vfd_sandbox_target_members").update({
+    contribution_method: "direct_debit",
+    mandate_status: "awaiting_approval",
+    mandate_reference: reference, mandate_code: vfd.mandateCode,
+    mandate_nibss_account: vfd.nibssAccount, mandate_nibss_message: vfd.nibssMessage,
+    mandate_payer_bank_code: payerCheck.payer.bankCode, mandate_payer_account_number: payerCheck.payer.accountNumber,
+    mandate_payer_phone: payerCheck.payer.phone, mandate_payer_email: payerCheck.payer.email,
+    mandate_payer_address: payerCheck.payer.address,
+    mandate_start_date: startObj.toISOString().slice(0, 10),
+    mandate_end_date: endObj.toISOString().slice(0, 10),
+    mandate_frequency: mapAjoFrequencyToVfd(target.frequency as string),
+    mandate_created_at: nowIso,
+    mandate_expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    mandate_fee_charged_at: nowIso, mandate_fee_amount: feeResult.fee,
+    mandate_payload: vfd.raw,
+  }).eq("id", member.id);
+
+  await recordTargetMandateEvent(targetId, userId, reference, vfd.mandateCode, "created", vfd.raw);
+  await sendNotification(userId, "Mandate Created — Authorize Now",
+    `Send ₦50 from your bank account ${payerCheck.payer.accountNumber} to NIBSS account ${vfd.nibssAccount || "(see in-app instructions)"} within 7 days to activate your Direct Debit Mandate for ${target.name}.`,
+    "ddm_mandate_submitted", targetId);
+
+  return jsonResponse({
+    data: {
+      success: true, mandate_status: "awaiting_approval",
+      mandate_reference: reference, mandate_code: vfd.mandateCode,
+      nibss_account: vfd.nibssAccount, nibss_message: vfd.nibssMessage,
+      payer_account_number: payerCheck.payer.accountNumber, payer_bank_code: payerCheck.payer.bankCode,
+      fee_charged: feeResult.fee, fee_reference: feeRef,
+    },
+  });
+}
+
+async function handleCheckTargetMandateStatus(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const targetId = body.target_id as string;
+  if (!targetId) return jsonResponse({ error: "target_id required" }, 400);
+
+  const { data: member } = await db.from("vfd_sandbox_target_members")
+    .select("id, mandate_status, mandate_reference, mandate_code, mandate_payload")
+    .eq("target_id", targetId).eq("user_id", userId).maybeSingle();
+  if (!member) return jsonResponse({ error: "You are not a member of this target" }, 403);
+  if (!member.mandate_reference) return jsonResponse({ error: "No mandate to check. Please authorize a mandate first." }, 400);
+  if (member.mandate_status === "authorized") {
+    return jsonResponse({ data: { success: true, mandate_status: "authorized", bank_approved: true } });
+  }
+
+  const accessToken = await getVfdAccessToken();
+  if (!accessToken) return jsonResponse({ error: "VFD credentials not configured" }, 500);
+
+  const approval = await checkVfdMandateApproval(member.mandate_reference as string, accessToken);
+  const nowIso = new Date().toISOString();
+  const newStatus = approval.approved ? "authorized" : "awaiting_approval";
+  const updates: Record<string, unknown> = {
+    mandate_status: newStatus,
+    mandate_payload: { ...(member.mandate_payload as Record<string, unknown> || {}), approval: approval.raw, approval_status: approval.status, last_checked_at: nowIso },
+  };
+  if (approval.approved) updates.mandate_authorized_at = nowIso;
+  await db.from("vfd_sandbox_target_members").update(updates).eq("id", member.id);
+  await recordTargetMandateEvent(targetId, userId, member.mandate_reference as string, member.mandate_code as string,
+    approval.approved ? "authorized" : "status_checked", { approval_status: approval.status, raw: approval.raw });
+
+  if (approval.approved) {
+    // Flip target-level status to authorized once every active member has authorized.
+    const { data: pending } = await db.from("vfd_sandbox_target_members")
+      .select("id").eq("target_id", targetId).neq("mandate_status", "authorized");
+    if (!pending || pending.length === 0) {
+      await db.from("vfd_sandbox_targets").update({ mandate_status: "authorized", updated_at: nowIso }).eq("id", targetId);
+    }
+    const { data: target } = await db.from("vfd_sandbox_targets").select("name").eq("id", targetId).maybeSingle();
+    await sendNotification(userId, "Mandate Approved",
+      `Your Direct Debit Mandate for ${target?.name || "Target Ajo"} has been approved by the bank.`,
+      "ddm_mandate_authorized", targetId);
+  }
+
+  return jsonResponse({ data: { success: true, mandate_status: newStatus, bank_approved: approval.approved, bank_approval_status: approval.status, vfd: approval.raw } });
+}
+
+// ---- Goal Savings 2.0: quote + create + authorize --------------------------
+
+function frequencyToDays(freq: string): number {
+  return freq === "weekly" ? 7 : 30;
+}
+
+async function pickGoalsaveRate(tenorDays: number): Promise<{ user_rate: number; vfd_rate: number }> {
+  const db = getSupabaseAdmin();
+  const { data } = await db.from("vestara_rate_configs")
+    .select("user_rate, vfd_rate, min_tenor_days, max_tenor_days, is_active")
+    .eq("product_code", "goalsave")
+    .eq("is_active", true)
+    .lte("min_tenor_days", tenorDays)
+    .gte("max_tenor_days", tenorDays)
+    .order("priority", { ascending: false })
+    .limit(1).maybeSingle();
+  return {
+    user_rate: Number(data?.user_rate ?? 12),
+    vfd_rate: Number(data?.vfd_rate ?? 14),
+  };
+}
+
+function buildGoalsaveSchedule(startIso: string, frequency: string, tenorCount: number, amount: number) {
+  const start = new Date(startIso);
+  const out: { seq: number; scheduled_at: string; amount: number }[] = [];
+  for (let i = 0; i < tenorCount; i++) {
+    const d = new Date(start);
+    if (frequency === "weekly") d.setDate(d.getDate() + (i + 1) * 7);
+    else d.setMonth(d.getMonth() + (i + 1));
+    out.push({ seq: i + 1, scheduled_at: d.toISOString(), amount });
+  }
+  return out;
+}
+
+async function handleGoalsaveV2Quote(_userId: string, body: Record<string, unknown>) {
+  const amount = Number(body.amount);
+  const frequency = String(body.frequency || "monthly");
+  const tenorCount = Number(body.tenor_count);
+  if (!Number.isFinite(amount) || amount < 1000) return jsonResponse({ error: "Contribution must be at least ₦1,000", success: false }, 400);
+  if (!Number.isFinite(tenorCount) || tenorCount < 1) return jsonResponse({ error: "Invalid tenor", success: false }, 400);
+  if (frequency !== "weekly" && frequency !== "monthly") return jsonResponse({ error: "Frequency must be weekly or monthly", success: false }, 400);
+  if (frequency === "weekly" && tenorCount < 4) return jsonResponse({ error: "Weekly goals require at least 4 weeks", success: false }, 400);
+
+  const daysPerCycle = frequencyToDays(frequency);
+  const tenorDays = daysPerCycle * tenorCount;
+  const rates = await pickGoalsaveRate(tenorDays);
+  const totalContributions = amount * tenorCount;
+  // Flat per-frequency rate paid at maturity, prorated over actual tenor.
+  const projectedInterest = Math.round((totalContributions * rates.user_rate / 100) * (tenorDays / 365));
+  const projectedMaturity = totalContributions + projectedInterest;
+  const start = new Date();
+  const maturity = new Date(start); maturity.setDate(maturity.getDate() + tenorDays);
+  const schedule = buildGoalsaveSchedule(start.toISOString(), frequency, tenorCount, amount);
+  return jsonResponse({
+    success: true,
+    rate: rates.user_rate,
+    frequency, tenor_count: tenorCount, tenor_days: tenorDays,
+    contribution_amount: amount,
+    total_contributions: totalContributions,
+    projected_interest: projectedInterest,
+    projected_maturity_value: projectedMaturity,
+    start_date: start.toISOString(),
+    maturity_date: maturity.toISOString(),
+    mandate_fee: AJO_DDM_MANDATE_FEE,
+    schedule,
+  });
+}
+
+async function handleGoalsaveV2Create(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const amount = Number(body.amount);
+  const frequency = String(body.frequency || "monthly");
+  const tenorCount = Number(body.tenor_count);
+  const goalName = String(body.goal_name || "").trim();
+  const goalPurpose = body.goal_purpose ? String(body.goal_purpose) : null;
+  if (!goalName || !Number.isFinite(amount) || amount < 1000 || !Number.isFinite(tenorCount) || tenorCount < 1) {
+    return jsonResponse({ error: "Invalid setup", success: false }, 400);
+  }
+  const daysPerCycle = frequencyToDays(frequency);
+  const tenorDays = daysPerCycle * tenorCount;
+  const rates = await pickGoalsaveRate(tenorDays);
+  const start = new Date();
+  const maturity = new Date(start); maturity.setDate(maturity.getDate() + tenorDays);
+
+  // 1) Lock account for this goal (held by user, balance grows on each debit)
+  const { data: lockAccount, error: lockErr } = await db.from("vestara_accounts").insert({
+    user_id: userId, account_type: "lock", balance: 0, currency: "NGN",
+    label: `Goal: ${goalName}`,
+    metadata: { product_code: "goalsave", goal_name: goalName, goal_purpose: goalPurpose },
+  }).select("id").single();
+  if (lockErr || !lockAccount) {
+    return jsonResponse({ error: "Could not create lock account", success: false, details: lockErr?.message }, 500);
+  }
+
+  // 2) vestara_savings shell (activation_status = pending_mandate)
+  const { data: savings, error: sErr } = await db.from("vestara_savings").insert({
+    user_id: userId, product_code: "goalsave",
+    lock_account_id: lockAccount.id, principal: 0, original_principal: 0,
+    user_rate: rates.user_rate, vfd_rate: rates.vfd_rate,
+    tenor_days: tenorDays, start_date: start.toISOString(), maturity_date: maturity.toISOString(),
+    status: "active",
+    commitment_frequency: frequency, commitment_amount: amount, tenor_count: tenorCount,
+    next_debit_at: tenorCount > 0 ? buildGoalsaveSchedule(start.toISOString(), frequency, tenorCount, amount)[0].scheduled_at : null,
+    activation_status: "pending_mandate", mandate_status: "pending",
+    mandate_fee: AJO_DDM_MANDATE_FEE,
+    metadata: { goal_name: goalName, goal_purpose: goalPurpose },
+  }).select("id, maturity_date").single();
+  if (sErr || !savings) {
+    return jsonResponse({ error: "Could not create savings", success: false, details: sErr?.message }, 500);
+  }
+
+  // 3) Schedule
+  const schedule = buildGoalsaveSchedule(start.toISOString(), frequency, tenorCount, amount);
+  await db.from("vfd_savings_debit_schedule").insert(schedule.map((s) => ({
+    savings_id: savings.id, user_id: userId, seq: s.seq, scheduled_at: s.scheduled_at,
+    amount: s.amount, status: "scheduled",
+  })));
+
+  return jsonResponse({ success: true, savings_id: savings.id, maturity_date: savings.maturity_date });
+}
+
+async function handleGoalsaveAuthorizeMandate(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const savingsId = body.savings_id as string;
+  if (!savingsId) return jsonResponse({ error: "savings_id required", success: false }, 400);
+
+  const payerCheck = validatePayerInput(body);
+  if (!payerCheck.ok) return jsonResponse({ error: payerCheck.error, code: payerCheck.code, success: false }, 400);
+
+  const { data: savings } = await db.from("vestara_savings")
+    .select("id, user_id, product_code, commitment_amount, commitment_frequency, tenor_count, mandate_status, mandate_reference, mandate_code, activation_status")
+    .eq("id", savingsId).maybeSingle();
+  if (!savings) return jsonResponse({ error: "Savings not found", success: false }, 404);
+  if (savings.user_id !== userId) return jsonResponse({ error: "Not authorized", success: false }, 403);
+  if (savings.mandate_status === "authorized") {
+    return jsonResponse({ success: true, already_authorized: true, mandate_reference: savings.mandate_reference, mandate_code: savings.mandate_code });
+  }
+
+  const feeRef = `VES-GOAL-MND-${savingsId.slice(0, 8)}-${Date.now()}`;
+  const feeResult = await chargeMandateSetupFee(userId, feeRef, { product_code: "goalsave", savings_id: savingsId });
+  if (!feeResult.ok) {
+    return jsonResponse({
+      error: `Insufficient wallet balance for the ₦${feeResult.fee} mandate setup fee. You have ₦${feeResult.available.toLocaleString()}. Please fund your wallet and try again.`,
+      code: "INSUFFICIENT_BALANCE", required: feeResult.fee, available: feeResult.available, success: false,
+    }, 400);
+  }
+
+  const reference = `vestara-ddm-goal-${savingsId.slice(0, 8)}-${Date.now()}`;
+  const vfd = await createVfdMandate({
+    reference, payer: payerCheck.payer,
+    amount: Number(savings.commitment_amount) || 0,
+    period: savings.commitment_frequency as string,
+    totalCycles: Number(savings.tenor_count) || 1,
+  });
+
+  const nowIso = new Date().toISOString();
+  if (!vfd.created) {
+    await db.from("vestara_savings").update({
+      mandate_status: "failed", mandate_payload: vfd.raw,
+    }).eq("id", savingsId);
+    await db.from("vfd_savings_mandate_events").insert({
+      savings_id: savingsId, user_id: userId, mandate_id: reference, event_type: "failed", payload: vfd.raw,
+    }).then(() => {}, () => {});
+    return jsonResponse({ error: "VFD did not create the mandate. The ₦100 setup fee has been charged; please try again.", code: "MANDATE_VFD_FAILED", details: vfd.raw, success: false }, 502);
+  }
+
+  const endObj = computeMandateEndDate(savings.commitment_frequency as string, Number(savings.tenor_count) || 1);
+  await db.from("vestara_savings").update({
+    mandate_id: vfd.mandateCode || reference,
+    mandate_reference: reference,
+    mandate_code: vfd.mandateCode,
+    mandate_status: "awaiting_approval",
+    mandate_nibss_account: vfd.nibssAccount,
+    mandate_nibss_message: vfd.nibssMessage,
+    mandate_payer_bank_code: payerCheck.payer.bankCode,
+    mandate_payer_account_number: payerCheck.payer.accountNumber,
+    mandate_payer_phone: payerCheck.payer.phone,
+    mandate_payer_email: payerCheck.payer.email,
+    mandate_payer_address: payerCheck.payer.address,
+    mandate_start_date: new Date().toISOString().slice(0, 10),
+    mandate_end_date: endObj.toISOString().slice(0, 10),
+    mandate_frequency: mapAjoFrequencyToVfd(savings.commitment_frequency as string),
+    mandate_expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    mandate_payload: vfd.raw,
+  }).eq("id", savingsId);
+
+  await db.from("vfd_savings_mandate_events").insert({
+    savings_id: savingsId, user_id: userId, mandate_id: reference, event_type: "created", payload: vfd.raw,
+  }).then(() => {}, () => {});
+
+  await sendNotification(userId, "Mandate Created — Authorize Now",
+    `Send ₦50 from your bank account ${payerCheck.payer.accountNumber} to NIBSS account ${vfd.nibssAccount || "(see in-app instructions)"} within 7 days to activate your Direct Debit Mandate for this Goal Savings.`,
+    "ddm_mandate_submitted");
+
+  return jsonResponse({
+    success: true, mandate_status: "awaiting_approval",
+    mandate_reference: reference, mandate_code: vfd.mandateCode,
+    nibss_account: vfd.nibssAccount, nibss_message: vfd.nibssMessage,
+    payer_account_number: payerCheck.payer.accountNumber, payer_bank_code: payerCheck.payer.bankCode,
+    fee_charged: feeResult.fee, fee_reference: feeRef,
+  });
+}
+
+async function handleGoalsaveCheckMandateStatus(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const savingsId = body.savings_id as string;
+  if (!savingsId) return jsonResponse({ error: "savings_id required" }, 400);
+
+  const { data: savings } = await db.from("vestara_savings")
+    .select("id, user_id, mandate_status, mandate_reference, mandate_code, mandate_payload, activation_status")
+    .eq("id", savingsId).maybeSingle();
+  if (!savings) return jsonResponse({ error: "Savings not found" }, 404);
+  if (savings.user_id !== userId) return jsonResponse({ error: "Not authorized" }, 403);
+  if (!savings.mandate_reference) return jsonResponse({ error: "No mandate to check. Please authorize a mandate first." }, 400);
+  if (savings.mandate_status === "authorized") {
+    return jsonResponse({ data: { success: true, mandate_status: "authorized", bank_approved: true } });
+  }
+
+  const accessToken = await getVfdAccessToken();
+  if (!accessToken) return jsonResponse({ error: "VFD credentials not configured" }, 500);
+
+  const approval = await checkVfdMandateApproval(savings.mandate_reference as string, accessToken);
+  const nowIso = new Date().toISOString();
+  const newStatus = approval.approved ? "authorized" : "awaiting_approval";
+  const updates: Record<string, unknown> = {
+    mandate_status: newStatus,
+    mandate_payload: { ...(savings.mandate_payload as Record<string, unknown> || {}), approval: approval.raw, approval_status: approval.status, last_checked_at: nowIso },
+  };
+  if (approval.approved) {
+    updates.mandate_authorized_at = nowIso;
+    updates.activation_status = "active";
+  }
+  await db.from("vestara_savings").update(updates).eq("id", savingsId);
+  await db.from("vfd_savings_mandate_events").insert({
+    savings_id: savingsId, user_id: userId, mandate_id: savings.mandate_reference, event_type: approval.approved ? "authorized" : "status_checked",
+    payload: { approval_status: approval.status, raw: approval.raw },
+  }).then(() => {}, () => {});
+
+  if (approval.approved) {
+    await sendNotification(userId, "Mandate Approved",
+      "Your Goal Savings Direct Debit Mandate has been approved by your bank. Auto-debits will now run on schedule.",
+      "ddm_mandate_authorized");
+  }
+
+  return jsonResponse({ data: { success: true, mandate_status: newStatus, bank_approved: approval.approved, bank_approval_status: approval.status, vfd: approval.raw } });
+}
+
+
+
 // =============================================
 // MAIN HANDLER
 // =============================================
@@ -4756,6 +5254,13 @@ Deno.serve(async (req) => {
       case "check_commencement_readiness": return await handleCheckCommencementReadiness(userId, body);
       case "trigger_mandate_debit": return await handleTriggerMandateDebit(userId, body);
       case "poll_pending_mandates": return await handlePollPendingMandates();
+      // E-Mandate flow extended to Target Ajo + Goal Savings 2.0
+      case "accept_target_mandate": return await handleAcceptTargetMandate(userId, body);
+      case "check_target_mandate_status": return await handleCheckTargetMandateStatus(userId, body);
+      case "goalsave_v2_quote": return await handleGoalsaveV2Quote(userId, body);
+      case "goalsave_v2_create": return await handleGoalsaveV2Create(userId, body);
+      case "goalsave_v2_authorize_mandate": return await handleGoalsaveAuthorizeMandate(userId, body);
+      case "goalsave_v2_check_mandate_status": return await handleGoalsaveCheckMandateStatus(userId, body);
       case "sandbox_auto_contribute": return await handleSandboxAutoContribute(userId, body);
 
       // In-app notifications
