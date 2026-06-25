@@ -5102,7 +5102,7 @@ async function handleGoalsaveAuthorizeMandate(userId: string, body: Record<strin
       mandate_status: "failed", mandate_payload: vfd.raw,
     }).eq("id", savingsId);
     await db.from("vfd_savings_mandate_events").insert({
-      savings_id: savingsId, mandate_id: reference, event_type: "failed", payload: vfd.raw,
+      savings_id: savingsId, user_id: userId, mandate_id: reference, event_type: "failed", payload: vfd.raw,
     }).then(() => {}, () => {});
     return jsonResponse({ error: "VFD did not create the mandate. The ₦100 setup fee has been charged; please try again.", code: "MANDATE_VFD_FAILED", details: vfd.raw, success: false }, 502);
   }
@@ -5128,7 +5128,7 @@ async function handleGoalsaveAuthorizeMandate(userId: string, body: Record<strin
   }).eq("id", savingsId);
 
   await db.from("vfd_savings_mandate_events").insert({
-    savings_id: savingsId, mandate_id: reference, event_type: "created", payload: vfd.raw,
+    savings_id: savingsId, user_id: userId, mandate_id: reference, event_type: "created", payload: vfd.raw,
   }).then(() => {}, () => {});
 
   await sendNotification(userId, "Mandate Created — Authorize Now",
@@ -5175,7 +5175,7 @@ async function handleGoalsaveCheckMandateStatus(userId: string, body: Record<str
   }
   await db.from("vestara_savings").update(updates).eq("id", savingsId);
   await db.from("vfd_savings_mandate_events").insert({
-    savings_id: savingsId, mandate_id: savings.mandate_reference, event_type: approval.approved ? "authorized" : "status_checked",
+    savings_id: savingsId, user_id: userId, mandate_id: savings.mandate_reference, event_type: approval.approved ? "authorized" : "status_checked",
     payload: { approval_status: approval.status, raw: approval.raw },
   }).then(() => {}, () => {});
 
