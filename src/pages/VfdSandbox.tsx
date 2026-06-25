@@ -509,7 +509,11 @@ function VfdSandboxInner() {
             {currentView === "dashboard" && (
               <SandboxDashboard
                 balance={balanceData}
-                onNavigate={(v) => setCurrentView(v as View)}
+                onNavigate={(v) => {
+                  const [view, productCode] = String(v).split(":");
+                  setInitialSavingsProduct(productCode || null);
+                  setCurrentView(view as View);
+                }}
                 recentTransactions={mappedTransactions}
                 tier={vfd.client?.tier}
               />
