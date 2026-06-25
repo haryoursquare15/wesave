@@ -74,7 +74,7 @@ function AnimatedNumber({ value, prefix = "₦" }: { value: number; prefix?: str
 const productBanners = [
   {
     key: "goalsave",
-    routeKey: "lock",
+    routeKey: "lock:goalsave",
     title: "GoalSave",
     subtitle: "Flexible savings • Earn 10–16% p.a. • 90–365 days",
     cta: "Start GoalSave",
@@ -84,7 +84,7 @@ const productBanners = [
   },
   {
     key: "vault",
-    routeKey: "lock",
+    routeKey: "lock:vault",
     title: "Vault",
     subtitle: "Higher yield safe • Earn 14–20.5% p.a. • 30–365 days",
     cta: "Open a Vault",
@@ -94,7 +94,7 @@ const productBanners = [
   },
   {
     key: "lockmax",
-    routeKey: "lock",
+    routeKey: "lock:lockmax",
     title: "LockMax",
     subtitle: "Maximum returns • Earn 18–21% p.a. • 90–365 days",
     cta: "Lock for Max",
@@ -104,7 +104,7 @@ const productBanners = [
   },
   {
     key: "upfront_yield",
-    routeKey: "lock",
+    routeKey: "lock:upfront_yield",
     title: "Upfront Yield",
     subtitle: "Get your interest paid up front • 12–18% p.a.",
     cta: "Earn Upfront",
@@ -116,10 +116,10 @@ const productBanners = [
 
 /* ─── Product Grid Items ─── */
 const productGrid = [
-  { key: "lock", label: "Lock Funds", icon: Lock, color: "bg-emerald-500/10 text-emerald-600", desc: "Earn interest" },
+  { key: "lock", label: "Active Savings", icon: Lock, color: "bg-emerald-500/10 text-emerald-600", desc: "All investments" },
   { key: "target", label: "Target Save", icon: Target, color: "bg-blue-500/10 text-blue-600", desc: "Goal savings" },
   { key: "ajo", label: "Ajo Groups", icon: Users, color: "bg-orange-500/10 text-orange-600", desc: "Group savings" },
-  { key: "association", label: "Associations", icon: Building2, color: "bg-indigo-500/10 text-indigo-600", desc: "Pool funds" },
+  { key: "association", label: "Associations", icon: Building2, color: "bg-indigo-500/10 text-indigo-600", desc: "Coming soon", comingSoon: true },
   { key: "goal", label: "Goal Fund", icon: Heart, color: "bg-rose-500/10 text-rose-600", desc: "Crowdfund" },
   { key: "split", label: "Split Bills", icon: Receipt, color: "bg-violet-500/10 text-violet-600", desc: "Share costs" },
   { key: "bills", label: "Pay Bills", icon: CreditCard, color: "bg-cyan-500/10 text-cyan-600", desc: "Airtime & more" },
