@@ -25,6 +25,7 @@ import Crowdfunding from "./pages/Crowdfunding";
 import GoalFunding from "./pages/GoalFunding";
 import CreateGoalCampaign from "./pages/CreateGoalCampaign";
 import GoalCampaignDetail from "./pages/GoalCampaignDetail";
+import PublicCampaignPay from "./pages/PublicCampaignPay";
 import TargetAjo from "./pages/TargetAjo";
 import CreateTargetAjo from "./pages/CreateTargetAjo";
 import TargetAjoDetail from "./pages/TargetAjoDetail";
