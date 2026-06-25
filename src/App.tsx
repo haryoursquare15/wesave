@@ -18,6 +18,7 @@ import Profile from "./pages/Profile";
 import Wallet from "./pages/Wallet";
 import Invite from "./pages/Invite";
 import Admin from "./pages/Admin";
+import AdminLogin from "./pages/AdminLogin";
 import SecuritySettings from "./pages/SecuritySettings";
 import Settings from "./pages/Settings";
 import Support from "./pages/Support";
