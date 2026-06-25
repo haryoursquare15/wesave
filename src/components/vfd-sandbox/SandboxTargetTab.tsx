@@ -214,25 +214,58 @@ export function SandboxTargetTab() {
           {t.target_date && <span className="flex items-center gap-1"><CalendarDays className="h-4 w-4" /> {format(new Date(t.target_date), "MMM d, yyyy")}</span>}
         </div>
 
-        {/* Contribute + Withdraw */}
-        {t.status === "active" && (
-          <div className="flex gap-2">
-            <Button className="flex-1" onClick={async () => {
-              const r = await products.contributeTarget(t.id);
-              if (r?.data) { toast({ title: "Contributed!" }); loadDetail(t.id); }
-            }} disabled={products.loading}>
-              <Wallet className="h-4 w-4 mr-2" /> Contribute ₦{fmt(Number(t.contribution_amount))}
-            </Button>
-            {isIndependent && (
-              <Button variant="outline" className="flex-1" onClick={async () => {
-                const r = await products.independentWithdrawal(t.id);
-                if (r?.data) { toast({ title: "Withdrawn to wallet!" }); loadDetail(t.id); }
-              }} disabled={products.loading}>
-                <ArrowDownToLine className="h-4 w-4 mr-2" /> Withdraw
+        {/* Per-member DDM mandate gate (extends e-mandate flow to Target Ajo) */}
+        {(() => {
+          if (t.funding_mode !== "ddm" || isClosed) return null;
+          const me = members.find((m: any) => m.user_id === currentUserId);
+          if (!me) return null;
+          const ms = String(me.mandate_status || "pending");
+          if (ms === "authorized") return null;
+          const label = ms === "awaiting_approval" ? "Bank approval pending"
+            : ms === "failed" ? "Mandate failed — re-authorize"
+            : ms === "expired" ? "Mandate expired — re-authorize"
+            : "Authorize DDM Mandate";
+          return (
+            <div className="p-3 rounded-xl border border-amber-500/40 bg-amber-500/10 flex items-center justify-between gap-2">
+              <div className="text-xs">
+                <p className="font-semibold text-amber-700 dark:text-amber-300">Direct Debit Mandate required</p>
+                <p className="text-muted-foreground">Authorize your bank account to enable auto-contributions for this Target Ajo.</p>
+              </div>
+              <Button size="sm" onClick={() => setMandateSubject({
+                kind: "target", id: t.id, name: t.name,
+                contribution_amount: Number(t.contribution_amount) || 0,
+                period: String(t.frequency || "monthly"),
+                total_cycles: Number(t.max_members) || 1,
+              })}>
+                <ShieldCheck className="h-3.5 w-3.5 mr-1" /> {label}
               </Button>
-            )}
-          </div>
-        )}
+            </div>
+          );
+        })()}
+
+        {/* Contribute + Withdraw */}
+        {t.status === "active" && (() => {
+          const me = members.find((m: any) => m.user_id === currentUserId);
+          const ddmBlocked = t.funding_mode === "ddm" && me && me.mandate_status !== "authorized";
+          return (
+            <div className="flex gap-2">
+              <Button className="flex-1" onClick={async () => {
+                const r = await products.contributeTarget(t.id);
+                if (r?.data) { toast({ title: "Contributed!" }); loadDetail(t.id); }
+              }} disabled={products.loading || ddmBlocked}>
+                <Wallet className="h-4 w-4 mr-2" /> Contribute ₦{fmt(Number(t.contribution_amount))}
+              </Button>
+              {isIndependent && (
+                <Button variant="outline" className="flex-1" onClick={async () => {
+                  const r = await products.independentWithdrawal(t.id);
+                  if (r?.data) { toast({ title: "Withdrawn to wallet!" }); loadDetail(t.id); }
+                }} disabled={products.loading}>
+                  <ArrowDownToLine className="h-4 w-4 mr-2" /> Withdraw
+                </Button>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Closed notice */}
         {isClosed && (
