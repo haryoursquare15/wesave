@@ -111,16 +111,8 @@ export function GoalSavingsV2Wizard({ onClose, onCreated, walletAvailable }: Pro
 
   /* ──────────── Step handlers ──────────── */
 
-  const goMandate = () => {
-    if (!setupValid || !quote) return;
-    setStep("mandate");
-  };
-
   const goReview = () => {
-    if (!feeConsent) {
-      toast({ title: "Consent required", description: "Please confirm the mandate setup fee to continue.", variant: "destructive" });
-      return;
-    }
+    if (!setupValid || !quote) return;
     setStep("review");
   };
 
