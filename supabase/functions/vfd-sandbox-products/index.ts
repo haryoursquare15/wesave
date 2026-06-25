@@ -4285,14 +4285,21 @@ async function handleAcceptGroupMandate(userId: string, body: Record<string, unk
         available,
       }, 400);
     }
-    await db.from("vestara_fee_ledger").insert({
-      user_id: userId,
-      fee_type: "ajo_mandate_setup",
-      amount: fee,
-      reference: feeRef,
-      tx_reference: feeRef,
-      metadata: { group_id: groupId, product_code: "ajo_ddm" },
-    });
+    // Split the ₦100 setup fee: ₦50 internal management + ₦50 NIBSS settlement.
+    const internalShare = Math.floor(fee / 2);
+    const nibssShare = fee - internalShare;
+    await db.from("vestara_fee_ledger").insert([
+      {
+        user_id: userId, fee_type: "ajo_mandate_setup_internal", amount: internalShare,
+        reference: `${feeRef}-INT`, tx_reference: feeRef,
+        metadata: { group_id: groupId, product_code: "ajo_ddm", split: "internal", parent_fee: fee },
+      },
+      {
+        user_id: userId, fee_type: "ajo_mandate_setup_nibss", amount: nibssShare,
+        reference: `${feeRef}-NIBSS`, tx_reference: feeRef,
+        metadata: { group_id: groupId, product_code: "ajo_ddm", split: "nibss", parent_fee: fee },
+      },
+    ]);
   }
 
 
@@ -4751,10 +4758,21 @@ async function chargeMandateSetupFee(userId: string, feeRef: string, ctx: Record
     const available = await getVestaraWalletBalance(userId);
     return { ok: false as const, available, fee };
   }
-  await db.from("vestara_fee_ledger").insert({
-    user_id: userId, fee_type: "mandate_setup", amount: fee,
-    reference: feeRef, tx_reference: feeRef, metadata: ctx,
-  });
+  // Split the ₦100 setup fee: ₦50 internal management + ₦50 NIBSS settlement.
+  const internalShare = Math.floor(fee / 2);
+  const nibssShare = fee - internalShare;
+  await db.from("vestara_fee_ledger").insert([
+    {
+      user_id: userId, fee_type: "mandate_setup_internal", amount: internalShare,
+      reference: `${feeRef}-INT`, tx_reference: feeRef,
+      metadata: { ...ctx, split: "internal", parent_fee: fee },
+    },
+    {
+      user_id: userId, fee_type: "mandate_setup_nibss", amount: nibssShare,
+      reference: `${feeRef}-NIBSS`, tx_reference: feeRef,
+      metadata: { ...ctx, split: "nibss", parent_fee: fee },
+    },
+  ]);
   return { ok: true as const, fee };
 }
 
