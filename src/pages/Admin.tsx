@@ -27,7 +27,8 @@ import { VestaraInvestmentsTab } from "@/components/admin/VestaraInvestmentsTab"
 import { VestaraAuditExportTab } from "@/components/admin/VestaraAuditExportTab";
 import { VfdWebhookDlqTab } from "@/components/admin/VfdWebhookDlqTab";
 import { VfdAuditTab } from "@/components/admin/VfdAuditTab";
-import { Percent, PiggyBank, FileSpreadsheet, AlertTriangle, ScanLine } from "lucide-react";
+import { RolesPermissionsTab } from "@/components/admin/RolesPermissionsTab";
+import { Percent, PiggyBank, FileSpreadsheet, AlertTriangle, ScanLine, UserCog } from "lucide-react";
 
 export default function Admin() {
   const navigate = useNavigate();
