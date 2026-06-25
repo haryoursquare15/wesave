@@ -25,6 +25,7 @@ import Crowdfunding from "./pages/Crowdfunding";
 import GoalFunding from "./pages/GoalFunding";
 import CreateGoalCampaign from "./pages/CreateGoalCampaign";
 import GoalCampaignDetail from "./pages/GoalCampaignDetail";
+import PublicCampaignPay from "./pages/PublicCampaignPay";
 import TargetAjo from "./pages/TargetAjo";
 import CreateTargetAjo from "./pages/CreateTargetAjo";
 import TargetAjoDetail from "./pages/TargetAjoDetail";
@@ -141,6 +142,7 @@ const App = () => {
                 <Route path="/goal-funding" element={<GoalFunding />} />
                 <Route path="/goal-funding/create" element={<CreateGoalCampaign />} />
                 <Route path="/goal-funding/:campaignId" element={<GoalCampaignDetail />} />
+                <Route path="/goal/:slug" element={<PublicCampaignPay />} />
                 <Route path="/target-ajo" element={<TargetAjo />} />
                 <Route path="/target-ajo/create" element={<CreateTargetAjo />} />
                 <Route path="/target-ajo/:groupId" element={<TargetAjoDetail />} />
