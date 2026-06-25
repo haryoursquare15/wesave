@@ -26,6 +26,7 @@ interface Props {
   userBalance: UserBalance | null;
   onRefresh: () => void;
   onBack: () => void;
+  initialProductCode?: string | null;
 }
 
 type FlowStep = "product" | "amount" | "tenor" | "confirm";
