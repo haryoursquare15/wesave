@@ -14,6 +14,7 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { useVestaraLedger } from "@/hooks/useVestaraLedger";
 import { TransactionPinGate } from "@/components/security/TransactionPinGate";
+import { MandateAuthorizationDialog, type MandateSubject } from "./MandateAuthorizationDialog";
 
 type Frequency = "weekly" | "monthly";
 type Step = "setup" | "mandate" | "review" | "success";
@@ -73,6 +74,7 @@ export function GoalSavingsV2Wizard({ onClose, onCreated, walletAvailable }: Pro
   const [lockAck, setLockAck] = useState(false);
   const [savingsId, setSavingsId] = useState<string | null>(null);
   const [createdMaturity, setCreatedMaturity] = useState<string | null>(null);
+  const [mandateSubject, setMandateSubject] = useState<MandateSubject | null>(null);
 
   // PIN gate
   const [pinGate, setPinGate] = useState<null | {
@@ -140,11 +142,11 @@ export function GoalSavingsV2Wizard({ onClose, onCreated, walletAvailable }: Pro
       onAuthorized: async () => {
         setSubmitting(true);
         try {
-          // 1) Create savings shell
+          // 1) Create the savings shell. Real per-savings DDM authorization
+          //    happens in the next step via MandateAuthorizationDialog, which
+          //    collects payer bank details and calls VFD /emandate/create.
           const created = await invoke("goalsave_v2_create", {
-            amount: amtNum,
-            frequency,
-            tenor_count: tenor,
+            amount: amtNum, frequency, tenor_count: tenor,
             goal_name: goalName.trim(),
             goal_purpose: goalPurpose.trim() || null,
           });
@@ -153,23 +155,15 @@ export function GoalSavingsV2Wizard({ onClose, onCreated, walletAvailable }: Pro
           setSavingsId(sid);
           setCreatedMaturity(created.maturity_date as string);
 
-          // 2) Authorize mandate (charges fee)
-          const authorized = await invoke("goalsave_v2_authorize_mandate", {
-            savings_id: sid,
-            fee_consent: true,
+          // 2) Open the mandate dialog (real VFD E-Mandate creation).
+          setMandateSubject({
+            kind: "goalsave",
+            id: sid,
+            name: goalName.trim(),
+            contribution_amount: amtNum,
+            period: frequency,
+            total_cycles: tenor,
           });
-          if (!authorized?.success) {
-            toast({
-              title: "Mandate authorization pending",
-              description: "Your goal was saved. Please finish mandate setup from the goal detail screen.",
-              variant: "destructive",
-            });
-            setStep("success");
-            onCreated();
-            return;
-          }
-          setStep("success");
-          onCreated();
         } finally {
           setSubmitting(false);
         }
