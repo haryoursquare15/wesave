@@ -65,6 +65,7 @@ function VfdSandboxInner() {
   const [kycDone, setKycDone] = useState(false);
   const [clientChecked, setClientChecked] = useState(false);
   const [currentView, setCurrentView] = useState<View>("dashboard");
+  const [initialSavingsProduct, setInitialSavingsProduct] = useState<string | null>(null);
   const [banks, setBanks] = useState<Array<{ code: string; name: string }>>([]);
 
   // Inactivity sign-out (2m foreground / 5m background) → /vfd-sandbox/auth
