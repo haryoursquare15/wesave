@@ -187,6 +187,12 @@ export default function Admin() {
                 VFD Audit
               </TabsTrigger>
             )}
+            {hasPermission("roles.manage") && (
+              <TabsTrigger value="roles" className="flex items-center gap-1">
+                <UserCog className="h-4 w-4" />
+                Roles & Access
+              </TabsTrigger>
+            )}
           </TabsList>
 
 
