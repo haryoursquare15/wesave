@@ -259,6 +259,10 @@ export default function Admin() {
           <TabsContent value="vfd-audit">
             <VfdAuditTab />
           </TabsContent>
+
+          <TabsContent value="roles">
+            <RolesPermissionsTab />
+          </TabsContent>
         </Tabs>
       </div>
     </div>
