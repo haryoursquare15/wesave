@@ -463,6 +463,17 @@ export function GoalSavingsV2Wizard({ onClose, onCreated, walletAvailable }: Pro
           }}
         />
       )}
+
+      {/* Direct Debit Mandate authorization — VFD E-Mandate Create + NIBSS ₦50 leg */}
+      <MandateAuthorizationDialog
+        subject={mandateSubject}
+        onClose={() => setMandateSubject(null)}
+        onAuthorized={() => {
+          setMandateSubject(null);
+          setStep("success");
+          onCreated();
+        }}
+      />
     </div>
   );
 }
