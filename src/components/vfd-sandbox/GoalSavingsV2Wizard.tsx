@@ -17,7 +17,7 @@ import { TransactionPinGate } from "@/components/security/TransactionPinGate";
 import { MandateAuthorizationDialog, type MandateSubject } from "./MandateAuthorizationDialog";
 
 type Frequency = "weekly" | "monthly";
-type Step = "setup" | "mandate" | "review" | "success";
+type Step = "setup" | "review" | "success";
 
 interface Quote {
   rate: number;
@@ -46,7 +46,6 @@ const fmtDate = (iso: string) =>
 
 const STEPS: { id: Step; label: string }[] = [
   { id: "setup", label: "Goal Setup" },
-  { id: "mandate", label: "Mandate" },
   { id: "review", label: "Review" },
   { id: "success", label: "Confirm" },
 ];
@@ -69,8 +68,7 @@ export function GoalSavingsV2Wizard({ onClose, onCreated, walletAvailable }: Pro
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
 
-  // Mandate consents
-  const [feeConsent, setFeeConsent] = useState(false);
+  // Mandate consent moved into review step
   const [lockAck, setLockAck] = useState(false);
   const [savingsId, setSavingsId] = useState<string | null>(null);
   const [createdMaturity, setCreatedMaturity] = useState<string | null>(null);
@@ -113,16 +111,8 @@ export function GoalSavingsV2Wizard({ onClose, onCreated, walletAvailable }: Pro
 
   /* ──────────── Step handlers ──────────── */
 
-  const goMandate = () => {
-    if (!setupValid || !quote) return;
-    setStep("mandate");
-  };
-
   const goReview = () => {
-    if (!feeConsent) {
-      toast({ title: "Consent required", description: "Please confirm the mandate setup fee to continue.", variant: "destructive" });
-      return;
-    }
+    if (!setupValid || !quote) return;
     setStep("review");
   };
 
@@ -298,55 +288,13 @@ export function GoalSavingsV2Wizard({ onClose, onCreated, walletAvailable }: Pro
               )}
             </div>
 
-            <Button onClick={goMandate} disabled={!setupValid || !quote} className="w-full h-12">
+            <Button onClick={goReview} disabled={!setupValid || !quote} className="w-full h-12">
               Continue <ArrowRight className="h-4 w-4 ml-1" />
             </Button>
           </motion.div>
         )}
 
-        {/* ─────────── STEP 2: MANDATE ─────────── */}
-        {step === "mandate" && quote && (
-          <motion.div key="mandate" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
-            className="space-y-4">
-            <div className="bg-card rounded-2xl border border-border/50 p-5 space-y-3">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="h-4 w-4 text-primary" />
-                <h3 className="text-sm font-semibold">Direct Debit Mandate</h3>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Your savings contributions will be collected automatically according to your selected schedule.
-              </p>
-              <Separator />
-              <Row label="Debit amount" value={fmt(quote.contribution_amount)} />
-              <Row label="Frequency" value={quote.frequency} className="capitalize" />
-              <Row label="Start date" value={fmtDate(quote.start_date)} />
-              <Row label="End date" value={fmtDate(quote.maturity_date)} />
-              <Row label="Number of debits" value={String(quote.tenor_count)} />
-            </div>
 
-            <Alert>
-              <ReceiptText className="h-4 w-4" />
-              <AlertTitle>Mandate Setup Fee: {fmt(quote.mandate_fee)}</AlertTitle>
-              <AlertDescription className="text-xs">
-                This is a one-time fee charged to your wallet now to set up the Direct Debit Mandate. The fee is non-refundable.
-              </AlertDescription>
-            </Alert>
-
-            <label className="flex items-start gap-2.5 p-3 rounded-xl border border-border/50 cursor-pointer">
-              <Checkbox checked={feeConsent} onCheckedChange={v => setFeeConsent(!!v)} />
-              <span className="text-xs leading-relaxed">
-                I authorize Vestara to charge {fmt(quote.mandate_fee)} from my wallet to set up the Direct Debit Mandate.
-              </span>
-            </label>
-
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setStep("setup")} className="flex-1">Back</Button>
-              <Button onClick={goReview} disabled={!feeConsent} className="flex-1">
-                Continue <ArrowRight className="h-4 w-4 ml-1" />
-              </Button>
-            </div>
-          </motion.div>
-        )}
 
         {/* ─────────── STEP 3: REVIEW ─────────── */}
         {step === "review" && quote && (
@@ -403,7 +351,7 @@ export function GoalSavingsV2Wizard({ onClose, onCreated, walletAvailable }: Pro
             </label>
 
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setStep("mandate")} className="flex-1" disabled={submitting}>
+              <Button variant="outline" onClick={() => setStep("setup")} className="flex-1" disabled={submitting}>
                 Edit
               </Button>
               <Button onClick={handleConfirm} disabled={!lockAck || submitting} className="flex-1">
