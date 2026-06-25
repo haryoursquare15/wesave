@@ -17,7 +17,7 @@ import { TransactionPinGate } from "@/components/security/TransactionPinGate";
 import { MandateAuthorizationDialog, type MandateSubject } from "./MandateAuthorizationDialog";
 
 type Frequency = "weekly" | "monthly";
-type Step = "setup" | "mandate" | "review" | "success";
+type Step = "setup" | "review" | "success";
 
 interface Quote {
   rate: number;
@@ -46,7 +46,6 @@ const fmtDate = (iso: string) =>
 
 const STEPS: { id: Step; label: string }[] = [
   { id: "setup", label: "Goal Setup" },
-  { id: "mandate", label: "Mandate" },
   { id: "review", label: "Review" },
   { id: "success", label: "Confirm" },
 ];
@@ -69,8 +68,7 @@ export function GoalSavingsV2Wizard({ onClose, onCreated, walletAvailable }: Pro
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
 
-  // Mandate consents
-  const [feeConsent, setFeeConsent] = useState(false);
+  // Mandate consent moved into review step
   const [lockAck, setLockAck] = useState(false);
   const [savingsId, setSavingsId] = useState<string | null>(null);
   const [createdMaturity, setCreatedMaturity] = useState<string | null>(null);
