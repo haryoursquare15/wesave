@@ -248,7 +248,7 @@ export function MandateAuthorizationDialog({ subject, onClose, onAuthorized }: P
                 <p className="font-semibold text-amber-700 dark:text-amber-400">₦50 NIBSS authorization charge</p>
                 <p className="text-muted-foreground">After setup we'll show an account to send ₦50 to. The transfer must come from the exact account above within 7 days, or the mandate expires.</p>
               </div>
-              <p className="text-[10px] text-muted-foreground">A one-time ₦100 setup fee will be debited from your Vestara wallet now.</p>
+              <p className="text-[10px] text-muted-foreground">A one-time ₦100 mandate setup fee will be debited from your Vestara wallet now (₦50 internal management + ₦50 NIBSS).</p>
             </div>
 
             <div className="grid grid-cols-2 gap-2 pt-1">
