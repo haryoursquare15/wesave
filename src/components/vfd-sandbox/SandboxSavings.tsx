@@ -80,6 +80,25 @@ export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductC
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Auto-jump straight into the chosen product's form when arriving from a
+  // product banner (e.g. "GoalSave", "Vault", "LockMax", "Upfront Yield").
+  const autoOpenedRef = useState<{ done: boolean }>({ done: false })[0];
+  useEffect(() => {
+    if (!initialProductCode || loadingData || autoOpenedRef.done) return;
+    if (initialProductCode === "goalsave") {
+      autoOpenedRef.done = true;
+      setShowGoalV2(true);
+      return;
+    }
+    const p = products.find((x) => x.code === initialProductCode);
+    if (p) {
+      autoOpenedRef.done = true;
+      setSelectedProduct(p);
+      setShowCreate(true);
+      setStep("amount");
+    }
+  }, [initialProductCode, loadingData, products, autoOpenedRef]);
+
   /* ─── Tenor presets per product ─── */
   const tenorPresets = useMemo(() => {
     if (!selectedProduct) return [];
