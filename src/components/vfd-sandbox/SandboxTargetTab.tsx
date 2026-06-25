@@ -355,6 +355,12 @@ export function SandboxTargetTab() {
           targetName={t.name}
           onMemberAdded={() => loadDetail(t.id)}
         />
+
+        <MandateAuthorizationDialog
+          subject={mandateSubject}
+          onClose={() => setMandateSubject(null)}
+          onAuthorized={() => loadDetail(t.id)}
+        />
       </div>
     );
   }
