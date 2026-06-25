@@ -45,7 +45,7 @@ const PRODUCT_GRADIENTS: Record<VestaraProductCode, string> = {
   upfront_yield: "from-amber-500/10 to-orange-500/5 border-amber-500/20",
 };
 
-export function SandboxSavings({ userBalance, onRefresh, onBack }: Props) {
+export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductCode }: Props) {
   const { toast } = useToast();
   const vestara = useVestaraLedger();
 
