@@ -141,6 +141,18 @@ export function useVfdSandboxProducts() {
     invoke("vote_target_withdrawal", { request_id, vote }), [invoke]);
   const independentWithdrawal = useCallback((target_id: string) => invoke("independent_withdrawal", { target_id }), [invoke]);
   const updateTargetSettings = useCallback((body: Record<string, unknown>) => invoke("update_target_settings", body), [invoke]);
+  const acceptTargetMandate = useCallback(
+    (target_id: string, payer: { payer_bank_code: string; payer_account_number: string; payer_phone: string; payer_email: string; payer_address: string }) =>
+      invoke("accept_target_mandate", { target_id, ...payer }),
+    [invoke]
+  );
+  const checkTargetMandateStatus = useCallback((target_id: string) => invoke("check_target_mandate_status", { target_id }), [invoke]);
+  const acceptGoalsaveMandate = useCallback(
+    (savings_id: string, payer: { payer_bank_code: string; payer_account_number: string; payer_phone: string; payer_email: string; payer_address: string }) =>
+      invoke("goalsave_v2_authorize_mandate", { savings_id, ...payer }),
+    [invoke]
+  );
+  const checkGoalsaveMandateStatus = useCallback((savings_id: string) => invoke("goalsave_v2_check_mandate_status", { savings_id }), [invoke]);
 
   // Goal Funding (full parity)
   const createCampaign = useCallback((body: Record<string, unknown>) => invoke("create_campaign", body), [invoke]);
@@ -210,6 +222,7 @@ export function useVfdSandboxProducts() {
     createTarget, listTargets, contributeTarget, getTargetDetail,
     inviteTargetMember, respondTargetInvite, listPendingTargetInvites,
     requestTargetWithdrawal, voteTargetWithdrawal, independentWithdrawal, updateTargetSettings,
+    acceptTargetMandate, checkTargetMandateStatus, acceptGoalsaveMandate, checkGoalsaveMandateStatus,
     // Goal Funding
     createCampaign, listCampaigns, contributeCampaign, getCampaignDetail, postCampaignUpdate, withdrawCampaignEscrow,
     // SplitPay

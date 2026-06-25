@@ -3732,8 +3732,23 @@ export type Database = {
           effective_rate: number | null
           id: string
           lock_account_id: string
+          mandate_authorized_at: string | null
+          mandate_code: string | null
+          mandate_end_date: string | null
+          mandate_expires_at: string | null
           mandate_fee: number | null
+          mandate_frequency: string | null
           mandate_id: string | null
+          mandate_nibss_account: string | null
+          mandate_nibss_message: string | null
+          mandate_payer_account_number: string | null
+          mandate_payer_address: string | null
+          mandate_payer_bank_code: string | null
+          mandate_payer_email: string | null
+          mandate_payer_phone: string | null
+          mandate_payload: Json | null
+          mandate_reference: string | null
+          mandate_start_date: string | null
           mandate_status: string | null
           matured_at: string | null
           maturity_date: string
@@ -3764,8 +3779,23 @@ export type Database = {
           effective_rate?: number | null
           id?: string
           lock_account_id: string
+          mandate_authorized_at?: string | null
+          mandate_code?: string | null
+          mandate_end_date?: string | null
+          mandate_expires_at?: string | null
           mandate_fee?: number | null
+          mandate_frequency?: string | null
           mandate_id?: string | null
+          mandate_nibss_account?: string | null
+          mandate_nibss_message?: string | null
+          mandate_payer_account_number?: string | null
+          mandate_payer_address?: string | null
+          mandate_payer_bank_code?: string | null
+          mandate_payer_email?: string | null
+          mandate_payer_phone?: string | null
+          mandate_payload?: Json | null
+          mandate_reference?: string | null
+          mandate_start_date?: string | null
           mandate_status?: string | null
           matured_at?: string | null
           maturity_date: string
@@ -3796,8 +3826,23 @@ export type Database = {
           effective_rate?: number | null
           id?: string
           lock_account_id?: string
+          mandate_authorized_at?: string | null
+          mandate_code?: string | null
+          mandate_end_date?: string | null
+          mandate_expires_at?: string | null
           mandate_fee?: number | null
+          mandate_frequency?: string | null
           mandate_id?: string | null
+          mandate_nibss_account?: string | null
+          mandate_nibss_message?: string | null
+          mandate_payer_account_number?: string | null
+          mandate_payer_address?: string | null
+          mandate_payer_bank_code?: string | null
+          mandate_payer_email?: string | null
+          mandate_payer_phone?: string | null
+          mandate_payload?: Json | null
+          mandate_reference?: string | null
+          mandate_start_date?: string | null
           mandate_status?: string | null
           matured_at?: string | null
           maturity_date?: string
@@ -5838,25 +5883,126 @@ export type Database = {
           },
         ]
       }
+      vfd_sandbox_target_mandates: {
+        Row: {
+          created_at: string
+          event_payload: Json | null
+          event_type: string
+          id: string
+          mandate_code: string | null
+          mandate_reference: string | null
+          member_user_id: string
+          target_id: string
+        }
+        Insert: {
+          created_at?: string
+          event_payload?: Json | null
+          event_type: string
+          id?: string
+          mandate_code?: string | null
+          mandate_reference?: string | null
+          member_user_id: string
+          target_id: string
+        }
+        Update: {
+          created_at?: string
+          event_payload?: Json | null
+          event_type?: string
+          id?: string
+          mandate_code?: string | null
+          mandate_reference?: string | null
+          member_user_id?: string
+          target_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vfd_sandbox_target_mandates_target_id_fkey"
+            columns: ["target_id"]
+            isOneToOne: false
+            referencedRelation: "vfd_sandbox_targets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vfd_sandbox_target_members: {
         Row: {
           contributed_amount: number
+          contribution_method: string | null
           id: string
           joined_at: string
+          mandate_authorized_at: string | null
+          mandate_code: string | null
+          mandate_created_at: string | null
+          mandate_end_date: string | null
+          mandate_expires_at: string | null
+          mandate_fee_amount: number | null
+          mandate_fee_charged_at: string | null
+          mandate_frequency: string | null
+          mandate_nibss_account: string | null
+          mandate_nibss_message: string | null
+          mandate_payer_account_number: string | null
+          mandate_payer_address: string | null
+          mandate_payer_bank_code: string | null
+          mandate_payer_email: string | null
+          mandate_payer_phone: string | null
+          mandate_payload: Json | null
+          mandate_reference: string | null
+          mandate_start_date: string | null
+          mandate_status: string | null
           target_id: string
           user_id: string
         }
         Insert: {
           contributed_amount?: number
+          contribution_method?: string | null
           id?: string
           joined_at?: string
+          mandate_authorized_at?: string | null
+          mandate_code?: string | null
+          mandate_created_at?: string | null
+          mandate_end_date?: string | null
+          mandate_expires_at?: string | null
+          mandate_fee_amount?: number | null
+          mandate_fee_charged_at?: string | null
+          mandate_frequency?: string | null
+          mandate_nibss_account?: string | null
+          mandate_nibss_message?: string | null
+          mandate_payer_account_number?: string | null
+          mandate_payer_address?: string | null
+          mandate_payer_bank_code?: string | null
+          mandate_payer_email?: string | null
+          mandate_payer_phone?: string | null
+          mandate_payload?: Json | null
+          mandate_reference?: string | null
+          mandate_start_date?: string | null
+          mandate_status?: string | null
           target_id: string
           user_id: string
         }
         Update: {
           contributed_amount?: number
+          contribution_method?: string | null
           id?: string
           joined_at?: string
+          mandate_authorized_at?: string | null
+          mandate_code?: string | null
+          mandate_created_at?: string | null
+          mandate_end_date?: string | null
+          mandate_expires_at?: string | null
+          mandate_fee_amount?: number | null
+          mandate_fee_charged_at?: string | null
+          mandate_frequency?: string | null
+          mandate_nibss_account?: string | null
+          mandate_nibss_message?: string | null
+          mandate_payer_account_number?: string | null
+          mandate_payer_address?: string | null
+          mandate_payer_bank_code?: string | null
+          mandate_payer_email?: string | null
+          mandate_payer_phone?: string | null
+          mandate_payload?: Json | null
+          mandate_reference?: string | null
+          mandate_start_date?: string | null
+          mandate_status?: string | null
           target_id?: string
           user_id?: string
         }
