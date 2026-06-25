@@ -7077,10 +7077,34 @@ export type Database = {
         Returns: Json
       }
       admin_get_stats: { Args: never; Returns: Json }
+      admin_grant_permission: {
+        Args: {
+          _permission: string
+          _role: Database["public"]["Enums"]["app_role"]
+        }
+        Returns: Json
+      }
+      admin_list_staff: {
+        Args: never
+        Returns: {
+          created_at: string
+          email: string
+          full_name: string
+          roles: Database["public"]["Enums"]["app_role"][]
+          user_id: string
+        }[]
+      }
       admin_remove_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
+        }
+        Returns: Json
+      }
+      admin_revoke_permission: {
+        Args: {
+          _permission: string
+          _role: Database["public"]["Enums"]["app_role"]
         }
         Returns: Json
       }
