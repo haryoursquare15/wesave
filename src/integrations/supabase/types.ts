@@ -4684,6 +4684,62 @@ export type Database = {
           },
         ]
       }
+      vfd_sandbox_campaign_inflows: {
+        Row: {
+          amount: number
+          campaign_id: string
+          created_at: string
+          id: string
+          narration: string | null
+          payer_account: string | null
+          payer_bank: string | null
+          payer_name: string | null
+          raw_payload: Json | null
+          source: string
+          status: string
+          vfd_reference: string | null
+          vfd_session_id: string
+        }
+        Insert: {
+          amount: number
+          campaign_id: string
+          created_at?: string
+          id?: string
+          narration?: string | null
+          payer_account?: string | null
+          payer_bank?: string | null
+          payer_name?: string | null
+          raw_payload?: Json | null
+          source?: string
+          status?: string
+          vfd_reference?: string | null
+          vfd_session_id: string
+        }
+        Update: {
+          amount?: number
+          campaign_id?: string
+          created_at?: string
+          id?: string
+          narration?: string | null
+          payer_account?: string | null
+          payer_bank?: string | null
+          payer_name?: string | null
+          raw_payload?: Json | null
+          source?: string
+          status?: string
+          vfd_reference?: string | null
+          vfd_session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vfd_sandbox_campaign_inflows_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "vfd_sandbox_campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vfd_sandbox_campaign_updates: {
         Row: {
           campaign_id: string
@@ -7305,6 +7361,26 @@ export type Database = {
           description: string
           goal_amount: number
           id: string
+          raised_amount: number
+          status: string
+          title: string
+          updated_at: string
+        }[]
+      }
+      get_public_vfd_sandbox_campaign_by_slug: {
+        Args: { p_slug: string }
+        Returns: {
+          campaign_image: string
+          campaign_slug: string
+          contribution_visibility: string
+          contributor_count: number
+          created_at: string
+          creator_id: string
+          deadline: string
+          description: string
+          goal_amount: number
+          id: string
+          payment_reference: string
           raised_amount: number
           status: string
           title: string
