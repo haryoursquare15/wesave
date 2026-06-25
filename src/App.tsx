@@ -18,6 +18,7 @@ import Profile from "./pages/Profile";
 import Wallet from "./pages/Wallet";
 import Invite from "./pages/Invite";
 import Admin from "./pages/Admin";
+import AdminLogin from "./pages/AdminLogin";
 import SecuritySettings from "./pages/SecuritySettings";
 import Settings from "./pages/Settings";
 import Support from "./pages/Support";
@@ -53,7 +54,7 @@ import Unsubscribe from "./pages/Unsubscribe";
 
 const queryClient = new QueryClient();
 
-const PUBLIC_ROUTES = ["/", "/auth", "/forgot-password", "/invite", "/onboarding", "/terms", "/privacy", "/aml-policy", "/kyc-policy", "/goal", "/delete-account", "/app-home", "/vfd-sandbox", "/vfd-sandbox/auth", "/unsubscribe"];
+const PUBLIC_ROUTES = ["/", "/auth", "/forgot-password", "/invite", "/onboarding", "/terms", "/privacy", "/aml-policy", "/kyc-policy", "/goal", "/delete-account", "/app-home", "/vfd-sandbox", "/vfd-sandbox/auth", "/unsubscribe", "/admin/login"];
 
 function isPublicRoute(pathname: string) {
   return PUBLIC_ROUTES.some(route => 
@@ -129,6 +130,7 @@ const App = () => {
                 <Route path="/profile" element={<Profile />} />
                 <Route path="/wallet" element={<Wallet />} />
                 <Route path="/invite/:token" element={<Invite />} />
+                <Route path="/admin/login" element={<AdminLogin />} />
                 <Route path="/admin" element={<Admin />} />
                 <Route path="/admin/recurring-test" element={<RecurringTestDashboard />} />
                 <Route path="/settings" element={<Settings />} />

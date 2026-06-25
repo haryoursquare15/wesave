@@ -27,7 +27,8 @@ import { VestaraInvestmentsTab } from "@/components/admin/VestaraInvestmentsTab"
 import { VestaraAuditExportTab } from "@/components/admin/VestaraAuditExportTab";
 import { VfdWebhookDlqTab } from "@/components/admin/VfdWebhookDlqTab";
 import { VfdAuditTab } from "@/components/admin/VfdAuditTab";
-import { Percent, PiggyBank, FileSpreadsheet, AlertTriangle, ScanLine } from "lucide-react";
+import { RolesPermissionsTab } from "@/components/admin/RolesPermissionsTab";
+import { Percent, PiggyBank, FileSpreadsheet, AlertTriangle, ScanLine, UserCog } from "lucide-react";
 
 export default function Admin() {
   const navigate = useNavigate();
@@ -38,7 +39,7 @@ export default function Admin() {
 
   useEffect(() => {
     if (!authLoading && !user) {
-      navigate("/auth");
+      navigate("/admin/login");
     }
   }, [user, authLoading, navigate]);
 
@@ -49,7 +50,7 @@ export default function Admin() {
         description: "You don't have permission to access this page.",
         variant: "destructive",
       });
-      navigate("/dashboard");
+      navigate("/admin/login");
     }
   }, [isAdmin, adminLoading, permLoading, user, navigate, toast]);
 
@@ -186,6 +187,12 @@ export default function Admin() {
                 VFD Audit
               </TabsTrigger>
             )}
+            {hasPermission("roles.manage") && (
+              <TabsTrigger value="roles" className="flex items-center gap-1">
+                <UserCog className="h-4 w-4" />
+                Roles & Access
+              </TabsTrigger>
+            )}
           </TabsList>
 
 
@@ -251,6 +258,10 @@ export default function Admin() {
 
           <TabsContent value="vfd-audit">
             <VfdAuditTab />
+          </TabsContent>
+
+          <TabsContent value="roles">
+            <RolesPermissionsTab />
           </TabsContent>
         </Tabs>
       </div>
