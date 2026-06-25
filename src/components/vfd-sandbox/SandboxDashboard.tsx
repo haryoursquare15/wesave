@@ -467,22 +467,34 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
       >
         <h3 className="text-sm font-bold text-foreground mb-3">Services</h3>
         <div className="grid grid-cols-3 gap-2.5">
-          {productGrid.map((product) => (
-            <motion.button
-              key={product.key}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => onNavigate(product.key)}
-              className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border border-border/60 hover:border-primary/30 hover:shadow-sm transition-all"
-            >
-              <div className={`w-11 h-11 rounded-xl ${product.color} flex items-center justify-center`}>
-                <product.icon className="h-5 w-5" />
-              </div>
-              <div className="text-center">
-                <p className="text-xs font-semibold text-foreground leading-tight">{product.label}</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">{product.desc}</p>
-              </div>
-            </motion.button>
-          ))}
+          {productGrid.map((product) => {
+            const disabled = !!(product as { comingSoon?: boolean }).comingSoon;
+            return (
+              <motion.button
+                key={product.key}
+                whileTap={disabled ? undefined : { scale: 0.95 }}
+                onClick={() => { if (!disabled) onNavigate(product.key); }}
+                disabled={disabled}
+                aria-disabled={disabled}
+                className={`relative flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border border-border/60 transition-all ${
+                  disabled ? "opacity-60 cursor-not-allowed" : "hover:border-primary/30 hover:shadow-sm"
+                }`}
+              >
+                {disabled && (
+                  <span className="absolute top-1 right-1 text-[8px] font-semibold uppercase tracking-wide bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">
+                    Soon
+                  </span>
+                )}
+                <div className={`w-11 h-11 rounded-xl ${product.color} flex items-center justify-center`}>
+                  <product.icon className="h-5 w-5" />
+                </div>
+                <div className="text-center">
+                  <p className="text-xs font-semibold text-foreground leading-tight">{product.label}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">{product.desc}</p>
+                </div>
+              </motion.button>
+            );
+          })}
         </div>
       </motion.div>
 
