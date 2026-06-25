@@ -50,7 +50,7 @@ export default function Admin() {
         description: "You don't have permission to access this page.",
         variant: "destructive",
       });
-      navigate("/dashboard");
+      navigate("/admin/login");
     }
   }, [isAdmin, adminLoading, permLoading, user, navigate, toast]);
 
