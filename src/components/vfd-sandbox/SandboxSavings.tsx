@@ -26,6 +26,7 @@ interface Props {
   userBalance: UserBalance | null;
   onRefresh: () => void;
   onBack: () => void;
+  initialProductCode?: string | null;
 }
 
 type FlowStep = "product" | "amount" | "tenor" | "confirm";
@@ -44,7 +45,7 @@ const PRODUCT_GRADIENTS: Record<VestaraProductCode, string> = {
   upfront_yield: "from-amber-500/10 to-orange-500/5 border-amber-500/20",
 };
 
-export function SandboxSavings({ userBalance, onRefresh, onBack }: Props) {
+export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductCode }: Props) {
   const { toast } = useToast();
   const vestara = useVestaraLedger();
 
@@ -78,6 +79,25 @@ export function SandboxSavings({ userBalance, onRefresh, onBack }: Props) {
     onRefresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Auto-jump straight into the chosen product's form when arriving from a
+  // product banner (e.g. "GoalSave", "Vault", "LockMax", "Upfront Yield").
+  const autoOpenedRef = useState<{ done: boolean }>({ done: false })[0];
+  useEffect(() => {
+    if (!initialProductCode || loadingData || autoOpenedRef.done) return;
+    if (initialProductCode === "goalsave") {
+      autoOpenedRef.done = true;
+      setShowGoalV2(true);
+      return;
+    }
+    const p = products.find((x) => x.code === initialProductCode);
+    if (p) {
+      autoOpenedRef.done = true;
+      setSelectedProduct(p);
+      setShowCreate(true);
+      setStep("amount");
+    }
+  }, [initialProductCode, loadingData, products, autoOpenedRef]);
 
   /* ─── Tenor presets per product ─── */
   const tenorPresets = useMemo(() => {
@@ -267,8 +287,8 @@ export function SandboxSavings({ userBalance, onRefresh, onBack }: Props) {
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div className="flex-1">
-          <h2 className="text-base font-semibold">Vestara Savings</h2>
-          <p className="text-xs text-muted-foreground">Lock funds, earn interest</p>
+          <h2 className="text-base font-semibold">All Active Savings</h2>
+          <p className="text-xs text-muted-foreground">Every investment, in one place</p>
         </div>
         <Button variant="ghost" size="icon" onClick={() => { loadAll(); onRefresh(); }} disabled={loadingData || vestara.loading}>
           <RefreshCw className={`h-4 w-4 ${(loadingData || vestara.loading) ? "animate-spin" : ""}`} />
@@ -291,6 +311,50 @@ export function SandboxSavings({ userBalance, onRefresh, onBack }: Props) {
       ) : (
         <Skeleton className="h-24 rounded-2xl" />
       )}
+
+      {/* Active Investments Summary */}
+      {!loadingData && savings.filter(s => s.status === "active").length > 0 && (() => {
+        const active = savings.filter(s => s.status === "active");
+        const totalPrincipal = active.reduce((sum, s) => sum + Number(s.principal || 0), 0);
+        const totalInterest = active.reduce((sum, s) => sum + Number(s.accrued_interest || 0) + Number(s.discounted_interest_paid || 0), 0);
+        const totalPortfolio = totalPrincipal + totalInterest;
+        const byProduct = active.reduce<Record<string, number>>((acc, s) => {
+          const key = s.vestara_products?.name || s.product_code;
+          acc[key] = (acc[key] || 0) + 1;
+          return acc;
+        }, {});
+        return (
+          <div className="rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-success/5 border border-primary/20 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Portfolio Summary</span>
+              <Badge variant="outline" className="text-[10px] border-primary/30 text-primary">
+                {active.length} active
+              </Badge>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <p className="text-[10px] text-muted-foreground">Principal</p>
+                <p className="text-sm font-bold">₦{totalPrincipal.toLocaleString()}</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground">Interest</p>
+                <p className="text-sm font-bold text-success">+₦{totalInterest.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground">Total Value</p>
+                <p className="text-sm font-bold">₦{totalPortfolio.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-1.5 pt-1 border-t border-primary/10">
+              {Object.entries(byProduct).map(([name, count]) => (
+                <Badge key={name} variant="outline" className="text-[10px] bg-background/60">
+                  {name} · {count}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Create flow */}
       {/* Goal Savings 2.0 wizard takes over the whole create area */}

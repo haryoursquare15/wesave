@@ -74,7 +74,7 @@ function AnimatedNumber({ value, prefix = "₦" }: { value: number; prefix?: str
 const productBanners = [
   {
     key: "goalsave",
-    routeKey: "lock",
+    routeKey: "lock:goalsave",
     title: "GoalSave",
     subtitle: "Flexible savings • Earn 10–16% p.a. • 90–365 days",
     cta: "Start GoalSave",
@@ -84,7 +84,7 @@ const productBanners = [
   },
   {
     key: "vault",
-    routeKey: "lock",
+    routeKey: "lock:vault",
     title: "Vault",
     subtitle: "Higher yield safe • Earn 14–20.5% p.a. • 30–365 days",
     cta: "Open a Vault",
@@ -94,7 +94,7 @@ const productBanners = [
   },
   {
     key: "lockmax",
-    routeKey: "lock",
+    routeKey: "lock:lockmax",
     title: "LockMax",
     subtitle: "Maximum returns • Earn 18–21% p.a. • 90–365 days",
     cta: "Lock for Max",
@@ -104,7 +104,7 @@ const productBanners = [
   },
   {
     key: "upfront_yield",
-    routeKey: "lock",
+    routeKey: "lock:upfront_yield",
     title: "Upfront Yield",
     subtitle: "Get your interest paid up front • 12–18% p.a.",
     cta: "Earn Upfront",
@@ -116,10 +116,10 @@ const productBanners = [
 
 /* ─── Product Grid Items ─── */
 const productGrid = [
-  { key: "lock", label: "Lock Funds", icon: Lock, color: "bg-emerald-500/10 text-emerald-600", desc: "Earn interest" },
+  { key: "lock", label: "Active Savings", icon: Lock, color: "bg-emerald-500/10 text-emerald-600", desc: "All investments" },
   { key: "target", label: "Target Save", icon: Target, color: "bg-blue-500/10 text-blue-600", desc: "Goal savings" },
   { key: "ajo", label: "Ajo Groups", icon: Users, color: "bg-orange-500/10 text-orange-600", desc: "Group savings" },
-  { key: "association", label: "Associations", icon: Building2, color: "bg-indigo-500/10 text-indigo-600", desc: "Pool funds" },
+  { key: "association", label: "Associations", icon: Building2, color: "bg-indigo-500/10 text-indigo-600", desc: "Coming soon", comingSoon: true },
   { key: "goal", label: "Goal Fund", icon: Heart, color: "bg-rose-500/10 text-rose-600", desc: "Crowdfund" },
   { key: "split", label: "Split Bills", icon: Receipt, color: "bg-violet-500/10 text-violet-600", desc: "Share costs" },
   { key: "bills", label: "Pay Bills", icon: CreditCard, color: "bg-cyan-500/10 text-cyan-600", desc: "Airtime & more" },
@@ -467,22 +467,34 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
       >
         <h3 className="text-sm font-bold text-foreground mb-3">Services</h3>
         <div className="grid grid-cols-3 gap-2.5">
-          {productGrid.map((product) => (
-            <motion.button
-              key={product.key}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => onNavigate(product.key)}
-              className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border border-border/60 hover:border-primary/30 hover:shadow-sm transition-all"
-            >
-              <div className={`w-11 h-11 rounded-xl ${product.color} flex items-center justify-center`}>
-                <product.icon className="h-5 w-5" />
-              </div>
-              <div className="text-center">
-                <p className="text-xs font-semibold text-foreground leading-tight">{product.label}</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">{product.desc}</p>
-              </div>
-            </motion.button>
-          ))}
+          {productGrid.map((product) => {
+            const disabled = !!(product as { comingSoon?: boolean }).comingSoon;
+            return (
+              <motion.button
+                key={product.key}
+                whileTap={disabled ? undefined : { scale: 0.95 }}
+                onClick={() => { if (!disabled) onNavigate(product.key); }}
+                disabled={disabled}
+                aria-disabled={disabled}
+                className={`relative flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border border-border/60 transition-all ${
+                  disabled ? "opacity-60 cursor-not-allowed" : "hover:border-primary/30 hover:shadow-sm"
+                }`}
+              >
+                {disabled && (
+                  <span className="absolute top-1 right-1 text-[8px] font-semibold uppercase tracking-wide bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">
+                    Soon
+                  </span>
+                )}
+                <div className={`w-11 h-11 rounded-xl ${product.color} flex items-center justify-center`}>
+                  <product.icon className="h-5 w-5" />
+                </div>
+                <div className="text-center">
+                  <p className="text-xs font-semibold text-foreground leading-tight">{product.label}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">{product.desc}</p>
+                </div>
+              </motion.button>
+            );
+          })}
         </div>
       </motion.div>
 

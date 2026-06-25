@@ -65,6 +65,7 @@ function VfdSandboxInner() {
   const [kycDone, setKycDone] = useState(false);
   const [clientChecked, setClientChecked] = useState(false);
   const [currentView, setCurrentView] = useState<View>("dashboard");
+  const [initialSavingsProduct, setInitialSavingsProduct] = useState<string | null>(null);
   const [banks, setBanks] = useState<Array<{ code: string; name: string }>>([]);
 
   // Inactivity sign-out (2m foreground / 5m background) → /vfd-sandbox/auth
@@ -508,7 +509,11 @@ function VfdSandboxInner() {
             {currentView === "dashboard" && (
               <SandboxDashboard
                 balance={balanceData}
-                onNavigate={(v) => setCurrentView(v as View)}
+                onNavigate={(v) => {
+                  const [view, productCode] = String(v).split(":");
+                  setInitialSavingsProduct(productCode || null);
+                  setCurrentView(view as View);
+                }}
                 recentTransactions={mappedTransactions}
                 tier={vfd.client?.tier}
               />
@@ -548,7 +553,8 @@ function VfdSandboxInner() {
               <SandboxSavings
                 userBalance={vestaraBalance}
                 onRefresh={() => { refreshVestaraBalance(); refreshVestaraTransactions(); }}
-                onBack={goBack}
+                onBack={() => { setInitialSavingsProduct(null); goBack(); }}
+                initialProductCode={initialSavingsProduct}
               />
             )}
             {currentView === "history" && (
