@@ -4445,7 +4445,7 @@ async function handleCheckGroupMandateStatus(userId: string, body: Record<string
     .select("id, mandate_status, mandate_reference, mandate_code, mandate_payload")
     .eq("group_id", groupId).eq("user_id", userId).maybeSingle();
   if (!member) return jsonResponse({ error: "You are not a member of this group" }, 403);
-  if (!member.mandate_reference) return jsonResponse({ error: "No mandate to check. Please authorize a mandate first." }, 400);
+  if (!member.mandate_reference) return jsonResponse({ data: { success: true, mandate_status: "not_authorized", bank_approved: false, pending_authorization: true } });
   if (member.mandate_status === "authorized") {
     return jsonResponse({ data: { success: true, mandate_status: "authorized", bank_approved: true } });
   }
