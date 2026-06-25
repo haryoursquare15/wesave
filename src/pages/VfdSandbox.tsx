@@ -553,7 +553,8 @@ function VfdSandboxInner() {
               <SandboxSavings
                 userBalance={vestaraBalance}
                 onRefresh={() => { refreshVestaraBalance(); refreshVestaraTransactions(); }}
-                onBack={goBack}
+                onBack={() => { setInitialSavingsProduct(null); goBack(); }}
+                initialProductCode={initialSavingsProduct}
               />
             )}
             {currentView === "history" && (
