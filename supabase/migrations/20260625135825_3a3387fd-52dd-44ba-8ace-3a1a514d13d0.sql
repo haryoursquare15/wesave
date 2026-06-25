@@ -1,0 +1,2 @@
+ALTER TABLE public.vfd_sandbox_targets DROP CONSTRAINT IF EXISTS vfd_sandbox_targets_mandate_status_chk;
+ALTER TABLE public.vfd_sandbox_targets ADD CONSTRAINT vfd_sandbox_targets_mandate_status_chk CHECK (mandate_status = ANY (ARRAY['not_required'::text, 'pending'::text, 'pending_authorization'::text, 'authorized'::text, 'revoked'::text, 'failed'::text]));
