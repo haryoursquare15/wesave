@@ -39,7 +39,7 @@ export default function Admin() {
 
   useEffect(() => {
     if (!authLoading && !user) {
-      navigate("/auth");
+      navigate("/admin/login");
     }
   }, [user, authLoading, navigate]);
 
