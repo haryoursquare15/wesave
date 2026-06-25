@@ -18,6 +18,8 @@ import {
 import { addDays, addWeeks, addMonths, format } from "date-fns";
 import { SandboxTargetInviteDialog } from "./SandboxTargetInviteDialog";
 import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
+import { MandateAuthorizationDialog, type MandateSubject } from "./MandateAuthorizationDialog";
+import { ShieldCheck } from "lucide-react";
 
 interface TargetGroup {
   id: string; name: string; goal_amount: number; contribution_amount: number;
@@ -44,6 +46,7 @@ export function SandboxTargetTab() {
   const [showInviteDialog, setShowInviteDialog] = useState(false);
   const [pendingInvites, setPendingInvites] = useState<any[]>([]);
   const [respondingId, setRespondingId] = useState<string | null>(null);
+  const [mandateSubject, setMandateSubject] = useState<MandateSubject | null>(null);
 
   const [form, setForm] = useState({
     name: "", description: "", reason: "", goal_amount: "",
