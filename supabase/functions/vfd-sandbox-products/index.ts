@@ -4585,29 +4585,24 @@ async function handleCheckCommencementReadiness(userId: string, body: Record<str
   return jsonResponse({ data: result });
 }
 
-// Cycle-time mandate debit. Called by the scheduler when a DDM member's
-// contribution is due. Inserts a pending ledger entry, calls VFD, then
-// confirms or fails the entry and updates the pool ledger balance.
-async function handleTriggerMandateDebit(_userId: string, body: Record<string, unknown>) {
+// Cycle-time mandate debit. Inserts a pending ledger entry, calls VFD,
+// then confirms or fails the entry and updates the pool ledger balance.
+// Returns a normalized result so it can be invoked both as an action and
+// from the auto-contribution sweep.
+async function performMandateDebitForMember(
+  group: Record<string, unknown>,
+  member: Record<string, unknown>,
+  cycleIndex: number,
+): Promise<{ success: boolean; reference?: string; amount_kobo?: number; error?: string; details?: unknown }> {
   const db = getSupabaseAdmin();
-  const groupId = body.group_id as string;
-  const targetUserId = body.user_id as string;
-  const cycleIndex = Number(body.cycle_index ?? 0);
-  if (!groupId || !targetUserId) return jsonResponse({ error: "group_id and user_id required" }, 400);
+  const groupId = group.id as string;
+  const targetUserId = member.user_id as string;
 
-  const { data: member } = await db.from("vfd_sandbox_group_members")
-    .select("id, mandate_status, mandate_code, mandate_reference, mandate_payer_account_number, mandate_payer_bank_code")
-    .eq("group_id", groupId).eq("user_id", targetUserId).maybeSingle();
-  if (!member) return jsonResponse({ error: "Member not found" }, 404);
   if (member.mandate_status !== "authorized") {
-    await recordMandateEvent(groupId, targetUserId, member.mandate_reference, member.mandate_code, "debit_failed",
+    await recordMandateEvent(groupId, targetUserId, member.mandate_reference as string, member.mandate_code as string, "debit_failed",
       { reason: "Mandate not authorized", mandate_status: member.mandate_status });
-    return jsonResponse({ error: "Mandate not authorized — flagged for admin review", code: "MANDATE_NOT_ACTIVE" }, 400);
+    return { success: false, error: "Mandate not authorized", details: { code: "MANDATE_NOT_ACTIVE" } };
   }
-
-  const { data: group } = await db.from("vfd_sandbox_groups")
-    .select("id, contribution_amount, name").eq("id", groupId).maybeSingle();
-  if (!group) return jsonResponse({ error: "Group not found" }, 404);
 
   const amountNaira = Number(group.contribution_amount) || 0;
   const amountKobo = Math.round(amountNaira * 100);
@@ -4626,11 +4621,11 @@ async function handleTriggerMandateDebit(_userId: string, body: Record<string, u
     metadata: { mandate_reference: member.mandate_reference },
   }).select("id").single();
 
-  await recordMandateEvent(groupId, targetUserId, member.mandate_reference, member.mandate_code, "debit_triggered",
+  await recordMandateEvent(groupId, targetUserId, member.mandate_reference as string, member.mandate_code as string, "debit_triggered",
     { cycle_index: cycleIndex, amount_naira: amountNaira, reference: cycleRef });
 
   const result = await vfdDebitMandate({
-    mandateReference: member.mandate_reference || "",
+    mandateReference: (member.mandate_reference as string) || "",
     amount: amountNaira,
     narration: `Vestara thrift cycle ${cycleIndex} - ${group.name}`,
     transactionReference: cycleRef,
@@ -4646,7 +4641,6 @@ async function handleTriggerMandateDebit(_userId: string, body: Record<string, u
         metadata: { mandate_reference: member.mandate_reference, vfd: result.raw },
       }).eq("id", ledgerEntry.id);
     }
-    // Bump pool ledger balance on the group row (kobo).
     const { data: g } = await db.from("vfd_sandbox_groups")
       .select("pool_ledger_balance, total_contributed_kobo").eq("id", groupId).maybeSingle();
     await db.from("vfd_sandbox_groups").update({
@@ -4654,9 +4648,9 @@ async function handleTriggerMandateDebit(_userId: string, body: Record<string, u
       total_contributed_kobo: Number(g?.total_contributed_kobo || 0) + amountKobo,
       updated_at: nowIso,
     }).eq("id", groupId);
-    await recordMandateEvent(groupId, targetUserId, member.mandate_reference, member.mandate_code, "debit_success",
+    await recordMandateEvent(groupId, targetUserId, member.mandate_reference as string, member.mandate_code as string, "debit_success",
       { cycle_index: cycleIndex, amount_naira: amountNaira, vfd: result.raw });
-    return jsonResponse({ data: { success: true, reference: cycleRef, amount_kobo: amountKobo } });
+    return { success: true, reference: cycleRef, amount_kobo: amountKobo };
   }
 
   if (ledgerEntry?.id) {
@@ -4664,13 +4658,40 @@ async function handleTriggerMandateDebit(_userId: string, body: Record<string, u
       status: "failed", metadata: { mandate_reference: member.mandate_reference, vfd: result.raw },
     }).eq("id", ledgerEntry.id);
   }
-  await recordMandateEvent(groupId, targetUserId, member.mandate_reference, member.mandate_code, "debit_failed",
+  await recordMandateEvent(groupId, targetUserId, member.mandate_reference as string, member.mandate_code as string, "debit_failed",
     { cycle_index: cycleIndex, vfd: result.raw });
-  await sendNotification(targetUserId, "Direct Debit Failed",
-    `Your contribution for ${group.name} (cycle ${cycleIndex}) could not be debited. Please contact support.`,
-    "ddm_debit_failed", groupId);
-  return jsonResponse({ error: "VFD debit failed", code: "MANDATE_DEBIT_FAILED", details: result.raw }, 502);
+  return { success: false, error: "VFD mandate debit failed", details: result.raw };
 }
+
+async function handleTriggerMandateDebit(_userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const groupId = body.group_id as string;
+  const targetUserId = body.user_id as string;
+  const cycleIndex = Number(body.cycle_index ?? 0);
+  if (!groupId || !targetUserId) return jsonResponse({ error: "group_id and user_id required" }, 400);
+
+  const { data: member } = await db.from("vfd_sandbox_group_members")
+    .select("id, user_id, mandate_status, mandate_code, mandate_reference, mandate_payer_account_number, mandate_payer_bank_code")
+    .eq("group_id", groupId).eq("user_id", targetUserId).maybeSingle();
+  if (!member) return jsonResponse({ error: "Member not found" }, 404);
+
+  const { data: group } = await db.from("vfd_sandbox_groups")
+    .select("id, contribution_amount, name").eq("id", groupId).maybeSingle();
+  if (!group) return jsonResponse({ error: "Group not found" }, 404);
+
+  const result = await performMandateDebitForMember(group, member, cycleIndex);
+  if (!result.success) {
+    if ((result.details as any)?.code === "MANDATE_NOT_ACTIVE") {
+      return jsonResponse({ error: "Mandate not authorized — flagged for admin review", code: "MANDATE_NOT_ACTIVE" }, 400);
+    }
+    await sendNotification(targetUserId, "Direct Debit Failed",
+      `Your contribution for ${group.name} (cycle ${cycleIndex}) could not be debited. Please contact support.`,
+      "ddm_debit_failed", groupId);
+    return jsonResponse({ error: result.error || "VFD debit failed", code: "MANDATE_DEBIT_FAILED", details: result.details }, 502);
+  }
+  return jsonResponse({ data: { success: true, reference: result.reference, amount_kobo: result.amount_kobo } });
+}
+
 
 // Scheduler-callable safety net for missed mandate webhooks. Polls every
 // pending mandate, activates approved ones, and expires those past their
