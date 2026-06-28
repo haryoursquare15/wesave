@@ -657,21 +657,33 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
   if (existingContrib) return jsonResponse({ error: "Already contributed this cycle" }, 400);
 
   const amount = Number(group.contribution_amount);
-  const fundingMode = (group.funding_mode as string) || "wallet";
-  const isDdm = fundingMode === "ddm";
+
+  // Per-member contribution method (admin-assigned). Falls back to the
+  // group-level funding_mode for legacy members with no explicit method.
+  const { data: myMember } = await db.from("vfd_sandbox_group_members")
+    .select("id, user_id, contribution_method, mandate_status, mandate_code, mandate_reference")
+    .eq("group_id", groupId).eq("user_id", userId).maybeSingle();
+  const groupFundingMode = (group.funding_mode as string) || "wallet";
+  const memberMethod = (myMember?.contribution_method as string) || (groupFundingMode === "ddm" ? "direct_debit" : "wallet");
+  const isDdm = memberMethod === "direct_debit";
 
   if (isDdm) {
-    // Each member has their own mandate. Check this user's.
-    const { data: myMember } = await db.from("vfd_sandbox_group_members")
-      .select("mandate_status").eq("group_id", groupId).eq("user_id", userId).maybeSingle();
     if (!myMember || myMember.mandate_status !== "authorized") {
       return jsonResponse({
         error: "Your Direct Debit Mandate is not authorized yet. Please accept the mandate (₦100 setup fee) to enable automatic bank debits.",
         code: "MANDATE_NOT_AUTHORIZED",
       }, 400);
     }
-    // DDM-funded: funds flow VFD bank → settlement pool → group pool. Skip wallet debit.
-    // Sandbox simulates a successful DDM collection here.
+    // Trigger the actual VFD mandate debit — funds pull from member's bank
+    // via NIBSS into the Vestara corporate pool.
+    const ddm = await performMandateDebitForMember(group, myMember, Number(group.current_cycle));
+    if (!ddm.success) {
+      return jsonResponse({
+        error: ddm.error || "Direct debit could not be collected. Please try again or contact support.",
+        code: (ddm.details as any)?.code === "MANDATE_NOT_ACTIVE" ? "MANDATE_NOT_AUTHORIZED" : "MANDATE_DEBIT_FAILED",
+        details: ddm.details,
+      }, 502);
+    }
   } else {
     const reference = `ajo-manual-${groupId}-${activeCycle.id}-${userId}`;
     const debit = await debitVestaraForThrift(userId, groupId, amount, reference, {
@@ -702,6 +714,7 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
       }, 400);
     }
   }
+
 
   await db.from("vfd_sandbox_group_contributions").insert({
     group_id: groupId, user_id: userId, cycle_number: group.current_cycle, amount,
