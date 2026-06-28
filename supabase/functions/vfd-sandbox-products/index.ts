@@ -3907,7 +3907,8 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
     if (!activeCycle) continue;
 
     const { data: pending } = await db.from("vfd_sandbox_group_members")
-      .select("user_id").eq("group_id", group.id).eq("status", "active")
+      .select("id, user_id, contribution_method, mandate_status, mandate_code, mandate_reference")
+      .eq("group_id", group.id).eq("status", "active")
       .eq("has_contributed_current", false);
 
     const MAX_RETRIES = 3;
@@ -3932,11 +3933,18 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
       }
 
       const amount = Number(group.contribution_amount);
-      const debit = await debitVestaraForThrift(m.user_id, group.id, amount, `ajo-auto-${group.id}-${activeCycle.id}-${m.user_id}`, {
-        cycle_id: activeCycle.id,
-        cycle_number: group.current_cycle,
-        source: "vfd_sandbox_auto_sweep",
-      });
+      const isDdmMember = m.contribution_method === "direct_debit";
+      const debit = isDdmMember
+        ? await (async () => {
+            const r = await performMandateDebitForMember(group, m, Number(group.current_cycle));
+            return { success: r.success, error: r.error };
+          })()
+        : await debitVestaraForThrift(m.user_id, group.id, amount, `ajo-auto-${group.id}-${activeCycle.id}-${m.user_id}`, {
+            cycle_id: activeCycle.id,
+            cycle_number: group.current_cycle,
+            source: "vfd_sandbox_auto_sweep",
+          });
+
 
       if (debit.success) {
         await db.from("vfd_sandbox_group_contributions").insert({
