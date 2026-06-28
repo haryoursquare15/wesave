@@ -3957,14 +3957,18 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
         }
         await db.from("vfd_sandbox_contribution_audit").insert({
           user_id: m.user_id, group_id: group.id, cycle_id: activeCycle.id,
-          amount, contribution_type: "auto", status: "success",
+          amount, contribution_type: isDdmMember ? "ddm_auto" : "auto", status: "success",
         });
         await db.from("vfd_sandbox_group_members").update({ has_contributed_current: true })
           .eq("group_id", group.id).eq("user_id", m.user_id);
-        await postChatMessage(group.id, m.user_id,
-          `Auto-contribution of ₦${amount.toLocaleString()} processed`, "auto_contribution");
-        await sendNotification(m.user_id, "Auto-contribution Successful",
-          `Your auto-contribution of ₦${amount.toLocaleString()} for ${group.name} was processed.`,
+        const successMsg = isDdmMember
+          ? `Direct debit of ₦${amount.toLocaleString()} collected (DDM) for cycle ${group.current_cycle}`
+          : `Auto-contribution of ₦${amount.toLocaleString()} processed`;
+        await postChatMessage(group.id, m.user_id, successMsg, isDdmMember ? "contribution_status" : "auto_contribution");
+        await sendNotification(m.user_id, "Contribution Successful",
+          isDdmMember
+            ? `Your bank was debited ₦${amount.toLocaleString()} via DDM for ${group.name}.`
+            : `Your auto-contribution of ₦${amount.toLocaleString()} for ${group.name} was processed.`,
           "contribution_success", group.id);
         succeeded++;
       } else {
@@ -3973,9 +3977,14 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
         const reachedLimit = newCount >= MAX_RETRIES;
         const nextRetry = reachedLimit ? null : new Date(Date.now() + RETRY_INTERVAL_MS).toISOString();
         const rawErr = (debit.error || "").toString();
-        const walletBal = await getVestaraWalletBalance(m.user_id);
-        const truelyInsufficient = walletBal < amount || /insufficient/i.test(rawErr);
-        const errMsg = truelyInsufficient ? "Insufficient wallet balance" : (rawErr || "Auto-contribution failed");
+        let errMsg: string;
+        if (isDdmMember) {
+          errMsg = rawErr || "Direct debit mandate debit failed";
+        } else {
+          const walletBal = await getVestaraWalletBalance(m.user_id);
+          const truelyInsufficient = walletBal < amount || /insufficient/i.test(rawErr);
+          errMsg = truelyInsufficient ? "Insufficient wallet balance" : (rawErr || "Auto-contribution failed");
+        }
 
         if (existingFailed) {
           await db.from("vfd_sandbox_contribution_audit").update({
@@ -3985,7 +3994,7 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
         } else {
           await db.from("vfd_sandbox_contribution_audit").insert({
             user_id: m.user_id, group_id: group.id, cycle_id: activeCycle.id,
-            amount, contribution_type: "auto", status: "failed",
+            amount, contribution_type: isDdmMember ? "ddm_auto" : "auto", status: "failed",
             retry_count: newCount, next_retry_at: nextRetry,
             error_message: errMsg, penalty_served: reachedLimit,
           });
@@ -3994,23 +4003,27 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
         if (reachedLimit) {
           await db.from("vfd_sandbox_penalties").insert({
             user_id: m.user_id, group_id: group.id, cycle_id: activeCycle.id,
-            amount, reason: `Failed ${MAX_RETRIES} auto-debit attempts (insufficient wallet)`,
+            amount, reason: `Failed ${MAX_RETRIES} ${isDdmMember ? "direct-debit" : "auto-debit"} attempts (${errMsg})`,
           });
           await postChatMessage(group.id, m.user_id,
-            `🚫 Auto-contribution failed after ${MAX_RETRIES} attempts — penalty served.`, "contribution_failed");
+            `🚫 ${isDdmMember ? "Direct debit" : "Auto-contribution"} failed after ${MAX_RETRIES} attempts — penalty served.`, "contribution_failed");
           await sendNotification(m.user_id, "Penalty Served",
-            `Your auto-contribution for ${group.name} failed after ${MAX_RETRIES} attempts. A penalty has been recorded.`,
+            `Your ${isDdmMember ? "direct debit" : "auto-contribution"} for ${group.name} failed after ${MAX_RETRIES} attempts (${errMsg}). A penalty has been recorded.`,
             "contribution_failed", group.id);
           penalized++;
         } else {
           await postChatMessage(group.id, m.user_id,
-            `⚠️ Auto-contribution failed (attempt ${newCount}/${MAX_RETRIES}) — retrying in 30 minutes.`, "contribution_failed");
-          await sendNotification(m.user_id, "Auto-contribution Failed — Retrying",
-            `Attempt ${newCount} of ${MAX_RETRIES} failed (insufficient wallet). We'll retry in 30 minutes — please fund your wallet.`,
+            `⚠️ ${isDdmMember ? "Direct debit" : "Auto-contribution"} failed (attempt ${newCount}/${MAX_RETRIES}) — retrying in 30 minutes.`, "contribution_failed");
+          await sendNotification(m.user_id,
+            `${isDdmMember ? "Direct Debit" : "Auto-contribution"} Failed — Retrying`,
+            isDdmMember
+              ? `Attempt ${newCount} of ${MAX_RETRIES} failed (${errMsg}). We'll retry in 30 minutes.`
+              : `Attempt ${newCount} of ${MAX_RETRIES} failed (insufficient wallet). We'll retry in 30 minutes — please fund your wallet.`,
             "contribution_failed", group.id);
           failed++;
         }
       }
+
     }
 
     // After sweep, see if cycle should auto-payout
