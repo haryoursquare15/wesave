@@ -267,7 +267,7 @@ export default function Onboarding() {
           id_document_url: formData.idDocumentUrl || null,
           utility_bill_url: formData.utilityBillUrl || null,
           onboarding_completed: true,
-        })
+        } as never)
         .eq("id", user.id);
 
       if (updateError) throw updateError;
