@@ -3725,6 +3725,11 @@ export type Database = {
         Row: {
           accrued_interest: number
           activation_status: string | null
+          approval_decision_at: string | null
+          approval_decision_by: string | null
+          approval_notes: string | null
+          approval_status: string
+          approval_submitted_at: string | null
           commitment_amount: number | null
           commitment_frequency: string | null
           created_at: string
@@ -3756,6 +3761,7 @@ export type Database = {
           next_debit_at: string | null
           original_principal: number
           penalty_amount: number
+          pending_account_id: string | null
           principal: number
           product_code: Database["public"]["Enums"]["vestara_product_code"]
           product_id: string
@@ -3772,6 +3778,11 @@ export type Database = {
         Insert: {
           accrued_interest?: number
           activation_status?: string | null
+          approval_decision_at?: string | null
+          approval_decision_by?: string | null
+          approval_notes?: string | null
+          approval_status?: string
+          approval_submitted_at?: string | null
           commitment_amount?: number | null
           commitment_frequency?: string | null
           created_at?: string
@@ -3803,6 +3814,7 @@ export type Database = {
           next_debit_at?: string | null
           original_principal: number
           penalty_amount?: number
+          pending_account_id?: string | null
           principal: number
           product_code: Database["public"]["Enums"]["vestara_product_code"]
           product_id: string
@@ -3819,6 +3831,11 @@ export type Database = {
         Update: {
           accrued_interest?: number
           activation_status?: string | null
+          approval_decision_at?: string | null
+          approval_decision_by?: string | null
+          approval_notes?: string | null
+          approval_status?: string
+          approval_submitted_at?: string | null
           commitment_amount?: number | null
           commitment_frequency?: string | null
           created_at?: string
@@ -3850,6 +3867,7 @@ export type Database = {
           next_debit_at?: string | null
           original_principal?: number
           penalty_amount?: number
+          pending_account_id?: string | null
           principal?: number
           product_code?: Database["public"]["Enums"]["vestara_product_code"]
           product_id?: string
@@ -3881,6 +3899,27 @@ export type Database = {
           {
             foreignKeyName: "vestara_savings_lock_account_id_fkey"
             columns: ["lock_account_id"]
+            isOneToOne: false
+            referencedRelation: "vestara_derived_balances"
+            referencedColumns: ["account_id"]
+          },
+          {
+            foreignKeyName: "vestara_savings_pending_account_id_fkey"
+            columns: ["pending_account_id"]
+            isOneToOne: false
+            referencedRelation: "vestara_account_drift"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vestara_savings_pending_account_id_fkey"
+            columns: ["pending_account_id"]
+            isOneToOne: false
+            referencedRelation: "vestara_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vestara_savings_pending_account_id_fkey"
+            columns: ["pending_account_id"]
             isOneToOne: false
             referencedRelation: "vestara_derived_balances"
             referencedColumns: ["account_id"]
@@ -7704,8 +7743,22 @@ export type Database = {
         }
         Returns: Json
       }
+      vestara_approve_savings: {
+        Args: { _admin_id: string; _notes?: string; _savings_id: string }
+        Returns: Json
+      }
       vestara_auto_mature_due: { Args: never; Returns: Json }
       vestara_create_savings: {
+        Args: {
+          _principal: number
+          _product_code: Database["public"]["Enums"]["vestara_product_code"]
+          _reference?: string
+          _tenor_days: number
+          _user_id: string
+        }
+        Returns: Json
+      }
+      vestara_create_savings_pending: {
         Args: {
           _principal: number
           _product_code: Database["public"]["Enums"]["vestara_product_code"]
@@ -7789,6 +7842,10 @@ export type Database = {
           _reference: string
           _type: Database["public"]["Enums"]["vestara_tx_type"]
         }
+        Returns: Json
+      }
+      vestara_reject_savings: {
+        Args: { _admin_id: string; _notes?: string; _savings_id: string }
         Returns: Json
       }
       vestara_resolve_rate: {
