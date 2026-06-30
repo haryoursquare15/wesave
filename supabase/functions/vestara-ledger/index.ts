@@ -792,7 +792,9 @@ serve(async (req) => {
           return err("product_code, principal, and tenor_days are required");
         }
         const ref = reference || `sav-${crypto.randomUUID().slice(0, 8)}`;
-        const { data, error: e } = await supabase.rpc("vestara_create_savings", {
+        // All savings now go through admin approval — funds are held in a
+        // pending_savings ledger account until an admin approves or rejects.
+        const { data, error: e } = await supabase.rpc("vestara_create_savings_pending", {
           _user_id: userId,
           _product_code: product_code,
           _principal: principal,
@@ -800,6 +802,74 @@ serve(async (req) => {
           _reference: ref,
         });
         if (e) return err(e.message);
+        await supabase.from("user_notifications").insert({
+          user_id: userId,
+          type: "savings_pending_approval",
+          title: "Investment submitted for review",
+          message: `Your ${product_code} investment of ₦${Number(principal).toLocaleString()} is awaiting admin approval. Funds are safely on hold.`,
+          metadata: { savings_id: (data as { savings_id?: string })?.savings_id, product_code },
+        }).then(() => {}, () => {});
+        result = data;
+        break;
+      }
+
+      case "list_pending_savings_admin": {
+        const roleRows = (await supabase.from("user_roles").select("role").eq("user_id", userId).in("role", ["admin", "super_admin"])).data ?? [];
+        if (roleRows.length === 0) return err("Admin only", 403);
+        const { data, error: e } = await supabase
+          .from("vestara_savings")
+          .select("*, vestara_products(code,name,is_upfront_yield), profiles:user_id(full_name,email)")
+          .eq("approval_status", "pending")
+          .order("approval_submitted_at", { ascending: true });
+        if (e) return err(e.message);
+        result = { success: true, pending: data };
+        break;
+      }
+
+      case "approve_savings": {
+        const { savings_id, notes } = params;
+        if (!savings_id) return err("savings_id is required");
+        const { data, error: e } = await supabase.rpc("vestara_approve_savings", {
+          _admin_id: userId,
+          _savings_id: savings_id,
+          _notes: notes ?? null,
+        });
+        if (e) return err(e.message);
+        const { data: s } = await supabase.from("vestara_savings")
+          .select("user_id, product_code, principal").eq("id", savings_id).maybeSingle();
+        if (s?.user_id) {
+          await supabase.from("user_notifications").insert({
+            user_id: s.user_id,
+            type: "savings_approved",
+            title: "Investment approved 🎉",
+            message: `Your ${s.product_code} investment of ₦${Number(s.principal).toLocaleString()} is now active.`,
+            metadata: { savings_id },
+          }).then(() => {}, () => {});
+        }
+        result = data;
+        break;
+      }
+
+      case "reject_savings": {
+        const { savings_id, notes } = params;
+        if (!savings_id) return err("savings_id is required");
+        const { data, error: e } = await supabase.rpc("vestara_reject_savings", {
+          _admin_id: userId,
+          _savings_id: savings_id,
+          _notes: notes ?? null,
+        });
+        if (e) return err(e.message);
+        const { data: s } = await supabase.from("vestara_savings")
+          .select("user_id, product_code, principal").eq("id", savings_id).maybeSingle();
+        if (s?.user_id) {
+          await supabase.from("user_notifications").insert({
+            user_id: s.user_id,
+            type: "savings_rejected",
+            title: "Investment not approved",
+            message: `Your ${s.product_code} investment of ₦${Number(s.principal).toLocaleString()} was declined and the funds were refunded to your wallet.${notes ? ` Reason: ${notes}` : ""}`,
+            metadata: { savings_id, reason: notes ?? null },
+          }).then(() => {}, () => {});
+        }
         result = data;
         break;
       }
