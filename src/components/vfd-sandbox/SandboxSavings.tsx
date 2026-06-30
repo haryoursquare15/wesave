@@ -205,8 +205,8 @@ export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductC
             });
           }
           setSuccessPayload({
-            title: "Savings Created Successfully",
-            description: `Your ${productName} plan is now active and earning.`,
+            title: "Submitted for Review",
+            description: `Your ${productName} investment is awaiting admin approval. Funds are safely on hold and will be locked in once approved.`,
             details,
             reference: (result as { savings_id?: string })?.savings_id,
           });
