@@ -253,6 +253,10 @@ export default function Admin() {
             <VestaraInvestmentsTab />
           </TabsContent>
 
+          <TabsContent value="investment-approvals">
+            <InvestmentApprovalsTab />
+          </TabsContent>
+
           <TabsContent value="vestara-audit">
             <VestaraAuditExportTab />
           </TabsContent>
