@@ -86,6 +86,12 @@
       },
     },
   },
+  "overrides": {
+    "@remix-run/router": "^1.23.0",
+    "dompurify": "^3.2.7",
+    "lodash": "^4.17.21",
+    "ws": "^8.18.3",
+  },
   "packages": {
     "@adobe/css-tools": ["@adobe/css-tools@4.4.4", "", {}, "sha512-Elp+iwUx5rN5+Y8xLt5/GRoG20WGoDCQ/1Fb+1LiGtvwbDavuSk0jhD/eZdckHAuzcDzccnkv+rEjyWfRx18gg=="],
 
