@@ -94,6 +94,10 @@ export interface VestaraSavings {
   discounted_interest_paid: number;
   effective_rate: number | null;
   status: "active" | "matured" | "withdrawn_early" | "cancelled";
+  approval_status?: "pending" | "approved" | "rejected";
+  approval_notes?: string | null;
+  approval_decision_at?: string | null;
+  approval_submitted_at?: string | null;
   matured_at: string | null;
   withdrawn_at: string | null;
   penalty_amount: number;

@@ -24,6 +24,7 @@ import { SupportTab } from "@/components/admin/SupportTab";
 import { AdminEmailTab } from "@/components/admin/AdminEmailTab";
 import { VestaraRateConfigTab } from "@/components/admin/VestaraRateConfigTab";
 import { VestaraInvestmentsTab } from "@/components/admin/VestaraInvestmentsTab";
+import { InvestmentApprovalsTab } from "@/components/admin/InvestmentApprovalsTab";
 import { VestaraAuditExportTab } from "@/components/admin/VestaraAuditExportTab";
 import { VfdWebhookDlqTab } from "@/components/admin/VfdWebhookDlqTab";
 import { VfdAuditTab } from "@/components/admin/VfdAuditTab";
@@ -169,6 +170,10 @@ export default function Admin() {
               <PiggyBank className="h-4 w-4" />
               Investments
             </TabsTrigger>
+            <TabsTrigger value="investment-approvals" className="flex items-center gap-1">
+              <PiggyBank className="h-4 w-4" />
+              Approvals
+            </TabsTrigger>
             {hasPermission("audit.view") && (
               <TabsTrigger value="vestara-audit" className="flex items-center gap-1">
                 <FileSpreadsheet className="h-4 w-4" />
@@ -246,6 +251,10 @@ export default function Admin() {
 
           <TabsContent value="vestara-investments">
             <VestaraInvestmentsTab />
+          </TabsContent>
+
+          <TabsContent value="investment-approvals">
+            <InvestmentApprovalsTab />
           </TabsContent>
 
           <TabsContent value="vestara-audit">

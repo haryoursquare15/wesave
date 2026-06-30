@@ -205,8 +205,8 @@ export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductC
             });
           }
           setSuccessPayload({
-            title: "Savings Created Successfully",
-            description: `Your ${productName} plan is now active and earning.`,
+            title: "Submitted for Review",
+            description: `Your ${productName} investment is awaiting admin approval. Funds are safely on hold and will be locked in once approved.`,
             details,
             reference: (result as { savings_id?: string })?.savings_id,
           });
@@ -277,7 +277,7 @@ export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductC
     });
   };
 
-  const activeSavings = savings.filter(s => s.status === "active");
+  const activeSavings = savings.filter(s => s.status === "active" && s.approval_status !== "pending");
 
   return (
     <div className="space-y-5">
@@ -313,8 +313,8 @@ export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductC
       )}
 
       {/* Active Investments Summary */}
-      {!loadingData && savings.filter(s => s.status === "active").length > 0 && (() => {
-        const active = savings.filter(s => s.status === "active");
+      {!loadingData && savings.filter(s => s.status === "active" && s.approval_status !== "pending").length > 0 && (() => {
+        const active = savings.filter(s => s.status === "active" && s.approval_status !== "pending");
         const totalPrincipal = active.reduce((sum, s) => sum + Number(s.principal || 0), 0);
         const totalInterest = active.reduce((sum, s) => sum + Number(s.accrued_interest || 0) + Number(s.discounted_interest_paid || 0), 0);
         const totalPortfolio = totalPrincipal + totalInterest;
@@ -657,17 +657,22 @@ export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductC
                     <Badge
                       variant="outline"
                       className={`text-[10px] px-2.5 py-0.5 rounded-full ${
-                        s.status === "active" && isMatured ? "bg-success/10 text-success border-success/30"
-                        : s.status === "active" ? "bg-warning/10 text-warning border-warning/30"
+                        s.approval_status === "pending" ? "bg-warning/10 text-warning border-warning/30"
+                        : s.approval_status === "rejected" ? "bg-destructive/10 text-destructive border-destructive/30"
+                        : s.status === "active" && isMatured ? "bg-success/10 text-success border-success/30"
+                        : s.status === "active" ? "bg-primary/10 text-primary border-primary/30"
                         : s.status === "matured" ? "bg-success/10 text-success border-success/30"
                         : "bg-destructive/10 text-destructive border-destructive/30"
                       }`}
                     >
-                      {s.status === "active" && isMatured ? "✓ Ready" : s.status.replace("_", " ")}
+                      {s.approval_status === "pending" ? "⏳ Pending approval"
+                        : s.approval_status === "rejected" ? "Rejected"
+                        : s.status === "active" && isMatured ? "✓ Ready"
+                        : s.status.replace("_", " ")}
                     </Badge>
                   </div>
 
-                  {s.status === "active" && (
+                  {s.status === "active" && s.approval_status !== "pending" && (
                     <div>
                       <div className="flex justify-between text-[10px] text-muted-foreground mb-1.5">
                         <span>{new Date(s.start_date).toLocaleDateString("en-NG", { month: "short", day: "numeric" })}</span>
@@ -693,7 +698,7 @@ export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductC
                     )}
                   </div>
 
-                  {s.status === "active" && (
+                  {s.status === "active" && s.approval_status !== "pending" && (
                     <div className="flex gap-2">
                       {isMatured ? (
                         <Button size="sm" className="flex-1 bg-success hover:bg-success/90 text-success-foreground" onClick={() => handleMature(s)} disabled={vestara.loading}>
