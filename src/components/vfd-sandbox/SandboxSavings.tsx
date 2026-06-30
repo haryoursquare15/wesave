@@ -657,13 +657,18 @@ export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductC
                     <Badge
                       variant="outline"
                       className={`text-[10px] px-2.5 py-0.5 rounded-full ${
-                        s.status === "active" && isMatured ? "bg-success/10 text-success border-success/30"
-                        : s.status === "active" ? "bg-warning/10 text-warning border-warning/30"
+                        s.approval_status === "pending" ? "bg-warning/10 text-warning border-warning/30"
+                        : s.approval_status === "rejected" ? "bg-destructive/10 text-destructive border-destructive/30"
+                        : s.status === "active" && isMatured ? "bg-success/10 text-success border-success/30"
+                        : s.status === "active" ? "bg-primary/10 text-primary border-primary/30"
                         : s.status === "matured" ? "bg-success/10 text-success border-success/30"
                         : "bg-destructive/10 text-destructive border-destructive/30"
                       }`}
                     >
-                      {s.status === "active" && isMatured ? "✓ Ready" : s.status.replace("_", " ")}
+                      {s.approval_status === "pending" ? "⏳ Pending approval"
+                        : s.approval_status === "rejected" ? "Rejected"
+                        : s.status === "active" && isMatured ? "✓ Ready"
+                        : s.status.replace("_", " ")}
                     </Badge>
                   </div>
 
