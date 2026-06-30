@@ -24,6 +24,7 @@ import { SupportTab } from "@/components/admin/SupportTab";
 import { AdminEmailTab } from "@/components/admin/AdminEmailTab";
 import { VestaraRateConfigTab } from "@/components/admin/VestaraRateConfigTab";
 import { VestaraInvestmentsTab } from "@/components/admin/VestaraInvestmentsTab";
+import { InvestmentApprovalsTab } from "@/components/admin/InvestmentApprovalsTab";
 import { VestaraAuditExportTab } from "@/components/admin/VestaraAuditExportTab";
 import { VfdWebhookDlqTab } from "@/components/admin/VfdWebhookDlqTab";
 import { VfdAuditTab } from "@/components/admin/VfdAuditTab";
