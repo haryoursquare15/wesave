@@ -8012,6 +8012,9 @@ export type Database = {
         | "reversal"
         | "savings_create"
         | "interest"
+        | "savings_pending_hold"
+        | "savings_pending_release"
+        | "savings_activation"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -8204,6 +8207,9 @@ export const Constants = {
         "reversal",
         "savings_create",
         "interest",
+        "savings_pending_hold",
+        "savings_pending_release",
+        "savings_activation",
       ],
     },
   },
