@@ -211,22 +211,24 @@ export function ContributionsTab() {
                     <TableHead>User</TableHead>
                     <TableHead>Amount</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Source</TableHead>
                     <TableHead>Card Status</TableHead>
                     <TableHead>Date</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {contributions.map(c => (
-                    <TableRow key={c.id}>
+                    <TableRow key={`${c.source}-${c.id}`}>
                       <TableCell className="font-mono text-xs">{c.user_id.slice(0,8)}...</TableCell>
                       <TableCell className="font-medium">₦{c.amount.toLocaleString()}</TableCell>
                       <TableCell>{getStatusBadge(c.status)}</TableCell>
+                      <TableCell><Badge variant="secondary" className="text-[10px]">{c.source}</Badge></TableCell>
                       <TableCell>{c.card_charge_status ? getChargeBadge(c.card_charge_status) : "—"}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{format(new Date(c.created_at), "MMM d, HH:mm")}</TableCell>
                     </TableRow>
                   ))}
                   {contributions.length === 0 && (
-                    <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No contributions found</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No contributions found</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
