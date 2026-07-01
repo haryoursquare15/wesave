@@ -818,11 +818,21 @@ serve(async (req) => {
         if (roleRows.length === 0) return err("Admin only", 403);
         const { data, error: e } = await supabase
           .from("vestara_savings")
-          .select("*, vestara_products(code,name,is_upfront_yield), profiles:user_id(full_name,email)")
+          .select("*, vestara_products(code,name,is_upfront_yield)")
           .eq("approval_status", "pending")
           .order("approval_submitted_at", { ascending: true });
         if (e) return err(e.message);
-        result = { success: true, pending: data };
+        const userIds = Array.from(new Set((data ?? []).map((r: Record<string, unknown>) => r.user_id as string).filter(Boolean)));
+        const profilesMap: Record<string, { full_name: string | null; email: string | null }> = {};
+        if (userIds.length > 0) {
+          const { data: profs } = await supabase
+            .from("profiles")
+            .select("id, full_name, email")
+            .in("id", userIds);
+          for (const p of profs ?? []) profilesMap[p.id as string] = { full_name: p.full_name ?? null, email: p.email ?? null };
+        }
+        const pending = (data ?? []).map((r: Record<string, unknown>) => ({ ...r, profiles: profilesMap[r.user_id as string] ?? null }));
+        result = { success: true, pending };
         break;
       }
 
