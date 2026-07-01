@@ -5017,7 +5017,9 @@ async function handleCheckTargetMandateStatus(userId: string, body: Record<strin
 // ---- Goal Savings 2.0: quote + create + authorize --------------------------
 
 function frequencyToDays(freq: string): number {
-  return freq === "weekly" ? 7 : 30;
+  if (freq === "daily") return 1;
+  if (freq === "weekly") return 7;
+  return 30;
 }
 
 async function pickGoalsaveRate(tenorDays: number): Promise<{ user_rate: number; vfd_rate: number }> {
@@ -5041,7 +5043,8 @@ function buildGoalsaveSchedule(startIso: string, frequency: string, tenorCount: 
   const out: { seq: number; scheduled_at: string; amount: number }[] = [];
   for (let i = 0; i < tenorCount; i++) {
     const d = new Date(start);
-    if (frequency === "weekly") d.setDate(d.getDate() + (i + 1) * 7);
+    if (frequency === "daily") d.setDate(d.getDate() + (i + 1));
+    else if (frequency === "weekly") d.setDate(d.getDate() + (i + 1) * 7);
     else d.setMonth(d.getMonth() + (i + 1));
     out.push({ seq: i + 1, scheduled_at: d.toISOString(), amount });
   }
