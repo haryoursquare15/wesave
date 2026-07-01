@@ -5017,7 +5017,9 @@ async function handleCheckTargetMandateStatus(userId: string, body: Record<strin
 // ---- Goal Savings 2.0: quote + create + authorize --------------------------
 
 function frequencyToDays(freq: string): number {
-  return freq === "weekly" ? 7 : 30;
+  if (freq === "daily") return 1;
+  if (freq === "weekly") return 7;
+  return 30;
 }
 
 async function pickGoalsaveRate(tenorDays: number): Promise<{ user_rate: number; vfd_rate: number }> {
@@ -5041,7 +5043,8 @@ function buildGoalsaveSchedule(startIso: string, frequency: string, tenorCount: 
   const out: { seq: number; scheduled_at: string; amount: number }[] = [];
   for (let i = 0; i < tenorCount; i++) {
     const d = new Date(start);
-    if (frequency === "weekly") d.setDate(d.getDate() + (i + 1) * 7);
+    if (frequency === "daily") d.setDate(d.getDate() + (i + 1));
+    else if (frequency === "weekly") d.setDate(d.getDate() + (i + 1) * 7);
     else d.setMonth(d.getMonth() + (i + 1));
     out.push({ seq: i + 1, scheduled_at: d.toISOString(), amount });
   }
@@ -5054,7 +5057,8 @@ async function handleGoalsaveV2Quote(_userId: string, body: Record<string, unkno
   const tenorCount = Number(body.tenor_count);
   if (!Number.isFinite(amount) || amount < 1000) return jsonResponse({ error: "Contribution must be at least ₦1,000", success: false }, 400);
   if (!Number.isFinite(tenorCount) || tenorCount < 1) return jsonResponse({ error: "Invalid tenor", success: false }, 400);
-  if (frequency !== "weekly" && frequency !== "monthly") return jsonResponse({ error: "Frequency must be weekly or monthly", success: false }, 400);
+  if (!["daily", "weekly", "monthly"].includes(frequency)) return jsonResponse({ error: "Frequency must be daily, weekly or monthly", success: false }, 400);
+  if (frequency === "daily" && tenorCount < 7) return jsonResponse({ error: "Daily goals require at least 7 days", success: false }, 400);
   if (frequency === "weekly" && tenorCount < 4) return jsonResponse({ error: "Weekly goals require at least 4 weeks", success: false }, 400);
 
   const daysPerCycle = frequencyToDays(frequency);

@@ -16,7 +16,7 @@ import { useVestaraLedger } from "@/hooks/useVestaraLedger";
 import { TransactionPinGate } from "@/components/security/TransactionPinGate";
 import { MandateAuthorizationDialog, type MandateSubject } from "./MandateAuthorizationDialog";
 
-type Frequency = "weekly" | "monthly";
+type Frequency = "daily" | "weekly" | "monthly";
 type Step = "setup" | "review" | "success";
 
 interface Quote {
@@ -80,11 +80,11 @@ export function GoalSavingsV2Wizard({ onClose, onCreated, walletAvailable }: Pro
   }>(null);
 
   const amtNum = parseFloat(amount);
+  const minTenor = frequency === "daily" ? 7 : frequency === "weekly" ? 4 : 1;
   const setupValid =
     goalName.trim().length >= 2 &&
     Number.isFinite(amtNum) && amtNum >= 1000 &&
-    Number.isFinite(tenor) && tenor >= 1 &&
-    (frequency === "monthly" || tenor >= 4);
+    Number.isFinite(tenor) && tenor >= minTenor;
 
   // Live quote
   useEffect(() => {
@@ -102,12 +102,16 @@ export function GoalSavingsV2Wizard({ onClose, onCreated, walletAvailable }: Pro
   }, [amtNum, frequency, tenor, setupValid, invoke]);
 
   const tenorOptions = useMemo(() => {
-    return frequency === "weekly"
-      ? [4, 8, 12, 24, 52]
-      : [1, 3, 6, 12, 24];
+    if (frequency === "daily") return [7, 14, 30, 60, 90];
+    if (frequency === "weekly") return [4, 8, 12, 24, 52];
+    return [1, 3, 6, 12, 24];
   }, [frequency]);
 
-  const tenorLabel = (n: number) => `${n} ${frequency === "weekly" ? (n === 1 ? "week" : "weeks") : (n === 1 ? "month" : "months")}`;
+  const unitLabel = (n: number) =>
+    frequency === "daily" ? (n === 1 ? "day" : "days")
+    : frequency === "weekly" ? (n === 1 ? "week" : "weeks")
+    : (n === 1 ? "month" : "months");
+  const tenorLabel = (n: number) => `${n} ${unitLabel(n)}`;
 
   /* ──────────── Step handlers ──────────── */
 
@@ -208,13 +212,13 @@ export function GoalSavingsV2Wizard({ onClose, onCreated, walletAvailable }: Pro
 
               <div>
                 <Label className="text-xs">Contribution frequency</Label>
-                <div className="grid grid-cols-2 gap-2 mt-1.5">
-                  {(["weekly", "monthly"] as Frequency[]).map(f => (
+                <div className="grid grid-cols-3 gap-2 mt-1.5">
+                  {(["daily", "weekly", "monthly"] as Frequency[]).map(f => (
                     <button
                       key={f}
                       onClick={() => {
                         setFrequency(f);
-                        setTenor(f === "weekly" ? 4 : 1);
+                        setTenor(f === "daily" ? 7 : f === "weekly" ? 4 : 1);
                       }}
                       className={`rounded-xl border p-3 text-sm font-medium capitalize transition-colors ${
                         frequency === f
@@ -248,7 +252,7 @@ export function GoalSavingsV2Wizard({ onClose, onCreated, walletAvailable }: Pro
 
               <div>
                 <Label className="text-xs">
-                  Tenor ({frequency === "weekly" ? "min 4 weeks" : "min 1 month"})
+                  Tenor (min {tenorLabel(minTenor)})
                 </Label>
                 <div className="grid grid-cols-5 gap-2 mt-1.5">
                   {tenorOptions.map(n => (
