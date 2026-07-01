@@ -80,11 +80,11 @@ export function GoalSavingsV2Wizard({ onClose, onCreated, walletAvailable }: Pro
   }>(null);
 
   const amtNum = parseFloat(amount);
+  const minTenor = frequency === "daily" ? 7 : frequency === "weekly" ? 4 : 1;
   const setupValid =
     goalName.trim().length >= 2 &&
     Number.isFinite(amtNum) && amtNum >= 1000 &&
-    Number.isFinite(tenor) && tenor >= 1 &&
-    (frequency === "monthly" || tenor >= 4);
+    Number.isFinite(tenor) && tenor >= minTenor;
 
   // Live quote
   useEffect(() => {
