@@ -1,0 +1,1 @@
+ALTER TYPE public.vestara_account_type ADD VALUE IF NOT EXISTS 'pending_savings';
