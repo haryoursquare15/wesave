@@ -20,10 +20,11 @@ import { exportToCSV } from "@/lib/exportUtils";
 
 interface GroupDetailsRowProps {
   groupId: string;
+  source?: "legacy" | "sandbox";
   onRefresh: () => void;
 }
 
-function GroupDetailsRow({ groupId, onRefresh }: GroupDetailsRowProps) {
+function GroupDetailsRow({ groupId, source = "legacy", onRefresh }: GroupDetailsRowProps) {
   const [data, setData] = useState<{ members: any[]; wallet: any; currentCycle: any } | null>(null);
   const [loading, setLoading] = useState(true);
   const [removingMember, setRemovingMember] = useState<string | null>(null);
@@ -32,30 +33,67 @@ function GroupDetailsRow({ groupId, onRefresh }: GroupDetailsRowProps) {
 
   useEffect(() => {
     fetchData();
-  }, [groupId]);
+  }, [groupId, source]);
 
   const fetchData = async () => {
     try {
-      const [membersRes, walletRes, cycleRes] = await Promise.all([
-        supabase.from("group_memberships")
-          .select("*, profiles:user_id(full_name, email, username)")
-          .eq("group_id", groupId),
-        supabase.from("group_wallets")
-          .select("*")
-          .eq("group_id", groupId)
-          .maybeSingle(),
-        supabase.from("contribution_cycles")
-          .select("*")
-          .eq("group_id", groupId)
-          .eq("status", "active")
-          .maybeSingle()
-      ]);
-      
-      setData({
-        members: membersRes.data || [],
-        wallet: walletRes.data,
-        currentCycle: cycleRes.data
-      });
+      if (source === "sandbox") {
+        const [membersRes, groupRes, cycleRes] = await Promise.all([
+          supabase.from("vfd_sandbox_group_members")
+            .select("id, user_id, payout_position, status, has_contributed_current, has_received_payout")
+            .eq("group_id", groupId),
+          supabase.from("vfd_sandbox_groups")
+            .select("pool_ledger_balance, total_contributed_kobo, total_paid_out_kobo, current_cycle, status")
+            .eq("id", groupId)
+            .maybeSingle(),
+          supabase.from("vfd_sandbox_contribution_cycles")
+            .select("*")
+            .eq("group_id", groupId)
+            .order("cycle_number", { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+        ]);
+
+        // Resolve member names
+        const userIds = (membersRes.data || []).map((m: any) => m.user_id);
+        const profileMap = new Map<string, any>();
+        if (userIds.length) {
+          const { data: profiles } = await supabase.from("profiles")
+            .select("id, full_name, email, username").in("id", userIds);
+          (profiles || []).forEach((p: any) => profileMap.set(p.id, p));
+        }
+        const members = (membersRes.data || []).map((m: any) => ({
+          ...m,
+          profiles: profileMap.get(m.user_id) || null,
+        }));
+
+        const wallet = groupRes.data
+          ? { contribution_balance: Number(groupRes.data.pool_ledger_balance || 0) / 100 }
+          : null;
+
+        setData({ members, wallet, currentCycle: cycleRes.data });
+      } else {
+        const [membersRes, walletRes, cycleRes] = await Promise.all([
+          supabase.from("group_memberships")
+            .select("*, profiles:user_id(full_name, email, username)")
+            .eq("group_id", groupId),
+          supabase.from("group_wallets")
+            .select("*")
+            .eq("group_id", groupId)
+            .maybeSingle(),
+          supabase.from("contribution_cycles")
+            .select("*")
+            .eq("group_id", groupId)
+            .eq("status", "active")
+            .maybeSingle(),
+        ]);
+
+        setData({
+          members: membersRes.data || [],
+          wallet: walletRes.data,
+          currentCycle: cycleRes.data,
+        });
+      }
     } catch (err) {
       console.error("Error fetching group details:", err);
     } finally {
@@ -218,24 +256,18 @@ export function GroupManagementTab() {
     }
   };
 
-  // Real-time: auto-refresh groups when thrift_groups or memberships change
+  // Real-time: auto-refresh groups when either legacy or sandbox tables change
   useEffect(() => {
     const channel = supabase
       .channel("admin-groups-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "thrift_groups" }, () => {
-        refetch();
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "group_memberships" }, () => {
-        refetch();
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "group_wallets" }, () => {
-        refetch();
-      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "thrift_groups" }, () => refetch())
+      .on("postgres_changes", { event: "*", schema: "public", table: "group_memberships" }, () => refetch())
+      .on("postgres_changes", { event: "*", schema: "public", table: "group_wallets" }, () => refetch())
+      .on("postgres_changes", { event: "*", schema: "public", table: "vfd_sandbox_groups" }, () => refetch())
+      .on("postgres_changes", { event: "*", schema: "public", table: "vfd_sandbox_group_members" }, () => refetch())
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [refetch]);
 
   const filteredGroups = groups.filter(group => {
@@ -342,6 +374,7 @@ export function GroupManagementTab() {
             <Button variant="outline" size="sm" disabled={!filteredGroups.length} onClick={() => {
               exportToCSV(filteredGroups.map(g => ({
                 Name: g.name,
+                Source: g.source || "legacy",
                 Admin: g.admin_name || "",
                 Status: g.status,
                 Members: g.member_count,
@@ -369,6 +402,7 @@ export function GroupManagementTab() {
                   <TableRow>
                     <TableHead className="w-10"></TableHead>
                     <TableHead>Group Name</TableHead>
+                    <TableHead>Source</TableHead>
                     <TableHead>Admin</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Members</TableHead>
@@ -381,13 +415,16 @@ export function GroupManagementTab() {
                 <TableBody>
                   {filteredGroups.map((group) => (
                     <>
-                      <TableRow key={group.id} className="cursor-pointer hover:bg-muted/50" onClick={() => toggleExpanded(group.id)}>
+                      <TableRow key={`${group.source || "legacy"}-${group.id}`} className="cursor-pointer hover:bg-muted/50" onClick={() => toggleExpanded(group.id)}>
                         <TableCell>
                           <Button variant="ghost" size="icon" className="h-6 w-6">
                             {expandedGroups.has(group.id) ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                           </Button>
                         </TableCell>
                         <TableCell className="font-medium">{group.name}</TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className="text-[10px]">{group.source || "legacy"}</Badge>
+                        </TableCell>
                         <TableCell>{group.admin_name || "—"}</TableCell>
                         <TableCell>
                           <Badge variant={group.status === "active" ? "default" : group.status === "paused" ? "destructive" : "secondary"} className="capitalize">
@@ -403,7 +440,7 @@ export function GroupManagementTab() {
                             <Button variant="ghost" size="sm" onClick={() => navigate(`/groups/${group.id}`)}>
                               <ExternalLink className="h-4 w-4" />
                             </Button>
-                            {group.status === "active" && (
+                            {group.source !== "sandbox" && group.status === "active" && (
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -418,7 +455,7 @@ export function GroupManagementTab() {
                                 )}
                               </Button>
                             )}
-                            {getAvailableActions(group.status).map(({ key, label, icon: Icon, variant }) => (
+                            {group.source !== "sandbox" && getAvailableActions(group.status).map(({ key, label, icon: Icon, variant }) => (
                               <Button
                                 key={key}
                                 variant={variant === "destructive" ? "ghost" : "ghost"}
@@ -434,7 +471,7 @@ export function GroupManagementTab() {
                         </TableCell>
                       </TableRow>
                       {expandedGroups.has(group.id) && (
-                        <GroupDetailsRow key={`${group.id}-details`} groupId={group.id} onRefresh={refetch} />
+                        <GroupDetailsRow key={`${group.id}-details`} groupId={group.id} source={group.source} onRefresh={refetch} />
                       )}
                     </>
                   ))}

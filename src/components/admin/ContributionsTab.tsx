@@ -14,13 +14,15 @@ import { useToast } from "@/hooks/use-toast";
 interface ContributionRow {
   id: string;
   user_id: string;
-  group_id: string;
-  cycle_id: string;
+  group_id: string | null;
+  cycle_id: string | null;
   amount: number;
   status: string | null;
   card_charge_status: string | null;
   contributed_at: string | null;
   created_at: string;
+  source: "legacy" | "sandbox";
+  reference?: string | null;
 }
 
 interface PendingCharge {
@@ -48,18 +50,20 @@ export function ContributionsTab() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      let contribQuery = supabase
-        .from("cycle_contributions")
-        .select("id, user_id, group_id, cycle_id, amount, status, card_charge_status, contributed_at, created_at")
-        .order("created_at", { ascending: false })
-        .limit(100);
-
-      if (statusFilter !== "all") {
-        contribQuery = contribQuery.eq("status", statusFilter);
-      }
-
-      const [contribRes, pendingRes] = await Promise.all([
-        contribQuery,
+      const [legacyRes, sandboxRes, pendingRes] = await Promise.all([
+        supabase
+          .from("cycle_contributions")
+          .select("id, user_id, group_id, cycle_id, amount, status, card_charge_status, contributed_at, created_at")
+          .order("created_at", { ascending: false })
+          .limit(200),
+        // Sandbox contribution activity lives in the transactions table with a
+        // thrift/contribution keyword in the description.
+        supabase
+          .from("vfd_sandbox_transactions")
+          .select("id, user_id, amount, status, reference, description, created_at")
+          .or("description.ilike.%contribution%,description.ilike.%thrift%,description.ilike.%ajo%,description.ilike.%target%")
+          .order("created_at", { ascending: false })
+          .limit(200),
         supabase
           .from("pending_card_charges")
           .select("*")
@@ -67,7 +71,25 @@ export function ContributionsTab() {
           .limit(100),
       ]);
 
-      setContributions(contribRes.data || []);
+      const rows: ContributionRow[] = [];
+      (legacyRes.data ?? []).forEach((c: any) => rows.push({
+        id: c.id, user_id: c.user_id, group_id: c.group_id, cycle_id: c.cycle_id,
+        amount: Number(c.amount), status: c.status, card_charge_status: c.card_charge_status,
+        contributed_at: c.contributed_at, created_at: c.created_at, source: "legacy",
+      }));
+      (sandboxRes.data ?? []).forEach((c: any) => rows.push({
+        id: c.id, user_id: c.user_id, group_id: null, cycle_id: null,
+        amount: Number(c.amount), status: c.status, card_charge_status: null,
+        contributed_at: c.created_at, created_at: c.created_at, source: "sandbox",
+        reference: c.reference,
+      }));
+      rows.sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at));
+
+      const filtered = statusFilter === "all"
+        ? rows
+        : rows.filter(r => r.status === statusFilter);
+
+      setContributions(filtered);
       setPendingCharges(pendingRes.data || []);
     } catch (err) {
       console.error("Error fetching contributions:", err);
@@ -189,22 +211,24 @@ export function ContributionsTab() {
                     <TableHead>User</TableHead>
                     <TableHead>Amount</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Source</TableHead>
                     <TableHead>Card Status</TableHead>
                     <TableHead>Date</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {contributions.map(c => (
-                    <TableRow key={c.id}>
+                    <TableRow key={`${c.source}-${c.id}`}>
                       <TableCell className="font-mono text-xs">{c.user_id.slice(0,8)}...</TableCell>
                       <TableCell className="font-medium">₦{c.amount.toLocaleString()}</TableCell>
                       <TableCell>{getStatusBadge(c.status)}</TableCell>
+                      <TableCell><Badge variant="secondary" className="text-[10px]">{c.source}</Badge></TableCell>
                       <TableCell>{c.card_charge_status ? getChargeBadge(c.card_charge_status) : "—"}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{format(new Date(c.created_at), "MMM d, HH:mm")}</TableCell>
                     </TableRow>
                   ))}
                   {contributions.length === 0 && (
-                    <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No contributions found</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No contributions found</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>

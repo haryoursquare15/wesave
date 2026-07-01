@@ -10,7 +10,7 @@ import { format } from "date-fns";
 import { RefreshCw, ArrowDownToLine, CheckCircle, Clock, XCircle, Download } from "lucide-react";
 import { exportToCSV } from "@/lib/exportUtils";
 
-interface LedgerWithdrawal {
+interface WithdrawalRow {
   id: string;
   user_id: string;
   user_name?: string;
@@ -20,43 +20,73 @@ interface LedgerWithdrawal {
   reference_type: string;
   reference_id: string | null;
   created_at: string;
+  source: "legacy" | "sandbox";
+  status?: string;
 }
 
 type WithdrawalFilter = "all" | "freeze" | "unfreeze" | "debit";
 
 export function WithdrawalsTab() {
-  const [withdrawals, setWithdrawals] = useState<LedgerWithdrawal[]>([]);
+  const [withdrawals, setWithdrawals] = useState<WithdrawalRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<WithdrawalFilter>("all");
 
   const fetchWithdrawals = async () => {
     setLoading(true);
     try {
-      let query = supabase
-        .from("ledger_entries")
-        .select("id, user_id, amount, entry_type, description, reference_type, reference_id, created_at")
-        .in("reference_type", ["withdrawal", "withdrawal_reversal"])
-        .order("created_at", { ascending: false })
-        .limit(100);
+      const [legacyRes, sandboxRes] = await Promise.all([
+        supabase
+          .from("ledger_entries")
+          .select("id, user_id, amount, entry_type, description, reference_type, reference_id, created_at")
+          .in("reference_type", ["withdrawal", "withdrawal_reversal"])
+          .order("created_at", { ascending: false })
+          .limit(200),
+        // Any sandbox transaction that hit a real bank counts as a withdrawal
+        supabase
+          .from("vfd_sandbox_transactions")
+          .select("id, user_id, amount, status, reference, vfd_reference, description, beneficiary_bank, beneficiary_account, beneficiary_name, transaction_type, created_at")
+          .not("beneficiary_bank", "is", null)
+          .order("created_at", { ascending: false })
+          .limit(200),
+      ]);
 
-      if (statusFilter !== "all") {
-        query = query.eq("entry_type", statusFilter);
-      }
+      const rows: WithdrawalRow[] = [];
+      (legacyRes.data ?? []).forEach((e: any) => rows.push({
+        id: e.id, user_id: e.user_id, amount: Number(e.amount), entry_type: e.entry_type,
+        description: e.description, reference_type: e.reference_type,
+        reference_id: e.reference_id, created_at: e.created_at, source: "legacy",
+      }));
+      (sandboxRes.data ?? []).forEach((t: any) => {
+        const entry_type = t.status === "completed" ? "debit"
+          : t.status === "failed" ? "unfreeze"
+          : "freeze";
+        rows.push({
+          id: t.id, user_id: t.user_id, amount: Number(t.amount),
+          entry_type,
+          description: t.description
+            || `Transfer to ${t.beneficiary_name || t.beneficiary_account} (${t.beneficiary_bank})`,
+          reference_type: t.status === "failed" ? "withdrawal_reversal" : "withdrawal",
+          reference_id: t.reference || t.vfd_reference,
+          created_at: t.created_at, source: "sandbox", status: t.status,
+        });
+      });
 
-      const { data, error } = await query;
-      if (error) throw error;
+      const filtered = statusFilter === "all"
+        ? rows
+        : rows.filter(r => r.entry_type === statusFilter);
 
-      let entries = data || [];
-
-      // Resolve usernames
-      const userIds = [...new Set(entries.map(e => e.user_id))];
+      // Resolve usernames across the union
+      const userIds = [...new Set(filtered.map(e => e.user_id))];
       if (userIds.length) {
-        const { data: profiles } = await supabase.from("profiles").select("id, full_name, username").in("id", userIds);
-        const profileMap = new Map((profiles || []).map(p => [p.id, p.full_name || p.username || p.id.slice(0, 8)]));
-        entries = entries.map(e => ({ ...e, user_name: profileMap.get(e.user_id) }));
+        const { data: profiles } = await supabase.from("profiles")
+          .select("id, full_name, username").in("id", userIds);
+        const profileMap = new Map((profiles || []).map(p =>
+          [p.id, p.full_name || p.username || p.id.slice(0, 8)]));
+        filtered.forEach(e => { e.user_name = profileMap.get(e.user_id); });
       }
 
-      setWithdrawals(entries);
+      filtered.sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at));
+      setWithdrawals(filtered);
     } catch (err) {
       console.error("Error fetching withdrawals:", err);
     } finally {
@@ -83,6 +113,7 @@ export function WithdrawalsTab() {
       User: w.user_name || w.user_id,
       Amount: Math.abs(w.amount),
       Status: w.reference_type === "withdrawal_reversal" ? "Reversed" : w.entry_type === "debit" ? "Completed" : w.entry_type === "freeze" ? "Processing" : "Failed/Released",
+      Source: w.source,
       Description: w.description || "",
       Reference: w.reference_id || "",
       Date: format(new Date(w.created_at), "yyyy-MM-dd HH:mm:ss"),
@@ -130,6 +161,7 @@ export function WithdrawalsTab() {
                     <TableHead>User</TableHead>
                     <TableHead>Amount</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Source</TableHead>
                     <TableHead>Description</TableHead>
                     <TableHead>Reference</TableHead>
                     <TableHead>Date</TableHead>
@@ -137,17 +169,18 @@ export function WithdrawalsTab() {
                 </TableHeader>
                 <TableBody>
                   {withdrawals.map(w => (
-                    <TableRow key={w.id}>
+                    <TableRow key={`${w.source}-${w.id}`}>
                       <TableCell className="font-medium text-sm">{w.user_name || w.user_id.slice(0, 8) + "..."}</TableCell>
                       <TableCell className="font-medium">₦{Math.abs(w.amount).toLocaleString()}</TableCell>
                       <TableCell>{getEntryBadge(w.entry_type, w.reference_type)}</TableCell>
+                      <TableCell><Badge variant="secondary" className="text-[10px]">{w.source}</Badge></TableCell>
                       <TableCell className="max-w-[200px] truncate text-xs text-muted-foreground">{w.description || "—"}</TableCell>
                       <TableCell className="font-mono text-xs">{w.reference_id?.slice(0, 12) || "—"}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{format(new Date(w.created_at), "MMM d, HH:mm")}</TableCell>
                     </TableRow>
                   ))}
                   {withdrawals.length === 0 && (
-                    <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No withdrawals found</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No withdrawals found</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
