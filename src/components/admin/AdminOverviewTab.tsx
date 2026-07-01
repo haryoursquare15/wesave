@@ -137,21 +137,16 @@ export function AdminOverviewTab() {
     fetchUserWallets();
   }, []);
 
-  // Real-time: refresh wallets & stats when wallets or profiles change
+  // Real-time: refresh wallets when either legacy wallets or sandbox balances change
   useEffect(() => {
     const channel = supabase
       .channel("admin-overview-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "wallets" }, () => {
-        fetchUserWallets();
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => {
-        fetchUserWallets();
-      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "wallets" }, () => fetchUserWallets())
+      .on("postgres_changes", { event: "*", schema: "public", table: "vfd_user_balances" }, () => fetchUserWallets())
+      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => fetchUserWallets())
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
   const filteredWallets = userWallets.filter(u => {
