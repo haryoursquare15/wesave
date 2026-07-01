@@ -964,8 +964,9 @@ serve(async (req) => {
         const frequency = String(params.frequency || "");
         const tenor_count = Number(params.tenor_count);
         if (!Number.isFinite(amount) || amount < 1000) return err("Minimum contribution is ₦1,000");
-        if (!["weekly", "monthly"].includes(frequency)) return err("frequency must be weekly or monthly");
+        if (!["daily", "weekly", "monthly"].includes(frequency)) return err("frequency must be daily, weekly or monthly");
         if (!Number.isFinite(tenor_count) || tenor_count < 1) return err("Invalid tenor");
+        if (frequency === "daily" && tenor_count < 7) return err("Daily plans need at least 7 days");
         if (frequency === "weekly" && tenor_count < 4) return err("Weekly plans need at least 4 weeks");
 
         const { data: cfg } = await supabase
