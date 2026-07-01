@@ -5057,7 +5057,8 @@ async function handleGoalsaveV2Quote(_userId: string, body: Record<string, unkno
   const tenorCount = Number(body.tenor_count);
   if (!Number.isFinite(amount) || amount < 1000) return jsonResponse({ error: "Contribution must be at least ₦1,000", success: false }, 400);
   if (!Number.isFinite(tenorCount) || tenorCount < 1) return jsonResponse({ error: "Invalid tenor", success: false }, 400);
-  if (frequency !== "weekly" && frequency !== "monthly") return jsonResponse({ error: "Frequency must be weekly or monthly", success: false }, 400);
+  if (!["daily", "weekly", "monthly"].includes(frequency)) return jsonResponse({ error: "Frequency must be daily, weekly or monthly", success: false }, 400);
+  if (frequency === "daily" && tenorCount < 7) return jsonResponse({ error: "Daily goals require at least 7 days", success: false }, 400);
   if (frequency === "weekly" && tenorCount < 4) return jsonResponse({ error: "Weekly goals require at least 4 weeks", success: false }, 400);
 
   const daysPerCycle = frequencyToDays(frequency);
