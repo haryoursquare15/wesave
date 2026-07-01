@@ -8015,6 +8015,8 @@ export type Database = {
         | "savings_pending_hold"
         | "savings_pending_release"
         | "savings_activation"
+        | "savings_approve"
+        | "savings_reject_refund"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -8210,6 +8212,8 @@ export const Constants = {
         "savings_pending_hold",
         "savings_pending_release",
         "savings_activation",
+        "savings_approve",
+        "savings_reject_refund",
       ],
     },
   },
