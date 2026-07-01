@@ -16,7 +16,7 @@ import { useVestaraLedger } from "@/hooks/useVestaraLedger";
 import { TransactionPinGate } from "@/components/security/TransactionPinGate";
 import { MandateAuthorizationDialog, type MandateSubject } from "./MandateAuthorizationDialog";
 
-type Frequency = "weekly" | "monthly";
+type Frequency = "daily" | "weekly" | "monthly";
 type Step = "setup" | "review" | "success";
 
 interface Quote {
