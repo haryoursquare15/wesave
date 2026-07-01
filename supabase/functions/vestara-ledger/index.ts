@@ -1027,8 +1027,9 @@ serve(async (req) => {
         } = params as Record<string, unknown>;
         const amt = Number(amount), tc = Number(tenor_count), fq = String(frequency || "");
         if (!Number.isFinite(amt) || amt < 1000) return err("Minimum contribution is ₦1,000");
-        if (!["weekly", "monthly"].includes(fq)) return err("frequency must be weekly or monthly");
+        if (!["daily", "weekly", "monthly"].includes(fq)) return err("frequency must be daily, weekly or monthly");
         if (!Number.isFinite(tc) || tc < 1) return err("Invalid tenor");
+        if (fq === "daily" && tc < 7) return err("Daily plans need at least 7 days");
         if (fq === "weekly" && tc < 4) return err("Weekly plans need at least 4 weeks");
         if (!goal_name || typeof goal_name !== "string") return err("goal_name is required");
 
