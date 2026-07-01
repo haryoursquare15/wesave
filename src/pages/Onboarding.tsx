@@ -253,21 +253,21 @@ export default function Onboarding() {
     setIsLoading(true);
 
     try {
-      // Update profile with onboarding data
+      // Update profile with onboarding data. Sensitive fields (BVN, bank
+      // account, ID number) are persisted separately through the encryption
+      // flow (BankAccountManagement / KYC), so they are intentionally omitted
+      // here — writing them directly would target non-existent columns and
+      // fail the entire update.
       const { error: updateError } = await supabase
         .from("profiles")
         .update({
           full_name: formData.fullName.trim(),
           username: formData.username.toLowerCase(),
-          bvn: formData.bvn || null,
-          bank_name: formData.bankName || null,
-          bank_account: formData.accountNumber || null,
           id_type: formData.idType || null,
-          id_number: formData.idNumber || null,
           id_document_url: formData.idDocumentUrl || null,
           utility_bill_url: formData.utilityBillUrl || null,
           onboarding_completed: true,
-        } as never)
+        })
         .eq("id", user.id);
 
       if (updateError) throw updateError;
