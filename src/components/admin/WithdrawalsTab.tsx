@@ -160,6 +160,7 @@ export function WithdrawalsTab() {
                     <TableHead>User</TableHead>
                     <TableHead>Amount</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Source</TableHead>
                     <TableHead>Description</TableHead>
                     <TableHead>Reference</TableHead>
                     <TableHead>Date</TableHead>
@@ -167,17 +168,18 @@ export function WithdrawalsTab() {
                 </TableHeader>
                 <TableBody>
                   {withdrawals.map(w => (
-                    <TableRow key={w.id}>
+                    <TableRow key={`${w.source}-${w.id}`}>
                       <TableCell className="font-medium text-sm">{w.user_name || w.user_id.slice(0, 8) + "..."}</TableCell>
                       <TableCell className="font-medium">₦{Math.abs(w.amount).toLocaleString()}</TableCell>
                       <TableCell>{getEntryBadge(w.entry_type, w.reference_type)}</TableCell>
+                      <TableCell><Badge variant="secondary" className="text-[10px]">{w.source}</Badge></TableCell>
                       <TableCell className="max-w-[200px] truncate text-xs text-muted-foreground">{w.description || "—"}</TableCell>
                       <TableCell className="font-mono text-xs">{w.reference_id?.slice(0, 12) || "—"}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{format(new Date(w.created_at), "MMM d, HH:mm")}</TableCell>
                     </TableRow>
                   ))}
                   {withdrawals.length === 0 && (
-                    <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No withdrawals found</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No withdrawals found</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
