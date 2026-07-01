@@ -290,7 +290,8 @@ export default function Onboarding() {
       navigate("/dashboard");
     } catch (error) {
       console.error("Onboarding error:", error);
-      toast.error("Failed to save profile. Please try again.");
+      const msg = error instanceof Error ? error.message : "Please try again.";
+      toast.error(`Failed to save profile: ${msg}`);
     } finally {
       setIsLoading(false);
     }
