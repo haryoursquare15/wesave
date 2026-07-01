@@ -102,12 +102,16 @@ export function GoalSavingsV2Wizard({ onClose, onCreated, walletAvailable }: Pro
   }, [amtNum, frequency, tenor, setupValid, invoke]);
 
   const tenorOptions = useMemo(() => {
-    return frequency === "weekly"
-      ? [4, 8, 12, 24, 52]
-      : [1, 3, 6, 12, 24];
+    if (frequency === "daily") return [7, 14, 30, 60, 90];
+    if (frequency === "weekly") return [4, 8, 12, 24, 52];
+    return [1, 3, 6, 12, 24];
   }, [frequency]);
 
-  const tenorLabel = (n: number) => `${n} ${frequency === "weekly" ? (n === 1 ? "week" : "weeks") : (n === 1 ? "month" : "months")}`;
+  const unitLabel = (n: number) =>
+    frequency === "daily" ? (n === 1 ? "day" : "days")
+    : frequency === "weekly" ? (n === 1 ? "week" : "weeks")
+    : (n === 1 ? "month" : "months");
+  const tenorLabel = (n: number) => `${n} ${unitLabel(n)}`;
 
   /* ──────────── Step handlers ──────────── */
 
