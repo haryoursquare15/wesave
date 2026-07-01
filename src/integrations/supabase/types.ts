@@ -7297,6 +7297,7 @@ export type Database = {
         Args: { message_id: number; queue_name: string }
         Returns: boolean
       }
+      email_queue_dispatch: { Args: never; Returns: undefined }
       enforce_caller_is: { Args: { _target: string }; Returns: undefined }
       enqueue_email: {
         Args: { payload: Json; queue_name: string }
@@ -7985,6 +7986,7 @@ export type Database = {
         | "interest_expense"
         | "revenue"
         | "pending_transfer"
+        | "pending_savings"
       vestara_product_code: "goalsave" | "vault" | "lockmax" | "upfront_yield"
       vestara_savings_status:
         | "active"
@@ -8010,6 +8012,11 @@ export type Database = {
         | "reversal"
         | "savings_create"
         | "interest"
+        | "savings_pending_hold"
+        | "savings_pending_release"
+        | "savings_activation"
+        | "savings_approve"
+        | "savings_reject_refund"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -8174,6 +8181,7 @@ export const Constants = {
         "interest_expense",
         "revenue",
         "pending_transfer",
+        "pending_savings",
       ],
       vestara_product_code: ["goalsave", "vault", "lockmax", "upfront_yield"],
       vestara_savings_status: [
@@ -8201,6 +8209,11 @@ export const Constants = {
         "reversal",
         "savings_create",
         "interest",
+        "savings_pending_hold",
+        "savings_pending_release",
+        "savings_activation",
+        "savings_approve",
+        "savings_reject_refund",
       ],
     },
   },
