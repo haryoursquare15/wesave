@@ -113,6 +113,7 @@ export function WithdrawalsTab() {
       User: w.user_name || w.user_id,
       Amount: Math.abs(w.amount),
       Status: w.reference_type === "withdrawal_reversal" ? "Reversed" : w.entry_type === "debit" ? "Completed" : w.entry_type === "freeze" ? "Processing" : "Failed/Released",
+      Source: w.source,
       Description: w.description || "",
       Reference: w.reference_id || "",
       Date: format(new Date(w.created_at), "yyyy-MM-dd HH:mm:ss"),
