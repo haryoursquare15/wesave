@@ -20,10 +20,11 @@ import { exportToCSV } from "@/lib/exportUtils";
 
 interface GroupDetailsRowProps {
   groupId: string;
+  source?: "legacy" | "sandbox";
   onRefresh: () => void;
 }
 
-function GroupDetailsRow({ groupId, onRefresh }: GroupDetailsRowProps) {
+function GroupDetailsRow({ groupId, source = "legacy", onRefresh }: GroupDetailsRowProps) {
   const [data, setData] = useState<{ members: any[]; wallet: any; currentCycle: any } | null>(null);
   const [loading, setLoading] = useState(true);
   const [removingMember, setRemovingMember] = useState<string | null>(null);
@@ -32,30 +33,67 @@ function GroupDetailsRow({ groupId, onRefresh }: GroupDetailsRowProps) {
 
   useEffect(() => {
     fetchData();
-  }, [groupId]);
+  }, [groupId, source]);
 
   const fetchData = async () => {
     try {
-      const [membersRes, walletRes, cycleRes] = await Promise.all([
-        supabase.from("group_memberships")
-          .select("*, profiles:user_id(full_name, email, username)")
-          .eq("group_id", groupId),
-        supabase.from("group_wallets")
-          .select("*")
-          .eq("group_id", groupId)
-          .maybeSingle(),
-        supabase.from("contribution_cycles")
-          .select("*")
-          .eq("group_id", groupId)
-          .eq("status", "active")
-          .maybeSingle()
-      ]);
-      
-      setData({
-        members: membersRes.data || [],
-        wallet: walletRes.data,
-        currentCycle: cycleRes.data
-      });
+      if (source === "sandbox") {
+        const [membersRes, groupRes, cycleRes] = await Promise.all([
+          supabase.from("vfd_sandbox_group_members")
+            .select("id, user_id, payout_position, status, has_contributed_current, has_received_payout")
+            .eq("group_id", groupId),
+          supabase.from("vfd_sandbox_groups")
+            .select("pool_ledger_balance, total_contributed_kobo, total_paid_out_kobo, current_cycle, status")
+            .eq("id", groupId)
+            .maybeSingle(),
+          supabase.from("vfd_sandbox_contribution_cycles")
+            .select("*")
+            .eq("group_id", groupId)
+            .order("cycle_number", { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+        ]);
+
+        // Resolve member names
+        const userIds = (membersRes.data || []).map((m: any) => m.user_id);
+        const profileMap = new Map<string, any>();
+        if (userIds.length) {
+          const { data: profiles } = await supabase.from("profiles")
+            .select("id, full_name, email, username").in("id", userIds);
+          (profiles || []).forEach((p: any) => profileMap.set(p.id, p));
+        }
+        const members = (membersRes.data || []).map((m: any) => ({
+          ...m,
+          profiles: profileMap.get(m.user_id) || null,
+        }));
+
+        const wallet = groupRes.data
+          ? { contribution_balance: Number(groupRes.data.pool_ledger_balance || 0) / 100 }
+          : null;
+
+        setData({ members, wallet, currentCycle: cycleRes.data });
+      } else {
+        const [membersRes, walletRes, cycleRes] = await Promise.all([
+          supabase.from("group_memberships")
+            .select("*, profiles:user_id(full_name, email, username)")
+            .eq("group_id", groupId),
+          supabase.from("group_wallets")
+            .select("*")
+            .eq("group_id", groupId)
+            .maybeSingle(),
+          supabase.from("contribution_cycles")
+            .select("*")
+            .eq("group_id", groupId)
+            .eq("status", "active")
+            .maybeSingle(),
+        ]);
+
+        setData({
+          members: membersRes.data || [],
+          wallet: walletRes.data,
+          currentCycle: cycleRes.data,
+        });
+      }
     } catch (err) {
       console.error("Error fetching group details:", err);
     } finally {
