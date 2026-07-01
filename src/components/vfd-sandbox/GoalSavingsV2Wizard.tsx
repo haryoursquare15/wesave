@@ -212,13 +212,13 @@ export function GoalSavingsV2Wizard({ onClose, onCreated, walletAvailable }: Pro
 
               <div>
                 <Label className="text-xs">Contribution frequency</Label>
-                <div className="grid grid-cols-2 gap-2 mt-1.5">
-                  {(["weekly", "monthly"] as Frequency[]).map(f => (
+                <div className="grid grid-cols-3 gap-2 mt-1.5">
+                  {(["daily", "weekly", "monthly"] as Frequency[]).map(f => (
                     <button
                       key={f}
                       onClick={() => {
                         setFrequency(f);
-                        setTenor(f === "weekly" ? 4 : 1);
+                        setTenor(f === "daily" ? 7 : f === "weekly" ? 4 : 1);
                       }}
                       className={`rounded-xl border p-3 text-sm font-medium capitalize transition-colors ${
                         frequency === f
