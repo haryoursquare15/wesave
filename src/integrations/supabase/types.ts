@@ -7094,8 +7094,9 @@ export type Database = {
           id: string
           member_count: number
           name: string
-          period: Database["public"]["Enums"]["contribution_period"]
-          status: Database["public"]["Enums"]["group_status"]
+          period: string
+          source: string
+          status: string
         }[]
       }
       admin_get_all_users: {
