@@ -30,11 +30,12 @@ interface AdminGroup {
   name: string;
   admin_id: string;
   admin_name: string | null;
-  status: "pending" | "active" | "completed" | "paused";
+  status: string;
   member_count: number;
   contribution_amount: number;
-  period: "daily" | "weekly" | "monthly";
+  period: string;
   created_at: string;
+  source?: "legacy" | "sandbox";
 }
 
 export function useIsAdmin() {
