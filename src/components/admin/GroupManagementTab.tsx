@@ -407,6 +407,7 @@ export function GroupManagementTab() {
                   <TableRow>
                     <TableHead className="w-10"></TableHead>
                     <TableHead>Group Name</TableHead>
+                    <TableHead>Source</TableHead>
                     <TableHead>Admin</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Members</TableHead>
@@ -419,13 +420,16 @@ export function GroupManagementTab() {
                 <TableBody>
                   {filteredGroups.map((group) => (
                     <>
-                      <TableRow key={group.id} className="cursor-pointer hover:bg-muted/50" onClick={() => toggleExpanded(group.id)}>
+                      <TableRow key={`${group.source || "legacy"}-${group.id}`} className="cursor-pointer hover:bg-muted/50" onClick={() => toggleExpanded(group.id)}>
                         <TableCell>
                           <Button variant="ghost" size="icon" className="h-6 w-6">
                             {expandedGroups.has(group.id) ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                           </Button>
                         </TableCell>
                         <TableCell className="font-medium">{group.name}</TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className="text-[10px]">{group.source || "legacy"}</Badge>
+                        </TableCell>
                         <TableCell>{group.admin_name || "—"}</TableCell>
                         <TableCell>
                           <Badge variant={group.status === "active" ? "default" : group.status === "paused" ? "destructive" : "secondary"} className="capitalize">
@@ -441,7 +445,7 @@ export function GroupManagementTab() {
                             <Button variant="ghost" size="sm" onClick={() => navigate(`/groups/${group.id}`)}>
                               <ExternalLink className="h-4 w-4" />
                             </Button>
-                            {group.status === "active" && (
+                            {group.source !== "sandbox" && group.status === "active" && (
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -456,7 +460,7 @@ export function GroupManagementTab() {
                                 )}
                               </Button>
                             )}
-                            {getAvailableActions(group.status).map(({ key, label, icon: Icon, variant }) => (
+                            {group.source !== "sandbox" && getAvailableActions(group.status).map(({ key, label, icon: Icon, variant }) => (
                               <Button
                                 key={key}
                                 variant={variant === "destructive" ? "ghost" : "ghost"}
@@ -472,7 +476,7 @@ export function GroupManagementTab() {
                         </TableCell>
                       </TableRow>
                       {expandedGroups.has(group.id) && (
-                        <GroupDetailsRow key={`${group.id}-details`} groupId={group.id} onRefresh={refetch} />
+                        <GroupDetailsRow key={`${group.id}-details`} groupId={group.id} source={group.source} onRefresh={refetch} />
                       )}
                     </>
                   ))}
