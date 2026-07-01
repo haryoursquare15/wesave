@@ -964,8 +964,9 @@ serve(async (req) => {
         const frequency = String(params.frequency || "");
         const tenor_count = Number(params.tenor_count);
         if (!Number.isFinite(amount) || amount < 1000) return err("Minimum contribution is ₦1,000");
-        if (!["weekly", "monthly"].includes(frequency)) return err("frequency must be weekly or monthly");
+        if (!["daily", "weekly", "monthly"].includes(frequency)) return err("frequency must be daily, weekly or monthly");
         if (!Number.isFinite(tenor_count) || tenor_count < 1) return err("Invalid tenor");
+        if (frequency === "daily" && tenor_count < 7) return err("Daily plans need at least 7 days");
         if (frequency === "weekly" && tenor_count < 4) return err("Weekly plans need at least 4 weeks");
 
         const { data: cfg } = await supabase
@@ -983,7 +984,8 @@ serve(async (req) => {
         const schedule: { seq: number; scheduled_at: string; amount: number }[] = [];
         for (let i = 0; i < tenor_count; i++) {
           const d = new Date(start);
-          if (frequency === "weekly") d.setDate(d.getDate() + (i + 1) * 7);
+          if (frequency === "daily") d.setDate(d.getDate() + (i + 1));
+          else if (frequency === "weekly") d.setDate(d.getDate() + (i + 1) * 7);
           else d.setMonth(d.getMonth() + (i + 1));
           schedule.push({ seq: i + 1, scheduled_at: d.toISOString(), amount });
         }
@@ -1025,8 +1027,9 @@ serve(async (req) => {
         } = params as Record<string, unknown>;
         const amt = Number(amount), tc = Number(tenor_count), fq = String(frequency || "");
         if (!Number.isFinite(amt) || amt < 1000) return err("Minimum contribution is ₦1,000");
-        if (!["weekly", "monthly"].includes(fq)) return err("frequency must be weekly or monthly");
+        if (!["daily", "weekly", "monthly"].includes(fq)) return err("frequency must be daily, weekly or monthly");
         if (!Number.isFinite(tc) || tc < 1) return err("Invalid tenor");
+        if (fq === "daily" && tc < 7) return err("Daily plans need at least 7 days");
         if (fq === "weekly" && tc < 4) return err("Weekly plans need at least 4 weeks");
         if (!goal_name || typeof goal_name !== "string") return err("goal_name is required");
 
@@ -1042,7 +1045,8 @@ serve(async (req) => {
         const sched: { seq: number; scheduled_at: string; amount: number }[] = [];
         for (let i = 0; i < tc; i++) {
           const d = new Date(start);
-          if (fq === "weekly") d.setDate(d.getDate() + (i + 1) * 7);
+          if (fq === "daily") d.setDate(d.getDate() + (i + 1));
+          else if (fq === "weekly") d.setDate(d.getDate() + (i + 1) * 7);
           else d.setMonth(d.getMonth() + (i + 1));
           sched.push({ seq: i + 1, scheduled_at: d.toISOString(), amount: amt });
         }
