@@ -80,32 +80,52 @@ export function AdminOverviewTab() {
   const fetchUserWallets = async () => {
     setWalletsLoading(true);
     try {
-      const { data: wallets } = await supabase
-        .from("wallets")
-        .select("user_id, available_balance, locked_balance")
-        .order("available_balance", { ascending: false })
-        .limit(200);
+      const [legacyRes, sandboxRes] = await Promise.all([
+        supabase.from("wallets")
+          .select("user_id, available_balance, locked_balance")
+          .limit(500),
+        supabase.from("vfd_user_balances")
+          .select("user_id, available_balance, locked_balance")
+          .limit(500),
+      ]);
 
-      if (!wallets?.length) { setUserWallets([]); return; }
+      // Merge by user_id (sum both sources so a user with both is counted once)
+      const merged = new Map<string, { available: number; locked: number }>();
+      (legacyRes.data ?? []).forEach((w: any) => {
+        const cur = merged.get(w.user_id) ?? { available: 0, locked: 0 };
+        cur.available += Number(w.available_balance || 0);
+        cur.locked += Number(w.locked_balance || 0);
+        merged.set(w.user_id, cur);
+      });
+      (sandboxRes.data ?? []).forEach((w: any) => {
+        const cur = merged.get(w.user_id) ?? { available: 0, locked: 0 };
+        cur.available += Number(w.available_balance || 0);
+        cur.locked += Number(w.locked_balance || 0);
+        merged.set(w.user_id, cur);
+      });
 
-      const userIds = wallets.map(w => w.user_id);
+      const userIds = Array.from(merged.keys());
+      if (!userIds.length) { setUserWallets([]); return; }
+
       const { data: profiles } = await supabase
         .from("profiles")
         .select("id, full_name, username, email")
         .in("id", userIds);
 
       const profileMap = new Map((profiles || []).map(p => [p.id, p]));
-      setUserWallets(wallets.map(w => {
-        const p = profileMap.get(w.user_id);
+      const rows: UserWalletRow[] = userIds.map(uid => {
+        const p = profileMap.get(uid);
+        const bal = merged.get(uid)!;
         return {
-          id: w.user_id,
+          id: uid,
           full_name: p?.full_name || null,
           username: p?.username || null,
           email: p?.email || null,
-          available_balance: w.available_balance || 0,
-          locked_balance: w.locked_balance || 0,
+          available_balance: bal.available,
+          locked_balance: bal.locked,
         };
-      }));
+      }).sort((a, b) => b.available_balance - a.available_balance);
+      setUserWallets(rows);
     } catch (err) {
       console.error("Error fetching user wallets:", err);
     } finally {
