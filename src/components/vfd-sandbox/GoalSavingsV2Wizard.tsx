@@ -252,7 +252,7 @@ export function GoalSavingsV2Wizard({ onClose, onCreated, walletAvailable }: Pro
 
               <div>
                 <Label className="text-xs">
-                  Tenor ({frequency === "weekly" ? "min 4 weeks" : "min 1 month"})
+                  Tenor (min {tenorLabel(minTenor)})
                 </Label>
                 <div className="grid grid-cols-5 gap-2 mt-1.5">
                   {tenorOptions.map(n => (
