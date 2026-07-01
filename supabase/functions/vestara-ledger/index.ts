@@ -984,7 +984,8 @@ serve(async (req) => {
         const schedule: { seq: number; scheduled_at: string; amount: number }[] = [];
         for (let i = 0; i < tenor_count; i++) {
           const d = new Date(start);
-          if (frequency === "weekly") d.setDate(d.getDate() + (i + 1) * 7);
+          if (frequency === "daily") d.setDate(d.getDate() + (i + 1));
+          else if (frequency === "weekly") d.setDate(d.getDate() + (i + 1) * 7);
           else d.setMonth(d.getMonth() + (i + 1));
           schedule.push({ seq: i + 1, scheduled_at: d.toISOString(), amount });
         }
