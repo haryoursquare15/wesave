@@ -374,6 +374,7 @@ export function GroupManagementTab() {
             <Button variant="outline" size="sm" disabled={!filteredGroups.length} onClick={() => {
               exportToCSV(filteredGroups.map(g => ({
                 Name: g.name,
+                Source: g.source || "legacy",
                 Admin: g.admin_name || "",
                 Status: g.status,
                 Members: g.member_count,
