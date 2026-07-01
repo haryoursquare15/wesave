@@ -1045,7 +1045,8 @@ serve(async (req) => {
         const sched: { seq: number; scheduled_at: string; amount: number }[] = [];
         for (let i = 0; i < tc; i++) {
           const d = new Date(start);
-          if (fq === "weekly") d.setDate(d.getDate() + (i + 1) * 7);
+          if (fq === "daily") d.setDate(d.getDate() + (i + 1));
+          else if (fq === "weekly") d.setDate(d.getDate() + (i + 1) * 7);
           else d.setMonth(d.getMonth() + (i + 1));
           sched.push({ seq: i + 1, scheduled_at: d.toISOString(), amount: amt });
         }
