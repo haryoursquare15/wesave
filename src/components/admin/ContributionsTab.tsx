@@ -14,13 +14,15 @@ import { useToast } from "@/hooks/use-toast";
 interface ContributionRow {
   id: string;
   user_id: string;
-  group_id: string;
-  cycle_id: string;
+  group_id: string | null;
+  cycle_id: string | null;
   amount: number;
   status: string | null;
   card_charge_status: string | null;
   contributed_at: string | null;
   created_at: string;
+  source: "legacy" | "sandbox";
+  reference?: string | null;
 }
 
 interface PendingCharge {
@@ -48,18 +50,20 @@ export function ContributionsTab() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      let contribQuery = supabase
-        .from("cycle_contributions")
-        .select("id, user_id, group_id, cycle_id, amount, status, card_charge_status, contributed_at, created_at")
-        .order("created_at", { ascending: false })
-        .limit(100);
-
-      if (statusFilter !== "all") {
-        contribQuery = contribQuery.eq("status", statusFilter);
-      }
-
-      const [contribRes, pendingRes] = await Promise.all([
-        contribQuery,
+      const [legacyRes, sandboxRes, pendingRes] = await Promise.all([
+        supabase
+          .from("cycle_contributions")
+          .select("id, user_id, group_id, cycle_id, amount, status, card_charge_status, contributed_at, created_at")
+          .order("created_at", { ascending: false })
+          .limit(200),
+        // Sandbox contribution activity lives in the transactions table with a
+        // thrift/contribution keyword in the description.
+        supabase
+          .from("vfd_sandbox_transactions")
+          .select("id, user_id, amount, status, reference, description, created_at")
+          .or("description.ilike.%contribution%,description.ilike.%thrift%,description.ilike.%ajo%,description.ilike.%target%")
+          .order("created_at", { ascending: false })
+          .limit(200),
         supabase
           .from("pending_card_charges")
           .select("*")
@@ -67,7 +71,25 @@ export function ContributionsTab() {
           .limit(100),
       ]);
 
-      setContributions(contribRes.data || []);
+      const rows: ContributionRow[] = [];
+      (legacyRes.data ?? []).forEach((c: any) => rows.push({
+        id: c.id, user_id: c.user_id, group_id: c.group_id, cycle_id: c.cycle_id,
+        amount: Number(c.amount), status: c.status, card_charge_status: c.card_charge_status,
+        contributed_at: c.contributed_at, created_at: c.created_at, source: "legacy",
+      }));
+      (sandboxRes.data ?? []).forEach((c: any) => rows.push({
+        id: c.id, user_id: c.user_id, group_id: null, cycle_id: null,
+        amount: Number(c.amount), status: c.status, card_charge_status: null,
+        contributed_at: c.created_at, created_at: c.created_at, source: "sandbox",
+        reference: c.reference,
+      }));
+      rows.sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at));
+
+      const filtered = statusFilter === "all"
+        ? rows
+        : rows.filter(r => r.status === statusFilter);
+
+      setContributions(filtered);
       setPendingCharges(pendingRes.data || []);
     } catch (err) {
       console.error("Error fetching contributions:", err);
