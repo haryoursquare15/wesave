@@ -14,12 +14,17 @@ import { toast } from "sonner";
 import { TwoFactorEnforcement } from "@/components/security/TwoFactorEnforcement";
 
 import { getUserFriendlyError } from "@/lib/errorMessages";
+// Public sign-ups are temporarily disabled while the Instagram campaign runs.
+// Existing users can still sign in. Sandbox sign-ups (/vfd-sandbox/auth) are unaffected.
+const SIGNUPS_ENABLED = false;
+
 export default function Auth() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { signIn, signUp, user, loading } = useAuth();
-  const [isSignUp, setIsSignUp] = useState(searchParams.get("mode") === "signup");
+  const [isSignUp, setIsSignUp] = useState(SIGNUPS_ENABLED && searchParams.get("mode") === "signup");
   const [isPasswordReset, setIsPasswordReset] = useState(searchParams.get("mode") === "reset");
+
   const [resetSessionReady, setResetSessionReady] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -36,9 +41,10 @@ export default function Auth() {
 
   // Keep UI mode in sync with URL
   useEffect(() => {
-    setIsSignUp(searchParams.get("mode") === "signup");
+    setIsSignUp(SIGNUPS_ENABLED && searchParams.get("mode") === "signup");
     setIsPasswordReset(searchParams.get("mode") === "reset");
   }, [searchParams]);
+
 
   // Ensure we have a valid auth session when arriving from a password-recovery email.
   // The implicit flow delivers tokens via URL hash; Supabase client auto-detects them
@@ -122,6 +128,11 @@ export default function Auth() {
 
     try {
       if (isSignUp) {
+        if (!SIGNUPS_ENABLED) {
+          toast.error("Sign-ups are temporarily closed. Please check back soon.");
+          return;
+        }
+
         // Capture referral code from URL
         const refCode = searchParams.get("ref");
         if (refCode) {
@@ -558,16 +569,33 @@ export default function Auth() {
                 </Button>
               </form>
 
-              <p className="mt-6 text-center text-sm text-muted-foreground">
-                {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
-                <button
-                  type="button"
-                  onClick={() => setIsSignUp(!isSignUp)}
-                  className="text-primary font-medium hover:underline"
-                >
-                  {isSignUp ? "Sign In" : "Sign Up"}
-                </button>
-              </p>
+              {SIGNUPS_ENABLED ? (
+                <p className="mt-6 text-center text-sm text-muted-foreground">
+                  {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
+                  <button
+                    type="button"
+                    onClick={() => setIsSignUp(!isSignUp)}
+                    className="text-primary font-medium hover:underline"
+                  >
+                    {isSignUp ? "Sign In" : "Sign Up"}
+                  </button>
+                </p>
+              ) : (
+                <div className="mt-6 rounded-lg border border-border bg-muted/40 p-4 text-center text-sm text-muted-foreground">
+                  New sign-ups are temporarily closed while we onboard our early
+                  users. Follow{" "}
+                  <a
+                    href="https://instagram.com/vestara.ng"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-primary font-medium hover:underline"
+                  >
+                    @vestara.ng
+                  </a>{" "}
+                  to know when we reopen.
+                </div>
+              )}
+
 
               {isSignUp && (
                 <p className="mt-4 text-center text-xs text-muted-foreground">
