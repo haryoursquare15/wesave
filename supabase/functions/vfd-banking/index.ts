@@ -2014,6 +2014,100 @@ async function handleTransfer(
       console.error("[VFD Transfer] hybrid ledger mirror error:", mirrorErr);
     }
 
+    // ─── GOAL CAMPAIGN CREDIT HOOK ───
+    // Users can fund a public Goal Campaign by transferring to the platform
+    // pool NUBAN with narration "GOAL-XXXXXXXX" (first 8 chars of campaign id).
+    // For inbound bank credits this is handled by vfd-campaign-inflow-webhook;
+    // for in-app transfers we detect it here so the campaign is credited the
+    // moment the transfer commits. Idempotent via UNIQUE(vfd_session_id):
+    // reference is used as the session key when VFD didn't return one.
+    try {
+      if (toAccount === PLATFORM_POOL_NUBAN) {
+        const narrationStr = ((body.narration as string) || (body.remark as string) || "").toUpperCase();
+        const m = narrationStr.match(/GOAL-[A-F0-9]{8}/);
+        if (m) {
+          const idPrefix = m[0].replace("GOAL-", "").toLowerCase();
+          const { data: campaigns } = await supabaseAdmin
+            .from("vfd_sandbox_campaigns")
+            .select("id, creator_id, title, goal_amount, raised_amount, escrow_balance, contributor_count, status")
+            .ilike("id", `${idPrefix}%`)
+            .limit(2);
+          if (campaigns && campaigns.length === 1) {
+            const campaign = campaigns[0] as {
+              id: string; creator_id: string; title: string;
+              goal_amount: number; raised_amount: number; escrow_balance: number | null;
+              contributor_count: number | null; status: string;
+            };
+            if (campaign.status === "active" || campaign.status === "completed") {
+              const sessKey = sessionId || reference;
+              const { data: senderProfile } = await supabaseAdmin
+                .from("vfd_sandbox_clients")
+                .select("full_name")
+                .eq("user_id", userId)
+                .maybeSingle();
+              const payerName = (senderProfile?.full_name as string | undefined) || (body.beneficiaryName as string) || "In-app Transfer";
+
+              const { error: inflowErr } = await supabaseAdmin
+                .from("vfd_sandbox_campaign_inflows")
+                .insert({
+                  campaign_id: campaign.id,
+                  amount: Number(body.amount),
+                  vfd_session_id: sessKey,
+                  vfd_reference: vfdTxnId || reference,
+                  payer_account: displayFromAccount,
+                  payer_name: payerName,
+                  payer_bank: "Vestara (VFD)",
+                  narration: (body.narration as string) || null,
+                  raw_payload: { source: "in_app_transfer", reference, vfd_txn_id: vfdTxnId, session_id: sessionId },
+                  source: "in_app_transfer",
+                  status: "credited",
+                });
+
+              const isDuplicate = inflowErr && (inflowErr.message || "").toLowerCase().includes("duplicate");
+              if (inflowErr && !isDuplicate) {
+                console.error("[VFD Transfer] campaign inflow insert failed:", inflowErr);
+              } else if (!inflowErr) {
+                const newRaised = Number(campaign.raised_amount) + Number(body.amount);
+                const newEscrow = Number(campaign.escrow_balance || 0) + Number(body.amount);
+                const newCount = Number(campaign.contributor_count || 0) + 1;
+                const updates: Record<string, unknown> = {
+                  raised_amount: newRaised,
+                  escrow_balance: newEscrow,
+                  contributor_count: newCount,
+                  updated_at: new Date().toISOString(),
+                };
+                if (newRaised >= Number(campaign.goal_amount)) updates.status = "completed";
+                await supabaseAdmin.from("vfd_sandbox_campaigns").update(updates).eq("id", campaign.id);
+
+                await supabaseAdmin.from("vfd_sandbox_campaign_contributions").insert({
+                  campaign_id: campaign.id,
+                  contributor_id: userId,
+                  amount: Number(body.amount),
+                  anonymous: false,
+                  message: null,
+                  contributor_name: payerName,
+                  contribution_reference: sessKey,
+                });
+
+                await supabaseAdmin.from("vfd_sandbox_notifications").insert({
+                  user_id: campaign.creator_id,
+                  title: "New campaign contribution",
+                  message: `Your campaign "${campaign.title}" received ₦${Number(body.amount).toLocaleString()} from ${payerName}. Escrow: ₦${newEscrow.toLocaleString()}.`,
+                  notification_type: "campaign_contribution",
+                });
+              }
+            }
+          } else if (campaigns && campaigns.length > 1) {
+            console.warn("[VFD Transfer] Ambiguous GOAL reference prefix:", idPrefix);
+          }
+        }
+      }
+    } catch (campaignErr) {
+      console.error("[VFD Transfer] campaign credit hook error:", campaignErr);
+    }
+    // ─── END GOAL CAMPAIGN CREDIT HOOK ───
+
+
 
 
     // ─── INTERBANK FEE + STAMP DUTY ───
