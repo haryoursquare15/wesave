@@ -41,18 +41,34 @@ export function TransferPreviewSheet({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const cacheRef = useRef<Map<string, TransferQuote>>(new Map());
+
   useEffect(() => {
     if (!open) return;
+    const key = `${toAccount}|${bankCode}|${amount}`;
+    const cached = cacheRef.current.get(key);
     let cancelled = false;
-    setQuote(null);
     setError(null);
-    setLoading(true);
+    if (cached) {
+      // Instant render from cache; still refresh in background so
+      // monthly free-quota counters stay accurate.
+      setQuote(cached);
+      setLoading(false);
+    } else {
+      setQuote(null);
+      setLoading(true);
+    }
     (async () => {
       const r = await quoteTransfer({ toAccount, bankCode, amount });
       if (cancelled) return;
       setLoading(false);
-      if (r?.data) setQuote(r.data as TransferQuote);
-      else setError("Could not load fees. Please try again.");
+      if (r?.data) {
+        const q = r.data as TransferQuote;
+        cacheRef.current.set(key, q);
+        setQuote(q);
+      } else if (!cached) {
+        setError("Could not load fees. Please try again.");
+      }
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
