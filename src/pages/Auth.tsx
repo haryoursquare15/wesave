@@ -41,9 +41,10 @@ export default function Auth() {
 
   // Keep UI mode in sync with URL
   useEffect(() => {
-    setIsSignUp(searchParams.get("mode") === "signup");
+    setIsSignUp(SIGNUPS_ENABLED && searchParams.get("mode") === "signup");
     setIsPasswordReset(searchParams.get("mode") === "reset");
   }, [searchParams]);
+
 
   // Ensure we have a valid auth session when arriving from a password-recovery email.
   // The implicit flow delivers tokens via URL hash; Supabase client auto-detects them
