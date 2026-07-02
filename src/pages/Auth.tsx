@@ -14,12 +14,17 @@ import { toast } from "sonner";
 import { TwoFactorEnforcement } from "@/components/security/TwoFactorEnforcement";
 
 import { getUserFriendlyError } from "@/lib/errorMessages";
+// Public sign-ups are temporarily disabled while the Instagram campaign runs.
+// Existing users can still sign in. Sandbox sign-ups (/vfd-sandbox/auth) are unaffected.
+const SIGNUPS_ENABLED = false;
+
 export default function Auth() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { signIn, signUp, user, loading } = useAuth();
-  const [isSignUp, setIsSignUp] = useState(searchParams.get("mode") === "signup");
+  const [isSignUp, setIsSignUp] = useState(SIGNUPS_ENABLED && searchParams.get("mode") === "signup");
   const [isPasswordReset, setIsPasswordReset] = useState(searchParams.get("mode") === "reset");
+
   const [resetSessionReady, setResetSessionReady] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
