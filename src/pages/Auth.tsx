@@ -128,6 +128,11 @@ export default function Auth() {
 
     try {
       if (isSignUp) {
+        if (!SIGNUPS_ENABLED) {
+          toast.error("Sign-ups are temporarily closed. Please check back soon.");
+          return;
+        }
+
         // Capture referral code from URL
         const refCode = searchParams.get("ref");
         if (refCode) {
