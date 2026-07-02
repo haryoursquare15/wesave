@@ -569,16 +569,33 @@ export default function Auth() {
                 </Button>
               </form>
 
-              <p className="mt-6 text-center text-sm text-muted-foreground">
-                {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
-                <button
-                  type="button"
-                  onClick={() => setIsSignUp(!isSignUp)}
-                  className="text-primary font-medium hover:underline"
-                >
-                  {isSignUp ? "Sign In" : "Sign Up"}
-                </button>
-              </p>
+              {SIGNUPS_ENABLED ? (
+                <p className="mt-6 text-center text-sm text-muted-foreground">
+                  {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
+                  <button
+                    type="button"
+                    onClick={() => setIsSignUp(!isSignUp)}
+                    className="text-primary font-medium hover:underline"
+                  >
+                    {isSignUp ? "Sign In" : "Sign Up"}
+                  </button>
+                </p>
+              ) : (
+                <div className="mt-6 rounded-lg border border-border bg-muted/40 p-4 text-center text-sm text-muted-foreground">
+                  New sign-ups are temporarily closed while we onboard our early
+                  users. Follow{" "}
+                  <a
+                    href="https://instagram.com/vestara.ng"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-primary font-medium hover:underline"
+                  >
+                    @vestara.ng
+                  </a>{" "}
+                  to know when we reopen.
+                </div>
+              )}
+
 
               {isSignUp && (
                 <p className="mt-4 text-center text-xs text-muted-foreground">
