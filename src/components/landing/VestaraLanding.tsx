@@ -256,12 +256,10 @@ export default function VestaraLanding() {
               transition={{ delay: 0.3 }}
               className="mt-8 flex flex-col sm:flex-row gap-3 justify-center"
             >
-              <Button size="xl" onClick={handleStart}>
-                Get Started Free <ArrowRight className="h-5 w-5" />
-              </Button>
-              <Button size="xl" variant="outline" onClick={handleSignIn}>
-                <Smartphone className="h-5 w-5" /> Sign In
-              </Button>
+              <div className="inline-flex items-center gap-2 px-4 py-3 rounded-xl bg-muted text-muted-foreground text-sm font-medium">
+                <Sparkles className="h-4 w-4 text-primary" />
+                Sign up &amp; sign in coming soon
+              </div>
             </motion.div>
             <div className="mt-8 flex flex-wrap justify-center gap-4 text-xs text-muted-foreground">
               {["No hidden fees", "Instant transfers", "Daily interest", "Split bills in seconds"].map((b) => (
