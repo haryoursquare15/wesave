@@ -157,14 +157,28 @@ async function vfdRequest(
 
   console.log(`[VFD ${VFD_MODE}] ${method} ${url.pathname}${url.search}`);
 
-  const response = await fetch(url.toString(), options);
+  // Retry upstream gateway timeouts (502/503/504) up to 2 extra times before
+  // giving up. VFD sandbox intermittently returns 504 HTML from its edge.
+  let response = await fetch(url.toString(), options);
+  for (let attempt = 0; attempt < 2 && [502, 503, 504].includes(response.status); attempt += 1) {
+    console.warn(`[VFD] Upstream ${response.status} on ${endpoint}, retrying (${attempt + 1}/2)...`);
+    await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+    response = await fetch(url.toString(), options);
+  }
   const contentType = response.headers.get("content-type") || "";
 
   if (!contentType.includes("application/json")) {
     const text = await response.text();
-    console.error(`[VFD] Non-JSON response (${response.status}): ${text.slice(0, 300)}`);
+    console.error(`[VFD] Non-JSON response (${response.status}) on ${endpoint}: ${text.slice(0, 300)}`);
+    const isGateway = [502, 503, 504].includes(response.status);
+    const isAuth = [401, 403].includes(response.status);
+    const friendly = isGateway
+      ? "The banking network is temporarily unavailable. Please try again in a moment."
+      : isAuth
+      ? "Banking service authentication failed. Please try again shortly."
+      : `Banking service returned an unexpected response (HTTP ${response.status}). Please try again.`;
     return {
-      data: { error: `VFD API returned non-JSON (HTTP ${response.status}). Token may be invalid or expired.` },
+      data: { error: friendly, upstream_status: response.status },
       status: response.status,
     };
   }
