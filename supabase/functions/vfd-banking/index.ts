@@ -3623,6 +3623,8 @@ Deno.serve(async (req) => {
       case "pin_transfer_beneficiary":
         return await handlePinTransferBeneficiary(userId, body);
 
+      case "admin_move_savings_to_subaccount":
+        return await handleAdminMoveSavingsToSubaccount(userId, body);
 
       default:
         return jsonResponse({ error: `Unknown action: ${action}` }, 400);
