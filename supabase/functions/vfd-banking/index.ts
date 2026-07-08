@@ -3712,3 +3712,199 @@ async function handleDeleteTransferBeneficiary(userId: string, body: Record<stri
   if (error) return jsonResponse({ error: error.message }, 500);
   return jsonResponse({ data: { deleted: true } });
 }
+
+// =============================================
+// ADMIN: MOVE APPROVED INVESTMENT PRINCIPAL INTO
+// PRODUCT-SPECIFIC SUB-ACCOUNT NUBAN AT VFD
+// =============================================
+//
+// Called by vestara-ledger during `approve_savings`. Physically moves the
+// principal at VFD from the customer's NUBAN sub-account into the product's
+// dedicated sub-account NUBAN (Vault / LockMax / Upfront Yield / GoalSave)
+// so ops can manage pooled investment funds per product.
+//
+// This is intentionally a BANK-LEVEL move only — Vestara's internal ledger
+// already reflects the customer's balance state (pending → locked_savings via
+// the RPC). We do NOT re-debit the customer's Vestara wallet here.
+async function handleAdminMoveSavingsToSubaccount(
+  callerUserId: string,
+  body: Record<string, unknown>
+) {
+  const db = getSupabaseAdmin();
+
+  // 1) admin gate
+  const { data: roles } = await db
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", callerUserId)
+    .in("role", ["admin", "super_admin"]);
+  if (!roles || roles.length === 0) {
+    return jsonResponse({ error: "Admin only" }, 403);
+  }
+
+  const savingsId = String(body.savings_id || "").trim();
+  if (!savingsId) return jsonResponse({ error: "savings_id is required" }, 400);
+
+  // 2) fetch savings + product sub-account NUBAN
+  const { data: savings, error: sErr } = await db
+    .from("vestara_savings")
+    .select("id, user_id, principal, product_code, sub_account_transferred_at, sub_account_transfer_ref")
+    .eq("id", savingsId)
+    .maybeSingle();
+  if (sErr || !savings) {
+    return jsonResponse({ error: "Investment not found" }, 404);
+  }
+  if (savings.sub_account_transferred_at) {
+    return jsonResponse({
+      data: {
+        already_moved: true,
+        reference: savings.sub_account_transfer_ref,
+        moved_at: savings.sub_account_transferred_at,
+      },
+    });
+  }
+
+  const { data: product } = await db
+    .from("vestara_products")
+    .select("code, name, sub_account_nuban")
+    .eq("code", savings.product_code)
+    .maybeSingle();
+  const subAccountNuban = (product?.sub_account_nuban as string | null) || null;
+  if (!subAccountNuban) {
+    return jsonResponse({
+      error: `Product "${savings.product_code}" has no sub-account NUBAN configured. Set vestara_products.sub_account_nuban first.`,
+      code: "SUBACCOUNT_NOT_CONFIGURED",
+    }, 400);
+  }
+
+  // 3) fetch customer's VFD NUBAN
+  const { data: client } = await db
+    .from("vfd_sandbox_clients")
+    .select("vfd_account_number, metadata, full_name")
+    .eq("user_id", savings.user_id)
+    .maybeSingle();
+  const customerNuban = client?.vfd_account_number as string | null | undefined;
+  if (!customerNuban) {
+    return jsonResponse({
+      error: "Customer has no VFD account provisioned yet.",
+      code: "CUSTOMER_NUBAN_MISSING",
+    }, 400);
+  }
+  const isVirtual = !!(client?.metadata as Record<string, unknown> | null)?.virtual_nuban;
+  if (isVirtual) {
+    return jsonResponse({
+      error: "Customer is on a virtual NUBAN — funds cannot be physically routed to a product sub-account.",
+      code: "CUSTOMER_NUBAN_VIRTUAL",
+    }, 400);
+  }
+  if (customerNuban === subAccountNuban) {
+    return jsonResponse({ error: "Refusing self-transfer.", code: "SELF_TRANSFER_BLOCKED" }, 400);
+  }
+
+  const amount = Number(savings.principal);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return jsonResponse({ error: "Invalid principal amount on savings row" }, 400);
+  }
+
+  // 4) sender enquiry (customer sub-account)
+  const { data: senderEnquiry, status: senderStatus } = await vfdRequest(
+    "/account/enquiry",
+    "GET",
+    undefined,
+    { accountNumber: customerNuban }
+  );
+  if (senderStatus !== 200 || (senderEnquiry as Record<string, unknown>)?.status !== "00") {
+    return jsonResponse({
+      error: "Could not retrieve customer VFD account details.",
+      data: senderEnquiry,
+    }, 400);
+  }
+  const senderEnv = (senderEnquiry as Record<string, unknown>)?.data as Record<string, unknown>;
+  const senderAcct = (senderEnv?.account as Record<string, unknown> | undefined) || senderEnv;
+  const senderSavingsId =
+    (senderAcct?.id?.toString?.() || senderEnv?.accountId?.toString?.() || "");
+  if (!senderSavingsId) {
+    return jsonResponse({ error: "VFD enquiry returned no id for customer sub-account.", data: senderEnquiry }, 400);
+  }
+
+  // 5) beneficiary enquiry (product sub-account)
+  const { data: benEnquiry, status: benStatus } = await vfdRequest(
+    "/account/enquiry",
+    "GET",
+    undefined,
+    { accountNumber: subAccountNuban }
+  );
+  if (benStatus !== 200 || (benEnquiry as Record<string, unknown>)?.status !== "00") {
+    return jsonResponse({
+      error: `Could not retrieve product sub-account (${subAccountNuban}) at VFD.`,
+      data: benEnquiry,
+    }, 400);
+  }
+  const benEnv = (benEnquiry as Record<string, unknown>)?.data as Record<string, unknown>;
+  const benAcct = (benEnv?.account as Record<string, unknown> | undefined) || benEnv;
+  const toSavingsId = benAcct?.id?.toString?.() || benEnv?.accountId?.toString?.() || "";
+  const toClientId = benEnv?.clientId?.toString?.() || benAcct?.clientId?.toString?.() || "";
+  const toClient = benEnv?.client?.toString?.() || benAcct?.client?.toString?.() || product?.name || "Product Pool";
+  const toBvn = benEnv?.bvn?.toString?.() || "";
+
+  // 6) signature + /transfer intra
+  const signature = await generateTransferSignature(customerNuban, subAccountNuban);
+  const walletPrefix = Deno.env.get("VFD_WALLET_NAME") || "VFD";
+  const reference = `INV-${savings.product_code.toUpperCase()}-${Date.now()}-${crypto.randomUUID().slice(0, 6)}`;
+
+  const payload = {
+    fromAccount: customerNuban,
+    fromClientId: senderEnv?.clientId?.toString?.() || "",
+    fromClient: senderEnv?.client?.toString?.() || "",
+    fromSavingsId: senderSavingsId,
+    fromBvn: senderEnv?.bvn?.toString?.() || "",
+    toAccount: subAccountNuban,
+    toBank: "999999",
+    toClient,
+    toClientId,
+    toSavingsId,
+    toSession: "",
+    toBvn,
+    signature,
+    amount: String(amount),
+    remark: `${product?.name || savings.product_code} investment funding`,
+    transferType: "intra",
+    reference,
+    uniqueSenderAccountId: senderSavingsId,
+  };
+
+  console.log("[admin_move_savings_to_subaccount] payload:", JSON.stringify(payload));
+
+  const { data: transferResp, status: transferStatus } = await vfdRequest("/transfer", "POST", payload);
+  const respData = transferResp as Record<string, unknown>;
+  const ok = respData?.status === "00";
+
+  if (!ok) {
+    console.error("[admin_move_savings_to_subaccount] VFD rejected:", respData);
+    return jsonResponse({
+      error: (respData?.message as string) || "VFD refused the sub-account transfer.",
+      code: "VFD_TRANSFER_REJECTED",
+      vfd_status: transferStatus,
+      data: respData,
+    }, 400);
+  }
+
+  // 7) stamp the savings row
+  const nowIso = new Date().toISOString();
+  await db.from("vestara_savings").update({
+    sub_account_nuban: subAccountNuban,
+    sub_account_transfer_ref: reference,
+    sub_account_transferred_at: nowIso,
+  }).eq("id", savingsId);
+
+  return jsonResponse({
+    data: {
+      success: true,
+      savings_id: savingsId,
+      sub_account_nuban: subAccountNuban,
+      reference,
+      moved_at: nowIso,
+      vfd: respData?.data ?? null,
+    },
+  });
+}
