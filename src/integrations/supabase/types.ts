@@ -3565,6 +3565,7 @@ export type Database = {
           min_tenor_days: number
           min_user_rate: number
           name: string
+          sub_account_nuban: string | null
           updated_at: string
           vfd_rate: number
         }
@@ -3582,6 +3583,7 @@ export type Database = {
           min_tenor_days: number
           min_user_rate: number
           name: string
+          sub_account_nuban?: string | null
           updated_at?: string
           vfd_rate: number
         }
@@ -3599,6 +3601,7 @@ export type Database = {
           min_tenor_days?: number
           min_user_rate?: number
           name?: string
+          sub_account_nuban?: string | null
           updated_at?: string
           vfd_rate?: number
         }
@@ -3767,6 +3770,9 @@ export type Database = {
           product_id: string
           start_date: string
           status: Database["public"]["Enums"]["vestara_savings_status"]
+          sub_account_nuban: string | null
+          sub_account_transfer_ref: string | null
+          sub_account_transferred_at: string | null
           tenor_count: number | null
           tenor_days: number
           updated_at: string
@@ -3820,6 +3826,9 @@ export type Database = {
           product_id: string
           start_date?: string
           status?: Database["public"]["Enums"]["vestara_savings_status"]
+          sub_account_nuban?: string | null
+          sub_account_transfer_ref?: string | null
+          sub_account_transferred_at?: string | null
           tenor_count?: number | null
           tenor_days: number
           updated_at?: string
@@ -3873,6 +3882,9 @@ export type Database = {
           product_id?: string
           start_date?: string
           status?: Database["public"]["Enums"]["vestara_savings_status"]
+          sub_account_nuban?: string | null
+          sub_account_transfer_ref?: string | null
+          sub_account_transferred_at?: string | null
           tenor_count?: number | null
           tenor_days?: number
           updated_at?: string

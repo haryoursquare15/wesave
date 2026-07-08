@@ -16,7 +16,7 @@ interface PendingSavings {
   user_rate: number;
   vfd_rate: number;
   approval_submitted_at: string;
-  vestara_products?: { code: string; name: string; is_upfront_yield: boolean } | null;
+  vestara_products?: { code: string; name: string; is_upfront_yield: boolean; sub_account_nuban: string | null } | null;
   profiles?: { full_name: string | null; email: string | null } | null;
 }
 
@@ -43,10 +43,13 @@ export function InvestmentApprovalsTab() {
     const res = await invoke(fn, { savings_id: id, notes: notes[id] || null });
     setActing(a => ({ ...a, [id]: null }));
     if (res?.success) {
+      const subAcct = (res as { sub_account?: { sub_account_nuban?: string; reference?: string } })?.sub_account;
       toast({
         title: action === "approve" ? "Investment approved" : "Investment rejected",
         description: action === "approve"
-          ? "Funds have been locked into the savings vault."
+          ? subAcct?.sub_account_nuban
+            ? `Funds routed to product sub-account ${subAcct.sub_account_nuban}${subAcct.reference ? ` (ref ${subAcct.reference})` : ""}.`
+            : "Funds have been locked into the savings vault."
           : `Funds were refunded to the customer's wallet${res.refunded ? ` (₦${Number(res.refunded).toLocaleString()})` : ""}.`,
       });
       await load();
@@ -97,6 +100,11 @@ export function InvestmentApprovalsTab() {
                   </p>
                 </div>
               </div>
+              {s.vestara_products?.sub_account_nuban && (
+                <p className="text-[11px] text-muted-foreground bg-muted/40 rounded-md px-2 py-1.5">
+                  On approval, ₦{Number(s.principal).toLocaleString()} will be routed to product sub-account <span className="font-mono">{s.vestara_products.sub_account_nuban}</span>.
+                </p>
+              )}
               <Textarea
                 placeholder="Optional note for the customer (shown if rejecting)"
                 value={notes[s.id] || ""}
