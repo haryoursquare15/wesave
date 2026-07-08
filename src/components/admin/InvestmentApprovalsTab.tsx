@@ -100,6 +100,11 @@ export function InvestmentApprovalsTab() {
                   </p>
                 </div>
               </div>
+              {s.vestara_products?.sub_account_nuban && (
+                <p className="text-[11px] text-muted-foreground bg-muted/40 rounded-md px-2 py-1.5">
+                  On approval, ₦{Number(s.principal).toLocaleString()} will be routed to product sub-account <span className="font-mono">{s.vestara_products.sub_account_nuban}</span>.
+                </p>
+              )}
               <Textarea
                 placeholder="Optional note for the customer (shown if rejecting)"
                 value={notes[s.id] || ""}
