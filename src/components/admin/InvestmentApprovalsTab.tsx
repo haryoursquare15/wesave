@@ -43,10 +43,13 @@ export function InvestmentApprovalsTab() {
     const res = await invoke(fn, { savings_id: id, notes: notes[id] || null });
     setActing(a => ({ ...a, [id]: null }));
     if (res?.success) {
+      const subAcct = (res as { sub_account?: { sub_account_nuban?: string; reference?: string } })?.sub_account;
       toast({
         title: action === "approve" ? "Investment approved" : "Investment rejected",
         description: action === "approve"
-          ? "Funds have been locked into the savings vault."
+          ? subAcct?.sub_account_nuban
+            ? `Funds routed to product sub-account ${subAcct.sub_account_nuban}${subAcct.reference ? ` (ref ${subAcct.reference})` : ""}.`
+            : "Funds have been locked into the savings vault."
           : `Funds were refunded to the customer's wallet${res.refunded ? ` (₦${Number(res.refunded).toLocaleString()})` : ""}.`,
       });
       await load();
