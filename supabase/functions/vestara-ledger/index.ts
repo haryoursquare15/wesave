@@ -839,6 +839,34 @@ serve(async (req) => {
       case "approve_savings": {
         const { savings_id, notes } = params;
         if (!savings_id) return err("savings_id is required");
+
+        // Step 1: physically move the principal at VFD from the customer's
+        // NUBAN into the product's dedicated sub-account NUBAN (Vault /
+        // LockMax / Upfront Yield / GoalSave). If VFD refuses, DO NOT flip
+        // approval status — surface the bank error to the admin.
+        const authHeader = req.headers.get("Authorization") || "";
+        const moveRes = await fetch(`${supabaseUrl}/functions/v1/vfd-banking`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: authHeader,
+            apikey: Deno.env.get("SUPABASE_ANON_KEY") || "",
+          },
+          body: JSON.stringify({
+            action: "admin_move_savings_to_subaccount",
+            savings_id,
+          }),
+        });
+        const moveJson = await moveRes.json().catch(() => ({}));
+        if (!moveRes.ok || moveJson?.error) {
+          return err(
+            moveJson?.error ||
+              "Could not move funds into the product sub-account at VFD. Approval halted.",
+            moveRes.status || 400,
+          );
+        }
+
+        // Step 2: flip approval status on the Vestara ledger.
         const { data, error: e } = await supabase.rpc("vestara_approve_savings", {
           _admin_id: userId,
           _savings_id: savings_id,
@@ -846,17 +874,17 @@ serve(async (req) => {
         });
         if (e) return err(e.message);
         const { data: s } = await supabase.from("vestara_savings")
-          .select("user_id, product_code, principal").eq("id", savings_id).maybeSingle();
+          .select("user_id, product_code, principal, sub_account_nuban, sub_account_transfer_ref").eq("id", savings_id).maybeSingle();
         if (s?.user_id) {
           await supabase.from("user_notifications").insert({
             user_id: s.user_id,
             type: "savings_approved",
             title: "Investment approved 🎉",
             message: `Your ${s.product_code} investment of ₦${Number(s.principal).toLocaleString()} is now active.`,
-            metadata: { savings_id },
+            metadata: { savings_id, sub_account_nuban: s.sub_account_nuban, sub_account_transfer_ref: s.sub_account_transfer_ref },
           }).then(() => {}, () => {});
         }
-        result = data;
+        result = { ...(data as Record<string, unknown> ?? {}), sub_account: moveJson?.data ?? null };
         break;
       }
 
