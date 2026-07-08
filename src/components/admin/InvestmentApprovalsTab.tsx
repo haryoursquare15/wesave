@@ -16,7 +16,7 @@ interface PendingSavings {
   user_rate: number;
   vfd_rate: number;
   approval_submitted_at: string;
-  vestara_products?: { code: string; name: string; is_upfront_yield: boolean } | null;
+  vestara_products?: { code: string; name: string; is_upfront_yield: boolean; sub_account_nuban: string | null } | null;
   profiles?: { full_name: string | null; email: string | null } | null;
 }
 
