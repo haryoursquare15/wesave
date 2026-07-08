@@ -818,7 +818,7 @@ serve(async (req) => {
         if (roleRows.length === 0) return err("Admin only", 403);
         const { data, error: e } = await supabase
           .from("vestara_savings")
-          .select("*, vestara_products(code,name,is_upfront_yield)")
+          .select("*, vestara_products(code,name,is_upfront_yield,sub_account_nuban)")
           .eq("approval_status", "pending")
           .order("approval_submitted_at", { ascending: true });
         if (e) return err(e.message);
