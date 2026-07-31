@@ -50,7 +50,7 @@ export default function Crowdfunding() {
         // Fetch all active campaigns
         const { data: allCampaigns, error } = await supabase
           .from("crowdfunding_campaigns")
-          .select("*")
+          .select("id, title, description, creator_id, target_amount, raised_amount, contributor_count, status, category, image_url, deadline, created_at, updated_at")
           .in("status", ["active", "completed"])
           .order("created_at", { ascending: false });
 
@@ -61,7 +61,7 @@ export default function Crowdfunding() {
         if (user) {
           const { data: userCampaigns } = await supabase
             .from("crowdfunding_campaigns")
-            .select("*")
+            .select("id, title, description, creator_id, target_amount, raised_amount, contributor_count, status, category, image_url, deadline, created_at, updated_at")
             .eq("creator_id", user.id)
             .order("created_at", { ascending: false });
 
