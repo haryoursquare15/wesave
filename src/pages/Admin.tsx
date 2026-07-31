@@ -30,6 +30,7 @@ import { VfdWebhookDlqTab } from "@/components/admin/VfdWebhookDlqTab";
 import { VfdAuditTab } from "@/components/admin/VfdAuditTab";
 import { RolesPermissionsTab } from "@/components/admin/RolesPermissionsTab";
 import { Percent, PiggyBank, FileSpreadsheet, AlertTriangle, ScanLine, UserCog } from "lucide-react";
+import { ADMIN_LOGIN_PATH, ADMIN_RECURRING_TEST_PATH, applyNoIndex } from "@/lib/adminRoutes";
 
 export default function Admin() {
   const navigate = useNavigate();
@@ -39,8 +40,12 @@ export default function Admin() {
   const { toast } = useToast();
 
   useEffect(() => {
+    applyNoIndex();
+  }, []);
+
+  useEffect(() => {
     if (!authLoading && !user) {
-      navigate("/admin/login");
+      navigate(ADMIN_LOGIN_PATH);
     }
   }, [user, authLoading, navigate]);
 
@@ -51,7 +56,7 @@ export default function Admin() {
         description: "You don't have permission to access this page.",
         variant: "destructive",
       });
-      navigate("/admin/login");
+      navigate(ADMIN_LOGIN_PATH);
     }
   }, [isAdmin, adminLoading, permLoading, user, navigate, toast]);
 
@@ -88,7 +93,7 @@ export default function Admin() {
               <h1 className="text-lg sm:text-2xl font-bold truncate">Admin Dashboard</h1>
             </div>
           </div>
-          <Button variant="outline" size="sm" onClick={() => navigate("/admin/recurring-test")} className="flex items-center gap-1 flex-shrink-0 text-xs sm:text-sm">
+          <Button variant="outline" size="sm" onClick={() => navigate(ADMIN_RECURRING_TEST_PATH)} className="flex items-center gap-1 flex-shrink-0 text-xs sm:text-sm">
             <FlaskConical className="h-4 w-4" />
             <span className="hidden sm:inline">Recurring Test Lab</span>
             <span className="sm:hidden">Test</span>

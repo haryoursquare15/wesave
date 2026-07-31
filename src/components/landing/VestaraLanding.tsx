@@ -88,13 +88,6 @@ const steps = [
 ];
 
 export default function VestaraLanding() {
-  const handleStart = () => {
-    window.location.href = "/vfd-sandbox/auth";
-  };
-  const handleSignIn = () => {
-    window.location.href = "/vfd-sandbox/auth";
-  };
-
   // SEO: set page-specific head tags + structured data for Vestara
   useEffect(() => {
     const title = "Vestara — Smart Savings, Split Pay & Ajo Banking in Nigeria";

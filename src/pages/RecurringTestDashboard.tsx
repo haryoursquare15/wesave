@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ADMIN_CONSOLE_PATH } from "@/lib/adminRoutes";
 
 declare global {
   interface Window {
@@ -369,7 +370,7 @@ export default function RecurringTestDashboard() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3">
-              <Button variant="ghost" size="icon" onClick={() => navigate("/admin")} className="shrink-0">
+              <Button variant="ghost" size="icon" onClick={() => navigate(ADMIN_CONSOLE_PATH)} className="shrink-0">
                 <ArrowLeft className="h-5 w-5" />
               </Button>
               <div className="flex items-center gap-2.5">
