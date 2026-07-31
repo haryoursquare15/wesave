@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Shield, Loader2 } from "lucide-react";
-import { ADMIN_CONSOLE_PATH, useNoIndex } from "@/lib/adminRoutes";
+import { ADMIN_CONSOLE_PATH, applyNoIndex } from "@/lib/adminRoutes";
 
 export default function AdminLogin() {
   const navigate = useNavigate();
@@ -18,7 +18,7 @@ export default function AdminLogin() {
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    useNoIndex();
+    applyNoIndex();
   }, []);
 
   useEffect(() => {

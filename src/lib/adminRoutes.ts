@@ -15,7 +15,7 @@ export const ADMIN_CONSOLE_PATH = `${ADMIN_BASE}/console`;
 export const ADMIN_RECURRING_TEST_PATH = `${ADMIN_BASE}/console/recurring-test`;
 
 /** Applies noindex/nofollow so crawlers never surface staff pages. */
-export function useNoIndex() {
+export function applyNoIndex() {
   if (typeof document === "undefined") return;
   let tag = document.querySelector('meta[name="robots"]') as HTMLMetaElement | null;
   if (!tag) {
