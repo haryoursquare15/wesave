@@ -12,6 +12,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useMyGroups } from "@/hooks/useThriftGroups";
 import { useIsAdmin } from "@/hooks/useAdmin";
 import { useEffect } from "react";
+import { ADMIN_CONSOLE_PATH } from "@/lib/adminRoutes";
 
 const quickActions = [
   { label: "Fund Wallet", icon: "💰", link: "/wallet" },
@@ -67,7 +68,7 @@ export default function Dashboard() {
             </div>
             <div className="flex items-center gap-2">
               {isAdmin && (
-                <Button variant="ghost" size="icon" onClick={() => navigate("/admin")} title="Admin Dashboard">
+                <Button variant="ghost" size="icon" onClick={() => navigate(ADMIN_CONSOLE_PATH)} title="Admin Dashboard">
                   <Shield className="h-5 w-5 text-primary" />
                 </Button>
               )}

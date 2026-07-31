@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Shield, Loader2 } from "lucide-react";
+import { ADMIN_CONSOLE_PATH, useNoIndex } from "@/lib/adminRoutes";
 
 export default function AdminLogin() {
   const navigate = useNavigate();
@@ -22,7 +23,7 @@ export default function AdminLogin() {
       if (session?.user) {
         const { data: isAdmin } = await supabase.rpc("is_any_admin", { _user_id: session.user.id });
         if (isAdmin) {
-          navigate("/admin", { replace: true });
+          navigate(ADMIN_CONSOLE_PATH, { replace: true });
           return;
         }
       }
@@ -43,7 +44,7 @@ export default function AdminLogin() {
         throw new Error("This account does not have staff access.");
       }
       toast({ title: "Welcome back", description: "Redirecting to admin console..." });
-      navigate("/admin", { replace: true });
+      navigate(ADMIN_CONSOLE_PATH, { replace: true });
     } catch (err) {
       toast({
         title: "Sign-in failed",

@@ -51,10 +51,11 @@ import SandboxHealth from "./pages/SandboxHealth";
 import { SandboxAuthProvider } from "./contexts/SandboxAuthContext";
 import NotFound from "./pages/NotFound";
 import Unsubscribe from "./pages/Unsubscribe";
+import { ADMIN_LOGIN_PATH, ADMIN_CONSOLE_PATH, ADMIN_RECURRING_TEST_PATH } from "@/lib/adminRoutes";
 
 const queryClient = new QueryClient();
 
-const PUBLIC_ROUTES = ["/", "/auth", "/forgot-password", "/invite", "/onboarding", "/terms", "/privacy", "/aml-policy", "/kyc-policy", "/goal", "/delete-account", "/app-home", "/vfd-sandbox", "/vfd-sandbox/auth", "/unsubscribe", "/admin/login"];
+const PUBLIC_ROUTES = ["/", "/auth", "/forgot-password", "/invite", "/onboarding", "/terms", "/privacy", "/aml-policy", "/kyc-policy", "/goal", "/delete-account", "/app-home", "/vfd-sandbox", "/vfd-sandbox/auth", "/unsubscribe", ADMIN_LOGIN_PATH];
 
 function isPublicRoute(pathname: string) {
   return PUBLIC_ROUTES.some(route => 
@@ -130,9 +131,9 @@ const App = () => {
                 <Route path="/profile" element={<Profile />} />
                 <Route path="/wallet" element={<Wallet />} />
                 <Route path="/invite/:token" element={<Invite />} />
-                <Route path="/admin/login" element={<AdminLogin />} />
-                <Route path="/admin" element={<Admin />} />
-                <Route path="/admin/recurring-test" element={<RecurringTestDashboard />} />
+                <Route path={ADMIN_LOGIN_PATH} element={<AdminLogin />} />
+                <Route path={ADMIN_CONSOLE_PATH} element={<Admin />} />
+                <Route path={ADMIN_RECURRING_TEST_PATH} element={<RecurringTestDashboard />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/settings/security" element={<SecuritySettings />} />
                 <Route path="/settings/profile" element={<Profile />} />
