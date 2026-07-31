@@ -7174,6 +7174,10 @@ export type Database = {
         Args: { _group_id: string; _user_id: string }
         Returns: undefined
       }
+      can_self_join_group: {
+        Args: { _group_id: string; _user_id: string }
+        Returns: boolean
+      }
       cancel_split_request: {
         Args: { _creator_id: string; _split_request_id: string }
         Returns: Json
