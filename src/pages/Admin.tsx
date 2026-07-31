@@ -40,6 +40,10 @@ export default function Admin() {
   const { toast } = useToast();
 
   useEffect(() => {
+    useNoIndex();
+  }, []);
+
+  useEffect(() => {
     if (!authLoading && !user) {
       navigate(ADMIN_LOGIN_PATH);
     }

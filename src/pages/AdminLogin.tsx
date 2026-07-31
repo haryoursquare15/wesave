@@ -18,6 +18,10 @@ export default function AdminLogin() {
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
+    useNoIndex();
+  }, []);
+
+  useEffect(() => {
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
