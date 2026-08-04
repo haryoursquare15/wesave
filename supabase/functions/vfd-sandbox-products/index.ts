@@ -905,9 +905,11 @@ async function processAutoPayout(
   return { success: true, recipient_id: recipientId, net_amount: netAmount, platform_fee: platformFee };
 }
 
-async function handleGetGroupDetail(body: Record<string, unknown>) {
+async function handleGetGroupDetail(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const groupId = body.group_id as string;
+  if (!groupId) return jsonResponse({ error: "group_id required" }, 400);
+  if (!(await isGroupMember(groupId, userId)) && !(await isPlatformAdmin(userId))) return forbidden();
   const { data: group } = await db.from("vfd_sandbox_groups").select("*").eq("id", groupId).single();
   const { data: members } = await db.from("vfd_sandbox_group_members").select("*").eq("group_id", groupId).order("payout_position");
   const { data: contributions } = await db.from("vfd_sandbox_group_contributions").select("*").eq("group_id", groupId).order("created_at", { ascending: false }).limit(50);
