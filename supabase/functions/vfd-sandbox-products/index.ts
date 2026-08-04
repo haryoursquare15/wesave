@@ -4821,12 +4821,16 @@ async function performMandateDebitForMember(
   return { success: false, error: "VFD mandate debit failed", details: result.raw };
 }
 
-async function handleTriggerMandateDebit(_userId: string, body: Record<string, unknown>) {
+async function handleTriggerMandateDebit(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const groupId = body.group_id as string;
   const targetUserId = body.user_id as string;
   const cycleIndex = Number(body.cycle_index ?? 0);
   if (!groupId || !targetUserId) return jsonResponse({ error: "group_id and user_id required" }, 400);
+  // Only the group admin (or a platform admin) may pull another member's mandate.
+  if (targetUserId !== userId && !(await isGroupAdmin(groupId, userId)) && !(await isPlatformAdmin(userId))) {
+    return forbidden("Only the group admin can trigger a mandate debit for another member");
+  }
 
   const { data: member } = await db.from("vfd_sandbox_group_members")
     .select("id, user_id, mandate_status, mandate_code, mandate_reference, mandate_payer_account_number, mandate_payer_bank_code")
@@ -5434,7 +5438,7 @@ Deno.serve(async (req) => {
       case "join_group": return await handleJoinGroup(userId, body);
       case "commence_group": return await handleCommenceGroup(userId, body);
       case "contribute_group": return await handleContributeGroup(userId, body);
-      case "get_group_detail": return await handleGetGroupDetail(body);
+      case "get_group_detail": return await handleGetGroupDetail(userId, body);
       case "request_swap": return await handleRequestSwap(userId, body);
       case "respond_swap": return await handleRespondSwap(userId, body);
       case "exit_group": return await handleExitGroup(userId, body);
@@ -5447,7 +5451,7 @@ Deno.serve(async (req) => {
       case "validate_group_invite_link": return await handleValidateGroupInviteLink(body);
       case "join_group_via_link": return await handleJoinGroupViaLink(userId, body);
       case "list_group_invites": return await handleListGroupInvites(userId);
-      case "list_pending_group_invitees": return await handleListPendingGroupInvitees(body);
+      case "list_pending_group_invitees": return await handleListPendingGroupInvitees(userId, body);
       case "auto_start_pending_groups": return await handleAutoStartPendingGroups(userId, body);
       case "post_group_chat": return await handlePostGroupChat(userId, body);
       case "list_group_chat": return await handleListGroupChat(userId, body);
@@ -5456,7 +5460,7 @@ Deno.serve(async (req) => {
       case "check_group_mandate_status": return await handleCheckGroupMandateStatus(userId, body);
       case "check_commencement_readiness": return await handleCheckCommencementReadiness(userId, body);
       case "trigger_mandate_debit": return await handleTriggerMandateDebit(userId, body);
-      case "poll_pending_mandates": return await handlePollPendingMandates();
+      case "poll_pending_mandates": return (await isPlatformAdmin(userId)) ? await handlePollPendingMandates() : forbidden("Admin only");
       // E-Mandate flow extended to Target Ajo + Goal Savings 2.0
       case "accept_target_mandate": return await handleAcceptTargetMandate(userId, body);
       case "check_target_mandate_status": return await handleCheckTargetMandateStatus(userId, body);
@@ -5464,7 +5468,7 @@ Deno.serve(async (req) => {
       case "goalsave_v2_create": return await handleGoalsaveV2Create(userId, body);
       case "goalsave_v2_authorize_mandate": return await handleGoalsaveAuthorizeMandate(userId, body);
       case "goalsave_v2_check_mandate_status": return await handleGoalsaveCheckMandateStatus(userId, body);
-      case "sandbox_auto_contribute": return await handleSandboxAutoContribute(userId, body);
+      case "sandbox_auto_contribute": return (await isPlatformAdmin(userId)) ? await handleSandboxAutoContribute(userId, body) : forbidden("Admin only");
 
       // In-app notifications
       case "list_notifications": return await handleListNotifications(userId);
@@ -5475,7 +5479,7 @@ Deno.serve(async (req) => {
       case "create_target": return await handleCreateTarget(userId, body);
       case "list_targets": return await handleListTargets(userId);
       case "contribute_target": return await handleContributeTarget(userId, body);
-      case "get_target_detail": return await handleGetTargetDetail(body);
+      case "get_target_detail": return await handleGetTargetDetail(userId, body);
       case "invite_target_member": return await handleInviteTargetMember(userId, body);
       case "respond_target_invite": return await handleRespondTargetInvite(userId, body);
       case "list_pending_target_invites": return await handleListPendingTargetInvites(userId);
@@ -5488,7 +5492,7 @@ Deno.serve(async (req) => {
       case "create_campaign": return await handleCreateCampaign(userId, body);
       case "list_campaigns": return await handleListCampaigns(userId);
       case "contribute_campaign": return await handleContributeCampaign(userId, body);
-      case "get_campaign_detail": return await handleGetCampaignDetail(body);
+      case "get_campaign_detail": return await handleGetCampaignDetail(userId, body);
       case "post_campaign_update": return await handlePostCampaignUpdate(userId, body);
       case "withdraw_campaign_escrow": return await handleWithdrawCampaignEscrow(userId, body);
 
@@ -5500,7 +5504,7 @@ Deno.serve(async (req) => {
       case "decline_split": return await handleDeclineSplit(userId, body);
       case "cancel_split": return await handleCancelSplit(userId, body);
       case "remove_split_participant": return await handleRemoveSplitParticipant(userId, body);
-      case "get_split_detail": return await handleGetSplitDetail(body);
+      case "get_split_detail": return await handleGetSplitDetail(userId, body);
       case "invite_split_member": return await handleInviteSplitMember(userId, body);
 
       // Associations (full parity)
