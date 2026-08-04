@@ -14,6 +14,9 @@ interface ReceiptRow {
   amount: number;
   paid_at: string;
   expires_at: string | null;
+  delivery_type: string | null;
+  delivery_token: string | null;
+  delivery_units: string | null;
 }
 
 export function SandboxBillReceipts() {
@@ -57,6 +60,11 @@ export function SandboxBillReceipts() {
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-foreground truncate">{r.biller_name}</p>
               <p className="text-xs text-muted-foreground truncate">{r.customer_id} • {formatDistanceToNow(new Date(r.paid_at), { addSuffix: true })}</p>
+              {r.delivery_token && (
+                <p className="sm:hidden text-[11px] font-mono font-semibold text-primary truncate">
+                  {r.delivery_type === "pin" ? "PIN" : "Token"}: {r.delivery_token}
+                </p>
+              )}
               {r.expires_at && (
                 <div className="flex items-center gap-1 mt-1">
                   <Clock className="h-3 w-3 text-muted-foreground" />
@@ -67,6 +75,15 @@ export function SandboxBillReceipts() {
                 </div>
               )}
             </div>
+            {r.delivery_token && (
+              <div className="hidden sm:block text-right shrink-0 mr-2">
+                <p className="text-[10px] text-muted-foreground">
+                  {r.delivery_type === "pin" ? "PIN" : "Token"}
+                </p>
+                <p className="text-xs font-mono font-semibold text-foreground">{r.delivery_token}</p>
+                {r.delivery_units && <p className="text-[10px] text-muted-foreground">{r.delivery_units}</p>}
+              </div>
+            )}
             <div className="text-right shrink-0">
               <p className="text-sm font-bold text-foreground">₦{Number(r.amount).toLocaleString()}</p>
               <p className="text-[10px] text-success">Successful</p>
