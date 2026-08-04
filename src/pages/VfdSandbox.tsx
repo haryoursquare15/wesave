@@ -58,6 +58,7 @@ function VfdSandboxInner() {
   const vfd = useVfdBanking();
   const vestara = useVestaraLedger();
   const fetchVfdTransactions = vfd.fetchTransactions;
+  const getVfdUserBalance = vfd.getUserBalance;
   const getVestaraBalanceSummary = vestara.getBalanceSummary;
   const getVestaraLockedFunds = vestara.getLockedFunds;
   const fetchVestaraTransactions = vestara.fetchTransactions;
