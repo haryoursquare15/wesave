@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { sandboxSupabase } from "@/integrations/supabase/sandboxClient";
+import { secureSignIn } from "@/lib/secureSignIn";
 
 interface SandboxAuthContextType {
   user: User | null;
@@ -73,7 +74,8 @@ export function SandboxAuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await sandboxSupabase.auth.signInWithPassword({ email, password });
+    // Routed through the hardened gate (rate limiting + lockout).
+    const { error } = await secureSignIn(sandboxSupabase, email, password);
     return { error };
   };
 

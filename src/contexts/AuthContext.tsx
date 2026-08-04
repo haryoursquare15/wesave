@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from "react
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { Tables } from "@/integrations/supabase/types";
+import { secureSignIn } from "@/lib/secureSignIn";
 
 type Profile = Tables<"profiles"> & {
   onboarding_completed?: boolean;
@@ -239,10 +240,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // doesn't immediately clear the new session on mount
     sessionStorage.setItem("wesave_session_active", "true");
     
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    // Routed through the hardened gate (rate limiting + lockout).
+    const { error } = await secureSignIn(supabase, email, password);
     
     if (error) {
       // Clear marker if sign-in failed
