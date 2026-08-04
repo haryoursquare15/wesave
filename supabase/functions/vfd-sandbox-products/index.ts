@@ -2995,7 +2995,17 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
 
     // Receipt with expiry for subscription-based services
     const expiresAt = computeBillExpiry(category, paymentItemName);
+    // Value delivery: prepaid meter token / recharge PIN / top-up confirmation
+    const delivery = deriveBillDelivery({
+      category, billerName, paymentItemName, amount: numAmount, reference,
+      vfdResponse: data as Record<string, unknown> | null,
+    });
     await db.from("vfd_sandbox_bill_receipts").insert({
+      delivery_type: delivery.delivery_type,
+      delivery_token: delivery.delivery_token,
+      delivery_units: delivery.delivery_units,
+      delivery_status: delivery.delivery_status,
+      delivery_detail: delivery.delivery_detail,
       user_id: userId,
       reference,
       category: category || "Other",
@@ -3048,11 +3058,13 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
 
     await sendNotification(
       userId,
-      "Bill payment successful",
-      `₦${numAmount.toLocaleString()} paid to ${billerName} (${customerId}). Ref: ${reference}`,
+      delivery.delivery_type === "token" ? "Electricity token delivered" : "Bill payment successful",
+      delivery.delivery_token
+        ? `₦${numAmount.toLocaleString()} paid to ${billerName} (${customerId}). Token: ${delivery.delivery_token}${delivery.delivery_units ? ` • ${delivery.delivery_units}` : ""}`
+        : `₦${numAmount.toLocaleString()} paid to ${billerName} (${customerId}). Ref: ${reference}`,
       "bill_payment",
     );
-    return jsonResponse({ data: { status: "00", message: "Payment successful (sandbox)", reference, receipt_expires_at: expiresAt } });
+    return jsonResponse({ data: { status: "00", message: "Payment successful (sandbox)", reference, receipt_expires_at: expiresAt, ...delivery } });
   }
 
   return jsonResponse({ data: { ...data, reference, status: data?.status || "99", message: data?.message || "Bill payment could not be processed" } });
@@ -3399,7 +3411,16 @@ async function handleRunDueRecurringBills() {
           description: `Recurring bill: ${r.biller_name} - ${r.customer_id}`,
           reference, status: "completed",
         });
+        const recDelivery = deriveBillDelivery({
+          category: r.category, billerName: r.biller_name,
+          paymentItemName: r.payment_item_name, amount, reference,
+        });
         await db.from("vfd_sandbox_bill_receipts").insert({
+          delivery_type: recDelivery.delivery_type,
+          delivery_token: recDelivery.delivery_token,
+          delivery_units: recDelivery.delivery_units,
+          delivery_status: recDelivery.delivery_status,
+          delivery_detail: recDelivery.delivery_detail,
           user_id: r.user_id,
           reference,
           category: r.category,
