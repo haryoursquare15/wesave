@@ -1668,9 +1668,10 @@ async function handleWithdrawCampaignEscrow(userId: string, body: Record<string,
   return jsonResponse({ data: { withdrawn: amount, remaining_escrow: escrow - amount } });
 }
 
-async function handleGetCampaignDetail(body: Record<string, unknown>) {
+async function handleGetCampaignDetail(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const campaignId = body.campaign_id as string;
+  if (!campaignId) return jsonResponse({ error: "campaign_id required" }, 400);
 
   const { data: campaign } = await db.from("vfd_sandbox_campaigns").select("*").eq("id", campaignId).single();
   if (!campaign) return jsonResponse({ error: "Campaign not found" }, 404);
@@ -1681,7 +1682,35 @@ async function handleGetCampaignDetail(body: Record<string, unknown>) {
   const { data: updates } = await db.from("vfd_sandbox_campaign_updates")
     .select("*").eq("campaign_id", campaignId).order("created_at", { ascending: false });
 
-  return jsonResponse({ data: { campaign, contributions: contributions || [], updates: updates || [] } });
+  // Campaigns are shareable, but only the owner (or a platform admin) may see
+  // contributor identities and the campaign's banking/escrow metadata.
+  const isOwner = campaign.creator_id === userId || (await isPlatformAdmin(userId));
+  if (isOwner) {
+    return jsonResponse({ data: { campaign, contributions: contributions || [], updates: updates || [] } });
+  }
+
+  const {
+    virtual_account_number: _van,
+    account_number: _an,
+    escrow_account: _esc,
+    flw_subaccount_id: _flw,
+    ...publicCampaign
+  } = campaign as Record<string, unknown>;
+
+  const redactedContributions = (contributions || []).map((c: Record<string, unknown>) => ({
+    id: c.id,
+    amount: c.amount,
+    amount_kobo: c.amount_kobo,
+    created_at: c.created_at,
+    is_anonymous: c.is_anonymous,
+    display_name: c.is_anonymous ? "Anonymous" : (c.display_name ?? "Supporter"),
+    // Contributor identity + payment references withheld from non-owners.
+    is_mine: c.user_id === userId,
+  }));
+
+  return jsonResponse({
+    data: { campaign: publicCampaign, contributions: redactedContributions, updates: updates || [] },
+  });
 }
 
 async function handlePostCampaignUpdate(userId: string, body: Record<string, unknown>) {
