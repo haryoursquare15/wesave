@@ -279,11 +279,18 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
         });
         setStep("success");
         toast({
-          title: resData.delivery_token ? "Token delivered!" : "Payment Successful!",
+          title: resData.delivery_token
+            ? "Token delivered!"
+            : resData.delivery_type === "token"
+              ? "Payment received — token pending"
+              : "Payment Successful!",
           description: resData.delivery_token
             ? `Token ${resData.delivery_token}${resData.delivery_units ? ` • ${resData.delivery_units}` : ""}`
-            : `₦${Number(amount).toLocaleString()} paid for ${selectedBiller.name}`,
+            : resData.delivery_type === "token"
+              ? "The disco has not released your meter token yet. It will appear in your receipt as soon as it does."
+              : `₦${Number(amount).toLocaleString()} paid for ${selectedBiller.name}`,
         });
+
       } else {
         toast({ title: "Payment Failed", description: resData?.message || "Transaction could not be processed", variant: "destructive" });
       }
