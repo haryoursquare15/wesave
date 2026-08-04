@@ -3098,9 +3098,9 @@ function computeBillExpiry(category: string, _paymentItemName: string | null): s
 // BILL VALUE DELIVERY
 // A bill payment is only complete when the customer receives the actual
 // value: a prepaid meter token, an airtime/data top-up confirmation, a
-// recharge PIN, or a subscription activation. This helper extracts that
-// value from the VFD response and, in sandbox where VFD returns no token,
-// synthesises a deterministic one so the flow is end-to-end verifiable.
+// recharge PIN, or a subscription activation. This value ALWAYS comes from
+// VFD/the biller — we never synthesise it. When VFD has not returned the
+// artefact yet the delivery is marked pending so it can be retried/queried.
 // =============================================
 type BillDelivery = {
   delivery_type: "token" | "pin" | "topup" | "subscription" | "receipt";
@@ -3127,21 +3127,21 @@ function formatMeterToken(raw: string): string {
   return (digits.match(/.{1,4}/g) || [raw]).join("-");
 }
 
-function synthesiseMeterToken(reference: string): string {
-  // Deterministic 20-digit token derived from the payment reference so the
-  // same payment always resolves to the same token (safe to re-display).
-  let h = 2166136261;
-  for (let i = 0; i < reference.length; i++) {
-    h ^= reference.charCodeAt(i);
-    h = Math.imul(h, 16777619) >>> 0;
+// Best-effort re-query of the VFD bills transaction so a token that was not
+// present on the immediate /pay response can still be delivered.
+async function fetchVfdBillArtefact(reference: string): Promise<Record<string, unknown> | null> {
+  try {
+    const token = await getVfdToken();
+    const resp = await fetch(
+      `${getBillsBase()}/transactionStatus?transactionId=${encodeURIComponent(reference)}`,
+      { method: "GET", headers: { AccessToken: token, "Content-Type": "application/json" } },
+    );
+    const json = await safeJson(resp);
+    return (json as Record<string, unknown> | null) ?? null;
+  } catch (e) {
+    console.error("[bills] transactionStatus lookup failed:", e);
+    return null;
   }
-  let digits = "";
-  let seed = h;
-  while (digits.length < 20) {
-    seed = (Math.imul(seed, 1103515245) + 12345) >>> 0;
-    digits += String(seed % 100000000).padStart(8, "0");
-  }
-  return formatMeterToken(digits.slice(0, 20));
 }
 
 function deriveBillDelivery(params: {
@@ -3152,7 +3152,7 @@ function deriveBillDelivery(params: {
   reference: string;
   vfdResponse?: Record<string, unknown> | null;
 }): BillDelivery {
-  const { category, billerName, paymentItemName, amount, reference } = params;
+  const { category, billerName, paymentItemName } = params;
   const raw = (params.vfdResponse || {}) as Record<string, unknown>;
   const inner = (raw.data && typeof raw.data === "object" ? raw.data : {}) as Record<string, unknown>;
 
@@ -3171,22 +3171,22 @@ function deriveBillDelivery(params: {
   const isSubscription = /cable|tv|dstv|gotv|startimes|internet|broadband/.test(hay);
 
   if (isElectricity && isPrepaid) {
-    const token = vfdToken ? formatMeterToken(vfdToken) : synthesiseMeterToken(reference);
-    // Nigerian prepaid tariffs sit around ₦225/kWh; derive an indicative figure
-    // when the biller does not return units.
-    const units = vfdUnits || `${(amount / 225).toFixed(1)} kWh`;
+    const token = vfdToken ? formatMeterToken(vfdToken) : null;
     return {
       delivery_type: "token",
       delivery_token: token,
-      delivery_units: units,
-      delivery_status: "delivered",
+      delivery_units: vfdUnits,
+      delivery_status: token ? "delivered" : "pending",
       delivery_detail: {
-        instruction: "Enter this one-time token on your prepaid meter keypad to load the units.",
-        simulated: !vfdToken,
+        instruction: token
+          ? "Enter this one-time token on your prepaid meter keypad to load the units."
+          : "Your payment was received. The meter token from the disco has not been returned yet — it will appear here as soon as the biller releases it.",
         meter_type: "prepaid",
+        token_source: token ? "vfd" : null,
       },
     };
   }
+
 
   if (isElectricity) {
     return {
