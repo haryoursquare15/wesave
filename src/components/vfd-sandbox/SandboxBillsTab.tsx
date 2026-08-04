@@ -97,7 +97,14 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
   const [validationResult, setValidationResult] = useState<string | null>(null);
   const [validating, setValidating] = useState(false);
   const [paying, setPaying] = useState(false);
-  const [paymentResult, setPaymentResult] = useState<{ reference: string; status: string } | null>(null);
+  const [paymentResult, setPaymentResult] = useState<{
+    reference: string;
+    status: string;
+    delivery_type?: string;
+    delivery_token?: string | null;
+    delivery_units?: string | null;
+    delivery_detail?: Record<string, unknown>;
+  } | null>(null);
 
   // Search/filter
   const [billerSearch, setBillerSearch] = useState("");
@@ -262,9 +269,21 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
       });
       const resData = result?.data;
       if (resData?.status === "00") {
-        setPaymentResult({ reference: resData.reference, status: "success" });
+        setPaymentResult({
+          reference: resData.reference,
+          status: "success",
+          delivery_type: resData.delivery_type,
+          delivery_token: resData.delivery_token,
+          delivery_units: resData.delivery_units,
+          delivery_detail: resData.delivery_detail,
+        });
         setStep("success");
-        toast({ title: "Payment Successful!", description: `₦${Number(amount).toLocaleString()} paid for ${selectedBiller.name}` });
+        toast({
+          title: resData.delivery_token ? "Token delivered!" : "Payment Successful!",
+          description: resData.delivery_token
+            ? `Token ${resData.delivery_token}${resData.delivery_units ? ` • ${resData.delivery_units}` : ""}`
+            : `₦${Number(amount).toLocaleString()} paid for ${selectedBiller.name}`,
+        });
       } else {
         toast({ title: "Payment Failed", description: resData?.message || "Transaction could not be processed", variant: "destructive" });
       }
@@ -857,6 +876,41 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
                 ₦{Number(amount).toLocaleString()} paid to {selectedBiller?.name}
               </p>
             </div>
+            {paymentResult.delivery_token && (
+              <div className="bg-primary/5 border border-primary/30 rounded-2xl p-4 text-left space-y-2">
+                <p className="text-xs font-semibold text-primary uppercase tracking-wide">
+                  {paymentResult.delivery_type === "pin" ? "Recharge PIN" : "Prepaid meter token"}
+                </p>
+                <p className="text-lg font-mono font-bold text-foreground tracking-wider break-all">
+                  {paymentResult.delivery_token}
+                </p>
+                {paymentResult.delivery_units && (
+                  <p className="text-xs text-muted-foreground">Units: {paymentResult.delivery_units}</p>
+                )}
+                <div className="flex gap-2 pt-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-8 text-xs"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(paymentResult.delivery_token || "");
+                      toast({ title: "Copied", description: "Token copied to clipboard" });
+                    }}
+                  >
+                    Copy token
+                  </Button>
+                </div>
+                {typeof paymentResult.delivery_detail?.instruction === "string" && (
+                  <p className="text-[11px] text-muted-foreground">
+                    {paymentResult.delivery_detail.instruction as string}
+                  </p>
+                )}
+              </div>
+            )}
+            {!paymentResult.delivery_token && typeof paymentResult.delivery_detail?.instruction === "string" && (
+              <p className="text-xs text-muted-foreground">{paymentResult.delivery_detail.instruction as string}</p>
+            )}
             <div className="bg-card rounded-2xl border border-border/50 p-4 space-y-2 text-left">
               <div className="flex justify-between">
                 <span className="text-xs text-muted-foreground">Reference</span>

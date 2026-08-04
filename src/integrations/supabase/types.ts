@@ -4634,6 +4634,11 @@ export type Database = {
           convenience_fee: number
           created_at: string
           customer_id: string
+          delivery_detail: Json
+          delivery_status: string
+          delivery_token: string | null
+          delivery_type: string | null
+          delivery_units: string | null
           expires_at: string | null
           id: string
           paid_at: string
@@ -4654,6 +4659,11 @@ export type Database = {
           convenience_fee?: number
           created_at?: string
           customer_id: string
+          delivery_detail?: Json
+          delivery_status?: string
+          delivery_token?: string | null
+          delivery_type?: string | null
+          delivery_units?: string | null
           expires_at?: string | null
           id?: string
           paid_at?: string
@@ -4674,6 +4684,11 @@ export type Database = {
           convenience_fee?: number
           created_at?: string
           customer_id?: string
+          delivery_detail?: Json
+          delivery_status?: string
+          delivery_token?: string | null
+          delivery_type?: string | null
+          delivery_units?: string | null
           expires_at?: string | null
           id?: string
           paid_at?: string

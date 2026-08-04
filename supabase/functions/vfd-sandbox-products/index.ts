@@ -1916,7 +1916,17 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
 
   // Bill receipt (creator owns the beneficiary record)
   const expiresAt = computeBillExpiry(category || "", paymentItemName || null);
+  const splitDelivery = deriveBillDelivery({
+    category: category || "", billerName: displayBillerName,
+    paymentItemName: paymentItemName || null, amount, reference,
+    vfdResponse: vfdData as Record<string, unknown> | null,
+  });
   await db.from("vfd_sandbox_bill_receipts").insert({
+    delivery_type: splitDelivery.delivery_type,
+    delivery_token: splitDelivery.delivery_token,
+    delivery_units: splitDelivery.delivery_units,
+    delivery_status: splitDelivery.delivery_status,
+    delivery_detail: splitDelivery.delivery_detail,
     user_id: split.creator_id,
     reference,
     category: category || "Other",
@@ -1944,7 +1954,9 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
     .eq("status", "paid");
   const recipientIds = new Set<string>([split.creator_id, ...((paidForNotify || []).map((p: any) => p.user_id))]);
   const deliveryTitle = "Bill delivered";
-  const deliveryMsg = `₦${amount.toLocaleString()} ${displayBillerName} delivered to ${customerId}. Ref: ${reference}`;
+  const deliveryMsg = splitDelivery.delivery_token
+    ? `₦${amount.toLocaleString()} ${displayBillerName} delivered to ${customerId}. Token: ${splitDelivery.delivery_token}`
+    : `₦${amount.toLocaleString()} ${displayBillerName} delivered to ${customerId}. Ref: ${reference}`;
   for (const rid of recipientIds) {
     await sendNotification(rid, deliveryTitle, deliveryMsg, "bill_payment");
   }
@@ -2995,7 +3007,17 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
 
     // Receipt with expiry for subscription-based services
     const expiresAt = computeBillExpiry(category, paymentItemName);
+    // Value delivery: prepaid meter token / recharge PIN / top-up confirmation
+    const delivery = deriveBillDelivery({
+      category, billerName, paymentItemName, amount: numAmount, reference,
+      vfdResponse: data as Record<string, unknown> | null,
+    });
     await db.from("vfd_sandbox_bill_receipts").insert({
+      delivery_type: delivery.delivery_type,
+      delivery_token: delivery.delivery_token,
+      delivery_units: delivery.delivery_units,
+      delivery_status: delivery.delivery_status,
+      delivery_detail: delivery.delivery_detail,
       user_id: userId,
       reference,
       category: category || "Other",
@@ -3048,11 +3070,13 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
 
     await sendNotification(
       userId,
-      "Bill payment successful",
-      `₦${numAmount.toLocaleString()} paid to ${billerName} (${customerId}). Ref: ${reference}`,
+      delivery.delivery_type === "token" ? "Electricity token delivered" : "Bill payment successful",
+      delivery.delivery_token
+        ? `₦${numAmount.toLocaleString()} paid to ${billerName} (${customerId}). Token: ${delivery.delivery_token}${delivery.delivery_units ? ` • ${delivery.delivery_units}` : ""}`
+        : `₦${numAmount.toLocaleString()} paid to ${billerName} (${customerId}). Ref: ${reference}`,
       "bill_payment",
     );
-    return jsonResponse({ data: { status: "00", message: "Payment successful (sandbox)", reference, receipt_expires_at: expiresAt } });
+    return jsonResponse({ data: { status: "00", message: "Payment successful (sandbox)", reference, receipt_expires_at: expiresAt, ...delivery } });
   }
 
   return jsonResponse({ data: { ...data, reference, status: data?.status || "99", message: data?.message || "Bill payment could not be processed" } });
@@ -3068,6 +3092,152 @@ function computeBillExpiry(category: string, _paymentItemName: string | null): s
     return d.toISOString();
   }
   return null;
+}
+
+// =============================================
+// BILL VALUE DELIVERY
+// A bill payment is only complete when the customer receives the actual
+// value: a prepaid meter token, an airtime/data top-up confirmation, a
+// recharge PIN, or a subscription activation. This helper extracts that
+// value from the VFD response and, in sandbox where VFD returns no token,
+// synthesises a deterministic one so the flow is end-to-end verifiable.
+// =============================================
+type BillDelivery = {
+  delivery_type: "token" | "pin" | "topup" | "subscription" | "receipt";
+  delivery_token: string | null;
+  delivery_units: string | null;
+  delivery_status: "delivered" | "pending" | "failed";
+  delivery_detail: Record<string, unknown>;
+};
+
+function pickField(src: Record<string, unknown> | null | undefined, keys: string[]): string | null {
+  if (!src) return null;
+  for (const k of Object.keys(src)) {
+    if (keys.includes(k.toLowerCase())) {
+      const v = src[k];
+      if (v !== null && v !== undefined && String(v).trim() !== "") return String(v).trim();
+    }
+  }
+  return null;
+}
+
+function formatMeterToken(raw: string): string {
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length < 16) return raw;
+  return (digits.match(/.{1,4}/g) || [raw]).join("-");
+}
+
+function synthesiseMeterToken(reference: string): string {
+  // Deterministic 20-digit token derived from the payment reference so the
+  // same payment always resolves to the same token (safe to re-display).
+  let h = 2166136261;
+  for (let i = 0; i < reference.length; i++) {
+    h ^= reference.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  let digits = "";
+  let seed = h;
+  while (digits.length < 20) {
+    seed = (Math.imul(seed, 1103515245) + 12345) >>> 0;
+    digits += String(seed % 100000000).padStart(8, "0");
+  }
+  return formatMeterToken(digits.slice(0, 20));
+}
+
+function deriveBillDelivery(params: {
+  category: string;
+  billerName: string;
+  paymentItemName: string | null;
+  amount: number;
+  reference: string;
+  vfdResponse?: Record<string, unknown> | null;
+}): BillDelivery {
+  const { category, billerName, paymentItemName, amount, reference } = params;
+  const raw = (params.vfdResponse || {}) as Record<string, unknown>;
+  const inner = (raw.data && typeof raw.data === "object" ? raw.data : {}) as Record<string, unknown>;
+
+  const tokenKeys = ["token", "standardtokenvalue", "stdtoken", "metertoken", "utilitytoken", "credittoken"];
+  const pinKeys = ["pin", "rechargepin", "voucherpin", "cardpin"];
+  const unitKeys = ["units", "unit", "kwh", "unitsvalue", "tokenamount"];
+
+  const vfdToken = pickField(inner, tokenKeys) || pickField(raw, tokenKeys);
+  const vfdPin = pickField(inner, pinKeys) || pickField(raw, pinKeys);
+  const vfdUnits = pickField(inner, unitKeys) || pickField(raw, unitKeys);
+
+  const hay = `${category} ${billerName} ${paymentItemName || ""}`.toLowerCase();
+  const isElectricity = /electric|disco|power|eko|ikeja|abuja|aedc|phed|kedco|ibedc|eedc|jed|kaedco|bedc/.test(hay);
+  const isPrepaid = /prepaid|prepay/.test(hay) || (isElectricity && !/postpaid/.test(hay));
+  const isAirtimeOrData = /airtime|data|mobile|mtn|glo|airtel|9mobile/.test(hay);
+  const isSubscription = /cable|tv|dstv|gotv|startimes|internet|broadband/.test(hay);
+
+  if (isElectricity && isPrepaid) {
+    const token = vfdToken ? formatMeterToken(vfdToken) : synthesiseMeterToken(reference);
+    // Nigerian prepaid tariffs sit around ₦225/kWh; derive an indicative figure
+    // when the biller does not return units.
+    const units = vfdUnits || `${(amount / 225).toFixed(1)} kWh`;
+    return {
+      delivery_type: "token",
+      delivery_token: token,
+      delivery_units: units,
+      delivery_status: "delivered",
+      delivery_detail: {
+        instruction: "Enter this one-time token on your prepaid meter keypad to load the units.",
+        simulated: !vfdToken,
+        meter_type: "prepaid",
+      },
+    };
+  }
+
+  if (isElectricity) {
+    return {
+      delivery_type: "receipt",
+      delivery_token: null,
+      delivery_units: null,
+      delivery_status: "delivered",
+      delivery_detail: {
+        instruction: "Postpaid account credited. Your outstanding balance has been reduced.",
+        meter_type: "postpaid",
+      },
+    };
+  }
+
+  if (vfdPin) {
+    return {
+      delivery_type: "pin",
+      delivery_token: vfdPin,
+      delivery_units: vfdUnits,
+      delivery_status: "delivered",
+      delivery_detail: { instruction: "Use this recharge PIN to load your account." },
+    };
+  }
+
+  if (isAirtimeOrData) {
+    return {
+      delivery_type: "topup",
+      delivery_token: null,
+      delivery_units: vfdUnits || paymentItemName,
+      delivery_status: "delivered",
+      delivery_detail: { instruction: "Top-up delivered to the phone number instantly." },
+    };
+  }
+
+  if (isSubscription) {
+    return {
+      delivery_type: "subscription",
+      delivery_token: null,
+      delivery_units: paymentItemName,
+      delivery_status: "delivered",
+      delivery_detail: { instruction: "Subscription activated on the smartcard/decoder number." },
+    };
+  }
+
+  return {
+    delivery_type: "receipt",
+    delivery_token: vfdToken,
+    delivery_units: vfdUnits,
+    delivery_status: "delivered",
+    delivery_detail: {},
+  };
 }
 
 // =============================================
@@ -3253,7 +3423,16 @@ async function handleRunDueRecurringBills() {
           description: `Recurring bill: ${r.biller_name} - ${r.customer_id}`,
           reference, status: "completed",
         });
+        const recDelivery = deriveBillDelivery({
+          category: r.category, billerName: r.biller_name,
+          paymentItemName: r.payment_item_name, amount, reference,
+        });
         await db.from("vfd_sandbox_bill_receipts").insert({
+          delivery_type: recDelivery.delivery_type,
+          delivery_token: recDelivery.delivery_token,
+          delivery_units: recDelivery.delivery_units,
+          delivery_status: recDelivery.delivery_status,
+          delivery_detail: recDelivery.delivery_detail,
           user_id: r.user_id,
           reference,
           category: r.category,
