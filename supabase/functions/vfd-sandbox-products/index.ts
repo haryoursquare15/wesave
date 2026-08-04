@@ -3131,7 +3131,9 @@ function formatMeterToken(raw: string): string {
 // present on the immediate /pay response can still be delivered.
 async function fetchVfdBillArtefact(reference: string): Promise<Record<string, unknown> | null> {
   try {
-    const token = await getVfdToken();
+    const token = await getVfdAccessToken();
+    if (!token) return null;
+
     const resp = await fetch(
       `${getBillsBase()}/transactionStatus?transactionId=${encodeURIComponent(reference)}`,
       { method: "GET", headers: { AccessToken: token, "Content-Type": "application/json" } },
