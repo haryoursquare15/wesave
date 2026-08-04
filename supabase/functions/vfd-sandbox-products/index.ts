@@ -3083,10 +3083,15 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
 
     await sendNotification(
       userId,
-      delivery.delivery_type === "token" ? "Electricity token delivered" : "Bill payment successful",
+      delivery.delivery_type === "token"
+        ? (delivery.delivery_token ? "Electricity token delivered" : "Token pending from disco")
+        : "Bill payment successful",
       delivery.delivery_token
         ? `₦${numAmount.toLocaleString()} paid to ${billerName} (${customerId}). Token: ${delivery.delivery_token}${delivery.delivery_units ? ` • ${delivery.delivery_units}` : ""}`
-        : `₦${numAmount.toLocaleString()} paid to ${billerName} (${customerId}). Ref: ${reference}`,
+        : delivery.delivery_type === "token"
+          ? `₦${numAmount.toLocaleString()} paid to ${billerName} (${customerId}). Awaiting meter token from the disco. Ref: ${reference}`
+          : `₦${numAmount.toLocaleString()} paid to ${billerName} (${customerId}). Ref: ${reference}`,
+
       "bill_payment",
     );
     return jsonResponse({ data: { status: "00", message: "Payment successful (sandbox)", reference, receipt_expires_at: expiresAt, ...delivery } });
