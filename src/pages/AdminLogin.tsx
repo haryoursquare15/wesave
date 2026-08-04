@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { useToast } from "@/hooks/use-toast";
 import { Shield, Loader2 } from "lucide-react";
 import { ADMIN_CONSOLE_PATH, applyNoIndex } from "@/lib/adminRoutes";
+import { secureSignIn } from "@/lib/secureSignIn";
 
 export default function AdminLogin() {
   const navigate = useNavigate();
