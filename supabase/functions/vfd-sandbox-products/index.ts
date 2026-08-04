@@ -1219,9 +1219,11 @@ async function handleContributeTarget(userId: string, body: Record<string, unkno
   return jsonResponse({ data: { contributed: true, amount, total: newTotal, target_reached: targetReached, tx_ref: txRef } });
 }
 
-async function handleGetTargetDetail(body: Record<string, unknown>) {
+async function handleGetTargetDetail(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const targetId = body.target_id as string;
+  if (!targetId) return jsonResponse({ error: "target_id required" }, 400);
+  if (!(await isTargetMember(targetId, userId)) && !(await isPlatformAdmin(userId))) return forbidden();
   const { data: target } = await db.from("vfd_sandbox_targets").select("*").eq("id", targetId).single();
   const { data: members } = await db.from("vfd_sandbox_target_members").select("*").eq("target_id", targetId);
   const { data: contributions } = await db.from("vfd_sandbox_target_contributions").select("*").eq("target_id", targetId).order("created_at", { ascending: false }).limit(50);
