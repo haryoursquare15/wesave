@@ -175,7 +175,7 @@ export function useVestaraLedger() {
         setLoading(false);
       }
     },
-    [supabase, toast]
+    [session, supabase, toast]
   );
 
 
