@@ -31,6 +31,66 @@ async function getUserFromRequest(req: Request) {
   return { id: userId };
 }
 
+// ─────────────────────────────────────────────────────────────
+// SECURITY: object-level authorization helpers.
+// Identity ALWAYS comes from the verified JWT (getUserFromRequest),
+// never from a client-supplied user_id in the request body.
+// ─────────────────────────────────────────────────────────────
+function forbidden(msg = "Not authorized to access this resource") {
+  return jsonResponse({ error: msg }, 403);
+}
+
+async function isGroupMember(groupId: string, userId: string) {
+  if (!groupId || !userId) return false;
+  const db = getSupabaseAdmin();
+  const { data } = await db.from("vfd_sandbox_group_members")
+    .select("id").eq("group_id", groupId).eq("user_id", userId).maybeSingle();
+  if (data) return true;
+  const { data: g } = await db.from("vfd_sandbox_groups")
+    .select("id").eq("id", groupId).eq("creator_id", userId).maybeSingle();
+  return !!g;
+}
+
+async function isGroupAdmin(groupId: string, userId: string) {
+  if (!groupId || !userId) return false;
+  const db = getSupabaseAdmin();
+  const { data: g } = await db.from("vfd_sandbox_groups")
+    .select("id").eq("id", groupId).eq("creator_id", userId).maybeSingle();
+  if (g) return true;
+  const { data: m } = await db.from("vfd_sandbox_group_members")
+    .select("id, role").eq("group_id", groupId).eq("user_id", userId).maybeSingle();
+  return !!m && ["admin", "creator", "owner"].includes(String((m as { role?: string }).role || ""));
+}
+
+async function isTargetMember(targetId: string, userId: string) {
+  if (!targetId || !userId) return false;
+  const db = getSupabaseAdmin();
+  const { data } = await db.from("vfd_sandbox_target_members")
+    .select("id").eq("target_id", targetId).eq("user_id", userId).maybeSingle();
+  if (data) return true;
+  const { data: t } = await db.from("vfd_sandbox_targets")
+    .select("id").eq("id", targetId).eq("creator_id", userId).maybeSingle();
+  if (t) return true;
+  const { data: inv } = await db.from("vfd_sandbox_target_invites")
+    .select("id").eq("target_id", targetId).eq("invitee_id", userId).maybeSingle();
+  return !!inv;
+}
+
+async function isPlatformAdmin(userId: string) {
+  if (!userId) return false;
+  const db = getSupabaseAdmin();
+  const { data } = await db.rpc("is_any_admin", { _user_id: userId });
+  return data === true;
+}
+
+function assertCronCaller(req: Request) {
+  const secret = Deno.env.get("CRON_SECRET");
+  const provided =
+    req.headers.get("x-cron-secret") ||
+    (req.headers.get("authorization") || "").replace("Bearer ", "").trim();
+  return !!secret && provided === secret;
+}
+
 function jsonResponse(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
