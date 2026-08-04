@@ -3007,11 +3007,24 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
 
     // Receipt with expiry for subscription-based services
     const expiresAt = computeBillExpiry(category, paymentItemName);
-    // Value delivery: prepaid meter token / recharge PIN / top-up confirmation
-    const delivery = deriveBillDelivery({
+    // Value delivery: prepaid meter token / recharge PIN / top-up confirmation.
+    // The artefact must come from VFD — never synthesised. If /pay did not carry
+    // it, re-query the biller transaction once before recording the receipt.
+    let delivery = deriveBillDelivery({
       category, billerName, paymentItemName, amount: numAmount, reference,
       vfdResponse: data as Record<string, unknown> | null,
     });
+    if (delivery.delivery_status === "pending" && delivery.delivery_type === "token") {
+      const statusResp = await fetchVfdBillArtefact(reference);
+      if (statusResp) {
+        const retry = deriveBillDelivery({
+          category, billerName, paymentItemName, amount: numAmount, reference,
+          vfdResponse: statusResp,
+        });
+        if (retry.delivery_token) delivery = retry;
+      }
+    }
+
     await db.from("vfd_sandbox_bill_receipts").insert({
       delivery_type: delivery.delivery_type,
       delivery_token: delivery.delivery_token,
