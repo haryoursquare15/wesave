@@ -58,6 +58,7 @@ function VfdSandboxInner() {
   const vfd = useVfdBanking();
   const vestara = useVestaraLedger();
   const fetchVfdTransactions = vfd.fetchTransactions;
+  const getVfdUserBalance = vfd.getUserBalance;
   const getVestaraBalanceSummary = vestara.getBalanceSummary;
   const getVestaraLockedFunds = vestara.getLockedFunds;
   const fetchVestaraTransactions = vestara.fetchTransactions;
@@ -155,7 +156,7 @@ function VfdSandboxInner() {
    * `no_vfd_account: true` and we show ₦0.
    */
   const refreshVestaraBalance = useCallback(async () => {
-    const vfdRes = await vfd.getUserBalance();
+    const vfdRes = await getVfdUserBalance();
     const vfdData = (vfdRes?.data as {
       available_balance?: number;
       no_vfd_account?: boolean;
@@ -179,7 +180,7 @@ function VfdSandboxInner() {
       no_vfd_account: noVfdAccount,
       stale,
     });
-  }, [getVestaraBalanceSummary, vfd]);
+  }, [getVestaraBalanceSummary, getVfdUserBalance]);
 
   /* ─── Vestara Locked Funds ─── */
   const refreshVestaraLockedFunds = useCallback(async () => {
