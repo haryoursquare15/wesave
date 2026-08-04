@@ -85,10 +85,12 @@ async function isPlatformAdmin(userId: string) {
 
 function assertCronCaller(req: Request) {
   const secret = Deno.env.get("CRON_SECRET");
-  const provided =
-    req.headers.get("x-cron-secret") ||
-    (req.headers.get("authorization") || "").replace("Bearer ", "").trim();
-  return !!secret && provided === secret;
+  const bearer = (req.headers.get("authorization") || "").replace("Bearer ", "").trim();
+  const provided = req.headers.get("x-cron-secret") || bearer;
+  if (secret && provided === secret) return true;
+  // pg_cron / internal schedulers authenticate with the service-role key.
+  const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  return !!serviceRole && bearer === serviceRole;
 }
 
 function jsonResponse(data: unknown, status = 200) {
