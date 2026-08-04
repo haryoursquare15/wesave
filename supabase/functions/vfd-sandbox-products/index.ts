@@ -3813,10 +3813,12 @@ async function handleListGroupInvites(userId: string) {
 // =============================================
 // PENDING-INVITEE LOOKUP (for "Already invited" badge in search)
 // =============================================
-async function handleListPendingGroupInvitees(body: Record<string, unknown>) {
+async function handleListPendingGroupInvitees(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const groupId = body.group_id as string;
   if (!groupId) return jsonResponse({ error: "group_id required" }, 400);
+  if (!(await isGroupMember(groupId, userId))) return forbidden();
+
 
   const { data: invites } = await db.from("vfd_sandbox_group_invites")
     .select("invitee_id, status").eq("group_id", groupId).eq("status", "pending");
