@@ -31,6 +31,68 @@ async function getUserFromRequest(req: Request) {
   return { id: userId };
 }
 
+// ─────────────────────────────────────────────────────────────
+// SECURITY: object-level authorization helpers.
+// Identity ALWAYS comes from the verified JWT (getUserFromRequest),
+// never from a client-supplied user_id in the request body.
+// ─────────────────────────────────────────────────────────────
+function forbidden(msg = "Not authorized to access this resource") {
+  return jsonResponse({ error: msg }, 403);
+}
+
+async function isGroupMember(groupId: string, userId: string) {
+  if (!groupId || !userId) return false;
+  const db = getSupabaseAdmin();
+  const { data } = await db.from("vfd_sandbox_group_members")
+    .select("id").eq("group_id", groupId).eq("user_id", userId).maybeSingle();
+  if (data) return true;
+  const { data: g } = await db.from("vfd_sandbox_groups")
+    .select("id").eq("id", groupId).eq("creator_id", userId).maybeSingle();
+  return !!g;
+}
+
+async function isGroupAdmin(groupId: string, userId: string) {
+  if (!groupId || !userId) return false;
+  const db = getSupabaseAdmin();
+  const { data: g } = await db.from("vfd_sandbox_groups")
+    .select("id").eq("id", groupId).eq("creator_id", userId).maybeSingle();
+  if (g) return true;
+  const { data: m } = await db.from("vfd_sandbox_group_members")
+    .select("id, role").eq("group_id", groupId).eq("user_id", userId).maybeSingle();
+  return !!m && ["admin", "creator", "owner"].includes(String((m as { role?: string }).role || ""));
+}
+
+async function isTargetMember(targetId: string, userId: string) {
+  if (!targetId || !userId) return false;
+  const db = getSupabaseAdmin();
+  const { data } = await db.from("vfd_sandbox_target_members")
+    .select("id").eq("target_id", targetId).eq("user_id", userId).maybeSingle();
+  if (data) return true;
+  const { data: t } = await db.from("vfd_sandbox_targets")
+    .select("id").eq("id", targetId).eq("creator_id", userId).maybeSingle();
+  if (t) return true;
+  const { data: inv } = await db.from("vfd_sandbox_target_invites")
+    .select("id").eq("target_id", targetId).eq("invitee_id", userId).maybeSingle();
+  return !!inv;
+}
+
+async function isPlatformAdmin(userId: string) {
+  if (!userId) return false;
+  const db = getSupabaseAdmin();
+  const { data } = await db.rpc("is_any_admin", { _user_id: userId });
+  return data === true;
+}
+
+function assertCronCaller(req: Request) {
+  const secret = Deno.env.get("CRON_SECRET");
+  const bearer = (req.headers.get("authorization") || "").replace("Bearer ", "").trim();
+  const provided = req.headers.get("x-cron-secret") || bearer;
+  if (secret && provided === secret) return true;
+  // pg_cron / internal schedulers authenticate with the service-role key.
+  const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  return !!serviceRole && bearer === serviceRole;
+}
+
 function jsonResponse(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -845,9 +907,11 @@ async function processAutoPayout(
   return { success: true, recipient_id: recipientId, net_amount: netAmount, platform_fee: platformFee };
 }
 
-async function handleGetGroupDetail(body: Record<string, unknown>) {
+async function handleGetGroupDetail(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const groupId = body.group_id as string;
+  if (!groupId) return jsonResponse({ error: "group_id required" }, 400);
+  if (!(await isGroupMember(groupId, userId)) && !(await isPlatformAdmin(userId))) return forbidden();
   const { data: group } = await db.from("vfd_sandbox_groups").select("*").eq("id", groupId).single();
   const { data: members } = await db.from("vfd_sandbox_group_members").select("*").eq("group_id", groupId).order("payout_position");
   const { data: contributions } = await db.from("vfd_sandbox_group_contributions").select("*").eq("group_id", groupId).order("created_at", { ascending: false }).limit(50);
@@ -1157,9 +1221,11 @@ async function handleContributeTarget(userId: string, body: Record<string, unkno
   return jsonResponse({ data: { contributed: true, amount, total: newTotal, target_reached: targetReached, tx_ref: txRef } });
 }
 
-async function handleGetTargetDetail(body: Record<string, unknown>) {
+async function handleGetTargetDetail(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const targetId = body.target_id as string;
+  if (!targetId) return jsonResponse({ error: "target_id required" }, 400);
+  if (!(await isTargetMember(targetId, userId)) && !(await isPlatformAdmin(userId))) return forbidden();
   const { data: target } = await db.from("vfd_sandbox_targets").select("*").eq("id", targetId).single();
   const { data: members } = await db.from("vfd_sandbox_target_members").select("*").eq("target_id", targetId);
   const { data: contributions } = await db.from("vfd_sandbox_target_contributions").select("*").eq("target_id", targetId).order("created_at", { ascending: false }).limit(50);
@@ -1604,9 +1670,10 @@ async function handleWithdrawCampaignEscrow(userId: string, body: Record<string,
   return jsonResponse({ data: { withdrawn: amount, remaining_escrow: escrow - amount } });
 }
 
-async function handleGetCampaignDetail(body: Record<string, unknown>) {
+async function handleGetCampaignDetail(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const campaignId = body.campaign_id as string;
+  if (!campaignId) return jsonResponse({ error: "campaign_id required" }, 400);
 
   const { data: campaign } = await db.from("vfd_sandbox_campaigns").select("*").eq("id", campaignId).single();
   if (!campaign) return jsonResponse({ error: "Campaign not found" }, 404);
@@ -1617,7 +1684,35 @@ async function handleGetCampaignDetail(body: Record<string, unknown>) {
   const { data: updates } = await db.from("vfd_sandbox_campaign_updates")
     .select("*").eq("campaign_id", campaignId).order("created_at", { ascending: false });
 
-  return jsonResponse({ data: { campaign, contributions: contributions || [], updates: updates || [] } });
+  // Campaigns are shareable, but only the owner (or a platform admin) may see
+  // contributor identities and the campaign's banking/escrow metadata.
+  const isOwner = campaign.creator_id === userId || (await isPlatformAdmin(userId));
+  if (isOwner) {
+    return jsonResponse({ data: { campaign, contributions: contributions || [], updates: updates || [] } });
+  }
+
+  const {
+    virtual_account_number: _van,
+    account_number: _an,
+    escrow_account: _esc,
+    flw_subaccount_id: _flw,
+    ...publicCampaign
+  } = campaign as Record<string, unknown>;
+
+  const redactedContributions = (contributions || []).map((c: Record<string, unknown>) => ({
+    id: c.id,
+    amount: c.amount,
+    amount_kobo: c.amount_kobo,
+    created_at: c.created_at,
+    is_anonymous: c.is_anonymous,
+    display_name: c.is_anonymous ? "Anonymous" : (c.display_name ?? "Supporter"),
+    // Contributor identity + payment references withheld from non-owners.
+    is_mine: c.user_id === userId,
+  }));
+
+  return jsonResponse({
+    data: { campaign: publicCampaign, contributions: redactedContributions, updates: updates || [] },
+  });
 }
 
 async function handlePostCampaignUpdate(userId: string, body: Record<string, unknown>) {
@@ -2244,12 +2339,41 @@ async function handleInviteSplitMember(userId: string, body: Record<string, unkn
 }
 
 // SplitPay: Get detail
-async function handleGetSplitDetail(body: Record<string, unknown>) {
+async function handleGetSplitDetail(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const splitId = body.split_id as string;
+  if (!splitId) return jsonResponse({ error: "split_id required" }, 400);
 
   const { data: split } = await db.from("vfd_sandbox_splits").select("*").eq("id", splitId).single();
   if (!split) return jsonResponse({ error: "Split not found" }, 404);
+
+  const { data: myParticipant } = await db.from("vfd_sandbox_split_participants")
+    .select("id").eq("split_id", splitId).eq("user_id", userId).maybeSingle();
+  const isInsider =
+    split.creator_id === userId || !!myParticipant || (await isPlatformAdmin(userId));
+
+  if (!isInsider) {
+    // Splits are joinable by link: expose only the minimum needed to decide to join.
+    return jsonResponse({
+      data: {
+        split: {
+          id: split.id,
+          title: split.title,
+          description: split.description,
+          total_amount: split.total_amount,
+          amount_per_person: split.amount_per_person,
+          split_count: split.split_count,
+          paid_count: split.paid_count,
+          status: split.status,
+          expiry_date: split.expiry_date,
+          created_at: split.created_at,
+        },
+        participants: [],
+        transactions: [],
+        preview: true,
+      },
+    });
+  }
 
   // Self-heal: if a bill SplitPay is fully paid but stuck in "processing"/"failed"/null for >2 min,
   // re-queue the bill delivery so the creator + contributors eventually get their success popup.
@@ -3691,10 +3815,12 @@ async function handleListGroupInvites(userId: string) {
 // =============================================
 // PENDING-INVITEE LOOKUP (for "Already invited" badge in search)
 // =============================================
-async function handleListPendingGroupInvitees(body: Record<string, unknown>) {
+async function handleListPendingGroupInvitees(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const groupId = body.group_id as string;
   if (!groupId) return jsonResponse({ error: "group_id required" }, 400);
+  if (!(await isGroupMember(groupId, userId))) return forbidden();
+
 
   const { data: invites } = await db.from("vfd_sandbox_group_invites")
     .select("invitee_id, status").eq("group_id", groupId).eq("status", "pending");
@@ -4697,12 +4823,16 @@ async function performMandateDebitForMember(
   return { success: false, error: "VFD mandate debit failed", details: result.raw };
 }
 
-async function handleTriggerMandateDebit(_userId: string, body: Record<string, unknown>) {
+async function handleTriggerMandateDebit(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const groupId = body.group_id as string;
   const targetUserId = body.user_id as string;
   const cycleIndex = Number(body.cycle_index ?? 0);
   if (!groupId || !targetUserId) return jsonResponse({ error: "group_id and user_id required" }, 400);
+  // Only the group admin (or a platform admin) may pull another member's mandate.
+  if (targetUserId !== userId && !(await isGroupAdmin(groupId, userId)) && !(await isPlatformAdmin(userId))) {
+    return forbidden("Only the group admin can trigger a mandate debit for another member");
+  }
 
   const { data: member } = await db.from("vfd_sandbox_group_members")
     .select("id, user_id, mandate_status, mandate_code, mandate_reference, mandate_payer_account_number, mandate_payer_bank_code")
@@ -5284,19 +5414,21 @@ Deno.serve(async (req) => {
     const body: Record<string, unknown> = req.method === "POST" ? await req.json() : {};
     const action = body.action as string;
 
-    // Cron-callable actions don't need a user JWT
-    if (action === "sandbox_auto_contribute") {
-      return await handleSandboxAutoContribute("system", body);
+    // Cron-callable actions: no user JWT, but they MUST present the shared
+    // cron secret. Previously these were reachable unauthenticated.
+    const CRON_ACTIONS = new Set([
+      "sandbox_auto_contribute",
+      "run_due_recurring_bills",
+      "send_bill_reminders",
+      "poll_pending_mandates",
+    ]);
+    if (CRON_ACTIONS.has(action) && assertCronCaller(req)) {
+      if (action === "sandbox_auto_contribute") return await handleSandboxAutoContribute("system", body);
+      if (action === "run_due_recurring_bills") return await handleRunDueRecurringBills();
+      if (action === "send_bill_reminders") return await handleSendBillReminders();
+      if (action === "poll_pending_mandates") return await handlePollPendingMandates();
     }
-    if (action === "run_due_recurring_bills") {
-      return await handleRunDueRecurringBills();
-    }
-    if (action === "send_bill_reminders") {
-      return await handleSendBillReminders();
-    }
-    if (action === "poll_pending_mandates") {
-      return await handlePollPendingMandates();
-    }
+
 
     const user = await getUserFromRequest(req);
     const userId = user.id;
@@ -5308,7 +5440,7 @@ Deno.serve(async (req) => {
       case "join_group": return await handleJoinGroup(userId, body);
       case "commence_group": return await handleCommenceGroup(userId, body);
       case "contribute_group": return await handleContributeGroup(userId, body);
-      case "get_group_detail": return await handleGetGroupDetail(body);
+      case "get_group_detail": return await handleGetGroupDetail(userId, body);
       case "request_swap": return await handleRequestSwap(userId, body);
       case "respond_swap": return await handleRespondSwap(userId, body);
       case "exit_group": return await handleExitGroup(userId, body);
@@ -5321,7 +5453,7 @@ Deno.serve(async (req) => {
       case "validate_group_invite_link": return await handleValidateGroupInviteLink(body);
       case "join_group_via_link": return await handleJoinGroupViaLink(userId, body);
       case "list_group_invites": return await handleListGroupInvites(userId);
-      case "list_pending_group_invitees": return await handleListPendingGroupInvitees(body);
+      case "list_pending_group_invitees": return await handleListPendingGroupInvitees(userId, body);
       case "auto_start_pending_groups": return await handleAutoStartPendingGroups(userId, body);
       case "post_group_chat": return await handlePostGroupChat(userId, body);
       case "list_group_chat": return await handleListGroupChat(userId, body);
@@ -5330,7 +5462,7 @@ Deno.serve(async (req) => {
       case "check_group_mandate_status": return await handleCheckGroupMandateStatus(userId, body);
       case "check_commencement_readiness": return await handleCheckCommencementReadiness(userId, body);
       case "trigger_mandate_debit": return await handleTriggerMandateDebit(userId, body);
-      case "poll_pending_mandates": return await handlePollPendingMandates();
+      case "poll_pending_mandates": return (await isPlatformAdmin(userId)) ? await handlePollPendingMandates() : forbidden("Admin only");
       // E-Mandate flow extended to Target Ajo + Goal Savings 2.0
       case "accept_target_mandate": return await handleAcceptTargetMandate(userId, body);
       case "check_target_mandate_status": return await handleCheckTargetMandateStatus(userId, body);
@@ -5338,7 +5470,7 @@ Deno.serve(async (req) => {
       case "goalsave_v2_create": return await handleGoalsaveV2Create(userId, body);
       case "goalsave_v2_authorize_mandate": return await handleGoalsaveAuthorizeMandate(userId, body);
       case "goalsave_v2_check_mandate_status": return await handleGoalsaveCheckMandateStatus(userId, body);
-      case "sandbox_auto_contribute": return await handleSandboxAutoContribute(userId, body);
+      case "sandbox_auto_contribute": return (await isPlatformAdmin(userId)) ? await handleSandboxAutoContribute(userId, body) : forbidden("Admin only");
 
       // In-app notifications
       case "list_notifications": return await handleListNotifications(userId);
@@ -5349,7 +5481,7 @@ Deno.serve(async (req) => {
       case "create_target": return await handleCreateTarget(userId, body);
       case "list_targets": return await handleListTargets(userId);
       case "contribute_target": return await handleContributeTarget(userId, body);
-      case "get_target_detail": return await handleGetTargetDetail(body);
+      case "get_target_detail": return await handleGetTargetDetail(userId, body);
       case "invite_target_member": return await handleInviteTargetMember(userId, body);
       case "respond_target_invite": return await handleRespondTargetInvite(userId, body);
       case "list_pending_target_invites": return await handleListPendingTargetInvites(userId);
@@ -5362,7 +5494,7 @@ Deno.serve(async (req) => {
       case "create_campaign": return await handleCreateCampaign(userId, body);
       case "list_campaigns": return await handleListCampaigns(userId);
       case "contribute_campaign": return await handleContributeCampaign(userId, body);
-      case "get_campaign_detail": return await handleGetCampaignDetail(body);
+      case "get_campaign_detail": return await handleGetCampaignDetail(userId, body);
       case "post_campaign_update": return await handlePostCampaignUpdate(userId, body);
       case "withdraw_campaign_escrow": return await handleWithdrawCampaignEscrow(userId, body);
 
@@ -5374,7 +5506,7 @@ Deno.serve(async (req) => {
       case "decline_split": return await handleDeclineSplit(userId, body);
       case "cancel_split": return await handleCancelSplit(userId, body);
       case "remove_split_participant": return await handleRemoveSplitParticipant(userId, body);
-      case "get_split_detail": return await handleGetSplitDetail(body);
+      case "get_split_detail": return await handleGetSplitDetail(userId, body);
       case "invite_split_member": return await handleInviteSplitMember(userId, body);
 
       // Associations (full parity)

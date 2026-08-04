@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { useToast } from "@/hooks/use-toast";
 import { Shield, Loader2 } from "lucide-react";
 import { ADMIN_CONSOLE_PATH, applyNoIndex } from "@/lib/adminRoutes";
+import { secureSignIn } from "@/lib/secureSignIn";
 
 export default function AdminLogin() {
   const navigate = useNavigate();
@@ -39,9 +40,12 @@ export default function AdminLogin() {
     e.preventDefault();
     setLoading(true);
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      // Hardened gate: server-side rate limiting, progressive backoff, lockout.
+      const { error } = await secureSignIn(supabase, email, password);
       if (error) throw error;
-      const { data: isAdmin, error: rpcErr } = await supabase.rpc("is_any_admin", { _user_id: data.user.id });
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Sign-in failed. Please try again.");
+      const { data: isAdmin, error: rpcErr } = await supabase.rpc("is_any_admin", { _user_id: user.id });
       if (rpcErr) throw rpcErr;
       if (!isAdmin) {
         await supabase.auth.signOut();
