@@ -2337,12 +2337,41 @@ async function handleInviteSplitMember(userId: string, body: Record<string, unkn
 }
 
 // SplitPay: Get detail
-async function handleGetSplitDetail(body: Record<string, unknown>) {
+async function handleGetSplitDetail(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const splitId = body.split_id as string;
+  if (!splitId) return jsonResponse({ error: "split_id required" }, 400);
 
   const { data: split } = await db.from("vfd_sandbox_splits").select("*").eq("id", splitId).single();
   if (!split) return jsonResponse({ error: "Split not found" }, 404);
+
+  const { data: myParticipant } = await db.from("vfd_sandbox_split_participants")
+    .select("id").eq("split_id", splitId).eq("user_id", userId).maybeSingle();
+  const isInsider =
+    split.creator_id === userId || !!myParticipant || (await isPlatformAdmin(userId));
+
+  if (!isInsider) {
+    // Splits are joinable by link: expose only the minimum needed to decide to join.
+    return jsonResponse({
+      data: {
+        split: {
+          id: split.id,
+          title: split.title,
+          description: split.description,
+          total_amount: split.total_amount,
+          amount_per_person: split.amount_per_person,
+          split_count: split.split_count,
+          paid_count: split.paid_count,
+          status: split.status,
+          expiry_date: split.expiry_date,
+          created_at: split.created_at,
+        },
+        participants: [],
+        transactions: [],
+        preview: true,
+      },
+    });
+  }
 
   // Self-heal: if a bill SplitPay is fully paid but stuck in "processing"/"failed"/null for >2 min,
   // re-queue the bill delivery so the creator + contributors eventually get their success popup.
