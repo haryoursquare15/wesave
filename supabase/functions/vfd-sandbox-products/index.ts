@@ -1916,7 +1916,17 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
 
   // Bill receipt (creator owns the beneficiary record)
   const expiresAt = computeBillExpiry(category || "", paymentItemName || null);
+  const splitDelivery = deriveBillDelivery({
+    category: category || "", billerName: displayBillerName,
+    paymentItemName: paymentItemName || null, amount, reference,
+    vfdResponse: vfdData as Record<string, unknown> | null,
+  });
   await db.from("vfd_sandbox_bill_receipts").insert({
+    delivery_type: splitDelivery.delivery_type,
+    delivery_token: splitDelivery.delivery_token,
+    delivery_units: splitDelivery.delivery_units,
+    delivery_status: splitDelivery.delivery_status,
+    delivery_detail: splitDelivery.delivery_detail,
     user_id: split.creator_id,
     reference,
     category: category || "Other",
@@ -1944,7 +1954,9 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
     .eq("status", "paid");
   const recipientIds = new Set<string>([split.creator_id, ...((paidForNotify || []).map((p: any) => p.user_id))]);
   const deliveryTitle = "Bill delivered";
-  const deliveryMsg = `₦${amount.toLocaleString()} ${displayBillerName} delivered to ${customerId}. Ref: ${reference}`;
+  const deliveryMsg = splitDelivery.delivery_token
+    ? `₦${amount.toLocaleString()} ${displayBillerName} delivered to ${customerId}. Token: ${splitDelivery.delivery_token}`
+    : `₦${amount.toLocaleString()} ${displayBillerName} delivered to ${customerId}. Ref: ${reference}`;
   for (const rid of recipientIds) {
     await sendNotification(rid, deliveryTitle, deliveryMsg, "bill_payment");
   }
