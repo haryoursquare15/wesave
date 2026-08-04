@@ -123,6 +123,10 @@ export function useVestaraLedger() {
 
   const invoke = useCallback(
     async (action: string, body: Record<string, unknown> = {}) => {
+      // No signed-in session (e.g. the user just signed out and an in-flight
+      // effect fired): bail quietly — this is not an error worth surfacing.
+      if (!session) return null;
+
       // Pull a fresh session, then validate it server-side. supabase-js's
       // getSession() reads localStorage and may return a token whose underlying
       // server session was revoked (e.g. another tab signed out) — that token
@@ -137,10 +141,7 @@ export function useVestaraLedger() {
           accessToken = undefined;
         }
       }
-      if (!accessToken) {
-        toast({ title: "Session expired", description: "Please sign in again.", variant: "destructive" });
-        return null;
-      }
+      if (!accessToken) return null;
 
       setLoading(true);
       try {
@@ -150,14 +151,20 @@ export function useVestaraLedger() {
         });
 
         if (error) {
-          toast({ title: "Ledger Error", description: getUserFriendlyError(error.message), variant: "destructive" });
+          // 401 = session ended mid-flight; stay silent instead of throwing a
+          // runtime error toast on a page the user is already leaving.
+          const msg = error.message || "";
+          if (/401|unauthor/i.test(msg)) return null;
+          toast({ title: "Ledger Error", description: getUserFriendlyError(msg), variant: "destructive" });
           return null;
         }
 
         if (data?.error) {
+          if (/unauthor/i.test(String(data.error))) return null;
           toast({ title: "Ledger Error", description: getUserFriendlyError(data.error), variant: "destructive" });
           return null;
         }
+
 
         return data;
       } catch (err) {
