@@ -5408,19 +5408,21 @@ Deno.serve(async (req) => {
     const body: Record<string, unknown> = req.method === "POST" ? await req.json() : {};
     const action = body.action as string;
 
-    // Cron-callable actions don't need a user JWT
-    if (action === "sandbox_auto_contribute") {
-      return await handleSandboxAutoContribute("system", body);
+    // Cron-callable actions: no user JWT, but they MUST present the shared
+    // cron secret. Previously these were reachable unauthenticated.
+    const CRON_ACTIONS = new Set([
+      "sandbox_auto_contribute",
+      "run_due_recurring_bills",
+      "send_bill_reminders",
+      "poll_pending_mandates",
+    ]);
+    if (CRON_ACTIONS.has(action) && assertCronCaller(req)) {
+      if (action === "sandbox_auto_contribute") return await handleSandboxAutoContribute("system", body);
+      if (action === "run_due_recurring_bills") return await handleRunDueRecurringBills();
+      if (action === "send_bill_reminders") return await handleSendBillReminders();
+      if (action === "poll_pending_mandates") return await handlePollPendingMandates();
     }
-    if (action === "run_due_recurring_bills") {
-      return await handleRunDueRecurringBills();
-    }
-    if (action === "send_bill_reminders") {
-      return await handleSendBillReminders();
-    }
-    if (action === "poll_pending_mandates") {
-      return await handlePollPendingMandates();
-    }
+
 
     const user = await getUserFromRequest(req);
     const userId = user.id;
