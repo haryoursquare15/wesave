@@ -7,8 +7,10 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// VFD Environment Configuration
-const VFD_MODE = "sandbox";
+// VFD Environment Configuration — controlled by the VFD_MODE secret so the same
+// deploy can run against sandbox or production without a code change.
+const VFD_MODE = Deno.env.get("VFD_MODE") || "sandbox";
+
 const VFD_BASE_URL =
   VFD_MODE === "sandbox"
     ? "https://api-devapps.vfdbank.systems/vtech-wallet/api/v2/wallet2"
