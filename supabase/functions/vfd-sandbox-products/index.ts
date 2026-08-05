@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { vfdFetch, getGatewayAccessToken } from "../_shared/vfd-gateway.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -130,18 +131,22 @@ async function fetchVfdLiveBalance(userId: string): Promise<number> {
 
   try {
     const vfdBase = Deno.env.get("VFD_API_BASE") || "https://api-devapps.vfdbank.systems";
-    const consumerKey = Deno.env.get("VFD_CONSUMER_KEY");
-    const consumerSecret = Deno.env.get("VFD_CONSUMER_SECRET");
-    if (!consumerKey || !consumerSecret) return 0;
+    let accessToken = await getGatewayAccessToken();
 
-    const authResp = await fetchWithTimeout(`${vfdBase}/vfd-tech/baas-portal/v1.1/baasauth/token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "-1" }),
-    }, 10_000);
-    const authRaw = await authResp.text();
-    const authData = authRaw ? JSON.parse(authRaw) : {};
-    const accessToken = authData?.data?.access_token;
+    if (!accessToken) {
+      const consumerKey = Deno.env.get("VFD_CONSUMER_KEY");
+      const consumerSecret = Deno.env.get("VFD_CONSUMER_SECRET");
+      if (!consumerKey || !consumerSecret) return 0;
+
+      const authResp = await fetchWithTimeout(`${vfdBase}/vfd-tech/baas-portal/v1.1/baasauth/token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "-1" }),
+      }, 10_000);
+      const authRaw = await authResp.text();
+      const authData = authRaw ? JSON.parse(authRaw) : {};
+      accessToken = authData?.data?.access_token || null;
+    }
     if (!accessToken) return 0;
 
     const balResp = await fetchWithTimeout(`${vfdBase}/vtech-wallet/api/v2/wallet2/account/enquiry?accountNumber=${client.vfd_account_number}`, {
@@ -2809,13 +2814,17 @@ async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs =
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetch(url, { ...init, signal: controller.signal });
+    return await vfdFetch(url, { ...init, signal: controller.signal });
   } finally {
     clearTimeout(timeoutId);
   }
 }
 
 async function getVfdAccessToken(): Promise<string | null> {
+  // Preferred: the gateway mints the token with credentials held on the droplet.
+  const gatewayToken = await getGatewayAccessToken();
+  if (gatewayToken) return gatewayToken;
+
   const vfdBase = Deno.env.get("VFD_API_BASE") || "https://api-devapps.vfdbank.systems";
   const consumerKey = Deno.env.get("VFD_CONSUMER_KEY");
   const consumerSecret = Deno.env.get("VFD_CONSUMER_SECRET");
@@ -2858,7 +2867,7 @@ async function safeJson(resp: Response): Promise<Record<string, unknown>> {
 async function handleBillsCategories() {
   const token = await getVfdAccessToken();
   if (!token) return jsonResponse({ error: "VFD auth failed" }, 500);
-  const resp = await fetch(`${getBillsBase()}/billercategory`, { headers: { AccessToken: token } });
+  const resp = await vfdFetch(`${getBillsBase()}/billercategory`, { headers: { AccessToken: token } });
   return jsonResponse({ data: await safeJson(resp) });
 }
 
@@ -2867,7 +2876,7 @@ async function handleBillsBillers(body: Record<string, unknown>) {
   const token = await getVfdAccessToken();
   if (!token) return jsonResponse({ error: "VFD auth failed" }, 500);
   const url = cat ? `${getBillsBase()}/billerlist?categoryName=${encodeURIComponent(cat)}` : `${getBillsBase()}/billerlist`;
-  const resp = await fetch(url, { headers: { AccessToken: token } });
+  const resp = await vfdFetch(url, { headers: { AccessToken: token } });
   const raw = await safeJson(resp) as Record<string, unknown> | null;
   console.log(`[bills_billers] cat=${cat} status=${resp.status} resp=`, JSON.stringify(raw)?.slice(0, 500));
 
@@ -2893,7 +2902,7 @@ async function handleBillsItems(body: Record<string, unknown>) {
   if (!billerId || !divisionId || !productId) return jsonResponse({ error: "billerId, divisionId, productId required" }, 400);
   const token = await getVfdAccessToken();
   if (!token) return jsonResponse({ error: "VFD auth failed" }, 500);
-  const resp = await fetch(
+  const resp = await vfdFetch(
     `${getBillsBase()}/billerItems?billerId=${encodeURIComponent(billerId)}&divisionId=${encodeURIComponent(divisionId)}&productId=${encodeURIComponent(productId)}`,
     { headers: { AccessToken: token } }
   );
@@ -2907,7 +2916,7 @@ async function handleBillsValidate(body: Record<string, unknown>) {
   if (!customerId || !divisionId || !paymentItem || !billerId) return jsonResponse({ error: "Missing validate fields" }, 400);
   const token = await getVfdAccessToken();
   if (!token) return jsonResponse({ error: "VFD auth failed" }, 500);
-  const resp = await fetch(
+  const resp = await vfdFetch(
     `${getBillsBase()}/customervalidate?customerId=${encodeURIComponent(customerId)}&divisionId=${encodeURIComponent(divisionId)}&paymentItem=${encodeURIComponent(paymentItem)}&billerId=${encodeURIComponent(billerId)}`,
     { headers: { AccessToken: token } }
   );
@@ -2952,7 +2961,7 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   const payBody: Record<string, string> = { customerId, amount: amount.toString(), division, paymentItem, productId, billerId, reference };
   if (phoneNumber) payBody.phoneNumber = phoneNumber;
 
-  const resp = await fetch(`${getBillsBase()}/pay`, {
+  const resp = await vfdFetch(`${getBillsBase()}/pay`, {
     method: "POST",
     headers: { AccessToken: token, "Content-Type": "application/json" },
     body: JSON.stringify(payBody),
@@ -3152,7 +3161,7 @@ async function fetchVfdBillArtefact(reference: string): Promise<Record<string, u
     const token = await getVfdAccessToken();
     if (!token) return null;
 
-    const resp = await fetch(
+    const resp = await vfdFetch(
       `${getBillsBase()}/transactionStatus?transactionId=${encodeURIComponent(reference)}`,
       { method: "GET", headers: { AccessToken: token, "Content-Type": "application/json" } },
     );
@@ -3527,7 +3536,7 @@ async function handleBillsStatus(body: Record<string, unknown>) {
   if (!transactionId) return jsonResponse({ error: "transactionId required" }, 400);
   const token = await getVfdAccessToken();
   if (!token) return jsonResponse({ error: "VFD auth failed" }, 500);
-  const resp = await fetch(`${getBillsBase()}/transactionStatus?transactionId=${encodeURIComponent(transactionId)}`, { headers: { AccessToken: token } });
+  const resp = await vfdFetch(`${getBillsBase()}/transactionStatus?transactionId=${encodeURIComponent(transactionId)}`, { headers: { AccessToken: token } });
   return jsonResponse({ data: await safeJson(resp) });
 }
 
@@ -3564,7 +3573,7 @@ async function handleCreateVirtualCard(userId: string, _body: Record<string, unk
   const token = await getVfdAccessToken();
   if (!token) return jsonResponse({ error: "VFD auth failed" }, 500);
 
-  const resp = await fetch(`${getCardsBase()}/cardrequest?action=virtual`, {
+  const resp = await vfdFetch(`${getCardsBase()}/cardrequest?action=virtual`, {
     method: "POST",
     headers: { AccessToken: token, "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -3662,7 +3671,7 @@ async function handleActivateCard(userId: string, body: Record<string, unknown>)
   const token = await getVfdAccessToken();
   if (!token) return jsonResponse({ error: "VFD auth failed" }, 500);
 
-  const resp = await fetch(`${getCardsBase()}/cardaction/request`, {
+  const resp = await vfdFetch(`${getCardsBase()}/cardaction/request`, {
     method: "POST",
     headers: { AccessToken: token, "Content-Type": "application/json" },
     body: JSON.stringify({ action: "ACTIVATE", accountNo: client.vfd_account_number, cardId: card_id }),
@@ -3693,7 +3702,7 @@ async function handleCardPinChange(userId: string, body: Record<string, unknown>
   const token = await getVfdAccessToken();
   if (!token) return jsonResponse({ error: "VFD auth failed" }, 500);
 
-  const resp = await fetch(`${getCardsBase()}/cardaction/request`, {
+  const resp = await vfdFetch(`${getCardsBase()}/cardaction/request`, {
     method: "POST",
     headers: { AccessToken: token, "Content-Type": "application/json" },
     body: JSON.stringify({ action: "PIN-CHANGE", cardId: card_id, accountNo: client.vfd_account_number, newCardPin: new_pin, cardPin: old_pin }),
@@ -3718,7 +3727,7 @@ async function handleBlockCard(userId: string, body: Record<string, unknown>) {
   const token = await getVfdAccessToken();
   if (!token) return jsonResponse({ error: "VFD auth failed" }, 500);
 
-  const resp = await fetch(`${getCardsBase()}/cardaction/request`, {
+  const resp = await vfdFetch(`${getCardsBase()}/cardaction/request`, {
     method: "POST",
     headers: { AccessToken: token, "Content-Type": "application/json" },
     body: JSON.stringify({ action: "BLOCK", cardId: card_id, accountNo: client.vfd_account_number }),
@@ -3746,7 +3755,7 @@ async function handleUnblockCard(userId: string, body: Record<string, unknown>) 
   const token = await getVfdAccessToken();
   if (!token) return jsonResponse({ error: "VFD auth failed" }, 500);
 
-  const resp = await fetch(`${getCardsBase()}/cardaction/request`, {
+  const resp = await vfdFetch(`${getCardsBase()}/cardaction/request`, {
     method: "POST",
     headers: { AccessToken: token, "Content-Type": "application/json" },
     body: JSON.stringify({ action: "UNBLOCK", cardId: card_id, accountNo: client.vfd_account_number }),
@@ -4503,7 +4512,7 @@ function computeMandateEndDate(period: string, totalCycles: number): Date {
 async function checkVfdMandateApproval(reference: string, accessToken: string) {
   try {
     const url = `${VFD_MANDATE_BASE}/mandate/status?reference=${encodeURIComponent(reference)}`;
-    const res = await fetch(url, { method: "GET", headers: { AccessToken: accessToken } });
+    const res = await vfdFetch(url, { method: "GET", headers: { AccessToken: accessToken } });
     const json = await res.json().catch(() => ({} as Record<string, unknown>));
     const data = (json as any)?.data || {};
     const desc = String(data.mandateWorkflowStatusDescription || data.mandateWorkflowStatus || data.mandateState || "");
@@ -4531,7 +4540,7 @@ async function vfdDebitMandate(params: {
     transactionReference: params.transactionReference,
   };
   try {
-    const res = await fetch(`${VFD_MANDATE_BASE}/account/debit`, {
+    const res = await vfdFetch(`${VFD_MANDATE_BASE}/account/debit`, {
       method: "POST",
       headers: { "Content-Type": "application/json", AccessToken: accessToken },
       body: JSON.stringify(payload),
@@ -4707,7 +4716,7 @@ async function handleAcceptGroupMandate(userId: string, body: Record<string, unk
   let mandateCreated = false;
 
   try {
-    const res = await fetch(`${VFD_MANDATE_BASE}/emandate/create`, {
+    const res = await vfdFetch(`${VFD_MANDATE_BASE}/emandate/create`, {
       method: "POST",
       headers: { "Content-Type": "application/json", AccessToken: accessToken },
       body: JSON.stringify(mandatePayload),
@@ -5186,7 +5195,7 @@ async function createVfdMandate(opts: {
   };
 
   try {
-    const res = await fetch(`${VFD_MANDATE_BASE}/emandate/create`, {
+    const res = await vfdFetch(`${VFD_MANDATE_BASE}/emandate/create`, {
       method: "POST",
       headers: { "Content-Type": "application/json", AccessToken: accessToken },
       body: JSON.stringify(payload),

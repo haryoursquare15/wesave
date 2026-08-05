@@ -4,6 +4,7 @@
 // Triggered by pg_cron on a schedule. Authenticates via CRON_SECRET.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { vfdFetch, getGatewayAccessToken } from "../_shared/vfd-gateway.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -36,11 +37,13 @@ async function vfdAccountEnquiry(accountNumber: string): Promise<{
   if (VFD_WALLET_CREDENTIAL_ID) url.searchParams.set("wallet-credential-id", VFD_WALLET_CREDENTIAL_ID);
 
   const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (VFD_BEARER) headers["Authorization"] = `Bearer ${VFD_BEARER}`;
+  const gatewayToken = await getGatewayAccessToken();
+  if (gatewayToken) headers["AccessToken"] = gatewayToken;
+  else if (VFD_BEARER) headers["Authorization"] = `Bearer ${VFD_BEARER}`;
   if (VFD_WALLET_CREDENTIAL_ID) headers["wallet-credential-id"] = VFD_WALLET_CREDENTIAL_ID;
 
   try {
-    const res = await fetch(url.toString(), { method: "GET", headers });
+    const res = await vfdFetch(url.toString(), { method: "GET", headers });
     const data = await res.json().catch(() => null);
     const status = (data as { status?: string } | null)?.status;
     const acctBal = (data as { data?: { accountBalance?: string | number } } | null)?.data?.accountBalance;

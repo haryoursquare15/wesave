@@ -1,5 +1,6 @@
 // vfd-banking edge function — quote_transfer action enabled
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { vfdFetch, getGatewayAccessToken } from "../_shared/vfd-gateway.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -27,6 +28,12 @@ let cachedToken: string | null = null;
 async function getAccessToken(): Promise<string> {
   if (cachedToken) return cachedToken;
 
+  const gatewayToken = await getGatewayAccessToken();
+  if (gatewayToken) {
+    cachedToken = gatewayToken;
+    return gatewayToken;
+  }
+
   const staticToken = Deno.env.get("VFD_ACCESS_TOKEN");
   const consumerKey = Deno.env.get("VFD_CONSUMER_KEY");
   const consumerSecret = Deno.env.get("VFD_CONSUMER_SECRET");
@@ -34,7 +41,7 @@ async function getAccessToken(): Promise<string> {
   if (consumerKey && consumerSecret) {
     console.log("[VFD] Generating access token via auth API...");
     try {
-      const res = await fetch(VFD_AUTH_URL, {
+      const res = await vfdFetch(VFD_AUTH_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "-1" }),
@@ -161,11 +168,11 @@ async function vfdRequest(
 
   // Retry upstream gateway timeouts (502/503/504) up to 2 extra times before
   // giving up. VFD sandbox intermittently returns 504 HTML from its edge.
-  let response = await fetch(url.toString(), options);
+  let response = await vfdFetch(url.toString(), options);
   for (let attempt = 0; attempt < 2 && [502, 503, 504].includes(response.status); attempt += 1) {
     console.warn(`[VFD] Upstream ${response.status} on ${endpoint}, retrying (${attempt + 1}/2)...`);
     await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
-    response = await fetch(url.toString(), options);
+    response = await vfdFetch(url.toString(), options);
   }
   const contentType = response.headers.get("content-type") || "";
 
@@ -194,7 +201,7 @@ async function vfdRequest(
     const newToken = await getAccessToken();
     (options.headers as Record<string, string>)["AccessToken"] = newToken;
 
-    const retryResponse = await fetch(url.toString(), options);
+    const retryResponse = await vfdFetch(url.toString(), options);
     const retryContentType = retryResponse.headers.get("content-type") || "";
     if (!retryContentType.includes("application/json")) {
       const text = await retryResponse.text();
