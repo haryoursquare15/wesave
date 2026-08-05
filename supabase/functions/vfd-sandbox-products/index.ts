@@ -131,18 +131,22 @@ async function fetchVfdLiveBalance(userId: string): Promise<number> {
 
   try {
     const vfdBase = Deno.env.get("VFD_API_BASE") || "https://api-devapps.vfdbank.systems";
-    const consumerKey = Deno.env.get("VFD_CONSUMER_KEY");
-    const consumerSecret = Deno.env.get("VFD_CONSUMER_SECRET");
-    if (!consumerKey || !consumerSecret) return 0;
+    let accessToken = await getGatewayAccessToken();
 
-    const authResp = await fetchWithTimeout(`${vfdBase}/vfd-tech/baas-portal/v1.1/baasauth/token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "-1" }),
-    }, 10_000);
-    const authRaw = await authResp.text();
-    const authData = authRaw ? JSON.parse(authRaw) : {};
-    const accessToken = authData?.data?.access_token;
+    if (!accessToken) {
+      const consumerKey = Deno.env.get("VFD_CONSUMER_KEY");
+      const consumerSecret = Deno.env.get("VFD_CONSUMER_SECRET");
+      if (!consumerKey || !consumerSecret) return 0;
+
+      const authResp = await fetchWithTimeout(`${vfdBase}/vfd-tech/baas-portal/v1.1/baasauth/token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "-1" }),
+      }, 10_000);
+      const authRaw = await authResp.text();
+      const authData = authRaw ? JSON.parse(authRaw) : {};
+      accessToken = authData?.data?.access_token || null;
+    }
     if (!accessToken) return 0;
 
     const balResp = await fetchWithTimeout(`${vfdBase}/vtech-wallet/api/v2/wallet2/account/enquiry?accountNumber=${client.vfd_account_number}`, {
@@ -2817,6 +2821,10 @@ async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs =
 }
 
 async function getVfdAccessToken(): Promise<string | null> {
+  // Preferred: the gateway mints the token with credentials held on the droplet.
+  const gatewayToken = await getGatewayAccessToken();
+  if (gatewayToken) return gatewayToken;
+
   const vfdBase = Deno.env.get("VFD_API_BASE") || "https://api-devapps.vfdbank.systems";
   const consumerKey = Deno.env.get("VFD_CONSUMER_KEY");
   const consumerSecret = Deno.env.get("VFD_CONSUMER_SECRET");

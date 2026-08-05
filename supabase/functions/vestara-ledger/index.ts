@@ -1196,8 +1196,8 @@ serve(async (req) => {
           const consumerKey = Deno.env.get("VFD_CONSUMER_KEY");
           const consumerSecret = Deno.env.get("VFD_CONSUMER_SECRET");
           const staticToken = Deno.env.get("VFD_ACCESS_TOKEN");
-          let accessToken = staticToken || "";
-          if (consumerKey && consumerSecret) {
+          let accessToken = (await getGatewayAccessToken()) || staticToken || "";
+          if (!accessToken && consumerKey && consumerSecret) {
             const tokRes = await vfdFetch(
               "https://api-devapps.vfdbank.systems/vfd-tech/baas-portal/v1.1/baasauth/token",
               {

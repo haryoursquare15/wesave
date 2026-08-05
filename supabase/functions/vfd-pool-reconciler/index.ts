@@ -37,7 +37,9 @@ async function vfdAccountEnquiry(accountNumber: string): Promise<{
   if (VFD_WALLET_CREDENTIAL_ID) url.searchParams.set("wallet-credential-id", VFD_WALLET_CREDENTIAL_ID);
 
   const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (VFD_BEARER) headers["Authorization"] = `Bearer ${VFD_BEARER}`;
+  const gatewayToken = await getGatewayAccessToken();
+  if (gatewayToken) headers["AccessToken"] = gatewayToken;
+  else if (VFD_BEARER) headers["Authorization"] = `Bearer ${VFD_BEARER}`;
   if (VFD_WALLET_CREDENTIAL_ID) headers["wallet-credential-id"] = VFD_WALLET_CREDENTIAL_ID;
 
   try {
