@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { vfdFetch, getGatewayAccessToken } from "../_shared/vfd-gateway.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1197,7 +1198,7 @@ serve(async (req) => {
           const staticToken = Deno.env.get("VFD_ACCESS_TOKEN");
           let accessToken = staticToken || "";
           if (consumerKey && consumerSecret) {
-            const tokRes = await fetch(
+            const tokRes = await vfdFetch(
               "https://api-devapps.vfdbank.systems/vfd-tech/baas-portal/v1.1/baasauth/token",
               {
                 method: "POST",
@@ -1234,7 +1235,7 @@ serve(async (req) => {
             reference: `VES-MND-${savings_id}`,
           };
 
-          const ddmRes = await fetch(VFD_MANDATE_URL, {
+          const ddmRes = await vfdFetch(VFD_MANDATE_URL, {
             method: "POST",
             headers: { "Content-Type": "application/json", AccessToken: accessToken },
             body: JSON.stringify(mandatePayload),
