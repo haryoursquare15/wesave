@@ -2842,7 +2842,12 @@ async function handleBillsCategories() {
   const token = await getVfdAccessToken();
   if (!token) return jsonResponse({ error: "VFD auth failed" }, 500);
   const resp = await vfdFetch(`${getBillsBase()}/billercategory`, { headers: { AccessToken: token } });
-  return jsonResponse({ data: await safeJson(resp) });
+  const raw = await safeJson(resp);
+  if (!resp.ok) {
+    console.error(`[bills_categories] upstream_status=${resp.status}`, JSON.stringify(raw).slice(0, 500));
+    return jsonResponse({ error: "The bill payment service is temporarily unavailable.", upstream_status: resp.status }, 502);
+  }
+  return jsonResponse({ data: raw });
 }
 
 async function handleBillsBillers(body: Record<string, unknown>) {
@@ -2853,6 +2858,10 @@ async function handleBillsBillers(body: Record<string, unknown>) {
   const resp = await vfdFetch(url, { headers: { AccessToken: token } });
   const raw = await safeJson(resp) as Record<string, unknown> | null;
   console.log(`[bills_billers] cat=${cat} status=${resp.status} resp=`, JSON.stringify(raw)?.slice(0, 500));
+  if (!resp.ok) {
+    console.error(`[bills_billers] upstream_status=${resp.status} category=${cat}`);
+    return jsonResponse({ error: "Billers could not be loaded right now.", upstream_status: resp.status }, 502);
+  }
 
   // Normalize: VFD response shape is { status, message, data: [...] }; sometimes nested under data.data
   let billersList: unknown[] = [];

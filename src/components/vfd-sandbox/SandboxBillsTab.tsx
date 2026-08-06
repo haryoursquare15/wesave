@@ -123,7 +123,17 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
       body: { action, ...body },
       headers: { Authorization: `Bearer ${accessToken}` },
     });
-    if (resp.error) throw new Error(resp.error.message);
+    if (resp.error) {
+      let message = resp.error.message;
+      try {
+        const context = (resp.error as { context?: Response }).context;
+        if (context && typeof context.clone === "function") {
+          const errorBody = await context.clone().json();
+          message = errorBody?.error || errorBody?.message || message;
+        }
+      } catch { /* use the SDK error */ }
+      throw new Error(message);
+    }
     return resp.data;
   }, [client]);
 
