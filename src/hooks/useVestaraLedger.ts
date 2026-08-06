@@ -133,6 +133,14 @@ export function useVestaraLedger() {
       // would still look valid locally but produce a 401 at the edge function.
       const { data: sessionData } = await supabase.auth.getSession();
       let accessToken = sessionData?.session?.access_token;
+      const expiresAt = sessionData?.session?.expires_at ?? 0;
+      const nowSec = Math.floor(Date.now() / 1000);
+      if (accessToken && expiresAt - nowSec < 60) {
+        // Token is expired or about to expire — refresh before calling the
+        // edge function, otherwise it rejects with 401.
+        const { data: refreshed } = await supabase.auth.refreshSession();
+        accessToken = refreshed?.session?.access_token ?? undefined;
+      }
       if (accessToken) {
         const { error: userErr } = await supabase.auth.getUser(accessToken);
         if (userErr) {
@@ -143,6 +151,7 @@ export function useVestaraLedger() {
       }
       if (!accessToken) return null;
 
+
       setLoading(true);
       try {
         const { data, error } = await supabase.functions.invoke("vestara-ledger", {
@@ -151,13 +160,17 @@ export function useVestaraLedger() {
         });
 
         if (error) {
-          // 401 = session ended mid-flight; stay silent instead of throwing a
-          // runtime error toast on a page the user is already leaving.
+          // 401 = session ended / token expired mid-flight; stay silent instead
+          // of surfacing a runtime error on a page the user is already leaving.
+          // supabase-js reports this as a generic "non-2xx status code" message,
+          // so inspect the underlying Response status too.
           const msg = error.message || "";
-          if (/401|unauthor/i.test(msg)) return null;
+          const status = (error as unknown as { context?: { status?: number } })?.context?.status;
+          if (status === 401 || status === 403 || /401|403|unauthor/i.test(msg)) return null;
           toast({ title: "Ledger Error", description: getUserFriendlyError(msg), variant: "destructive" });
           return null;
         }
+
 
         if (data?.error) {
           if (/unauthor/i.test(String(data.error))) return null;
