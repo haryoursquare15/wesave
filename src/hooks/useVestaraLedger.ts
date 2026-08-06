@@ -151,13 +151,17 @@ export function useVestaraLedger() {
         });
 
         if (error) {
-          // 401 = session ended mid-flight; stay silent instead of throwing a
-          // runtime error toast on a page the user is already leaving.
+          // 401 = session ended / token expired mid-flight; stay silent instead
+          // of surfacing a runtime error on a page the user is already leaving.
+          // supabase-js reports this as a generic "non-2xx status code" message,
+          // so inspect the underlying Response status too.
           const msg = error.message || "";
-          if (/401|unauthor/i.test(msg)) return null;
+          const status = (error as unknown as { context?: { status?: number } })?.context?.status;
+          if (status === 401 || status === 403 || /401|403|unauthor/i.test(msg)) return null;
           toast({ title: "Ledger Error", description: getUserFriendlyError(msg), variant: "destructive" });
           return null;
         }
+
 
         if (data?.error) {
           if (/unauthor/i.test(String(data.error))) return null;
