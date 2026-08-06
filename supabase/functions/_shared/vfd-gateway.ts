@@ -56,6 +56,7 @@ export async function vfdFetch(input: string | URL, init: VfdFetchOptions = {}):
 
   const headers = new Headers(init.headers || {});
   if (GATEWAY_SECRET) headers.set("x-gateway-key", GATEWAY_SECRET);
+  if (init.idempotencyKey) headers.set("Idempotency-Key", init.idempotencyKey);
   if (!headers.has("Content-Type") && init.body) headers.set("Content-Type", "application/json");
 
   const target = toGatewayUrl(url);
