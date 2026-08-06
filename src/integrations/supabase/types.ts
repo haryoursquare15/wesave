@@ -7542,6 +7542,7 @@ export type Database = {
       }
       is_admin: { Args: never; Returns: boolean }
       is_any_admin: { Args: { _user_id?: string }; Returns: boolean }
+      is_backend_role: { Args: never; Returns: boolean }
       is_group_admin: { Args: { _group_id: string }; Returns: boolean }
       is_group_member: { Args: { _group_id: string }; Returns: boolean }
       is_split_participant:
