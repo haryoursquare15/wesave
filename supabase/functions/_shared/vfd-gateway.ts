@@ -55,7 +55,11 @@ export async function vfdFetch(input: string | URL, init: VfdFetchOptions = {}):
   }
 
   const headers = new Headers(init.headers || {});
+  if (!GATEWAY_SECRET) {
+    throw new Error("VFD_GATEWAY_SECRET is not configured");
+  }
   if (GATEWAY_SECRET) headers.set("x-gateway-key", GATEWAY_SECRET);
+  if (!headers.has("x-request-id")) headers.set("x-request-id", crypto.randomUUID());
   if (init.idempotencyKey) headers.set("Idempotency-Key", init.idempotencyKey);
   if (!headers.has("Content-Type") && init.body) headers.set("Content-Type", "application/json");
 
@@ -92,20 +96,32 @@ export function isCircuitOpen(res: Response): boolean {
  * only on the droplet, so no consumer key/secret is needed in edge functions.
  */
 export async function getGatewayAccessToken(): Promise<string | null> {
-  if (!GATEWAY_URL) return null;
+  if (!GATEWAY_URL) throw new Error("VFD_GATEWAY_URL is not configured");
+  if (!GATEWAY_SECRET) throw new Error("VFD_GATEWAY_SECRET is not configured");
+  const requestId = crypto.randomUUID();
   try {
     const res = await fetch(`${GATEWAY_URL}/token`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...(GATEWAY_SECRET ? { "x-gateway-key": GATEWAY_SECRET } : {}),
+        "x-gateway-key": GATEWAY_SECRET,
+        "x-request-id": requestId,
       },
     });
     const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      const upstreamRequestId = res.headers.get("x-request-id") || requestId;
+      console.error(`[vfd-gateway] token request failed status=${res.status} request_id=${upstreamRequestId}`);
+      if (res.status === 401 || res.status === 403) {
+        throw new Error(`VFD gateway authentication failed (request ${upstreamRequestId})`);
+      }
+      throw new Error(`VFD gateway token request failed with HTTP ${res.status} (request ${upstreamRequestId})`);
+    }
     const token = (data as { access_token?: string } | null)?.access_token;
-    return token || null;
+    if (!token) throw new Error(`VFD gateway returned no access token (request ${requestId})`);
+    return token;
   } catch (err) {
     console.error("[vfd-gateway] token mint failed", err);
-    return null;
+    throw err;
   }
 }

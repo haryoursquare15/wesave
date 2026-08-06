@@ -2821,40 +2821,14 @@ async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs =
 }
 
 async function getVfdAccessToken(): Promise<string | null> {
-  // Preferred: the gateway mints the token with credentials held on the droplet.
-  const gatewayToken = await getGatewayAccessToken();
-  if (gatewayToken) return gatewayToken;
-
-  const vfdBase = Deno.env.get("VFD_API_BASE") || "https://api-devapps.vfdbank.systems";
-  const consumerKey = Deno.env.get("VFD_CONSUMER_KEY");
-  const consumerSecret = Deno.env.get("VFD_CONSUMER_SECRET");
-  if (!consumerKey || !consumerSecret) {
-    console.error("[Bills] VFD_CONSUMER_KEY or VFD_CONSUMER_SECRET not set");
-    return null;
-  }
-  try {
-    const authUrl = `${vfdBase}/vfd-tech/baas-portal/v1.1/baasauth/token`;
-    const authResp = await fetchWithTimeout(authUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "-1" }),
-    }, 10_000);
-    const raw = await authResp.text();
-    if (!raw) { console.error("[Bills auth] Empty response, status:", authResp.status); return null; }
-    const d = JSON.parse(raw);
-    if (d?.status === "00" && d?.data?.access_token) {
-      return d.data.access_token;
-    }
-    console.error("[Bills auth] Unexpected response:", raw.substring(0, 200));
-    return null;
-  } catch (e) {
-    console.error("[Bills auth error]", e);
-    return null;
-  }
+  // VFD credentials live exclusively on the static-IP gateway. Never mint a
+  // token from this function or fall back to a direct VFD authentication call.
+  return await getGatewayAccessToken();
 }
 
 function getBillsBase(): string {
-  return (Deno.env.get("VFD_ENVIRONMENT") || "test") === "live" ? VFD_BILLS_BASE_LIVE : VFD_BILLS_BASE_TEST;
+  const mode = (Deno.env.get("VFD_MODE") || "sandbox").toLowerCase();
+  return mode === "production" || mode === "live" ? VFD_BILLS_BASE_LIVE : VFD_BILLS_BASE_TEST;
 }
 
 async function safeJson(resp: Response): Promise<Record<string, unknown>> {
@@ -2868,7 +2842,12 @@ async function handleBillsCategories() {
   const token = await getVfdAccessToken();
   if (!token) return jsonResponse({ error: "VFD auth failed" }, 500);
   const resp = await vfdFetch(`${getBillsBase()}/billercategory`, { headers: { AccessToken: token } });
-  return jsonResponse({ data: await safeJson(resp) });
+  const raw = await safeJson(resp);
+  if (!resp.ok) {
+    console.error(`[bills_categories] upstream_status=${resp.status}`, JSON.stringify(raw).slice(0, 500));
+    return jsonResponse({ error: "The bill payment service is temporarily unavailable.", upstream_status: resp.status }, 502);
+  }
+  return jsonResponse({ data: raw });
 }
 
 async function handleBillsBillers(body: Record<string, unknown>) {
@@ -2879,6 +2858,10 @@ async function handleBillsBillers(body: Record<string, unknown>) {
   const resp = await vfdFetch(url, { headers: { AccessToken: token } });
   const raw = await safeJson(resp) as Record<string, unknown> | null;
   console.log(`[bills_billers] cat=${cat} status=${resp.status} resp=`, JSON.stringify(raw)?.slice(0, 500));
+  if (!resp.ok) {
+    console.error(`[bills_billers] upstream_status=${resp.status} category=${cat}`);
+    return jsonResponse({ error: "Billers could not be loaded right now.", upstream_status: resp.status }, 502);
+  }
 
   // Normalize: VFD response shape is { status, message, data: [...] }; sometimes nested under data.data
   let billersList: unknown[] = [];
