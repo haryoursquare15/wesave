@@ -25,11 +25,21 @@ export function toGatewayUrl(url: string): string {
   return `${GATEWAY_URL}/vfd${u.pathname}${u.search}`;
 }
 
+export interface VfdFetchOptions extends RequestInit {
+  /**
+   * Optional idempotency key for money-moving calls (transfers, wallet
+   * fund/debit/credit, bill payments, airtime). Use one UUID v4 per business
+   * intent and reuse it for every retry of that intent — the gateway replays the
+   * stored response instead of hitting VFD twice.
+   */
+  idempotencyKey?: string;
+}
+
 /**
  * Drop-in replacement for `fetch` for VFD endpoints.
  * Routes through the whitelisted gateway and attaches the shared secret.
  */
-export async function vfdFetch(input: string | URL, init: RequestInit = {}): Promise<Response> {
+export async function vfdFetch(input: string | URL, init: VfdFetchOptions = {}): Promise<Response> {
   const url = typeof input === "string" ? input : input.toString();
 
   if (!isVfdUrl(url)) return fetch(url, init);
