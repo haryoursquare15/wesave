@@ -65,6 +65,29 @@ export async function vfdFetch(input: string | URL, init: VfdFetchOptions = {}):
 }
 
 /**
+ * True when the gateway could not confirm the outcome of a financial request
+ * (lost response / upstream timeout). The transaction may or may not have been
+ * executed by VFD — NEVER auto-retry it. Run a transaction-status inquiry or
+ * leave it to the reconciler before attempting another debit or transfer.
+ *
+ * Shape returned by the gateway:
+ *   HTTP 409 + { transaction_status: "unknown", action_required: "transaction_status_inquiry" }
+ */
+export function isUncertainTransaction(
+  status: number,
+  body: unknown,
+): boolean {
+  if (status !== 409) return false;
+  const b = body as { transaction_status?: string } | null;
+  return b?.transaction_status === "unknown";
+}
+
+/** True when the gateway's circuit breaker is open (VFD outage, fail-fast). */
+export function isCircuitOpen(res: Response): boolean {
+  return res.status === 503 && res.headers.get("x-circuit-state") === "OPEN";
+}
+
+/**
  * Obtains a VFD access token. The gateway mints it using credentials that live
  * only on the droplet, so no consumer key/secret is needed in edge functions.
  */
