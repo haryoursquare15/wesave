@@ -4640,6 +4640,8 @@ export type Database = {
           delivery_type: string | null
           delivery_units: string | null
           expires_at: string | null
+          held_at: string | null
+          hold_state: string
           id: string
           paid_at: string
           payment_item_name: string | null
@@ -4647,8 +4649,11 @@ export type Database = {
           raw_response: Json | null
           recurring_bill_id: string | null
           reference: string
+          refunded_at: string | null
           reminder_sent_at: string | null
+          settled_at: string | null
           status: string
+          timed_out_at: string | null
           user_id: string
         }
         Insert: {
@@ -4665,6 +4670,8 @@ export type Database = {
           delivery_type?: string | null
           delivery_units?: string | null
           expires_at?: string | null
+          held_at?: string | null
+          hold_state?: string
           id?: string
           paid_at?: string
           payment_item_name?: string | null
@@ -4672,8 +4679,11 @@ export type Database = {
           raw_response?: Json | null
           recurring_bill_id?: string | null
           reference: string
+          refunded_at?: string | null
           reminder_sent_at?: string | null
+          settled_at?: string | null
           status?: string
+          timed_out_at?: string | null
           user_id: string
         }
         Update: {
@@ -4690,6 +4700,8 @@ export type Database = {
           delivery_type?: string | null
           delivery_units?: string | null
           expires_at?: string | null
+          held_at?: string | null
+          hold_state?: string
           id?: string
           paid_at?: string
           payment_item_name?: string | null
@@ -4697,8 +4709,11 @@ export type Database = {
           raw_response?: Json | null
           recurring_bill_id?: string | null
           reference?: string
+          refunded_at?: string | null
           reminder_sent_at?: string | null
+          settled_at?: string | null
           status?: string
+          timed_out_at?: string | null
           user_id?: string
         }
         Relationships: []
@@ -7782,6 +7797,23 @@ export type Database = {
         Returns: Json
       }
       vestara_auto_mature_due: { Args: never; Returns: Json }
+      vestara_bill_release: {
+        Args: { _metadata?: Json; _reference: string }
+        Returns: Json
+      }
+      vestara_bill_reserve: {
+        Args: {
+          _amount: number
+          _metadata?: Json
+          _reference: string
+          _user_id: string
+        }
+        Returns: Json
+      }
+      vestara_bill_settle: {
+        Args: { _metadata?: Json; _reference: string }
+        Returns: Json
+      }
       vestara_create_savings: {
         Args: {
           _principal: number
@@ -8020,6 +8052,7 @@ export type Database = {
         | "revenue"
         | "pending_transfer"
         | "pending_savings"
+        | "bills_hold"
       vestara_product_code: "goalsave" | "vault" | "lockmax" | "upfront_yield"
       vestara_savings_status:
         | "active"
@@ -8215,6 +8248,7 @@ export const Constants = {
         "revenue",
         "pending_transfer",
         "pending_savings",
+        "bills_hold",
       ],
       vestara_product_code: ["goalsave", "vault", "lockmax", "upfront_yield"],
       vestara_savings_status: [

@@ -3000,11 +3000,11 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
 
   if (isSuccess) {
     const db = getSupabaseAdmin();
-    // Atomic double-entry debit: wallet → settlement (via vestara_withdraw RPC).
-    // This guarantees the settlement account is credited and prevents the
-    // syncBalanceCachesFromVestara routine from later "restoring" a stale
-    // vfd_user_balances row.
-    const { data: wdData, error: wdErr } = await db.rpc("vestara_withdraw", {
+    // Hold-and-settle: reserve the funds (wallet → bills_hold) instead of
+    // debiting straight to settlement. The money only reaches settlement once
+    // VFD confirms the biller actually delivered ("00"); a pending ("09") or
+    // failed purchase releases the hold back to the customer's wallet.
+    const { data: hdData, error: hdErr } = await db.rpc("vestara_bill_reserve", {
       _user_id: userId,
       _amount: numAmount,
       _reference: reference,
@@ -3016,19 +3016,36 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
         product_id: productId,
       },
     });
-    const wdResult = wdData as { success?: boolean; error?: string } | null;
-    if (wdErr || !wdResult?.success) {
-      console.error("[bills] vestara_withdraw failed:", wdErr || wdResult);
+    const hdResult = hdData as { success?: boolean; error?: string } | null;
+    if (hdErr || !hdResult?.success) {
+      console.error("[bills] vestara_bill_reserve failed:", hdErr || hdResult);
       return jsonResponse(
-        { error: "Bill payment could not be recorded. Please contact support.", details: wdErr?.message || wdResult?.error },
+        { error: "Bill payment could not be recorded. Please contact support.", details: hdErr?.message || hdResult?.error },
         500,
       );
+    }
+    // Confirmed delivery → settle the hold to the settlement account now.
+    let holdState = "held";
+    let settledAt: string | null = null;
+    if (!isPending) {
+      const { data: stData, error: stErr } = await db.rpc("vestara_bill_settle", {
+        _reference: reference,
+        _metadata: { biller_id: billerId, customer_id: customerId },
+      });
+      const stResult = stData as { success?: boolean; error?: string } | null;
+      if (stErr || !stResult?.success) {
+        console.error("[bills] vestara_bill_settle failed (left held, reconciler will retry):", stErr || stResult);
+      } else {
+        holdState = "settled";
+        settledAt = new Date().toISOString();
+      }
     }
     // Mirror the debit to the vfd_user_balances cache so the UI reflects it immediately.
     await db.from("vfd_user_balances").update({
       total_balance: bal.total_balance - numAmount,
       updated_at: new Date().toISOString(),
     }).eq("user_id", userId);
+
     const category = (body.category as string) || "";
     const billerName = (body.billerName as string) || billerId.toUpperCase();
     const paymentItemName = (body.paymentItemName as string) || null;
@@ -3091,7 +3108,11 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
       expires_at: expiresAt,
       raw_response: data || null,
       recurring_bill_id: recurringBillId,
+      hold_state: holdState,
+      held_at: new Date().toISOString(),
+      settled_at: settledAt,
     });
+
 
     // Upsert beneficiary (auto-save) — last_used touch; preserve user-edited nickname on repeat pay
     if (category && billerId && customerId) {
@@ -3418,7 +3439,71 @@ async function handleReconcilePendingBills(userId: string, body: Record<string, 
     .limit(limit);
   if (error) return jsonResponse({ error: error.message }, 500);
 
-  const result = { scanned: 0, delivered: 0, refunded: 0, still_pending: 0 };
+  const result = { scanned: 0, delivered: 0, refunded: 0, timed_out: 0, still_pending: 0 };
+  // A purchase stuck at VFD "09" for longer than this is auto-refunded so the
+  // customer is never left hanging on money the biller never delivered.
+  const STALE_PENDING_MINUTES = 45;
+
+  // Releases the hold back to the wallet. Falls back to a plain deposit for
+  // legacy receipts that were debited straight to settlement (pre hold-and-settle).
+  const refundReceipt = async (r: Record<string, any>, owner: string, reason: string, statusResp: unknown) => {
+    const refundRef = `${r.reference}-REFUND`;
+    let ok = false;
+    const { data: rel, error: relErr } = await db.rpc("vestara_bill_release", {
+      _reference: r.reference,
+      _metadata: { reason, vfd_status: reason },
+    });
+    const relResult = rel as { success?: boolean; error?: string } | null;
+    ok = !relErr && !!relResult?.success;
+    if (!ok) {
+      const { data: dep, error: depErr } = await db.rpc("vestara_deposit", {
+        _user_id: owner,
+        _amount: Number(r.amount),
+        _reference: refundRef,
+        _metadata: { source: "bill_payment_refund", original_reference: r.reference, reason },
+      });
+      ok = !depErr && !!(dep as { success?: boolean } | null)?.success;
+      if (!ok) {
+        console.error("[bills] refund failed", r.reference, relErr || relResult, depErr || dep);
+        return false;
+      }
+    }
+    await db.from("vfd_sandbox_transactions").insert({
+      user_id: owner, transaction_type: "credit", amount: Number(r.amount),
+      description: `Refund: bill payment ${r.biller_name} - ${r.customer_id}`,
+      reference: refundRef, status: "completed",
+    });
+    const timedOut = reason === "stale_pending";
+    await db.from("vfd_sandbox_bill_receipts").update({
+      status: timedOut ? "refunded" : "failed",
+      delivery_status: "failed",
+      hold_state: "refunded",
+      refunded_at: new Date().toISOString(),
+      timed_out_at: timedOut ? new Date().toISOString() : null,
+      delivery_detail: {
+        instruction: timedOut
+          ? "The biller never confirmed this purchase, so it was cancelled and your wallet refunded in full."
+          : "The biller could not complete this purchase. Your wallet has been refunded in full.",
+      },
+      raw_response: statusResp ?? r.raw_response,
+    }).eq("id", r.id);
+    // Mirror the refund into the balance cache the UI reads.
+    const { data: balRow } = await db.from("vfd_user_balances")
+      .select("total_balance").eq("user_id", owner).maybeSingle();
+    if (balRow) {
+      await db.from("vfd_user_balances").update({
+        total_balance: Number(balRow.total_balance) + Number(r.amount),
+        updated_at: new Date().toISOString(),
+      }).eq("user_id", owner);
+    }
+    await sendNotification(
+      owner,
+      timedOut ? "Bill payment cancelled & refunded" : "Bill payment refunded",
+      `${r.biller_name} • ${r.customer_id} — ${timedOut ? "the biller never confirmed this purchase" : "the biller could not complete this purchase"}, so ₦${Number(r.amount).toLocaleString()} has been refunded to your wallet. Ref: ${r.reference}`,
+      "bill_payment",
+    );
+    return true;
+  };
 
   for (const r of (rows || []) as Record<string, any>[]) {
     const owner = r.user_id as string;
@@ -3436,8 +3521,17 @@ async function handleReconcilePendingBills(userId: string, body: Record<string, 
         reference: r.reference,
         vfdResponse: statusResp,
       });
+      // Money only leaves the hold once the biller has confirmed delivery.
+      const { data: st, error: stErr } = await db.rpc("vestara_bill_settle", {
+        _reference: r.reference,
+        _metadata: { source: "bill_reconciler" },
+      });
+      const settled = !stErr && !!(st as { success?: boolean } | null)?.success;
+      if (!settled) console.error("[bills] settle failed", r.reference, stErr || st);
       await db.from("vfd_sandbox_bill_receipts").update({
         status: "completed",
+        hold_state: settled ? "settled" : r.hold_state,
+        settled_at: settled ? new Date().toISOString() : r.settled_at,
         delivery_type: delivery.delivery_type,
         delivery_token: delivery.delivery_token,
         delivery_units: delivery.delivery_units,
@@ -3454,41 +3548,20 @@ async function handleReconcilePendingBills(userId: string, body: Record<string, 
       result.delivered++;
     } else if (eff && eff !== "09") {
       // Genuine biller failure — return the money.
-      const refundRef = `${r.reference}-REFUND`;
-      const { data: dep, error: depErr } = await db.rpc("vestara_deposit", {
-        _user_id: owner,
-        _amount: Number(r.amount),
-        _reference: refundRef,
-        _metadata: { source: "bill_payment_refund", original_reference: r.reference, vfd_status: eff },
-      });
-      const depOk = (dep as { success?: boolean } | null)?.success;
-      if (depErr || !depOk) {
-        console.error("[bills] refund failed", r.reference, depErr || dep);
-        result.still_pending++;
-        continue;
-      }
-      await db.from("vfd_sandbox_transactions").insert({
-        user_id: owner, transaction_type: "credit", amount: Number(r.amount),
-        description: `Refund: failed bill payment ${r.biller_name} - ${r.customer_id}`,
-        reference: refundRef, status: "completed",
-      });
-      await db.from("vfd_sandbox_bill_receipts").update({
-        status: "failed",
-        delivery_status: "failed",
-        delivery_detail: { instruction: "The biller could not complete this purchase. Your wallet has been refunded in full." },
-        raw_response: statusResp,
-      }).eq("id", r.id);
-      await sendNotification(
-        owner,
-        "Bill payment refunded",
-        `${r.biller_name} • ${r.customer_id} — the biller could not complete this purchase, so ₦${Number(r.amount).toLocaleString()} has been refunded to your wallet. Ref: ${r.reference}`,
-        "bill_payment",
-      );
-      result.refunded++;
+      if (await refundReceipt(r, owner, String(eff), statusResp)) result.refunded++;
+      else result.still_pending++;
     } else {
-      result.still_pending++;
+      // Still pending at VFD — auto-refund once it goes stale.
+      const ageMin = (Date.now() - new Date(r.paid_at).getTime()) / 60000;
+      if (ageMin >= STALE_PENDING_MINUTES) {
+        if (await refundReceipt(r, owner, "stale_pending", statusResp)) result.timed_out++;
+        else result.still_pending++;
+      } else {
+        result.still_pending++;
+      }
     }
   }
+
 
   return jsonResponse({ data: result });
 }
