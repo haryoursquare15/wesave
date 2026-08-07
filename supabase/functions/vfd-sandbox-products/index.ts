@@ -204,8 +204,12 @@ async function getAvailableBalance(userId: string): Promise<number> {
   return bal.total_balance - bal.locked_balance - bal.savings_balance;
 }
 
-// All ledger writes go through the atomic RPC `apply_balance_delta`
-// which row-locks vfd_user_balances and prevents race conditions.
+// `apply_balance_delta` row-locks vfd_user_balances and is now used ONLY to
+// re-classify money already on the balance sheet between the spendable /
+// locked / savings buckets (total_balance is never changed by these callers).
+// Any movement that creates or destroys spendable balance must go through a
+// ledger RPC instead — see the ledger* helpers below.
+
 
 async function applyBalanceDelta(
   userId: string,
@@ -246,19 +250,104 @@ async function creditFromSavings(userId: string, amount: number): Promise<void> 
   await applyBalanceDelta(userId, { savings: -amount });
 }
 
-async function debitWallet(userId: string, amount: number): Promise<boolean> {
-  const r = await applyBalanceDelta(userId, { total: -amount, requireAvailable: 0 });
-  if (!r.ok) {
-    await ensureBalanceRow(userId, true);
-    const r2 = await applyBalanceDelta(userId, { total: -amount, requireAvailable: 0 });
-    return r2.ok;
+/* ─────────────────────────────────────────────────────────────
+   Ledger-backed wallet movement.
+
+   `creditWallet` / `debitWallet` (cache-only writes through
+   apply_balance_delta) have been RETIRED. Every movement of
+   spendable balance now posts a double-entry transaction through
+   vestara_post_transaction, which updates the displayed balance
+   cache inside the same database transaction. There is no longer
+   any route that can move a wallet balance without a ledger entry.
+   ───────────────────────────────────────────────────────────── */
+
+type LedgerResult = { success?: boolean; already?: boolean; error?: string } | null;
+
+function ledgerOk(data: unknown, error: unknown): boolean {
+  if (error) {
+    console.error("[ledger] rpc error:", error);
+    return false;
+  }
+  const r = data as LedgerResult;
+  if (!r?.success) {
+    console.error("[ledger] rpc rejected:", r?.error);
+    return false;
   }
   return true;
 }
 
-async function creditWallet(userId: string, amount: number): Promise<void> {
-  await applyBalanceDelta(userId, { total: amount });
+/** Debit spendable wallet balance to the platform settlement account. */
+async function ledgerDebitWallet(
+  userId: string,
+  amount: number,
+  reference: string,
+  metadata: Record<string, unknown> = {},
+): Promise<boolean> {
+  const db = getSupabaseAdmin();
+  await ensureBalanceRow(userId);
+  const { data, error } = await db.rpc("vestara_withdraw", {
+    _user_id: userId, _amount: amount, _reference: reference, _metadata: metadata,
+  });
+  return ledgerOk(data, error);
 }
+
+/** SplitPay: move a participant's share from their wallet into the split holding account. */
+async function ledgerSplitPay(
+  userId: string, splitId: string, amount: number, reference: string, metadata: Record<string, unknown> = {},
+): Promise<boolean> {
+  const db = getSupabaseAdmin();
+  await ensureBalanceRow(userId);
+  const { data, error } = await db.rpc("vestara_split_pay", {
+    _user_id: userId, _split_id: splitId, _amount: amount, _reference: reference, _metadata: metadata,
+  });
+  return ledgerOk(data, error);
+}
+
+/** SplitPay: release a participant's share back to their wallet. */
+async function ledgerSplitRefund(
+  userId: string, splitId: string, amount: number, reference: string, metadata: Record<string, unknown> = {},
+): Promise<boolean> {
+  const db = getSupabaseAdmin();
+  const { data, error } = await db.rpc("vestara_split_refund", {
+    _user_id: userId, _split_id: splitId, _amount: amount, _reference: reference, _metadata: metadata,
+  });
+  return ledgerOk(data, error);
+}
+
+/** Goal Fund: move a contribution from the contributor's wallet into the campaign pool. */
+async function ledgerCampaignContribute(
+  userId: string, campaignId: string, amount: number, reference: string, metadata: Record<string, unknown> = {},
+): Promise<boolean> {
+  const db = getSupabaseAdmin();
+  await ensureBalanceRow(userId);
+  const { data, error } = await db.rpc("vestara_campaign_contribute", {
+    _user_id: userId, _campaign_id: campaignId, _amount: amount, _reference: reference, _metadata: metadata,
+  });
+  return ledgerOk(data, error);
+}
+
+/** Goal Fund: release campaign escrow to the campaign owner's wallet. */
+async function ledgerCampaignWithdraw(
+  userId: string, campaignId: string, amount: number, reference: string, metadata: Record<string, unknown> = {},
+): Promise<boolean> {
+  const db = getSupabaseAdmin();
+  const { data, error } = await db.rpc("vestara_campaign_withdraw", {
+    _user_id: userId, _campaign_id: campaignId, _amount: amount, _reference: reference, _metadata: metadata,
+  });
+  return ledgerOk(data, error);
+}
+
+/** Target Ajo: pay a member out of the group's thrift pool. */
+async function ledgerTargetPayout(
+  userId: string, groupId: string, amount: number, reference: string, metadata: Record<string, unknown> = {},
+): Promise<boolean> {
+  const db = getSupabaseAdmin();
+  const { data, error } = await db.rpc("vestara_target_payout", {
+    _user_id: userId, _group_id: groupId, _amount: amount, _reference: reference, _metadata: metadata,
+  });
+  return ledgerOk(data, error);
+}
+
 
 async function getVestaraWalletBalance(userId: string): Promise<number> {
   const db = getSupabaseAdmin();
@@ -1224,8 +1313,12 @@ async function handleContributeTarget(userId: string, body: Record<string, unkno
         const memberContributed = m.user_id === userId ? newMemberContributed : Number(m.contributed_amount);
         if (memberContributed > 0) {
           if (isDdm) {
-            // DDM-funded: cash sat in the pool, credit member's wallet directly.
-            await creditWallet(m.user_id, memberContributed);
+            // DDM-funded: cash sat in the group pool — pay it out through the ledger.
+            await ledgerTargetPayout(
+              m.user_id, targetId, memberContributed,
+              `target-payout-${targetId}-${m.user_id}`,
+              { target_name: target.name },
+            );
           } else {
             await creditFromSavings(m.user_id, memberContributed);
           }
@@ -1617,10 +1710,13 @@ async function handleContributeCampaign(userId: string, body: Record<string, unk
   if (!campaign) return jsonResponse({ error: "Campaign not found" }, 404);
   if (campaign.status !== "active") return jsonResponse({ error: "Campaign is not active" }, 400);
 
-  const debited = await debitWallet(userId, amount);
+  const contributionRef = `goal-${campaignId}-${userId}-${Date.now()}`;
+
+  const debited = await ledgerCampaignContribute(userId, campaignId, amount, contributionRef, {
+    campaign_title: campaign.title,
+  });
   if (!debited) return jsonResponse({ error: "Insufficient available balance" }, 400);
 
-  const contributionRef = `goal-${campaignId}-${userId}-${Date.now()}`;
 
   await db.from("vfd_sandbox_campaign_contributions").insert({
     campaign_id: campaignId, contributor_id: userId, amount, anonymous, message,
@@ -1671,8 +1767,13 @@ async function handleWithdrawCampaignEscrow(userId: string, body: Record<string,
   const amount = requestedAmount && requestedAmount > 0 ? Math.min(requestedAmount, escrow) : escrow;
   if (amount <= 0) return jsonResponse({ error: "Invalid withdrawal amount" }, 400);
 
-  // Move funds from campaign escrow to owner's wallet.
-  await creditWallet(userId, amount);
+  // Move funds from campaign escrow to owner's wallet (ledger-backed).
+  const released = await ledgerCampaignWithdraw(
+    userId, campaignId, amount,
+    `campaign-withdraw-${campaignId}-${Date.now()}`,
+    { campaign_title: campaign.title },
+  );
+  if (!released) return jsonResponse({ error: "Could not release campaign funds. Please try again." }, 400);
   await db.from("vfd_sandbox_campaigns").update({
     escrow_balance: escrow - amount,
     total_withdrawn: Number(campaign.total_withdrawn || 0) + amount,
@@ -2141,8 +2242,11 @@ async function handlePaySplit(userId: string, body: Record<string, unknown>) {
   const totalDebit = amount + feeShare;
 
 
-  // Production parity: debit bill share + fee share
-  const debited = await debitWallet(userId, totalDebit);
+  // Ledger-backed: bill share + fee share move from wallet into the split holding account,
+  // so a later cancellation/removal can release the exact same funds back.
+  const debited = await ledgerSplitPay(userId, splitId, totalDebit, `splitpay-${splitId}-${userId}`, {
+    split_title: split.title, bill_share: amount, fee_share: feeShare,
+  });
   if (!debited) return jsonResponse({ error: `Insufficient available balance. Need ₦${totalDebit.toLocaleString()} (₦${amount.toLocaleString()} share${feeShare > 0 ? ` + ₦${feeShare.toLocaleString()} fee` : ""})` }, 400);
 
   await db.from("vfd_sandbox_split_participants").update({
@@ -2258,7 +2362,12 @@ async function handleCancelSplit(userId: string, body: Record<string, unknown>) 
       ? (p.user_id === split.creator_id ? Number(split.platform_fee || 100) : 0)
       : (storedFeePerPerson || (Math.ceil(100 / split.split_count * 100) / 100));
     const refundAmount = Number(p.amount) + feeShare;
-    await creditWallet(p.user_id, refundAmount);
+    const refunded = await ledgerSplitRefund(
+      p.user_id, splitId, refundAmount,
+      `splitpay-${splitId}-${p.user_id}-REFUND`,
+      { reason: "split_cancelled", split_title: split.title },
+    );
+    if (!refunded) continue;
     refundedCount++;
     await sendNotification(p.user_id, "SplitPay Refund",
       `"${split.title}" has been cancelled. ₦${refundAmount.toLocaleString()} has been refunded.`,
@@ -2295,7 +2404,12 @@ async function handleRemoveSplitParticipant(userId: string, body: Record<string,
       ? (participantUserId === split.creator_id ? Number(split.platform_fee || 100) : 0)
       : (storedFeePerPerson || (Math.ceil(100 / split.split_count * 100) / 100));
     const refundAmount = Number(participant.amount) + feeShare;
-    await creditWallet(participantUserId, refundAmount);
+    const refunded = await ledgerSplitRefund(
+      participantUserId, splitId, refundAmount,
+      `splitpay-${splitId}-${participantUserId}-REFUND`,
+      { reason: "participant_removed", split_title: split.title },
+    );
+    if (!refunded) return jsonResponse({ error: "Could not refund this participant. Please try again." }, 400);
     await db.from("vfd_sandbox_splits").update({
       paid_count: Math.max(0, split.paid_count - 1),
       updated_at: new Date().toISOString(),
@@ -2634,7 +2748,10 @@ async function handleContributeAssociation(userId: string, body: Record<string, 
   }
   if (!membership) return jsonResponse({ error: "You must be a member to contribute" }, 403);
 
-  const debited = await debitWallet(userId, amount);
+  const debited = await ledgerDebitWallet(
+    userId, amount, `assoc-contrib-${associationId}-${userId}-${Date.now()}`,
+    { source: "association_contribution", association_id: associationId },
+  );
   if (!debited) {
     const avail = await getAvailableBalance(userId);
     return jsonResponse({ error: `Insufficient balance. Available: ₦${avail.toLocaleString()}` }, 400);
@@ -3040,11 +3157,10 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
         settledAt = new Date().toISOString();
       }
     }
-    // Mirror the debit to the vfd_user_balances cache so the UI reflects it immediately.
-    await db.from("vfd_user_balances").update({
-      total_balance: bal.total_balance - numAmount,
-      updated_at: new Date().toISOString(),
-    }).eq("user_id", userId);
+    // No cache mirroring here: vestara_bill_reserve posts through
+    // vestara_post_transaction, which updates the displayed balance in the
+    // same database transaction.
+
 
     const category = (body.category as string) || "";
     const billerName = (body.billerName as string) || billerId.toUpperCase();
@@ -3487,15 +3603,10 @@ async function handleReconcilePendingBills(userId: string, body: Record<string, 
       },
       raw_response: statusResp ?? r.raw_response,
     }).eq("id", r.id);
-    // Mirror the refund into the balance cache the UI reads.
-    const { data: balRow } = await db.from("vfd_user_balances")
-      .select("total_balance").eq("user_id", owner).maybeSingle();
-    if (balRow) {
-      await db.from("vfd_user_balances").update({
-        total_balance: Number(balRow.total_balance) + Number(r.amount),
-        updated_at: new Date().toISOString(),
-      }).eq("user_id", owner);
-    }
+    // No cache mirroring here: vestara_bill_release / vestara_deposit post
+    // through vestara_post_transaction, which updates the displayed balance
+    // atomically. The old read-then-write mirror was race-prone.
+
     await sendNotification(
       owner,
       timedOut ? "Bill payment cancelled & refunded" : "Bill payment refunded",
@@ -3672,7 +3783,10 @@ async function handleRunDueRecurringBills() {
     const amount = Number(r.amount);
     let outcome: { status: string; reason?: string; reference?: string };
     try {
-      const debited = await debitWallet(r.user_id, amount);
+      const debited = await ledgerDebitWallet(
+        r.user_id, amount, `wesave-rec-debit-${r.id}-${Date.now()}`,
+        { source: "recurring_bill", recurring_bill_id: r.id, biller: r.biller_name },
+      );
       if (!debited) {
         outcome = { status: "insufficient_funds", reason: "Wallet balance too low" };
         await sendNotification(
@@ -3845,11 +3959,9 @@ async function handleCreateVirtualCard(userId: string, _body: Record<string, unk
         500,
       );
     }
-    // Mirror the debit to the vfd_user_balances cache.
-    await db.from("vfd_user_balances").update({
-      total_balance: bal.total_balance - CARD_ISSUANCE_FEE,
-      updated_at: new Date().toISOString(),
-    }).eq("user_id", userId);
+    // No cache mirroring here: vestara_withdraw updates the displayed balance
+    // inside the same database transaction as the ledger entry.
+
 
     await db.from("vfd_sandbox_transactions").insert({
       user_id: userId, transaction_type: "debit", amount: CARD_ISSUANCE_FEE,
