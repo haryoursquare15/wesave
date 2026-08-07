@@ -2744,7 +2744,10 @@ async function handleContributeAssociation(userId: string, body: Record<string, 
   }
   if (!membership) return jsonResponse({ error: "You must be a member to contribute" }, 403);
 
-  const debited = await debitWallet(userId, amount);
+  const debited = await ledgerDebitWallet(
+    userId, amount, `assoc-contrib-${associationId}-${userId}-${Date.now()}`,
+    { source: "association_contribution", association_id: associationId },
+  );
   if (!debited) {
     const avail = await getAvailableBalance(userId);
     return jsonResponse({ error: `Insufficient balance. Available: ₦${avail.toLocaleString()}` }, 400);
