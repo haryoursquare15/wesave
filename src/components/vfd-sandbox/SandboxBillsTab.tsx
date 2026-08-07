@@ -949,6 +949,21 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
                     Copy token
                   </Button>
                 </div>
+                {(paymentResult.delivery_detail?.kct1 || paymentResult.delivery_detail?.kct2) && (
+                  <div className="rounded-xl bg-warning/10 border border-warning/30 p-3 space-y-1">
+                    <p className="text-[11px] font-semibold text-warning uppercase tracking-wide">
+                      Key change tokens — enter these first
+                    </p>
+                    {["kct1", "kct2"].map((k, i) =>
+                      paymentResult.delivery_detail?.[k] ? (
+                        <p key={k} className="text-sm font-mono font-bold text-foreground break-all">
+                          KCT{i + 1}: {String(paymentResult.delivery_detail[k])}
+                        </p>
+                      ) : null
+                    )}
+                  </div>
+                )}
+
                 {typeof paymentResult.delivery_detail?.instruction === "string" && (
                   <p className="text-[11px] text-muted-foreground">
                     {paymentResult.delivery_detail.instruction as string}
