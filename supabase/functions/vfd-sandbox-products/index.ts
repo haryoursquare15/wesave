@@ -4093,7 +4093,7 @@ async function handleRunDueRecurringBills() {
         const reason = String((payJson as Record<string, unknown>).error || "Bill payment failed");
         const status = code === "INSUFFICIENT_BALANCE"
           ? "insufficient_funds"
-          : code === "CUSTOMER_VALIDATION_FAILED" || code === "BILLER_CONFIG_REVIEW"
+          : code === "CUSTOMER_VALIDATION_FAILED" || code === "BILLER_CONFIG_REVIEW" || code === "VALIDATION_UNAVAILABLE"
             ? "validation_failed"
             : "failed";
         outcome = { status, reason };
