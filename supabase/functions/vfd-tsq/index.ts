@@ -54,23 +54,25 @@ Deno.serve(async (req) => {
   const url = new URL(req.url);
   let sessionId = url.searchParams.get("sessionId") || "";
   let reference = url.searchParams.get("reference") || "";
+  let billRef = url.searchParams.get("billRef") || "";
   if (req.method === "POST") {
     const body = await req.json().catch(() => ({})) as Record<string, string>;
     sessionId = body.sessionId || sessionId;
     reference = body.reference || reference;
+    billRef = body.billRef || billRef;
   }
-  if (!sessionId && !reference) {
-    return new Response(JSON.stringify({ error: "sessionId or reference required" }), {
+  if (!sessionId && !reference && !billRef) {
+    return new Response(JSON.stringify({ error: "sessionId, reference or billRef required" }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
-  const billRef = url.searchParams.get("billRef") || (req.method === "POST" ? undefined : undefined);
   const attempts: Array<Record<string, unknown>> = [];
   const queries: Array<Record<string, string>> = [];
   if (sessionId) queries.push({ sessionId });
   if (reference) queries.push({ reference });
+
 
   try {
     const accessToken = await getAccessToken();
