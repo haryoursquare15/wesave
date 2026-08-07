@@ -54,13 +54,15 @@ Deno.serve(async (req) => {
   const url = new URL(req.url);
   let sessionId = url.searchParams.get("sessionId") || "";
   let reference = url.searchParams.get("reference") || "";
+  let billRef = url.searchParams.get("billRef") || "";
   if (req.method === "POST") {
     const body = await req.json().catch(() => ({})) as Record<string, string>;
     sessionId = body.sessionId || sessionId;
     reference = body.reference || reference;
+    billRef = body.billRef || billRef;
   }
-  if (!sessionId && !reference) {
-    return new Response(JSON.stringify({ error: "sessionId or reference required" }), {
+  if (!sessionId && !reference && !billRef) {
+    return new Response(JSON.stringify({ error: "sessionId, reference or billRef required" }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
@@ -70,6 +72,7 @@ Deno.serve(async (req) => {
   const queries: Array<Record<string, string>> = [];
   if (sessionId) queries.push({ sessionId });
   if (reference) queries.push({ reference });
+
 
   try {
     const accessToken = await getAccessToken();
@@ -84,6 +87,18 @@ Deno.serve(async (req) => {
       let parsed: unknown = text;
       try { parsed = JSON.parse(text); } catch { /* keep raw */ }
       attempts.push({ query: params, http_status: res.status, response: parsed });
+    }
+    if (billRef) {
+      const billsBase = `${HOST}/vtech-bills/api/v2/billspaymentstore`;
+      const target = `${billsBase}/transactionStatus?transactionId=${encodeURIComponent(billRef)}`;
+      const res = await vfdFetch(target, {
+        method: "GET",
+        headers: { "Content-Type": "application/json", AccessToken: accessToken },
+      });
+      const text = await res.text();
+      let parsed: unknown = text;
+      try { parsed = JSON.parse(text); } catch { /* keep raw */ }
+      attempts.push({ query: { billRef }, http_status: res.status, response: parsed });
     }
     return new Response(JSON.stringify({ vfd_mode: VFD_MODE, attempts }, null, 2), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
