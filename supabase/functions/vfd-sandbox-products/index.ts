@@ -2962,17 +2962,30 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   // VFD "09" means the biller accepted but has not confirmed yet: re-query the
   // transaction once, and if still unresolved treat it as an accepted-pending
   // purchase (debited, delivery pending) — never as a hard failure.
+  //
+  // IMPORTANT: on /transactionStatus the envelope `status` only reports whether
+  // the *lookup* succeeded ("00" = Successful Transaction Retrieval). The real
+  // biller outcome lives in `data.transactionStatus`. Reading the envelope alone
+  // marked pending purchases as delivered — always use the effective status.
   const isProduction = (Deno.env.get("VFD_MODE") || "sandbox").toLowerCase() === "production";
   let isPending = false;
-  if (isProduction && data?.status === "09") {
+  let effStatus = effectiveBillStatus(data as Record<string, unknown> | null);
+  if (isProduction && (effStatus === "09" || effStatus === null)) {
     const statusResp = await fetchVfdBillArtefact(reference);
-    if (statusResp?.status === "00") data = statusResp;
-    else if (statusResp && statusResp.status && statusResp.status !== "09") data = statusResp;
-    else isPending = true;
+    const statusEff = effectiveBillStatus(statusResp);
+    if (statusEff === "00") {
+      data = statusResp;
+      effStatus = "00";
+    } else if (statusEff && statusEff !== "09") {
+      data = statusResp;
+      effStatus = statusEff;
+    } else {
+      isPending = true;
+    }
   }
   const isSuccess = isProduction
-    ? (resp.ok && (data?.status === "00" || isPending))
-    : (resp.ok || data?.status === "00" || data?.status === "99" || !!data);
+    ? (resp.ok && (effStatus === "00" || isPending))
+    : (resp.ok || effStatus === "00" || effStatus === "99" || !!data);
 
   if (isSuccess) {
     const db = getSupabaseAdmin();
