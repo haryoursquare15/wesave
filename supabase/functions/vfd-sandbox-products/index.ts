@@ -3431,7 +3431,7 @@ async function handleReconcilePendingBills(userId: string, body: Record<string, 
         raw_response: statusResp,
       }).eq("id", r.id);
       await sendNotification(
-        userId,
+        owner,
         "Bill delivered",
         `${r.biller_name} • ${r.customer_id} — ₦${Number(r.amount).toLocaleString()} confirmed by the biller.${delivery.delivery_token ? ` Token/PIN: ${delivery.delivery_token}.` : ""} Ref: ${r.reference}`,
         "bill_payment",
@@ -3441,7 +3441,7 @@ async function handleReconcilePendingBills(userId: string, body: Record<string, 
       // Genuine biller failure — return the money.
       const refundRef = `${r.reference}-REFUND`;
       const { data: dep, error: depErr } = await db.rpc("vestara_deposit", {
-        _user_id: userId,
+        _user_id: owner,
         _amount: Number(r.amount),
         _reference: refundRef,
         _metadata: { source: "bill_payment_refund", original_reference: r.reference, vfd_status: eff },
@@ -3453,7 +3453,7 @@ async function handleReconcilePendingBills(userId: string, body: Record<string, 
         continue;
       }
       await db.from("vfd_sandbox_transactions").insert({
-        user_id: userId, transaction_type: "credit", amount: Number(r.amount),
+        user_id: owner, transaction_type: "credit", amount: Number(r.amount),
         description: `Refund: failed bill payment ${r.biller_name} - ${r.customer_id}`,
         reference: refundRef, status: "completed",
       });
@@ -3464,7 +3464,7 @@ async function handleReconcilePendingBills(userId: string, body: Record<string, 
         raw_response: statusResp,
       }).eq("id", r.id);
       await sendNotification(
-        userId,
+        owner,
         "Bill payment refunded",
         `${r.biller_name} • ${r.customer_id} — the biller could not complete this purchase, so ₦${Number(r.amount).toLocaleString()} has been refunded to your wallet. Ref: ${r.reference}`,
         "bill_payment",
