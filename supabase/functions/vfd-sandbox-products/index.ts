@@ -3000,11 +3000,11 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
 
   if (isSuccess) {
     const db = getSupabaseAdmin();
-    // Atomic double-entry debit: wallet → settlement (via vestara_withdraw RPC).
-    // This guarantees the settlement account is credited and prevents the
-    // syncBalanceCachesFromVestara routine from later "restoring" a stale
-    // vfd_user_balances row.
-    const { data: wdData, error: wdErr } = await db.rpc("vestara_withdraw", {
+    // Hold-and-settle: reserve the funds (wallet → bills_hold) instead of
+    // debiting straight to settlement. The money only reaches settlement once
+    // VFD confirms the biller actually delivered ("00"); a pending ("09") or
+    // failed purchase releases the hold back to the customer's wallet.
+    const { data: hdData, error: hdErr } = await db.rpc("vestara_bill_reserve", {
       _user_id: userId,
       _amount: numAmount,
       _reference: reference,
@@ -3016,19 +3016,36 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
         product_id: productId,
       },
     });
-    const wdResult = wdData as { success?: boolean; error?: string } | null;
-    if (wdErr || !wdResult?.success) {
-      console.error("[bills] vestara_withdraw failed:", wdErr || wdResult);
+    const hdResult = hdData as { success?: boolean; error?: string } | null;
+    if (hdErr || !hdResult?.success) {
+      console.error("[bills] vestara_bill_reserve failed:", hdErr || hdResult);
       return jsonResponse(
-        { error: "Bill payment could not be recorded. Please contact support.", details: wdErr?.message || wdResult?.error },
+        { error: "Bill payment could not be recorded. Please contact support.", details: hdErr?.message || hdResult?.error },
         500,
       );
+    }
+    // Confirmed delivery → settle the hold to the settlement account now.
+    let holdState = "held";
+    let settledAt: string | null = null;
+    if (!isPending) {
+      const { data: stData, error: stErr } = await db.rpc("vestara_bill_settle", {
+        _reference: reference,
+        _metadata: { biller_id: billerId, customer_id: customerId },
+      });
+      const stResult = stData as { success?: boolean; error?: string } | null;
+      if (stErr || !stResult?.success) {
+        console.error("[bills] vestara_bill_settle failed (left held, reconciler will retry):", stErr || stResult);
+      } else {
+        holdState = "settled";
+        settledAt = new Date().toISOString();
+      }
     }
     // Mirror the debit to the vfd_user_balances cache so the UI reflects it immediately.
     await db.from("vfd_user_balances").update({
       total_balance: bal.total_balance - numAmount,
       updated_at: new Date().toISOString(),
     }).eq("user_id", userId);
+
     const category = (body.category as string) || "";
     const billerName = (body.billerName as string) || billerId.toUpperCase();
     const paymentItemName = (body.paymentItemName as string) || null;
