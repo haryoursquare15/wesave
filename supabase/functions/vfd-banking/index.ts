@@ -1888,6 +1888,10 @@ async function handleTransfer(
     // bankTransactionId. Hit /transactions once to capture both into the row
     // before any webhook arrives. Fire-and-forget — failures here don't
     // unwind the (already-committed) transfer.
+    // The resolved ids are hoisted so the ledger mirror below can stamp them
+    // on the recipient's credit row — the inflow webhook dedupes on them.
+    let resolvedSessionId: string | null = sessionId || null;
+    let resolvedVfdRef: string | null = vfdTxnId || null;
     await (async () => {
       try {
         const tsqParams: Record<string, string> = { reference };
@@ -1913,6 +1917,8 @@ async function handleTransfer(
           tsqBankTxnId ||
           (tsqInnerTxnId && tsqInnerTxnId !== reference ? tsqInnerTxnId : null) ||
           vfdTxnId;
+        resolvedSessionId = tsqSessionId || resolvedSessionId;
+        resolvedVfdRef = tsqTxnId || resolvedVfdRef;
         if (reservedTx?.id && (tsqSessionId || tsqBankTxnId || tsqTxnId)) {
           await supabaseAdmin
             .from("vfd_sandbox_transactions")
@@ -1952,8 +1958,8 @@ async function handleTransfer(
           to_account: toAccount,
           bank_code: body.bankCode as string,
           beneficiary_name: body.beneficiaryName ?? null,
-          vfd_reference: vfdTxnId,
-          session_id: sessionId,
+          vfd_reference: resolvedVfdRef,
+          session_id: resolvedSessionId,
         },
       });
       const senderWdRes = senderWd as { success?: boolean; error?: string } | null;
@@ -1982,8 +1988,8 @@ async function handleTransfer(
             from_account: displayFromAccount,
             to_account: toAccount,
             sender_name: body.beneficiaryName ?? null,
-            vfd_reference: vfdTxnId,
-            session_id: sessionId,
+            vfd_reference: resolvedVfdRef,
+            session_id: resolvedSessionId,
           },
         });
         const rcptDepRes = rcptDep as { success?: boolean; error?: string } | null;
@@ -1999,8 +2005,8 @@ async function handleTransfer(
           transaction_type: "credit",
           status: "completed",
           reference: `${reference}-IN`,
-          vfd_reference: vfdTxnId,
-          session_id: sessionId,
+          vfd_reference: resolvedVfdRef,
+          session_id: resolvedSessionId,
           beneficiary_account: displayFromAccount,
           beneficiary_name: body.beneficiaryName ?? null,
           description: (body.narration as string) || "Transfer received",
@@ -2008,8 +2014,8 @@ async function handleTransfer(
           metadata: {
             source: "vfd_transfer_mirror",
             from_user_id: userId,
-            session_id: sessionId,
-            bank_transaction_id: vfdTxnId,
+            session_id: resolvedSessionId,
+            bank_transaction_id: resolvedVfdRef,
           },
         });
 
