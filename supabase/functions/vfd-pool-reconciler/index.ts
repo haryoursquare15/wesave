@@ -14,8 +14,12 @@ const corsHeaders = {
 
 const PLATFORM_POOL_NUBAN = "1001695610";
 
+// Wallet API base — must be the vtech-wallet host (NOT the mandate/directdebit
+// base held in VFD_BASE_URL, which has no /account/enquiry endpoint).
 const VFD_BASE_URL =
-  Deno.env.get("VFD_BASE_URL") ?? "https://api-devapps.vfdbank.systems/vtech-wallet/api/v1/wallet2";
+  (Deno.env.get("VFD_MODE") ?? "").toLowerCase() === "production"
+    ? "https://api-apps.vfdbank.systems/vtech-wallet/api/v2/wallet2"
+    : "https://api-devapps.vfdbank.systems/vtech-wallet/api/v2/wallet2";
 const VFD_BEARER = Deno.env.get("VFD_BEARER_TOKEN") ?? "";
 const VFD_WALLET_CREDENTIAL_ID =
   Deno.env.get("VFD_WALLET_CREDENTIAL_ID") ?? "";
