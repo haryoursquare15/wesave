@@ -3370,7 +3370,7 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
       convenience_fee: 0,
       status: isPending ? "pending" : "completed",
       expires_at: expiresAt,
-      raw_response: data || null,
+      raw_response: { ...(data || {}), validation: validationAudit(validationRecord) },
       recurring_bill_id: recurringBillId,
       hold_state: holdState,
       held_at: new Date().toISOString(),
