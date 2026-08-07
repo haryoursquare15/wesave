@@ -79,11 +79,13 @@ Deno.serve(async (req) => {
   };
 
   // Raw audit trail
-  await db.from("vfd_sandbox_webhook_logs").insert({
+  const { data: auditRow } = await db.from("vfd_sandbox_webhook_logs").insert({
     event_type: "vfd_inflow_router",
     payload,
     processed: false,
-  });
+  }).select("id").maybeSingle();
+  const auditId = (auditRow as { id?: string } | null)?.id ?? null;
+
 
   // ── 1. Mandate lifecycle event? ───────────────────────────────
   const mandateCode = get("mandateCode") || get("mandate_code");
@@ -144,6 +146,35 @@ Deno.serve(async (req) => {
     .maybeSingle();
   if (existing) return ok({ deduped: true, reference });
 
+  // Intra-Vestara guard: when the sender is also a Vestara user, vfd-banking
+  // already mirrored the credit as `<ref>-IN` at transfer time. VFD then fires
+  // this inflow alert for the same money — crediting again would double-pay.
+  // Match on the VFD session id / reference recorded on the recipient's row.
+  const sessionKeys = [sessionId, vfdRef].filter(Boolean);
+  if (sessionKeys.length) {
+    const orFilter = sessionKeys
+      .flatMap((k) => [`session_id.eq.${k}`, `vfd_reference.eq.${k}`])
+      .join(",");
+    const { data: mirrored } = await db
+      .from("vfd_sandbox_transactions")
+      .select("id, reference")
+      .eq("user_id", client.user_id)
+      .eq("transaction_type", "credit")
+      .or(orFilter)
+      .limit(1)
+      .maybeSingle();
+    if (mirrored) {
+      if (auditId) {
+        await db.from("vfd_sandbox_webhook_logs")
+          .update({ processed: true, processed_at: new Date().toISOString() })
+          .eq("id", auditId);
+      }
+      return ok({ deduped: true, reason: "already_credited_by_intra_transfer_mirror", reference: (mirrored as { reference?: string }).reference });
+    }
+  }
+
+
+
   const { data: dep, error: depErr } = await db.rpc("vestara_deposit", {
     _user_id: client.user_id,
     _amount: amount,
@@ -167,6 +198,24 @@ Deno.serve(async (req) => {
     return ok({ error: depErr?.message || result?.error || "ledger_deposit_failed", reference });
   }
 
+  // Credit row so the inbound transfer shows in the customer's history
+  // (also acts as the dedupe marker for any later replay of this session).
+  await db.from("vfd_sandbox_transactions").insert({
+    user_id: client.user_id,
+    vfd_account_number: accountNo,
+    amount,
+    transaction_type: "credit",
+    status: "completed",
+    reference,
+    vfd_reference: vfdRef || null,
+    session_id: sessionId,
+    beneficiary_account: get("originator_account_number") || get("originatorAccountNumber") || null,
+    beneficiary_name: get("originator_account_name") || get("originatorName") || null,
+    description: narration || "Transfer received",
+    committed_at: new Date().toISOString(),
+    metadata: { source: "vfd_inflow_webhook" },
+  }).then(() => null, () => null);
+
   await db.from("vfd_sandbox_notifications").insert({
     user_id: client.user_id,
     title: "Money received",
@@ -174,21 +223,13 @@ Deno.serve(async (req) => {
     notification_type: "wallet_credit",
   }).then(() => null, () => null);
 
-  const { data: logRow } = await db
-    .from("vfd_sandbox_webhook_logs")
-    .select("id")
-    .eq("event_type", "vfd_inflow_router")
-    .eq("processed", false)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (logRow?.id) {
+  if (auditId) {
     await db
       .from("vfd_sandbox_webhook_logs")
       .update({ processed: true, processed_at: new Date().toISOString() })
-      .eq("id", logRow.id);
+      .eq("id", auditId);
   }
-
 
   return ok({ credited: true, reference, amount, account_no: accountNo });
 });
+
