@@ -3237,12 +3237,19 @@ function deriveBillDelivery(params: {
   }
 
   if (isAirtimeOrData) {
+    // Some networks/aggregators return a recharge token or voucher on top-up.
+    // Surface it verbatim when VFD sends one; otherwise it is a direct top-up.
+    const topupToken = vfdPin || vfdToken;
     return {
-      delivery_type: "topup",
-      delivery_token: null,
+      delivery_type: topupToken ? "pin" : "topup",
+      delivery_token: topupToken,
       delivery_units: vfdUnits || paymentItemName,
       delivery_status: "delivered",
-      delivery_detail: { instruction: "Top-up delivered to the phone number instantly." },
+      delivery_detail: {
+        instruction: topupToken
+          ? "Dial *555*PIN# (or your network's recharge code) to load this credit."
+          : "Top-up delivered directly to the phone number — no recharge token is issued for this network.",
+      },
     };
   }
 
