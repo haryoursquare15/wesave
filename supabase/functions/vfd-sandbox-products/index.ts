@@ -246,19 +246,104 @@ async function creditFromSavings(userId: string, amount: number): Promise<void> 
   await applyBalanceDelta(userId, { savings: -amount });
 }
 
-async function debitWallet(userId: string, amount: number): Promise<boolean> {
-  const r = await applyBalanceDelta(userId, { total: -amount, requireAvailable: 0 });
-  if (!r.ok) {
-    await ensureBalanceRow(userId, true);
-    const r2 = await applyBalanceDelta(userId, { total: -amount, requireAvailable: 0 });
-    return r2.ok;
+/* ─────────────────────────────────────────────────────────────
+   Ledger-backed wallet movement.
+
+   `creditWallet` / `debitWallet` (cache-only writes through
+   apply_balance_delta) have been RETIRED. Every movement of
+   spendable balance now posts a double-entry transaction through
+   vestara_post_transaction, which updates the displayed balance
+   cache inside the same database transaction. There is no longer
+   any route that can move a wallet balance without a ledger entry.
+   ───────────────────────────────────────────────────────────── */
+
+type LedgerResult = { success?: boolean; already?: boolean; error?: string } | null;
+
+function ledgerOk(data: unknown, error: unknown): boolean {
+  if (error) {
+    console.error("[ledger] rpc error:", error);
+    return false;
+  }
+  const r = data as LedgerResult;
+  if (!r?.success) {
+    console.error("[ledger] rpc rejected:", r?.error);
+    return false;
   }
   return true;
 }
 
-async function creditWallet(userId: string, amount: number): Promise<void> {
-  await applyBalanceDelta(userId, { total: amount });
+/** Debit spendable wallet balance to the platform settlement account. */
+async function ledgerDebitWallet(
+  userId: string,
+  amount: number,
+  reference: string,
+  metadata: Record<string, unknown> = {},
+): Promise<boolean> {
+  const db = getSupabaseAdmin();
+  await ensureBalanceRow(userId);
+  const { data, error } = await db.rpc("vestara_withdraw", {
+    _user_id: userId, _amount: amount, _reference: reference, _metadata: metadata,
+  });
+  return ledgerOk(data, error);
 }
+
+/** SplitPay: move a participant's share from their wallet into the split holding account. */
+async function ledgerSplitPay(
+  userId: string, splitId: string, amount: number, reference: string, metadata: Record<string, unknown> = {},
+): Promise<boolean> {
+  const db = getSupabaseAdmin();
+  await ensureBalanceRow(userId);
+  const { data, error } = await db.rpc("vestara_split_pay", {
+    _user_id: userId, _split_id: splitId, _amount: amount, _reference: reference, _metadata: metadata,
+  });
+  return ledgerOk(data, error);
+}
+
+/** SplitPay: release a participant's share back to their wallet. */
+async function ledgerSplitRefund(
+  userId: string, splitId: string, amount: number, reference: string, metadata: Record<string, unknown> = {},
+): Promise<boolean> {
+  const db = getSupabaseAdmin();
+  const { data, error } = await db.rpc("vestara_split_refund", {
+    _user_id: userId, _split_id: splitId, _amount: amount, _reference: reference, _metadata: metadata,
+  });
+  return ledgerOk(data, error);
+}
+
+/** Goal Fund: move a contribution from the contributor's wallet into the campaign pool. */
+async function ledgerCampaignContribute(
+  userId: string, campaignId: string, amount: number, reference: string, metadata: Record<string, unknown> = {},
+): Promise<boolean> {
+  const db = getSupabaseAdmin();
+  await ensureBalanceRow(userId);
+  const { data, error } = await db.rpc("vestara_campaign_contribute", {
+    _user_id: userId, _campaign_id: campaignId, _amount: amount, _reference: reference, _metadata: metadata,
+  });
+  return ledgerOk(data, error);
+}
+
+/** Goal Fund: release campaign escrow to the campaign owner's wallet. */
+async function ledgerCampaignWithdraw(
+  userId: string, campaignId: string, amount: number, reference: string, metadata: Record<string, unknown> = {},
+): Promise<boolean> {
+  const db = getSupabaseAdmin();
+  const { data, error } = await db.rpc("vestara_campaign_withdraw", {
+    _user_id: userId, _campaign_id: campaignId, _amount: amount, _reference: reference, _metadata: metadata,
+  });
+  return ledgerOk(data, error);
+}
+
+/** Target Ajo: pay a member out of the group's thrift pool. */
+async function ledgerTargetPayout(
+  userId: string, groupId: string, amount: number, reference: string, metadata: Record<string, unknown> = {},
+): Promise<boolean> {
+  const db = getSupabaseAdmin();
+  const { data, error } = await db.rpc("vestara_target_payout", {
+    _user_id: userId, _group_id: groupId, _amount: amount, _reference: reference, _metadata: metadata,
+  });
+  return ledgerOk(data, error);
+}
+
 
 async function getVestaraWalletBalance(userId: string): Promise<number> {
   const db = getSupabaseAdmin();
