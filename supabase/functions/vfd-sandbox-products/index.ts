@@ -3249,6 +3249,15 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   // Resolve in order: explicit input → phone-shaped customerId → the customer's
   // registered phone on their Vestara account.
   const resolvedPhone = await resolveBillMsisdn(userId, phoneNumber, customerId);
+  // VFD documents phoneNumber as mandatory for Ikeja Electric (IKEDC).
+  if (!resolvedPhone && /ikedc|ikeja/.test(billerHay)) {
+    return jsonResponse({
+      error: "Ikeja Electric requires a phone number for this payment. Please enter the customer's phone number.",
+      code: "PHONE_NUMBER_REQUIRED",
+    }, 400);
+  }
+
+
 
   // --- Backend validation gate (never trusts the frontend's verdict) ---
   const payIdentity: BillIdentity = {
