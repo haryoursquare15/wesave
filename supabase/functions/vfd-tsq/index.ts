@@ -44,7 +44,31 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   const provided = req.headers.get("x-ops-secret") || "";
-  if (!OPS_SECRET || !provided || !timingSafeEqual(provided, OPS_SECRET)) {
+  let authorized = !!OPS_SECRET && !!provided && timingSafeEqual(provided, OPS_SECRET);
+
+  // Alternative auth: a signed-in super_admin (ops console / agent diagnostics).
+  if (!authorized) {
+    const jwt = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+    if (jwt) {
+      try {
+        const { createClient } = await import("npm:@supabase/supabase-js@2");
+        const admin = createClient(
+          Deno.env.get("SUPABASE_URL")!,
+          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+        );
+        const { data: userRes } = await admin.auth.getUser(jwt);
+        const uid = userRes?.user?.id;
+        if (uid) {
+          const { data: isSuper } = await admin.rpc("has_role", { _user_id: uid, _role: "super_admin" });
+          authorized = !!isSuper;
+        }
+      } catch (e) {
+        console.error("[vfd-tsq] jwt auth check failed", e);
+      }
+    }
+  }
+
+  if (!authorized) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
