@@ -12,6 +12,7 @@
 // (VFD callback configs vary). Reuses VFD_WEBHOOK_SECRET.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { timingSafeEqual, logAuthFailure } from "../_shared/webhook-security.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -45,11 +46,16 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return ok({ error: "Method not allowed" }, 405);
 
-  // 1. Shared secret
+  const db = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } });
+
+  // 1. Shared secret — constant-time compare, failures audited.
   const headerSecret = req.headers.get("x-webhook-secret") || req.headers.get("X-Webhook-Secret") || "";
   const url = new URL(req.url);
   const querySecret = url.searchParams.get("secret") || "";
-  if (!WEBHOOK_SECRET || (headerSecret !== WEBHOOK_SECRET && querySecret !== WEBHOOK_SECRET)) {
+  const secretOk = Boolean(WEBHOOK_SECRET) &&
+    (timingSafeEqual(headerSecret, WEBHOOK_SECRET) || timingSafeEqual(querySecret, WEBHOOK_SECRET));
+  if (!secretOk) {
+    await logAuthFailure(db, req, "vfd-campaign-inflow-webhook", "invalid_or_missing_secret");
     return ok({ error: "Unauthorized" }, 401);
   }
 
@@ -73,7 +79,6 @@ Deno.serve(async (req) => {
   const payerName = get("originatorName") || get("sourceName") || "";
   const payerBank = get("originatorBankName") || get("sourceBank") || "";
 
-  const db = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } });
 
   // Log raw event for traceability (admin-only readable)
   await db.from("vfd_sandbox_webhook_logs").insert({
