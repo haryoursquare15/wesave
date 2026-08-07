@@ -3199,6 +3199,34 @@ async function resolveBillMsisdn(
   return "";
 }
 
+// Convenience fee published by VFD on the biller list. Always resolved
+// server-side from VFD (never trusted from the client) so the customer is
+// debited exactly the fee the biller charges.
+async function resolveConvenienceFee(category: string | null, billerId: string): Promise<number> {
+  try {
+    const token = await getVfdAccessToken();
+    if (!token) return 0;
+    const cat = (category || "").trim();
+    const url = cat
+      ? `${getBillsBase()}/billerlist?categoryName=${encodeURIComponent(cat)}`
+      : `${getBillsBase()}/billerlist`;
+    const resp = await vfdFetch(url, { headers: { AccessToken: token } });
+    const raw = await safeJson(resp) as Record<string, unknown> | null;
+    const rawData = raw?.data as unknown;
+    let list: unknown[] = [];
+    if (Array.isArray(rawData)) list = rawData;
+    else if (rawData && typeof rawData === "object" && Array.isArray((rawData as Record<string, unknown>).data)) {
+      list = (rawData as { data: unknown[] }).data;
+    }
+    const match = list.find((b) => String((b as Record<string, unknown>)?.id ?? "") === String(billerId));
+    const fee = Number((match as Record<string, unknown> | undefined)?.convenienceFee ?? 0);
+    return Number.isFinite(fee) && fee > 0 ? fee : 0;
+  } catch (e) {
+    console.error("[bills] resolveConvenienceFee failed", e);
+    return 0;
+  }
+}
+
 async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   const { customerId, amount, division, paymentItem, productId, billerId, phoneNumber } = body as {
     customerId: string; amount: string; division: string; paymentItem: string;
@@ -3209,6 +3237,10 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   }
   const numAmount = Number(amount);
   if (isNaN(numAmount) || numAmount <= 0) return jsonResponse({ error: "Invalid amount" }, 400);
+  // Biller convenience fee is charged on top of the bill amount: the customer
+  // is debited (bill + fee) while VFD's /pay only carries the bill amount.
+  const convenienceFee = await resolveConvenienceFee((body.category as string) || null, billerId);
+  const totalDebit = numAmount + convenienceFee;
 
   // Biller-specific rules published by VFD: IBEDC (Band A) will not process a
   // vend below ₦5,000, so reject it up-front instead of losing the money to a
@@ -3226,12 +3258,13 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
 
   const bal = await ensureBalanceRow(userId);
   const available = bal.total_balance - bal.locked_balance - bal.savings_balance;
-  if (numAmount > available) {
-    const shortfall = Math.max(0, numAmount - available);
+  if (totalDebit > available) {
+    const shortfall = Math.max(0, totalDebit - available);
     return jsonResponse({
-      error: `Insufficient wallet balance. You need ₦${numAmount.toLocaleString()} but have ₦${available.toLocaleString()} available. Please fund your wallet with at least ₦${shortfall.toLocaleString()}.`,
+      error: `Insufficient wallet balance. You need ₦${totalDebit.toLocaleString()}${convenienceFee > 0 ? ` (₦${numAmount.toLocaleString()} + ₦${convenienceFee.toLocaleString()} convenience fee)` : ""} but have ₦${available.toLocaleString()} available. Please fund your wallet with at least ₦${shortfall.toLocaleString()}.`,
       code: "INSUFFICIENT_BALANCE",
-      required: numAmount,
+      required: totalDebit,
+      convenience_fee: convenienceFee,
       available,
       shortfall,
     }, 400);
@@ -3346,7 +3379,7 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
     // failed purchase releases the hold back to the customer's wallet.
     const { data: hdData, error: hdErr } = await db.rpc("vestara_bill_reserve", {
       _user_id: userId,
-      _amount: numAmount,
+      _amount: totalDebit,
       _reference: reference,
       _metadata: {
         source: "bill_payment",
@@ -3354,6 +3387,8 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
         customer_id: customerId,
         division,
         product_id: productId,
+        bill_amount: numAmount,
+        convenience_fee: convenienceFee,
       },
     });
     const hdResult = hdData as { success?: boolean; error?: string } | null;
@@ -3389,9 +3424,11 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
     const billerName = (body.billerName as string) || billerId.toUpperCase();
     const paymentItemName = (body.paymentItemName as string) || null;
     const recurringBillId = (body.recurring_bill_id as string) || null;
-    const description = `Bill Payment: ${billerName} - ${customerId}`;
+    const description = convenienceFee > 0
+      ? `Bill Payment: ${billerName} - ${customerId} (incl. ₦${convenienceFee.toLocaleString()} fee)`
+      : `Bill Payment: ${billerName} - ${customerId}`;
     await db.from("vfd_sandbox_transactions").insert({
-      user_id: userId, transaction_type: "debit", amount: numAmount,
+      user_id: userId, transaction_type: "debit", amount: totalDebit,
       description, reference, status: "completed",
     });
 
@@ -3459,7 +3496,7 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
       customer_id: customerId,
       phone_number: phoneNumber || null,
       amount: numAmount,
-      convenience_fee: 0,
+      convenience_fee: convenienceFee,
       status: isPending ? "pending" : "completed",
       expires_at: expiresAt,
       raw_response: { ...(data || {}), validation: validationAudit(validationRecord) },
@@ -3521,7 +3558,7 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
           : `₦${numAmount.toLocaleString()} paid to ${billerName} (${customerId}). Ref: ${reference}`;
     await sendNotification(userId, notifTitle, notifBody, "bill_payment");
 
-    return jsonResponse({ data: { status: "00", message: isPending ? "Purchase accepted — awaiting biller confirmation" : "Payment successful", pending: isPending, reference, receipt_expires_at: expiresAt, ...delivery } });
+    return jsonResponse({ data: { status: "00", message: isPending ? "Purchase accepted — awaiting biller confirmation" : "Payment successful", pending: isPending, reference, receipt_expires_at: expiresAt, bill_amount: numAmount, convenience_fee: convenienceFee, total_debited: totalDebit, ...delivery } });
   }
 
   console.error(
