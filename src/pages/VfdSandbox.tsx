@@ -69,7 +69,7 @@ function VfdSandboxInner() {
   const [initialSavingsProduct, setInitialSavingsProduct] = useState<string | null>(null);
   const [banks, setBanks] = useState<Array<{ code: string; name: string }>>([]);
 
-  // Inactivity sign-out (2m foreground / 5m background) → /vfd-sandbox/auth
+  // Inactivity sign-out (2m foreground / 5m background) → /signin
   useSandboxSessionEnforcement({ enabled: !!user });
 
   // Vestara-driven balance (single source of truth)
