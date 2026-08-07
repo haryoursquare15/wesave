@@ -96,6 +96,8 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
   const [phoneNumber, setPhoneNumber] = useState("");
   const [validationResult, setValidationResult] = useState<string | null>(null);
   const [validating, setValidating] = useState(false);
+  // Validation requirement comes from the backend policy (single source of truth).
+  const [needsValidation, setNeedsValidation] = useState(false);
   const [paying, setPaying] = useState(false);
   const [paymentResult, setPaymentResult] = useState<{
     reference: string;
