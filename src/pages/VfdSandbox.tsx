@@ -310,22 +310,6 @@ function VfdSandboxInner() {
     return [base];
   });
 
-  /* ─── Fund via VFD sandbox credit; backend mirrors successful credit to ledger. ─── */
-  const handleFund = async (amount: number) => {
-    const accountNo = vfd.client?.vfd_account_number;
-    if (!accountNo || accountNo === "—") {
-      toast({ title: "Account not ready", description: "Complete KYC first, then try funding again.", variant: "destructive" });
-      return false;
-    }
-
-    const result = await vfd.sandboxCredit(accountNo, amount);
-    if (!result) return false;
-
-    toast({ title: "Account funded!", description: `₦${amount.toLocaleString()} credited to your wallet` });
-    await Promise.all([refreshVestaraBalance(), refreshVestaraTransactions(), fetchVfdTransactions()]);
-    return true;
-  };
-
   /* ─── Transfer ───
    * The vfd-banking edge function is the single source of truth: it atomically
    * debits the sender wallet (via vestara_withdraw or the intra-virtual
@@ -535,7 +519,6 @@ function VfdSandboxInner() {
                 accountNumber={balanceData.accountNumber}
                 bankName="VFD Microfinance Bank"
                 fullName={balanceData.fullName}
-                onFund={handleFund}
                 onBack={goBack}
               />
             )}

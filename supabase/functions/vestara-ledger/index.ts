@@ -1184,14 +1184,17 @@ serve(async (req) => {
         }
 
         // ─── Call VFD Direct Debit Mandate API ───
-        // Endpoint: https://api-devapps.vfdbank.systems/vtech-mandate/api/v2/directdebit
+        // Endpoint: <VFD host>/vtech-mandate/api/v2/directdebit (host follows VFD_MODE)
         let mandateId = "";
         let mandateStatus: "authorized" | "pending" | "failed" = "pending";
         let activationStatus: "active" | "pending_mandate" | "failed" = "pending_mandate";
         let vfdResponsePayload: Record<string, unknown> = {};
 
         try {
-          const VFD_MANDATE_URL = "https://api-devapps.vfdbank.systems/vtech-mandate/api/v2/directdebit";
+          const VFD_HOST = (Deno.env.get("VFD_MODE") || "sandbox") === "sandbox"
+            ? "https://api-devapps.vfdbank.systems"
+            : "https://api-apps.vfdbank.systems";
+          const VFD_MANDATE_URL = `${VFD_HOST}/vtech-mandate/api/v2/directdebit`;
           // Pull VFD access token via same creds used by vfd-banking
           const consumerKey = Deno.env.get("VFD_CONSUMER_KEY");
           const consumerSecret = Deno.env.get("VFD_CONSUMER_SECRET");
@@ -1199,7 +1202,7 @@ serve(async (req) => {
           let accessToken = (await getGatewayAccessToken()) || staticToken || "";
           if (!accessToken && consumerKey && consumerSecret) {
             const tokRes = await vfdFetch(
-              "https://api-devapps.vfdbank.systems/vfd-tech/baas-portal/v1.1/baasauth/token",
+              `${VFD_HOST}/vfd-tech/baas-portal/v1.1/baasauth/token`,
               {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },

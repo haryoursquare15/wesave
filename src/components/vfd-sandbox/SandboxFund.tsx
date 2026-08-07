@@ -14,7 +14,6 @@ interface Props {
   accountNumber: string;
   bankName?: string;
   fullName?: string;
-  onFund: (amount: number) => Promise<boolean>;
   onBack: () => void;
 }
 
@@ -35,7 +34,7 @@ const channels = [
     label: "Debit Card",
     desc: "Fund via Visa, Mastercard, or Verve",
     icon: CreditCard,
-    badge: null,
+    badge: "Coming soon",
   },
   {
     id: "ussd" as FundingChannel,
@@ -51,28 +50,11 @@ export function SandboxFund({
   accountNumber,
   bankName = "VFD Microfinance Bank",
   fullName = "Vestara User",
-  onFund,
   onBack,
 }: Props) {
   const [channel, setChannel] = useState<FundingChannel>("select");
   const [amount, setAmount] = useState("");
-  const [funded, setFunded] = useState(false);
-  const [funding, setFunding] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
-  const canFund = parseFloat(amount) > 0;
-
-  const handleFund = async () => {
-    const amt = parseFloat(amount);
-    if (funding || !canFund) return;
-    setFunding(true);
-    const ok = await onFund(amt).catch(() => false).finally(() => setFunding(false));
-    if (!ok) return;
-    setFunded(true);
-    setTimeout(() => {
-      setFunded(false);
-      setAmount("");
-    }, 2000);
-  };
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -86,7 +68,7 @@ export function SandboxFund({
   };
 
   return (
-    <div className="space-y-5" aria-busy={loading || funding}>
+    <div className="space-y-5" aria-busy={loading}>
       {/* Header */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={goBack}>
@@ -221,23 +203,15 @@ export function SandboxFund({
               </p>
             </div>
 
-            <AmountInput amount={amount} setAmount={setAmount} />
-            <PresetGrid amount={amount} setAmount={setAmount} />
-
             <div className="flex items-start gap-2 bg-blue-500/10 rounded-xl p-3">
               <Info className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
               <p className="text-xs text-blue-700 dark:text-blue-400">
-                In sandbox mode, this simulates VFD's Payment Widget card collection. In production, this launches the VFD secure payment page.
+                Card funding is coming soon. For now, please fund your wallet with a bank transfer to your account number.
               </p>
             </div>
 
-            <Button
-              onClick={handleFund}
-              disabled={funding || !canFund || funded}
-              className="w-full h-12"
-              variant={funded ? "success" : "hero"}
-            >
-              <FundButtonContent loading={funding} funded={funded} amount={amount} label="Pay with Card" />
+            <Button onClick={() => setChannel("bank_transfer")} className="w-full h-12" variant="hero">
+              Fund by bank transfer
             </Button>
           </motion.div>
         )}
@@ -324,30 +298,5 @@ function PresetGrid({ amount, setAmount }: { amount: string; setAmount: (v: stri
         </button>
       ))}
     </div>
-  );
-}
-
-function FundButtonContent({
-  loading,
-  funded,
-  amount,
-  label,
-}: {
-  loading: boolean;
-  funded: boolean;
-  amount: string;
-  label: string;
-}) {
-  if (funded)
-    return <><CheckCircle2 className="h-4 w-4 mr-2" /> Funded!</>;
-  if (loading)
-    return <><RefreshCw className="h-4 w-4 animate-spin mr-2" /> Processing...</>;
-
-  const amt = parseFloat(amount);
-  const formatted = !isNaN(amt) && amt > 0 ? ` ₦${amt.toLocaleString()}` : "";
-  return (
-    <>
-      <Banknote className="h-4 w-4 mr-2" /> {label}{formatted}
-    </>
   );
 }
