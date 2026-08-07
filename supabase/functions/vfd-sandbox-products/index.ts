@@ -3653,7 +3653,12 @@ const VFD_BILL_STATUS_MAP: Record<string, BillOutcome> = {
   COMPLETED: "success",
   "09": "pending",
   "91": "pending",
+  // VFD /transactionStatus returns 108 "No Transaction!" when the reference is
+  // not (yet) known to the biller store. Per the spec only 99 warrants a
+  // reversal, so 108 is held as pending and re-queried by the reconciler.
+  "108": "pending",
   PENDING: "pending",
+
   PROCESSING: "pending",
   "01": "failed",
   "06": "failed",
