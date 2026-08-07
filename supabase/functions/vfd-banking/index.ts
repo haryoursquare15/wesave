@@ -2005,8 +2005,8 @@ async function handleTransfer(
           transaction_type: "credit",
           status: "completed",
           reference: `${reference}-IN`,
-          vfd_reference: vfdTxnId,
-          session_id: sessionId,
+          vfd_reference: resolvedVfdRef,
+          session_id: resolvedSessionId,
           beneficiary_account: displayFromAccount,
           beneficiary_name: body.beneficiaryName ?? null,
           description: (body.narration as string) || "Transfer received",
@@ -2014,8 +2014,8 @@ async function handleTransfer(
           metadata: {
             source: "vfd_transfer_mirror",
             from_user_id: userId,
-            session_id: sessionId,
-            bank_transaction_id: vfdTxnId,
+            session_id: resolvedSessionId,
+            bank_transaction_id: resolvedVfdRef,
           },
         });
 
