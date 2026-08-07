@@ -3210,6 +3210,20 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   const numAmount = Number(amount);
   if (isNaN(numAmount) || numAmount <= 0) return jsonResponse({ error: "Invalid amount" }, 400);
 
+  // Biller-specific rules published by VFD: IBEDC (Band A) will not process a
+  // vend below ₦5,000, so reject it up-front instead of losing the money to a
+  // failed purchase at the biller.
+  const billerHay = `${billerId} ${(body.billerName as string) || ""} ${(body.paymentItemName as string) || ""}`.toLowerCase();
+  if (/ibedc|ibadan/.test(billerHay) && numAmount < 5000) {
+    return jsonResponse({
+      error: "IBEDC requires a minimum purchase of ₦5,000. Please enter ₦5,000 or more.",
+      code: "BILLER_MINIMUM_AMOUNT",
+      minimum: 5000,
+    }, 400);
+  }
+
+
+
   const bal = await ensureBalanceRow(userId);
   const available = bal.total_balance - bal.locked_balance - bal.savings_balance;
   if (numAmount > available) {
