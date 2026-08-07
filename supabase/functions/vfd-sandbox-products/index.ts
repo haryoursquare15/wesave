@@ -5799,6 +5799,9 @@ Deno.serve(async (req) => {
       "poll_pending_mandates",
       "reconcile_pending_bills_cron",
     ]);
+    if (action === "reconcile_pending_bills_cron" && await assertCronToken(req, "bills_reconciler")) {
+      return await handleReconcilePendingBills("system", body);
+    }
     if (CRON_ACTIONS.has(action) && assertCronCaller(req)) {
       if (action === "sandbox_auto_contribute") return await handleSandboxAutoContribute("system", body);
       if (action === "run_due_recurring_bills") return await handleRunDueRecurringBills();
