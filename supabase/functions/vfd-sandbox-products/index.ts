@@ -2003,13 +2003,21 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
   try {
     const token = await getVfdAccessToken();
     if (token) {
+      const splitRequestId = crypto.randomUUID();
+      // Same MSISDN rule as the direct pay path: airtime/data must carry the
+      // phone number, falling back to the customerId when none was captured.
+      const splitIsMsisdn = /airtime|data|mobile|mtn|glo|airtel|9mobile|telco/i.test(
+        `${category || ""} ${paymentItemName || ""} ${billerId}`,
+      );
+      const splitPhone = phoneNumber ||
+        (splitIsMsisdn && /^0?\d{10,13}$/.test(String(customerId).replace(/\s/g, "")) ? customerId : "");
       const payBody: Record<string, string> = {
         customerId, amount: String(amount), division, paymentItem, productId, billerId, reference,
       };
-      if (phoneNumber) payBody.phoneNumber = phoneNumber;
+      if (splitPhone) payBody.phoneNumber = splitPhone;
       const resp = await fetchWithTimeout(`${getBillsBase()}/pay`, {
         method: "POST",
-        headers: { AccessToken: token, "Content-Type": "application/json" },
+        headers: { AccessToken: token, "Content-Type": "application/json", "x-request-id": splitRequestId },
         body: JSON.stringify(payBody),
       }, VFD_BILLS_PAY_TIMEOUT_MS);
       vfdData = await safeJson(resp);
@@ -3075,14 +3083,28 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   if (!token) return jsonResponse({ error: "VFD auth failed" }, 500);
 
   const reference = `wesave-bill-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const payBody: Record<string, string> = { customerId, amount: amount.toString(), division, paymentItem, productId, billerId, reference };
-  if (phoneNumber) payBody.phoneNumber = phoneNumber;
+  const requestId = crypto.randomUUID();
+  const payCategory = ((body.category as string) || "").toLowerCase();
+  const payItemName = ((body.paymentItemName as string) || "").toLowerCase();
+  // Airtime/data purchases are delivered to an MSISDN — VFD expects the phone
+  // number on the payload. When the user did not type one separately the
+  // customerId IS the phone number, so fall back to it rather than omitting
+  // the field (an omitted MSISDN leaves the purchase parked at the biller).
+  const isMsisdnBill = /airtime|data|mobile|mtn|glo|airtel|9mobile|telco/.test(`${payCategory} ${payItemName} ${billerId}`.toLowerCase());
+  const resolvedPhone = phoneNumber || (isMsisdnBill && /^0?\d{10,13}$/.test(String(customerId).replace(/\s/g, "")) ? customerId : "");
 
-  const resp = await vfdFetch(`${getBillsBase()}/pay`, {
-    method: "POST",
-    headers: { AccessToken: token, "Content-Type": "application/json" },
-    body: JSON.stringify(payBody),
-  });
+  const payBody: Record<string, string> = { customerId, amount: amount.toString(), division, paymentItem, productId, billerId, reference };
+  if (resolvedPhone) payBody.phoneNumber = resolvedPhone;
+
+  const resp = await fetchWithTimeout(
+    `${getBillsBase()}/pay`,
+    {
+      method: "POST",
+      headers: { AccessToken: token, "Content-Type": "application/json", "x-request-id": requestId },
+      body: JSON.stringify(payBody),
+    },
+    VFD_BILLS_PAY_TIMEOUT_MS,
+  );
   let data = await safeJson(resp);
 
   // In production every non-"00"/non-pending response is a genuine biller
@@ -3098,22 +3120,37 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   const isProduction = (Deno.env.get("VFD_MODE") || "sandbox").toLowerCase() === "production";
   let isPending = false;
   let effStatus = effectiveBillStatus(data as Record<string, unknown> | null);
-  if (isProduction && (effStatus === "09" || effStatus === null)) {
-    const statusResp = await fetchVfdBillArtefact(reference);
-    const statusEff = effectiveBillStatus(statusResp);
-    if (statusEff === "00") {
-      data = statusResp;
-      effStatus = "00";
-    } else if (statusEff && statusEff !== "09") {
-      data = statusResp;
+  console.log(
+    `[bills][pay] ref=${reference} request_id=${requestId} biller=${billerId} item=${paymentItem} ` +
+    `amount=${numAmount} msisdn_sent=${resolvedPhone ? "yes" : "no"} http=${resp.status} ` +
+    `status=${String(effStatus ?? "")} outcome=${classifyBillStatus(effStatus)} ` +
+    `message=${String((data as Record<string, unknown>)?.message ?? "").slice(0, 160)}`,
+  );
+
+  let payOutcome = classifyBillStatus(effStatus);
+  if (isProduction && (payOutcome === "pending" || payOutcome === "unknown")) {
+    const lookup = await lookupVfdBillStatus(reference);
+    const statusEff = effectiveBillStatus(lookup.body);
+    const statusOutcome = classifyBillStatus(statusEff);
+    if (lookup.lookup_ok && (statusOutcome === "success" || statusOutcome === "failed" || statusOutcome === "reversed")) {
+      data = lookup.body as Record<string, unknown>;
       effStatus = statusEff;
+      payOutcome = statusOutcome;
     } else {
+      // Either still processing at the biller, or we could not reach VFD. Both
+      // are held (not refunded, not settled) and left to the reconciler.
       isPending = true;
+      payOutcome = "pending";
     }
+    console.log(
+      `[bills][pay] ref=${reference} request_id=${requestId} post_tsq lookup_ok=${lookup.lookup_ok} ` +
+      `tsq_request_id=${lookup.request_id} status=${String(statusEff ?? "")} outcome=${payOutcome}`,
+    );
   }
   const isSuccess = isProduction
-    ? (resp.ok && (effStatus === "00" || isPending))
+    ? (payOutcome === "success" || isPending)
     : (resp.ok || effStatus === "00" || effStatus === "99" || !!data);
+
 
   if (isSuccess) {
     const db = getSupabaseAdmin();
@@ -3203,6 +3240,23 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
         },
       };
     }
+    // Provider trace kept on the receipt so any VFD dispute can be traced to the
+    // exact request. No credentials or customer PII are stored here.
+    delivery = {
+      ...delivery,
+      delivery_detail: {
+        ...delivery.delivery_detail,
+        vfd: {
+          request_id: requestId,
+          http_status: resp.status,
+          status_code: effStatus,
+          outcome: payOutcome,
+          message: String((data as Record<string, unknown>)?.message ?? "").slice(0, 200),
+          msisdn_sent: !!resolvedPhone,
+        },
+      },
+    };
+
 
     await db.from("vfd_sandbox_bill_receipts").insert({
       delivery_type: delivery.delivery_type,
@@ -3284,7 +3338,11 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
     return jsonResponse({ data: { status: "00", message: isPending ? "Purchase accepted — awaiting biller confirmation" : "Payment successful", pending: isPending, reference, receipt_expires_at: expiresAt, ...delivery } });
   }
 
-  console.error("[bills] pay failed", { reference, http: resp.status, status: data?.status, message: data?.message });
+  console.error(
+    `[bills][pay] ref=${reference} request_id=${requestId} DECLINED biller=${billerId} item=${paymentItem} ` +
+    `amount=${numAmount} msisdn_sent=${resolvedPhone ? "yes" : "no"} http=${resp.status} ` +
+    `status=${String(effStatus ?? "")} outcome=${payOutcome} message=${String(data?.message ?? "").slice(0, 200)}`,
+  );
   return jsonResponse({
     error: (data?.message as string) || "The biller could not complete this purchase. Your wallet was not debited. Please try again.",
     code: "BILL_PAYMENT_FAILED",
@@ -3337,23 +3395,63 @@ function formatMeterToken(raw: string): string {
   return (digits.match(/.{1,4}/g) || [raw]).join("-");
 }
 
+// Transaction Status Query (TSQ) against the VFD bills store.
+//
+// `lookup_ok: false` means we could not reach VFD, the call timed out, or the
+// envelope was unreadable. That is NOT the same as "the biller is still
+// processing" — an unreachable VFD must never settle or refund a receipt.
+type BillStatusLookup = {
+  lookup_ok: boolean;
+  body: Record<string, unknown> | null;
+  http_status: number | null;
+  request_id: string;
+};
+
+const TSQ_TIMEOUT_MS = 15_000;
+const TSQ_ATTEMPTS = 3;
+
+async function lookupVfdBillStatus(reference: string): Promise<BillStatusLookup> {
+  let last: BillStatusLookup = { lookup_ok: false, body: null, http_status: null, request_id: "" };
+  for (let attempt = 1; attempt <= TSQ_ATTEMPTS; attempt++) {
+    const requestId = crypto.randomUUID();
+    try {
+      const token = await getVfdAccessToken();
+      if (!token) {
+        console.error(`[bills][tsq] ref=${reference} attempt=${attempt} request_id=${requestId} no_access_token`);
+        last = { lookup_ok: false, body: null, http_status: null, request_id: requestId };
+      } else {
+        const resp = await fetchWithTimeout(
+          `${getBillsBase()}/transactionStatus?transactionId=${encodeURIComponent(reference)}`,
+          { method: "GET", headers: { AccessToken: token, "Content-Type": "application/json", "x-request-id": requestId } },
+          TSQ_TIMEOUT_MS,
+        );
+        const json = await safeJson(resp);
+        const ok = resp.ok && Object.keys(json).length > 0;
+        const eff = effectiveBillStatus(json as Record<string, unknown>);
+        console.log(
+          `[bills][tsq] ref=${reference} attempt=${attempt} request_id=${requestId} http=${resp.status} ` +
+          `envelope_status=${String((json as Record<string, unknown>)?.status ?? "")} txn_status=${String(eff ?? "")} ` +
+          `outcome=${classifyBillStatus(eff)} message=${String((json as Record<string, unknown>)?.message ?? "").slice(0, 120)}`,
+        );
+        last = { lookup_ok: ok, body: ok ? json : null, http_status: resp.status, request_id: requestId };
+        if (ok) return last;
+      }
+    } catch (e) {
+      console.error(
+        `[bills][tsq] ref=${reference} attempt=${attempt} request_id=${requestId} failed:`,
+        e instanceof Error ? e.message : String(e),
+      );
+      last = { lookup_ok: false, body: null, http_status: null, request_id: requestId };
+    }
+    if (attempt < TSQ_ATTEMPTS) await new Promise((r) => setTimeout(r, 750 * attempt));
+  }
+  return last;
+}
+
 // Best-effort re-query of the VFD bills transaction so a token that was not
 // present on the immediate /pay response can still be delivered.
 async function fetchVfdBillArtefact(reference: string): Promise<Record<string, unknown> | null> {
-  try {
-    const token = await getVfdAccessToken();
-    if (!token) return null;
-
-    const resp = await vfdFetch(
-      `${getBillsBase()}/transactionStatus?transactionId=${encodeURIComponent(reference)}`,
-      { method: "GET", headers: { AccessToken: token, "Content-Type": "application/json" } },
-    );
-    const json = await safeJson(resp);
-    return (json as Record<string, unknown> | null) ?? null;
-  } catch (e) {
-    console.error("[bills] transactionStatus lookup failed:", e);
-    return null;
-  }
+  return (await lookupVfdBillStatus(reference)).body;
 }
 
 /**
@@ -3370,6 +3468,47 @@ function effectiveBillStatus(resp: Record<string, unknown> | null | undefined): 
   if (innerStatus) return innerStatus;
   const outer = resp.status;
   return outer === null || outer === undefined || String(outer).trim() === "" ? null : String(outer).trim();
+}
+
+/**
+ * Normalised internal outcome model for VFD bill status codes. We never rely on
+ * the HTTP status — only on the provider code.
+ *   success  -> value delivered, settle the hold
+ *   pending  -> biller accepted, not yet confirmed; keep holding
+ *   failed   -> biller declined; release the hold back to the wallet
+ *   reversed -> biller reversed the purchase; release the hold
+ *   unknown  -> code we do not recognise (or none at all). Treated like pending
+ *               so money is never refunded on a guess; the 45-minute stale
+ *               timeout still closes it out.
+ */
+type BillOutcome = "success" | "pending" | "failed" | "reversed" | "unknown";
+
+const VFD_BILL_STATUS_MAP: Record<string, BillOutcome> = {
+  "00": "success",
+  SUCCESS: "success",
+  SUCCESSFUL: "success",
+  COMPLETED: "success",
+  "09": "pending",
+  "91": "pending",
+  PENDING: "pending",
+  PROCESSING: "pending",
+  "01": "failed",
+  "06": "failed",
+  "12": "failed",
+  "51": "failed",
+  "96": "failed",
+  "99": "failed",
+  TF: "failed",
+  FAILED: "failed",
+  DECLINED: "failed",
+  "25": "reversed",
+  RV: "reversed",
+  REVERSED: "reversed",
+};
+
+function classifyBillStatus(code: string | null | undefined): BillOutcome {
+  if (code === null || code === undefined || String(code).trim() === "") return "unknown";
+  return VFD_BILL_STATUS_MAP[String(code).trim().toUpperCase()] ?? "unknown";
 }
 
 function deriveBillDelivery(params: {
@@ -3619,11 +3758,18 @@ async function handleReconcilePendingBills(userId: string, body: Record<string, 
   for (const r of (rows || []) as Record<string, any>[]) {
     const owner = r.user_id as string;
     result.scanned++;
-    const statusResp = await fetchVfdBillArtefact(r.reference);
+    const lookup = await lookupVfdBillStatus(r.reference);
+    const statusResp = lookup.body;
     const eff = effectiveBillStatus(statusResp);
+    const outcome: BillOutcome = lookup.lookup_ok ? classifyBillStatus(eff) : "unknown";
+    const ageMin = (Date.now() - new Date(r.paid_at).getTime()) / 60000;
+    console.log(
+      `[bills][reconcile] ref=${r.reference} request_id=${lookup.request_id} lookup_ok=${lookup.lookup_ok} ` +
+      `http=${lookup.http_status ?? ""} status=${String(eff ?? "")} outcome=${outcome} age_min=${Math.round(ageMin)}`,
+    );
 
+    if (outcome === "success") {
 
-    if (eff === "00") {
       const delivery = deriveBillDelivery({
         category: r.category || "",
         billerName: r.biller_name || "",
@@ -3657,13 +3803,13 @@ async function handleReconcilePendingBills(userId: string, body: Record<string, 
         "bill_payment",
       );
       result.delivered++;
-    } else if (eff && eff !== "09") {
-      // Genuine biller failure — return the money.
+    } else if (outcome === "failed" || outcome === "reversed") {
+      // Genuine biller failure/reversal, confirmed by a successful lookup — return the money.
       if (await refundReceipt(r, owner, String(eff), statusResp)) result.refunded++;
       else result.still_pending++;
     } else {
-      // Still pending at VFD — auto-refund once it goes stale.
-      const ageMin = (Date.now() - new Date(r.paid_at).getTime()) / 60000;
+      // Pending at VFD, an unrecognised code, or a lookup we could not complete.
+      // Never refund on a guess — hold until the stale timeout closes it out.
       if (ageMin >= STALE_PENDING_MINUTES) {
         if (await refundReceipt(r, owner, "stale_pending", statusResp)) result.timed_out++;
         else result.still_pending++;
@@ -3671,6 +3817,7 @@ async function handleReconcilePendingBills(userId: string, body: Record<string, 
         result.still_pending++;
       }
     }
+
   }
 
 
@@ -3884,11 +4031,22 @@ async function handleSendBillReminders() {
 async function handleBillsStatus(body: Record<string, unknown>) {
   const { transactionId } = body as { transactionId: string };
   if (!transactionId) return jsonResponse({ error: "transactionId required" }, 400);
-  const token = await getVfdAccessToken();
-  if (!token) return jsonResponse({ error: "VFD auth failed" }, 500);
-  const resp = await vfdFetch(`${getBillsBase()}/transactionStatus?transactionId=${encodeURIComponent(transactionId)}`, { headers: { AccessToken: token } });
-  return jsonResponse({ data: await safeJson(resp) });
+  const lookup = await lookupVfdBillStatus(transactionId);
+  if (!lookup.lookup_ok) {
+    return jsonResponse(
+      { error: "The bill status could not be retrieved right now.", lookup_ok: false, request_id: lookup.request_id },
+      502,
+    );
+  }
+  const eff = effectiveBillStatus(lookup.body);
+  return jsonResponse({
+    data: lookup.body,
+    status_code: eff,
+    outcome: classifyBillStatus(eff),
+    request_id: lookup.request_id,
+  });
 }
+
 
 // =============================================
 // VIRTUAL CARDS (VFD BaaS)
