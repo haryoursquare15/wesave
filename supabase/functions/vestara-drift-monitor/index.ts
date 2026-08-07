@@ -49,11 +49,16 @@ async function alertAdmins(findings: Array<Record<string, unknown>>) {
     `• ${f.kind} — account ${String(f.account_id).slice(0, 8)}… expected ${money(Number(f.expected))}, actual ${money(Number(f.actual))} (off by ${money(Number(f.delta))})`
   ).join("\n");
 
-  const title = `⚠️ Ledger drift detected (${findings.length})`;
+  const title = `Ledger drift detected (${findings.length})`;
   const body =
     `${findings.length} account${findings.length === 1 ? "" : "s"} no longer match the ledger.\n\n${lines}` +
     (findings.length > 10 ? `\n…and ${findings.length - 10} more.` : "") +
     `\n\nInvestigate immediately — customer balances may be wrong.`;
+
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("id, email, full_name")
+    .in("id", adminIds);
 
   for (const adminId of adminIds) {
     try {
@@ -61,22 +66,35 @@ async function alertAdmins(findings: Array<Record<string, unknown>>) {
         _user_id: adminId,
         _title: title,
         _message: body,
-        _type: "ledger_drift",
+        _notification_type: "ledger_drift",
       });
     } catch (e) {
       console.error("[drift-monitor] in-app alert failed:", e);
     }
+  }
+
+  for (const p of profiles || []) {
+    if (!p.email) continue;
     try {
-      await supabase.rpc("notify_user_email", {
-        _user_id: adminId,
-        _subject: title,
-        _body: body,
+      await supabase.functions.invoke("send-transactional-email", {
+        body: {
+          templateName: "notification",
+          recipientEmail: p.email,
+          templateData: {
+            recipientName: p.full_name || "there",
+            title,
+            message: body,
+            actionUrl: "https://vestara.ng/vst-ops-9f3c",
+            actionLabel: "Open Admin Portal",
+          },
+        },
       });
     } catch (e) {
       console.error("[drift-monitor] email alert failed:", e);
     }
   }
 }
+
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
