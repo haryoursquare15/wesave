@@ -3330,7 +3330,11 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
     return jsonResponse({ data: { status: "00", message: isPending ? "Purchase accepted — awaiting biller confirmation" : "Payment successful", pending: isPending, reference, receipt_expires_at: expiresAt, ...delivery } });
   }
 
-  console.error("[bills] pay failed", { reference, http: resp.status, status: data?.status, message: data?.message });
+  console.error(
+    `[bills][pay] ref=${reference} request_id=${requestId} DECLINED biller=${billerId} item=${paymentItem} ` +
+    `amount=${numAmount} msisdn_sent=${resolvedPhone ? "yes" : "no"} http=${resp.status} ` +
+    `status=${String(effStatus ?? "")} outcome=${payOutcome} message=${String(data?.message ?? "").slice(0, 200)}`,
+  );
   return jsonResponse({
     error: (data?.message as string) || "The biller could not complete this purchase. Your wallet was not debited. Please try again.",
     code: "BILL_PAYMENT_FAILED",
