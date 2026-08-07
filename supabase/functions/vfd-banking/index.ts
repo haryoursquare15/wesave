@@ -1988,8 +1988,8 @@ async function handleTransfer(
             from_account: displayFromAccount,
             to_account: toAccount,
             sender_name: body.beneficiaryName ?? null,
-            vfd_reference: vfdTxnId,
-            session_id: sessionId,
+            vfd_reference: resolvedVfdRef,
+            session_id: resolvedSessionId,
           },
         });
         const rcptDepRes = rcptDep as { success?: boolean; error?: string } | null;
