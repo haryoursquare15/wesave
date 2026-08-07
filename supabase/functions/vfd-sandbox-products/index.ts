@@ -1706,10 +1706,13 @@ async function handleContributeCampaign(userId: string, body: Record<string, unk
   if (!campaign) return jsonResponse({ error: "Campaign not found" }, 404);
   if (campaign.status !== "active") return jsonResponse({ error: "Campaign is not active" }, 400);
 
-  const debited = await debitWallet(userId, amount);
+  const contributionRef = `goal-${campaignId}-${userId}-${Date.now()}`;
+
+  const debited = await ledgerCampaignContribute(userId, campaignId, amount, contributionRef, {
+    campaign_title: campaign.title,
+  });
   if (!debited) return jsonResponse({ error: "Insufficient available balance" }, 400);
 
-  const contributionRef = `goal-${campaignId}-${userId}-${Date.now()}`;
 
   await db.from("vfd_sandbox_campaign_contributions").insert({
     campaign_id: campaignId, contributor_id: userId, amount, anonymous, message,
