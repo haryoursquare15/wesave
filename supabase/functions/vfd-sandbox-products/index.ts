@@ -204,8 +204,12 @@ async function getAvailableBalance(userId: string): Promise<number> {
   return bal.total_balance - bal.locked_balance - bal.savings_balance;
 }
 
-// All ledger writes go through the atomic RPC `apply_balance_delta`
-// which row-locks vfd_user_balances and prevents race conditions.
+// `apply_balance_delta` row-locks vfd_user_balances and is now used ONLY to
+// re-classify money already on the balance sheet between the spendable /
+// locked / savings buckets (total_balance is never changed by these callers).
+// Any movement that creates or destroys spendable balance must go through a
+// ledger RPC instead — see the ledger* helpers below.
+
 
 async function applyBalanceDelta(
   userId: string,
