@@ -139,6 +139,29 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
     return resp.data;
   }, [client]);
 
+  /* ─── Validation requirement: ask the backend, never hardcode categories ─── */
+  useEffect(() => {
+    let cancelled = false;
+    if (!selectedBiller || !selectedItem) { setNeedsValidation(false); return; }
+    (async () => {
+      try {
+        const res = await callProducts("bills_validation_policy", {
+          category: selectedCategory,
+          billerId: selectedBiller.id,
+          billerName: selectedBiller.name,
+          paymentItemName: selectedItem.paymentitemname,
+          productId: selectedItem.productId,
+          divisionId: selectedBiller.division,
+        });
+        if (!cancelled) setNeedsValidation(Boolean(res?.data?.required));
+      } catch {
+        // Fail safe for UX: prompt validation; the backend enforces regardless.
+        if (!cancelled) setNeedsValidation(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [callProducts, selectedCategory, selectedBiller, selectedItem]);
+
   /* ─── Step 1: Load Categories ─── */
   const loadCategories = useCallback(async () => {
     setLoading(true);
