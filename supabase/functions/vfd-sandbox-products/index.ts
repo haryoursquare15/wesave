@@ -3204,6 +3204,22 @@ async function fetchVfdBillArtefact(reference: string): Promise<Record<string, u
   }
 }
 
+/**
+ * Effective biller outcome for a VFD bills response.
+ * `/pay` reports the outcome on the envelope `status`, while
+ * `/transactionStatus` puts the lookup result on `status` ("00" = retrieval
+ * succeeded) and the real biller outcome on `data.transactionStatus`.
+ * Always prefer the inner value when present.
+ */
+function effectiveBillStatus(resp: Record<string, unknown> | null | undefined): string | null {
+  if (!resp) return null;
+  const inner = (resp.data && typeof resp.data === "object" ? resp.data : {}) as Record<string, unknown>;
+  const innerStatus = pickField(inner, ["transactionstatus", "txnstatus"]);
+  if (innerStatus) return innerStatus;
+  const outer = resp.status;
+  return outer === null || outer === undefined || String(outer).trim() === "" ? null : String(outer).trim();
+}
+
 function deriveBillDelivery(params: {
   category: string;
   billerName: string;
