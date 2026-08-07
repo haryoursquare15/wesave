@@ -3197,12 +3197,11 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   const requestId = crypto.randomUUID();
   const payCategory = ((body.category as string) || "").toLowerCase();
   const payItemName = ((body.paymentItemName as string) || "").toLowerCase();
-  // Airtime/data purchases are delivered to an MSISDN — VFD expects the phone
-  // number on the payload. When the user did not type one separately the
-  // customerId IS the phone number, so fall back to it rather than omitting
-  // the field (an omitted MSISDN leaves the purchase parked at the biller).
-  const isMsisdnBill = /airtime|data|mobile|mtn|glo|airtel|9mobile|telco/.test(`${payCategory} ${payItemName} ${billerId}`.toLowerCase());
-  const resolvedPhone = phoneNumber || (isMsisdnBill && /^0?\d{10,13}$/.test(String(customerId).replace(/\s/g, "")) ? customerId : "");
+  // VFD's /pay spec lists phoneNumber as a required field for every bill, not
+  // only telco items: it is the contact/delivery MSISDN the biller notifies.
+  // Resolve in order: explicit input → phone-shaped customerId → the customer's
+  // registered phone on their Vestara account.
+  const resolvedPhone = await resolveBillMsisdn(userId, phoneNumber, customerId);
 
   // --- Backend validation gate (never trusts the frontend's verdict) ---
   const payIdentity: BillIdentity = {
