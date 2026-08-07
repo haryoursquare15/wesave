@@ -2358,7 +2358,12 @@ async function handleCancelSplit(userId: string, body: Record<string, unknown>) 
       ? (p.user_id === split.creator_id ? Number(split.platform_fee || 100) : 0)
       : (storedFeePerPerson || (Math.ceil(100 / split.split_count * 100) / 100));
     const refundAmount = Number(p.amount) + feeShare;
-    await creditWallet(p.user_id, refundAmount);
+    const refunded = await ledgerSplitRefund(
+      p.user_id, splitId, refundAmount,
+      `splitpay-${splitId}-${p.user_id}-REFUND`,
+      { reason: "split_cancelled", split_title: split.title },
+    );
+    if (!refunded) continue;
     refundedCount++;
     await sendNotification(p.user_id, "SplitPay Refund",
       `"${split.title}" has been cancelled. ₦${refundAmount.toLocaleString()} has been refunded.`,
