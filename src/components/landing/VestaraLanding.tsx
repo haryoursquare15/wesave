@@ -200,7 +200,12 @@ export default function VestaraLanding() {
             <span className="font-bold text-lg tracking-tight">Vestara</span>
           </a>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground px-2">Coming soon</span>
+            <Button asChild variant="ghost" size="sm">
+              <a href="/auth">Sign in</a>
+            </Button>
+            <Button asChild size="sm">
+              <a href="/auth?mode=signup">Get started</a>
+            </Button>
           </div>
         </div>
       </nav>
@@ -249,10 +254,14 @@ export default function VestaraLanding() {
               transition={{ delay: 0.3 }}
               className="mt-8 flex flex-col sm:flex-row gap-3 justify-center"
             >
-              <div className="inline-flex items-center gap-2 px-4 py-3 rounded-xl bg-muted text-muted-foreground text-sm font-medium">
-                <Sparkles className="h-4 w-4 text-primary" />
-                Sign up &amp; sign in coming soon
-              </div>
+              <Button asChild size="lg" className="gap-2">
+                <a href="/auth?mode=signup">
+                  Create your free account <ArrowRight className="h-4 w-4" />
+                </a>
+              </Button>
+              <Button asChild size="lg" variant="outline">
+                <a href="/auth">Sign in</a>
+              </Button>
             </motion.div>
             <div className="mt-8 flex flex-wrap justify-center gap-4 text-xs text-muted-foreground">
               {["No hidden fees", "Instant transfers", "Daily interest", "Split bills in seconds"].map((b) => (
@@ -354,9 +363,20 @@ export default function VestaraLanding() {
           <p className="relative mt-4 text-primary-foreground/80 max-w-xl mx-auto">
             Join thousands building their financial future with Vestara — Split Pay, savings & ajo, all in one app.
           </p>
-          <div className="relative mt-8 inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-primary-foreground/10 text-primary-foreground text-sm font-medium border border-primary-foreground/20">
-            <Sparkles className="h-4 w-4" />
-            Account sign-ups opening soon — stay tuned
+          <div className="relative mt-8 flex flex-col sm:flex-row gap-3 justify-center">
+            <Button asChild size="lg" variant="secondary" className="gap-2">
+              <a href="/auth?mode=signup">
+                Create your free account <ArrowRight className="h-4 w-4" />
+              </a>
+            </Button>
+            <Button
+              asChild
+              size="lg"
+              variant="outline"
+              className="bg-transparent border-primary-foreground/40 text-primary-foreground hover:bg-primary-foreground/10"
+            >
+              <a href="/auth">Sign in</a>
+            </Button>
           </div>
         </div>
       </section>
