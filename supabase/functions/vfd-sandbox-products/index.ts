@@ -3116,19 +3116,23 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
       }
     }
 
-    await sendNotification(
-      userId,
-      delivery.delivery_type === "token"
+    const isAirtimeLike = /airtime|data/i.test(category) || /airtime|data/i.test(paymentItemName || "");
+    const notifTitle = isPending
+      ? (isAirtimeLike ? "Airtime purchase pending" : "Bill payment pending")
+      : delivery.delivery_type === "token"
         ? (delivery.delivery_token ? "Electricity token delivered" : "Token pending from disco")
-        : "Bill payment successful",
-      delivery.delivery_token
-        ? `₦${numAmount.toLocaleString()} paid to ${billerName} (${customerId}). Token: ${delivery.delivery_token}${delivery.delivery_units ? ` • ${delivery.delivery_units}` : ""}`
+        : isAirtimeLike
+          ? (delivery.delivery_token ? "Recharge PIN delivered" : "Airtime top-up successful")
+          : "Bill payment successful";
+    const notifBody = isPending
+      ? `₦${numAmount.toLocaleString()} to ${billerName} (${customerId}) has been accepted but not yet confirmed by the biller. We'll notify you the moment it completes, or refund you if it fails. Ref: ${reference}`
+      : delivery.delivery_token
+        ? `₦${numAmount.toLocaleString()} paid to ${billerName} (${customerId}). ${isAirtimeLike ? "Recharge PIN" : "Token"}: ${delivery.delivery_token}${delivery.delivery_units ? ` • ${delivery.delivery_units}` : ""}`
         : delivery.delivery_type === "token"
           ? `₦${numAmount.toLocaleString()} paid to ${billerName} (${customerId}). Awaiting meter token from the disco. Ref: ${reference}`
-          : `₦${numAmount.toLocaleString()} paid to ${billerName} (${customerId}). Ref: ${reference}`,
+          : `₦${numAmount.toLocaleString()} paid to ${billerName} (${customerId}). Ref: ${reference}`;
+    await sendNotification(userId, notifTitle, notifBody, "bill_payment");
 
-      "bill_payment",
-    );
     return jsonResponse({ data: { status: "00", message: "Payment successful", reference, receipt_expires_at: expiresAt, ...delivery } });
   }
 
