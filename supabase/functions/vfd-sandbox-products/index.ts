@@ -3779,7 +3779,10 @@ async function handleRunDueRecurringBills() {
     const amount = Number(r.amount);
     let outcome: { status: string; reason?: string; reference?: string };
     try {
-      const debited = await debitWallet(r.user_id, amount);
+      const debited = await ledgerDebitWallet(
+        r.user_id, amount, `wesave-rec-debit-${r.id}-${Date.now()}`,
+        { source: "recurring_bill", recurring_bill_id: r.id, biller: r.biller_name },
+      );
       if (!debited) {
         outcome = { status: "insufficient_funds", reason: "Wallet balance too low" };
         await sendNotification(
