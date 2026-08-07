@@ -1901,7 +1901,9 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
         body: JSON.stringify(payBody),
       }, VFD_BILLS_PAY_TIMEOUT_MS);
       vfdData = await safeJson(resp);
-      vfdOk = resp.ok || vfdData?.status === "00" || vfdData?.status === "99" || !!vfdData;
+      vfdOk = (Deno.env.get("VFD_MODE") || "sandbox").toLowerCase() === "production"
+        ? (resp.ok && vfdData?.status === "00")
+        : (resp.ok || vfdData?.status === "00" || vfdData?.status === "99" || !!vfdData);
     }
   } catch (e) {
     console.error("[settleSplitBill] vfd call failed", e);
