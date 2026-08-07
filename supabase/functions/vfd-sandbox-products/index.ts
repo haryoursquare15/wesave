@@ -3750,11 +3750,18 @@ async function handleReconcilePendingBills(userId: string, body: Record<string, 
   for (const r of (rows || []) as Record<string, any>[]) {
     const owner = r.user_id as string;
     result.scanned++;
-    const statusResp = await fetchVfdBillArtefact(r.reference);
+    const lookup = await lookupVfdBillStatus(r.reference);
+    const statusResp = lookup.body;
     const eff = effectiveBillStatus(statusResp);
+    const outcome: BillOutcome = lookup.lookup_ok ? classifyBillStatus(eff) : "unknown";
+    const ageMin = (Date.now() - new Date(r.paid_at).getTime()) / 60000;
+    console.log(
+      `[bills][reconcile] ref=${r.reference} request_id=${lookup.request_id} lookup_ok=${lookup.lookup_ok} ` +
+      `http=${lookup.http_status ?? ""} status=${String(eff ?? "")} outcome=${outcome} age_min=${Math.round(ageMin)}`,
+    );
 
+    if (outcome === "success") {
 
-    if (eff === "00") {
       const delivery = deriveBillDelivery({
         category: r.category || "",
         billerName: r.biller_name || "",
