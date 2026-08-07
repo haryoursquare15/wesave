@@ -1763,8 +1763,13 @@ async function handleWithdrawCampaignEscrow(userId: string, body: Record<string,
   const amount = requestedAmount && requestedAmount > 0 ? Math.min(requestedAmount, escrow) : escrow;
   if (amount <= 0) return jsonResponse({ error: "Invalid withdrawal amount" }, 400);
 
-  // Move funds from campaign escrow to owner's wallet.
-  await creditWallet(userId, amount);
+  // Move funds from campaign escrow to owner's wallet (ledger-backed).
+  const released = await ledgerCampaignWithdraw(
+    userId, campaignId, amount,
+    `campaign-withdraw-${campaignId}-${Date.now()}`,
+    { campaign_title: campaign.title },
+  );
+  if (!released) return jsonResponse({ error: "Could not release campaign funds. Please try again." }, 400);
   await db.from("vfd_sandbox_campaigns").update({
     escrow_balance: escrow - amount,
     total_withdrawn: Number(campaign.total_withdrawn || 0) + amount,
