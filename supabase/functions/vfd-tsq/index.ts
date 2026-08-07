@@ -55,12 +55,41 @@ Deno.serve(async (req) => {
   let sessionId = url.searchParams.get("sessionId") || "";
   let reference = url.searchParams.get("reference") || "";
   let billRef = url.searchParams.get("billRef") || "";
+  let billPay: Record<string, string> | null = null;
   if (req.method === "POST") {
-    const body = await req.json().catch(() => ({})) as Record<string, string>;
-    sessionId = body.sessionId || sessionId;
-    reference = body.reference || reference;
-    billRef = body.billRef || billRef;
+    const body = await req.json().catch(() => ({})) as Record<string, unknown>;
+    sessionId = (body.sessionId as string) || sessionId;
+    reference = (body.reference as string) || reference;
+    billRef = (body.billRef as string) || billRef;
+    if (body.billPay && typeof body.billPay === "object") {
+      billPay = body.billPay as Record<string, string>;
+    }
   }
+
+  // Ops probe: post a raw payload straight to VFD /pay (no wallet movement,
+  // no receipt) so we can compare our request against VFD's own sample.
+  if (billPay) {
+    try {
+      const accessToken = await getAccessToken();
+      const billsBase = `${HOST}/vtech-bills/api/v2/billspaymentstore`;
+      const res = await vfdFetch(`${billsBase}/pay`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", AccessToken: accessToken },
+        body: JSON.stringify(billPay),
+      });
+      const text = await res.text();
+      let parsed: unknown = text;
+      try { parsed = JSON.parse(text); } catch { /* keep raw */ }
+      return new Response(JSON.stringify({ vfd_mode: VFD_MODE, probe: "bill_pay", sent: billPay, http_status: res.status, response: parsed }, null, 2), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (err) {
+      return new Response(JSON.stringify({ error: String(err) }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }
+
   if (!sessionId && !reference && !billRef) {
     return new Response(JSON.stringify({ error: "sessionId, reference or billRef required" }), {
       status: 400,
