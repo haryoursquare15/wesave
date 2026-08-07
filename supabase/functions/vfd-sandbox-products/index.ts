@@ -2003,13 +2003,21 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
   try {
     const token = await getVfdAccessToken();
     if (token) {
+      const splitRequestId = crypto.randomUUID();
+      // Same MSISDN rule as the direct pay path: airtime/data must carry the
+      // phone number, falling back to the customerId when none was captured.
+      const splitIsMsisdn = /airtime|data|mobile|mtn|glo|airtel|9mobile|telco/i.test(
+        `${category || ""} ${paymentItemName || ""} ${billerId}`,
+      );
+      const splitPhone = phoneNumber ||
+        (splitIsMsisdn && /^0?\d{10,13}$/.test(String(customerId).replace(/\s/g, "")) ? customerId : "");
       const payBody: Record<string, string> = {
         customerId, amount: String(amount), division, paymentItem, productId, billerId, reference,
       };
-      if (phoneNumber) payBody.phoneNumber = phoneNumber;
+      if (splitPhone) payBody.phoneNumber = splitPhone;
       const resp = await fetchWithTimeout(`${getBillsBase()}/pay`, {
         method: "POST",
-        headers: { AccessToken: token, "Content-Type": "application/json" },
+        headers: { AccessToken: token, "Content-Type": "application/json", "x-request-id": splitRequestId },
         body: JSON.stringify(payBody),
       }, VFD_BILLS_PAY_TIMEOUT_MS);
       vfdData = await safeJson(resp);
