@@ -3955,11 +3955,9 @@ async function handleCreateVirtualCard(userId: string, _body: Record<string, unk
         500,
       );
     }
-    // Mirror the debit to the vfd_user_balances cache.
-    await db.from("vfd_user_balances").update({
-      total_balance: bal.total_balance - CARD_ISSUANCE_FEE,
-      updated_at: new Date().toISOString(),
-    }).eq("user_id", userId);
+    // No cache mirroring here: vestara_withdraw updates the displayed balance
+    // inside the same database transaction as the ledger entry.
+
 
     await db.from("vfd_sandbox_transactions").insert({
       user_id: userId, transaction_type: "debit", amount: CARD_ISSUANCE_FEE,
