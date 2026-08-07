@@ -88,6 +88,18 @@ Deno.serve(async (req) => {
       try { parsed = JSON.parse(text); } catch { /* keep raw */ }
       attempts.push({ query: params, http_status: res.status, response: parsed });
     }
+    if (billRef) {
+      const billsBase = `${HOST}/vtech-bills/api/v2/billspaymentstore`;
+      const target = `${billsBase}/transactionStatus?transactionId=${encodeURIComponent(billRef)}`;
+      const res = await vfdFetch(target, {
+        method: "GET",
+        headers: { "Content-Type": "application/json", AccessToken: accessToken },
+      });
+      const text = await res.text();
+      let parsed: unknown = text;
+      try { parsed = JSON.parse(text); } catch { /* keep raw */ }
+      attempts.push({ query: { billRef }, http_status: res.status, response: parsed });
+    }
     return new Response(JSON.stringify({ vfd_mode: VFD_MODE, attempts }, null, 2), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
