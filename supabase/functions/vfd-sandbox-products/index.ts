@@ -1,5 +1,11 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { vfdFetch, getGatewayAccessToken } from "../_shared/vfd-gateway.ts";
+import {
+  billCategoryRequiresValidation,
+  enforceBillCustomerValidation,
+  type BillIdentity,
+  type ValidationRecord,
+} from "../_shared/bill-validation.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1998,6 +2004,30 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
   const reference = `wesave-split-bill-${split.id.slice(0, 8)}-${Date.now()}`;
   const displayBillerName = billerName || String(billerId).toUpperCase();
 
+  // --- Backend validation gate: SplitPay settlement must clear the same bar ---
+  const splitGate = await gateBillPayment({
+    identity: {
+      category, billerId, billerName: displayBillerName,
+      paymentItemName, productId, divisionId: division,
+    },
+    customerId, divisionId: division, paymentItem, billerId,
+    paymentReference: reference, origin: "splitpay_settlement",
+  });
+  if (!splitGate.allowed) {
+    await db.from("vfd_sandbox_splits").update({
+      settlement_status: "failed",
+      settlement_reference: reference,
+      settlement_completed_at: new Date().toISOString(),
+      settlement_failure_reason: splitGate.error || "Customer validation failed",
+    }).eq("id", split.id);
+    await sendNotification(split.creator_id, "SplitPay collected — bill needs attention",
+      `Funds for "${split.title}" were collected but ${displayBillerName} could not verify ${customerId}. Our team will follow up.`,
+      "split_completed");
+    return { delivered: false, reference, biller_name: displayBillerName, customer_id: customerId, amount, message: splitGate.error };
+  }
+  const splitValidation = splitGate.record;
+
+
   let vfdData: any = null;
   let vfdOk = false;
   try {
@@ -2069,7 +2099,7 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
     convenience_fee: 0,
     status: "completed",
     expires_at: expiresAt,
-    raw_response: { via: "splitpay", split_id: split.id, vfd: vfdData },
+    raw_response: { via: "splitpay", split_id: split.id, vfd: vfdData, validation: validationAudit(splitValidation) },
   });
 
   // Note: per-share debits are already recorded in vfd_sandbox_transactions by handlePaySplit
@@ -3033,6 +3063,87 @@ async function handleBillsItems(body: Record<string, unknown>) {
   return jsonResponse({ data: await safeJson(resp) });
 }
 
+// --- Backend customer-validation gate (source of truth for ALL pay paths) ---
+// The frontend may validate for UX, but its verdict is never trusted: every
+// path that reaches VFD /pay runs this first.
+const VFD_BILLS_VALIDATE_TIMEOUT_MS = 15_000;
+
+async function runVfdCustomerValidate(a: {
+  customerId: string; divisionId: string; paymentItem: string; billerId: string; requestId: string;
+}): Promise<{ ok: boolean; body: Record<string, unknown> | null }> {
+  const token = await getVfdAccessToken();
+  if (!token) return { ok: false, body: { message: "VFD auth failed" } };
+  const url = `${getBillsBase()}/customervalidate?customerId=${encodeURIComponent(a.customerId)}` +
+    `&divisionId=${encodeURIComponent(a.divisionId)}&paymentItem=${encodeURIComponent(a.paymentItem)}` +
+    `&billerId=${encodeURIComponent(a.billerId)}`;
+  const resp = await fetchWithTimeout(
+    url,
+    { headers: { AccessToken: token, "x-request-id": a.requestId } },
+    VFD_BILLS_VALIDATE_TIMEOUT_MS,
+  );
+  const body = await safeJson(resp);
+  return { ok: resp.ok, body };
+}
+
+/** Runs the policy + validation call and logs the outcome for reconciliation. */
+async function gateBillPayment(args: {
+  identity: BillIdentity;
+  customerId: string; divisionId: string; paymentItem: string; billerId: string;
+  paymentReference: string; origin: string;
+}) {
+  const result = await enforceBillCustomerValidation({
+    identity: args.identity,
+    customerId: args.customerId,
+    divisionId: args.divisionId,
+    paymentItem: args.paymentItem,
+    billerId: args.billerId,
+    paymentReference: args.paymentReference,
+    validate: runVfdCustomerValidate,
+  });
+  const r = result.record;
+  console.log(
+    `[bills][validate] origin=${args.origin} ref=${args.paymentReference} family=${r.family} ` +
+    `matched_by=${r.matched_by} required=${r.required} performed=${r.performed} passed=${r.passed} ` +
+    `validation_request_id=${r.validation_request_id ?? "-"} status=${r.validation_status ?? "-"} ` +
+    `biller=${r.biller_id ?? "-"} customer=${r.customer_id ?? "-"} at=${r.validated_at ?? "-"} ` +
+    `message=${String(r.validation_message ?? "").slice(0, 160)}`,
+  );
+  return result;
+}
+
+/** Exposes the backend policy so the UI never keeps its own category list. */
+function handleBillsValidationPolicy(body: Record<string, unknown>) {
+  const policy = billCategoryRequiresValidation({
+    category: (body.category as string) || null,
+    billerId: (body.billerId as string) || null,
+    billerName: (body.billerName as string) || null,
+    paymentItemName: (body.paymentItemName as string) || null,
+    productId: (body.productId as string) || null,
+    divisionId: (body.divisionId as string) || null,
+  });
+  return jsonResponse({ data: policy });
+}
+
+/** Compact record persisted alongside the receipt for reconciliation. */
+function validationAudit(r: ValidationRecord) {
+  return {
+    required: r.required,
+    family: r.family,
+    matched_by: r.matched_by,
+    performed: r.performed,
+    passed: r.passed,
+    validation_request_id: r.validation_request_id,
+    validation_status: r.validation_status,
+    validation_message: r.validation_message,
+    customer_name: r.customer_name,
+    validated_at: r.validated_at,
+    biller_id: r.biller_id,
+    customer_id: r.customer_id,
+    payment_reference: r.payment_reference,
+  };
+}
+
+
 async function handleBillsValidate(body: Record<string, unknown>) {
   const { customerId, divisionId, paymentItem, billerId } = body as {
     customerId: string; divisionId: string; paymentItem: string; billerId: string;
@@ -3092,6 +3203,26 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   // the field (an omitted MSISDN leaves the purchase parked at the biller).
   const isMsisdnBill = /airtime|data|mobile|mtn|glo|airtel|9mobile|telco/.test(`${payCategory} ${payItemName} ${billerId}`.toLowerCase());
   const resolvedPhone = phoneNumber || (isMsisdnBill && /^0?\d{10,13}$/.test(String(customerId).replace(/\s/g, "")) ? customerId : "");
+
+  // --- Backend validation gate (never trusts the frontend's verdict) ---
+  const payIdentity: BillIdentity = {
+    category: (body.category as string) || null,
+    billerId,
+    billerName: (body.billerName as string) || null,
+    paymentItemName: (body.paymentItemName as string) || null,
+    productId,
+    divisionId: division,
+  };
+  const gate = await gateBillPayment({
+    identity: payIdentity,
+    customerId, divisionId: division, paymentItem, billerId,
+    paymentReference: reference, origin: "bills_pay",
+  });
+  if (!gate.allowed) {
+    return jsonResponse({ error: gate.error, code: gate.code, validation: validationAudit(gate.record) }, 400);
+  }
+  const validationRecord = gate.record;
+
 
   const payBody: Record<string, string> = { customerId, amount: amount.toString(), division, paymentItem, productId, billerId, reference };
   if (resolvedPhone) payBody.phoneNumber = resolvedPhone;
@@ -3276,7 +3407,7 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
       convenience_fee: 0,
       status: isPending ? "pending" : "completed",
       expires_at: expiresAt,
-      raw_response: data || null,
+      raw_response: { ...(data || {}), validation: validationAudit(validationRecord) },
       recurring_bill_id: recurringBillId,
       hold_state: holdState,
       held_at: new Date().toISOString(),
@@ -3930,6 +4061,36 @@ async function handleRunDueRecurringBills() {
     const amount = Number(r.amount);
     let outcome: { status: string; reason?: string; reference?: string };
     try {
+      // --- Backend validation gate: the scheduler is held to the same bar ---
+      const recRef = `wesave-rec-${r.id}-${Date.now()}`;
+      const recGate = await gateBillPayment({
+        identity: {
+          category: r.category, billerId: r.biller_id, billerName: r.biller_name,
+          paymentItemName: r.payment_item_name, productId: r.product_id, divisionId: r.division,
+        },
+        customerId: r.customer_id, divisionId: r.division,
+        paymentItem: r.payment_item_code, billerId: r.biller_id,
+        paymentReference: recRef, origin: "recurring_bill",
+      });
+      if (!recGate.allowed) {
+        outcome = { status: "validation_failed", reason: recGate.error || "Customer validation failed" };
+        await sendNotification(
+          r.user_id,
+          "Recurring bill skipped",
+          `${r.biller_name} (₦${amount.toLocaleString()}) was skipped — we couldn't verify ${r.customer_id} with the biller. Update the details to keep ${r.nickname || r.biller_name} active.`,
+          "bill_recurring_failed",
+        );
+        const nextSkip = computeNextRunAt(r.frequency, r.hour_wat, r.day_of_week, r.day_of_month);
+        await db.from("vfd_sandbox_recurring_bills").update({
+          last_run_at: new Date().toISOString(),
+          last_run_status: outcome.status,
+          last_run_reason: outcome.reason || null,
+          next_run_at: nextSkip,
+          consecutive_failures: Number(r.consecutive_failures) + 1,
+        }).eq("id", r.id);
+        results.push({ id: r.id, ...outcome });
+        continue;
+      }
       const debited = await ledgerDebitWallet(
         r.user_id, amount, `wesave-rec-debit-${r.id}-${Date.now()}`,
         { source: "recurring_bill", recurring_bill_id: r.id, biller: r.biller_name },
@@ -3971,6 +4132,7 @@ async function handleRunDueRecurringBills() {
           status: "completed",
           expires_at: computeBillExpiry(r.category, r.payment_item_name),
           recurring_bill_id: r.id,
+          raw_response: { via: "recurring", validation: validationAudit(recGate.record) },
         });
         await sendNotification(
           r.user_id,
@@ -6252,6 +6414,7 @@ Deno.serve(async (req) => {
       case "bills_billers": return await handleBillsBillers(body);
       case "bills_items": return await handleBillsItems(body);
       case "bills_validate": return await handleBillsValidate(body);
+      case "bills_validation_policy": return handleBillsValidationPolicy(body);
       case "bills_pay": return await handleBillsPay(userId, body);
       case "bills_status": return await handleBillsStatus(body);
 

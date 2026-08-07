@@ -96,6 +96,8 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
   const [phoneNumber, setPhoneNumber] = useState("");
   const [validationResult, setValidationResult] = useState<string | null>(null);
   const [validating, setValidating] = useState(false);
+  // Validation requirement comes from the backend policy (single source of truth).
+  const [needsValidation, setNeedsValidation] = useState(false);
   const [paying, setPaying] = useState(false);
   const [paymentResult, setPaymentResult] = useState<{
     reference: string;
@@ -136,6 +138,29 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
     }
     return resp.data;
   }, [client]);
+
+  /* ─── Validation requirement: ask the backend, never hardcode categories ─── */
+  useEffect(() => {
+    let cancelled = false;
+    if (!selectedBiller || !selectedItem) { setNeedsValidation(false); return; }
+    (async () => {
+      try {
+        const res = await callProducts("bills_validation_policy", {
+          category: selectedCategory,
+          billerId: selectedBiller.id,
+          billerName: selectedBiller.name,
+          paymentItemName: selectedItem.paymentitemname,
+          productId: selectedItem.productId,
+          divisionId: selectedBiller.division,
+        });
+        if (!cancelled) setNeedsValidation(Boolean(res?.data?.required));
+      } catch {
+        // Fail safe for UX: prompt validation; the backend enforces regardless.
+        if (!cancelled) setNeedsValidation(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [callProducts, selectedCategory, selectedBiller, selectedItem]);
 
   /* ─── Step 1: Load Categories ─── */
   const loadCategories = useCallback(async () => {
@@ -519,7 +544,6 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
     loadCategories();
   }
 
-  const needsValidation = selectedCategory === "Utility" || selectedCategory === "Cable TV";
   const isAmountFixed = selectedItem?.isAmountFixed === "true" && Number(selectedItem.amount) > 0;
   const convenienceFee = selectedBiller?.convenienceFee ? Number(selectedBiller.convenienceFee) : 0;
 
