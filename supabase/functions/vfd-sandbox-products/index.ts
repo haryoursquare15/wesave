@@ -3153,11 +3153,10 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
         settledAt = new Date().toISOString();
       }
     }
-    // Mirror the debit to the vfd_user_balances cache so the UI reflects it immediately.
-    await db.from("vfd_user_balances").update({
-      total_balance: bal.total_balance - numAmount,
-      updated_at: new Date().toISOString(),
-    }).eq("user_id", userId);
+    // No cache mirroring here: vestara_bill_reserve posts through
+    // vestara_post_transaction, which updates the displayed balance in the
+    // same database transaction.
+
 
     const category = (body.category as string) || "";
     const billerName = (body.billerName as string) || billerId.toUpperCase();
