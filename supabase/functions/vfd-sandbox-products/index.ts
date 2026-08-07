@@ -3337,23 +3337,63 @@ function formatMeterToken(raw: string): string {
   return (digits.match(/.{1,4}/g) || [raw]).join("-");
 }
 
+// Transaction Status Query (TSQ) against the VFD bills store.
+//
+// `lookup_ok: false` means we could not reach VFD, the call timed out, or the
+// envelope was unreadable. That is NOT the same as "the biller is still
+// processing" — an unreachable VFD must never settle or refund a receipt.
+type BillStatusLookup = {
+  lookup_ok: boolean;
+  body: Record<string, unknown> | null;
+  http_status: number | null;
+  request_id: string;
+};
+
+const TSQ_TIMEOUT_MS = 15_000;
+const TSQ_ATTEMPTS = 3;
+
+async function lookupVfdBillStatus(reference: string): Promise<BillStatusLookup> {
+  let last: BillStatusLookup = { lookup_ok: false, body: null, http_status: null, request_id: "" };
+  for (let attempt = 1; attempt <= TSQ_ATTEMPTS; attempt++) {
+    const requestId = crypto.randomUUID();
+    try {
+      const token = await getVfdAccessToken();
+      if (!token) {
+        console.error(`[bills][tsq] ref=${reference} attempt=${attempt} request_id=${requestId} no_access_token`);
+        last = { lookup_ok: false, body: null, http_status: null, request_id: requestId };
+      } else {
+        const resp = await fetchWithTimeout(
+          `${getBillsBase()}/transactionStatus?transactionId=${encodeURIComponent(reference)}`,
+          { method: "GET", headers: { AccessToken: token, "Content-Type": "application/json", "x-request-id": requestId } },
+          TSQ_TIMEOUT_MS,
+        );
+        const json = await safeJson(resp);
+        const ok = resp.ok && Object.keys(json).length > 0;
+        const eff = effectiveBillStatus(json as Record<string, unknown>);
+        console.log(
+          `[bills][tsq] ref=${reference} attempt=${attempt} request_id=${requestId} http=${resp.status} ` +
+          `envelope_status=${String((json as Record<string, unknown>)?.status ?? "")} txn_status=${String(eff ?? "")} ` +
+          `outcome=${classifyBillStatus(eff)} message=${String((json as Record<string, unknown>)?.message ?? "").slice(0, 120)}`,
+        );
+        last = { lookup_ok: ok, body: ok ? json : null, http_status: resp.status, request_id: requestId };
+        if (ok) return last;
+      }
+    } catch (e) {
+      console.error(
+        `[bills][tsq] ref=${reference} attempt=${attempt} request_id=${requestId} failed:`,
+        e instanceof Error ? e.message : String(e),
+      );
+      last = { lookup_ok: false, body: null, http_status: null, request_id: requestId };
+    }
+    if (attempt < TSQ_ATTEMPTS) await new Promise((r) => setTimeout(r, 750 * attempt));
+  }
+  return last;
+}
+
 // Best-effort re-query of the VFD bills transaction so a token that was not
 // present on the immediate /pay response can still be delivered.
 async function fetchVfdBillArtefact(reference: string): Promise<Record<string, unknown> | null> {
-  try {
-    const token = await getVfdAccessToken();
-    if (!token) return null;
-
-    const resp = await vfdFetch(
-      `${getBillsBase()}/transactionStatus?transactionId=${encodeURIComponent(reference)}`,
-      { method: "GET", headers: { AccessToken: token, "Content-Type": "application/json" } },
-    );
-    const json = await safeJson(resp);
-    return (json as Record<string, unknown> | null) ?? null;
-  } catch (e) {
-    console.error("[bills] transactionStatus lookup failed:", e);
-    return null;
-  }
+  return (await lookupVfdBillStatus(reference)).body;
 }
 
 /**
@@ -3370,6 +3410,47 @@ function effectiveBillStatus(resp: Record<string, unknown> | null | undefined): 
   if (innerStatus) return innerStatus;
   const outer = resp.status;
   return outer === null || outer === undefined || String(outer).trim() === "" ? null : String(outer).trim();
+}
+
+/**
+ * Normalised internal outcome model for VFD bill status codes. We never rely on
+ * the HTTP status — only on the provider code.
+ *   success  -> value delivered, settle the hold
+ *   pending  -> biller accepted, not yet confirmed; keep holding
+ *   failed   -> biller declined; release the hold back to the wallet
+ *   reversed -> biller reversed the purchase; release the hold
+ *   unknown  -> code we do not recognise (or none at all). Treated like pending
+ *               so money is never refunded on a guess; the 45-minute stale
+ *               timeout still closes it out.
+ */
+type BillOutcome = "success" | "pending" | "failed" | "reversed" | "unknown";
+
+const VFD_BILL_STATUS_MAP: Record<string, BillOutcome> = {
+  "00": "success",
+  SUCCESS: "success",
+  SUCCESSFUL: "success",
+  COMPLETED: "success",
+  "09": "pending",
+  "91": "pending",
+  PENDING: "pending",
+  PROCESSING: "pending",
+  "01": "failed",
+  "06": "failed",
+  "12": "failed",
+  "51": "failed",
+  "96": "failed",
+  "99": "failed",
+  TF: "failed",
+  FAILED: "failed",
+  DECLINED: "failed",
+  "25": "reversed",
+  RV: "reversed",
+  REVERSED: "reversed",
+};
+
+function classifyBillStatus(code: string | null | undefined): BillOutcome {
+  if (code === null || code === undefined || String(code).trim() === "") return "unknown";
+  return VFD_BILL_STATUS_MAP[String(code).trim().toUpperCase()] ?? "unknown";
 }
 
 function deriveBillDelivery(params: {
