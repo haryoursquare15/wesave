@@ -123,10 +123,6 @@ async function assertOwnsAccount(userId: string, accountNo: string): Promise<voi
 }
 
 
-// Sandbox credit caps (per user) to prevent abuse of test-credit endpoint
-const SANDBOX_CREDIT_MAX_PER_TXN = 500_000; // ₦500k single
-const SANDBOX_CREDIT_MAX_PER_DAY = 1_000_000; // ₦1M daily
-
 // Platform settlement (pool) account at VFD. This NUBAN is owned by Vestara,
 // NOT by any end user. It is the corporate settlement account through which
 // all inbound credits and outbound debits flow; Vestara's internal ledger
@@ -2175,184 +2171,6 @@ async function handleTransfer(
   });
 }
 
-// Sandbox Credit - per VFD docs requires senderAccountNo and senderBank
-async function handleSandboxCredit(userId: string, accountNo: string, amount: number) {
-  // SECURITY: validate amount and enforce per-txn / per-day caps
-  if (!Number.isFinite(amount) || amount <= 0) {
-    return jsonResponse({ error: "Invalid amount" }, 400);
-  }
-  if (amount > SANDBOX_CREDIT_MAX_PER_TXN) {
-    return jsonResponse(
-      { error: `Sandbox credit per-transaction limit is ₦${SANDBOX_CREDIT_MAX_PER_TXN.toLocaleString()}` },
-      400
-    );
-  }
-
-  // SECURITY: prevent users from crediting accounts they don't own
-  try {
-    await assertOwnsAccount(userId, accountNo);
-  } catch (err) {
-    return jsonResponse(
-      { error: err instanceof Error ? err.message : "unauthorized" },
-      403
-    );
-  }
-
-  const supabaseAdmin = getSupabaseAdmin();
-
-  // SECURITY: per-day cap across all sandbox credits for this user
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const { data: recent } = await supabaseAdmin
-    .from("vfd_sandbox_transactions")
-    .select("amount")
-    .eq("user_id", userId)
-    .eq("transaction_type", "credit")
-    .eq("status", "completed")
-    .gte("created_at", since);
-  const usedToday = (recent ?? []).reduce((s, r) => s + Number(r.amount || 0), 0);
-  if (usedToday + amount > SANDBOX_CREDIT_MAX_PER_DAY) {
-    return jsonResponse(
-      { error: `Daily sandbox credit limit (₦${SANDBOX_CREDIT_MAX_PER_DAY.toLocaleString()}) exceeded` },
-      429
-    );
-  }
-
-  const reference = `VFD-credit-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
-  const ledgerReference = reference;
-
-  // ─── PHASE 1: idempotency for sandbox credit ───
-  const idemKey = reference;
-  const idem = await reserveIdempotencyKey(supabaseAdmin, {
-    key: idemKey,
-    userId,
-    action: "sandbox_credit",
-    reference,
-  });
-
-  if (idem.mode === "replay") {
-    const cached = idem.row.response as Record<string, unknown> | null;
-    return jsonResponse(
-      {
-        data: cached ?? { status: idem.row.status, message: "Replayed from idempotency cache" },
-        vfd_status: idem.row.http_status ?? 200,
-        reference,
-        replayed: true,
-      },
-      200
-    );
-  }
-
-  let data: unknown;
-  let status = 0;
-  let networkError: Error | null = null;
-  try {
-    const result = await vfdRequest("/credit", "POST", {
-      amount: String(amount),
-      accountNo,
-      senderAccountNo: "5050104070",
-      senderBank: "000002",
-      senderNarration: `Sandbox test credit - ${reference}`,
-    });
-    data = result.data;
-    status = result.status;
-  } catch (err) {
-    networkError = err instanceof Error ? err : new Error(String(err));
-  }
-
-  if (networkError) {
-    await settleIdempotencyKey(supabaseAdmin, idemKey, {
-      status: "pending",
-      response: { error: networkError.message },
-      http_status: null,
-    });
-    return jsonResponse(
-      { error: "Credit is processing. Refresh in a moment.", code: "CREDIT_PENDING", reference },
-      202
-    );
-  }
-
-  const vfdData = data as Record<string, unknown>;
-  const isSuccess = vfdData?.status === "00";
-
-  await supabaseAdmin.from("vfd_sandbox_transactions").insert({
-    user_id: userId,
-    vfd_account_number: accountNo,
-    amount,
-    transaction_type: "credit",
-    status: isSuccess ? "completed" : "failed",
-    reference,
-    idempotency_key: idemKey,
-    committed_at: isSuccess ? new Date().toISOString() : null,
-    description: "Sandbox test credit",
-    metadata: data as Record<string, unknown>,
-    source: "vfd_sandbox",
-  });
-
-  await recordTxEvent(supabaseAdmin, {
-    user_id: userId,
-    reference,
-    event_type: isSuccess ? "credit.committed" : "credit.failed",
-    actor: "user",
-    to_status: isSuccess ? "completed" : "failed",
-    payload: { amount, accountNo, vfd_status: vfdData?.status },
-  });
-
-  await settleIdempotencyKey(supabaseAdmin, idemKey, {
-    status: isSuccess ? "completed" : "failed",
-    response: data,
-    http_status: status,
-  });
-
-  // Auto-settle internal ledger after successful VFD sandbox credit. The VFD
-  // history row alone is not spendable balance; Vestara's double-entry ledger
-  // is the authoritative wallet balance used by dashboard + transfer checks.
-  if (isSuccess) {
-    const { data: ledgerDeposit, error: ledgerErr } = await supabaseAdmin.rpc("vestara_deposit", {
-      _user_id: userId,
-      _amount: amount,
-      _reference: ledgerReference,
-      _metadata: {
-        source: "vfd_sandbox_credit",
-        vfd_reference: reference,
-        account_no: accountNo,
-        vfd_response: data,
-      },
-    });
-    const ledgerResult = ledgerDeposit as { success?: boolean; error?: string } | null;
-    if (ledgerErr || !ledgerResult?.success) {
-      console.error("[VFD sandbox_credit] vestara_deposit failed:", ledgerErr || ledgerResult);
-      await supabaseAdmin
-        .from("vfd_sandbox_transactions")
-        .update({
-          status: "failed",
-          metadata: { ...(data as Record<string, unknown>), ledger_error: ledgerErr?.message || ledgerResult?.error || "ledger_deposit_failed" },
-        })
-        .eq("reference", reference);
-      await settleIdempotencyKey(supabaseAdmin, idemKey, {
-        status: "failed",
-        response: { error: "Ledger settlement failed", vfd_response: data },
-        http_status: status,
-      });
-      return jsonResponse({ error: "Credit could not be settled. Please try again.", code: "LEDGER_SETTLEMENT_FAILED", reference }, 500);
-    }
-
-    await ensureBalanceRow(supabaseAdmin, userId, {
-      accountNo,
-      preserveExisting: false,
-    });
-    try {
-      await supabaseAdmin.from("vfd_sandbox_notifications").insert({
-        user_id: userId,
-        title: "Wallet funded",
-        message: `₦${Number(amount).toLocaleString()} credited to your sandbox wallet. Ref: ${reference}`,
-        notification_type: "wallet_credit",
-      });
-    } catch (_) { /* best-effort */ }
-  }
-
-  return jsonResponse({ data, vfd_status: status, reference });
-}
-
 // Virtual Account Creation
 async function handleCreateVirtualAccount(userId: string, body: Record<string, unknown>) {
   const { data, status } = await vfdRequest("/virtualaccount", "POST", body);
@@ -3563,9 +3381,6 @@ Deno.serve(async (req) => {
 
       case "quote_transfer":
         return await handleQuoteTransfer(userId, body);
-
-      case "sandbox_credit":
-        return await handleSandboxCredit(userId, body.accountNo as string, body.amount as number);
 
       case "create_virtual_account":
         return await handleCreateVirtualAccount(userId, body);
