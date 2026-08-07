@@ -3599,15 +3599,10 @@ async function handleReconcilePendingBills(userId: string, body: Record<string, 
       },
       raw_response: statusResp ?? r.raw_response,
     }).eq("id", r.id);
-    // Mirror the refund into the balance cache the UI reads.
-    const { data: balRow } = await db.from("vfd_user_balances")
-      .select("total_balance").eq("user_id", owner).maybeSingle();
-    if (balRow) {
-      await db.from("vfd_user_balances").update({
-        total_balance: Number(balRow.total_balance) + Number(r.amount),
-        updated_at: new Date().toISOString(),
-      }).eq("user_id", owner);
-    }
+    // No cache mirroring here: vestara_bill_release / vestara_deposit post
+    // through vestara_post_transaction, which updates the displayed balance
+    // atomically. The old read-then-write mirror was race-prone.
+
     await sendNotification(
       owner,
       timedOut ? "Bill payment cancelled & refunded" : "Bill payment refunded",
