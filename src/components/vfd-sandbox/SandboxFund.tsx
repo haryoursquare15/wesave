@@ -14,7 +14,6 @@ interface Props {
   accountNumber: string;
   bankName?: string;
   fullName?: string;
-  onFund: (amount: number) => Promise<boolean>;
   onBack: () => void;
 }
 
@@ -35,7 +34,7 @@ const channels = [
     label: "Debit Card",
     desc: "Fund via Visa, Mastercard, or Verve",
     icon: CreditCard,
-    badge: null,
+    badge: "Coming soon",
   },
   {
     id: "ussd" as FundingChannel,
@@ -51,28 +50,12 @@ export function SandboxFund({
   accountNumber,
   bankName = "VFD Microfinance Bank",
   fullName = "Vestara User",
-  onFund,
   onBack,
 }: Props) {
   const [channel, setChannel] = useState<FundingChannel>("select");
   const [amount, setAmount] = useState("");
-  const [funded, setFunded] = useState(false);
-  const [funding, setFunding] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const canFund = parseFloat(amount) > 0;
-
-  const handleFund = async () => {
-    const amt = parseFloat(amount);
-    if (funding || !canFund) return;
-    setFunding(true);
-    const ok = await onFund(amt).catch(() => false).finally(() => setFunding(false));
-    if (!ok) return;
-    setFunded(true);
-    setTimeout(() => {
-      setFunded(false);
-      setAmount("");
-    }, 2000);
-  };
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
