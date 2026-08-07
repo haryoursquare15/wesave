@@ -2955,14 +2955,23 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
     headers: { AccessToken: token, "Content-Type": "application/json" },
     body: JSON.stringify(payBody),
   });
-  const data = await safeJson(resp);
+  let data = await safeJson(resp);
 
-  // In production every non-"00" response is a genuine biller failure — the
-  // wallet must NOT be debited and no receipt/token may be fabricated.
-  // Sandbox keeps the old tolerance so test inputs can complete the flow.
+  // In production every non-"00"/non-pending response is a genuine biller
+  // failure — the wallet must NOT be debited and no artefact fabricated.
+  // VFD "09" means the biller accepted but has not confirmed yet: re-query the
+  // transaction once, and if still unresolved treat it as an accepted-pending
+  // purchase (debited, delivery pending) — never as a hard failure.
   const isProduction = (Deno.env.get("VFD_MODE") || "sandbox").toLowerCase() === "production";
+  let isPending = false;
+  if (isProduction && data?.status === "09") {
+    const statusResp = await fetchVfdBillArtefact(reference);
+    if (statusResp?.status === "00") data = statusResp;
+    else if (statusResp && statusResp.status && statusResp.status !== "09") data = statusResp;
+    else isPending = true;
+  }
   const isSuccess = isProduction
-    ? resp.ok && data?.status === "00"
+    ? (resp.ok && (data?.status === "00" || isPending))
     : (resp.ok || data?.status === "00" || data?.status === "99" || !!data);
 
   if (isSuccess) {
