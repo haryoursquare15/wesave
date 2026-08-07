@@ -170,18 +170,25 @@ Deno.serve(async (req) => {
   await db.from("vfd_sandbox_notifications").insert({
     user_id: client.user_id,
     title: "Money received",
-    body: `₦${amount.toLocaleString()} was credited to your Vestara wallet.`,
-    type: "wallet_credit",
-    read: false,
+    message: `₦${amount.toLocaleString()} was credited to your Vestara wallet.`,
+    notification_type: "wallet_credit",
   }).then(() => null, () => null);
 
-  await db
+  const { data: logRow } = await db
     .from("vfd_sandbox_webhook_logs")
-    .update({ processed: true, processed_at: new Date().toISOString() })
+    .select("id")
     .eq("event_type", "vfd_inflow_router")
     .eq("processed", false)
     .order("created_at", { ascending: false })
-    .limit(1);
+    .limit(1)
+    .maybeSingle();
+  if (logRow?.id) {
+    await db
+      .from("vfd_sandbox_webhook_logs")
+      .update({ processed: true, processed_at: new Date().toISOString() })
+      .eq("id", logRow.id);
+  }
+
 
   return ok({ credited: true, reference, amount, account_no: accountNo });
 });
