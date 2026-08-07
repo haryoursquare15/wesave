@@ -453,7 +453,7 @@ function SplitInviteBlock({ splitId, title, slotsRemaining, onInvited }: { split
   const [results, setResults] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
   const [invited, setInvited] = useState<Set<string>>(new Set());
-  const link = `${window.location.origin}/vfd-sandbox?split=${splitId}`;
+  const link = `${window.location.origin}/app?split=${splitId}`;
   const text = `Join me to split the bill for "${title}" on Vestara: ${link}`;
 
   useEffect(() => {

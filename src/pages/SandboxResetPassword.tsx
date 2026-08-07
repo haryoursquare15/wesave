@@ -53,7 +53,7 @@ export default function SandboxResetPassword() {
       }
       toast.success("Password updated. Please sign in.");
       await sandboxSupabase.auth.signOut();
-      navigate("/vfd-sandbox/auth");
+      navigate("/signin");
     } finally {
       setLoading(false);
     }
@@ -67,7 +67,7 @@ export default function SandboxResetPassword() {
         className="w-full max-w-md"
       >
         <Link
-          to="/vfd-sandbox/auth"
+          to="/signin"
           className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />

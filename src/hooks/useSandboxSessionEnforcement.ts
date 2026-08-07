@@ -30,7 +30,7 @@ export function useSandboxSessionEnforcement({ enabled = true }: { enabled?: boo
       sessionStorage.removeItem("vestara_splash_seen");
       await sandboxSupabase.auth.signOut();
       toast.info("Sandbox session expired due to inactivity. Please sign in again.");
-      navigate("/vfd-sandbox/auth");
+      navigate("/signin");
     } catch (err) {
       console.error("Sandbox sign-out error:", err);
     }

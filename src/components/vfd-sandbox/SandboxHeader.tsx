@@ -18,7 +18,7 @@ export function SandboxHeader() {
         return;
       }
     }
-    navigate("/vfd-sandbox");
+    navigate("/app");
   };
 
   return (

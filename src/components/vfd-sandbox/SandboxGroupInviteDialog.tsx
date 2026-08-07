@@ -72,7 +72,7 @@ export function SandboxGroupInviteDialog({ open, onOpenChange, groupId, groupNam
     const res = await products.createGroupInviteLink(groupId);
     if (res?.data?.invite_token) {
       const baseUrl = window.location.origin;
-      setInviteLink(`${baseUrl}/vfd-sandbox/invite/${res.data.invite_token}`);
+      setInviteLink(`${baseUrl}/join/${res.data.invite_token}`);
     }
     setCreatingLink(false);
   };
