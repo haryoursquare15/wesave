@@ -200,7 +200,12 @@ export default function VestaraLanding() {
             <span className="font-bold text-lg tracking-tight">Vestara</span>
           </a>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground px-2">Coming soon</span>
+            <Button asChild variant="ghost" size="sm">
+              <a href="/auth">Sign in</a>
+            </Button>
+            <Button asChild size="sm">
+              <a href="/auth?mode=signup">Get started</a>
+            </Button>
           </div>
         </div>
       </nav>
