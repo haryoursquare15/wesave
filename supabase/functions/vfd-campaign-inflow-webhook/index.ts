@@ -69,15 +69,19 @@ Deno.serve(async (req) => {
     const v = (root as Record<string, unknown>)[key];
     return v == null ? "" : String(v);
   };
-  const accountNo = get("accountNo") || get("account_no") || get("creditAccount");
-  const amountStr = get("amount") || get("transactionAmount");
+  // `account_number` is the CREDITED pool NUBAN; `originator_account_number`
+  // is the SENDER and must never be used for matching.
+  const accountNo = get("account_number") || get("accountNo") || get("account_no") ||
+    get("creditAccount") || get("credit_account");
+  const amountStr = get("amount") || get("transactionAmount") || get("transaction_amount");
   const amount = Number(amountStr);
-  const sessionId = get("sessionId") || get("session_id") || get("reference");
-  const vfdRef = get("reference") || get("originatorReference") || sessionId;
-  const narration = get("originatorNarration") || get("narration") || get("description") || "";
-  const payerAccount = get("originatorAccountNumber") || get("sourceAccount") || "";
-  const payerName = get("originatorName") || get("sourceName") || "";
-  const payerBank = get("originatorBankName") || get("sourceBank") || "";
+  const sessionId = get("session_id") || get("sessionId") || get("reference");
+  const vfdRef = get("reference") || get("originator_reference") || get("originatorReference") || sessionId;
+  const narration = get("originator_narration") || get("originatorNarration") ||
+    get("narration") || get("description") || "";
+  const payerAccount = get("originator_account_number") || get("originatorAccountNumber") || get("sourceAccount") || "";
+  const payerName = get("originator_account_name") || get("originatorName") || get("sourceName") || "";
+  const payerBank = get("originator_bank") || get("originatorBankName") || get("sourceBank") || "";
 
 
   // Log raw event for traceability (admin-only readable)
