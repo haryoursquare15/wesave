@@ -3133,7 +3133,7 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
           : `₦${numAmount.toLocaleString()} paid to ${billerName} (${customerId}). Ref: ${reference}`;
     await sendNotification(userId, notifTitle, notifBody, "bill_payment");
 
-    return jsonResponse({ data: { status: "00", message: "Payment successful", reference, receipt_expires_at: expiresAt, ...delivery } });
+    return jsonResponse({ data: { status: "00", message: isPending ? "Purchase accepted — awaiting biller confirmation" : "Payment successful", pending: isPending, reference, receipt_expires_at: expiresAt, ...delivery } });
   }
 
   console.error("[bills] pay failed", { reference, http: resp.status, status: data?.status, message: data?.message });
@@ -5786,12 +5786,14 @@ Deno.serve(async (req) => {
       "run_due_recurring_bills",
       "send_bill_reminders",
       "poll_pending_mandates",
+      "reconcile_pending_bills_cron",
     ]);
     if (CRON_ACTIONS.has(action) && assertCronCaller(req)) {
       if (action === "sandbox_auto_contribute") return await handleSandboxAutoContribute("system", body);
       if (action === "run_due_recurring_bills") return await handleRunDueRecurringBills();
       if (action === "send_bill_reminders") return await handleSendBillReminders();
       if (action === "poll_pending_mandates") return await handlePollPendingMandates();
+      if (action === "reconcile_pending_bills_cron") return await handleReconcilePendingBills("system", body);
     }
 
 
