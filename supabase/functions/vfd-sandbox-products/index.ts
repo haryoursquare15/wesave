@@ -3384,6 +3384,96 @@ async function handleListReceipts(userId: string, body: Record<string, unknown>)
   return jsonResponse({ data: data || [] });
 }
 
+/**
+ * Re-queries VFD for every bill receipt still awaiting delivery and closes it out:
+ *  - biller confirmed ("00")  -> receipt completed, artefact stored, customer notified
+ *  - biller failed (anything else, not "09") -> wallet refunded, receipt failed, customer notified
+ *  - still "09" -> left pending for the next sweep
+ */
+async function handleReconcilePendingBills(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const limit = Math.min(Number(body.limit) || 25, 100);
+  const { data: rows, error } = await db.from("vfd_sandbox_bill_receipts")
+    .select("*")
+    .eq("user_id", userId)
+    .or("status.eq.pending,delivery_status.eq.pending")
+    .order("paid_at", { ascending: false })
+    .limit(limit);
+  if (error) return jsonResponse({ error: error.message }, 500);
+
+  const result = { scanned: 0, delivered: 0, refunded: 0, still_pending: 0 };
+
+  for (const r of (rows || []) as Record<string, any>[]) {
+    result.scanned++;
+    const statusResp = await fetchVfdBillArtefact(r.reference);
+    const eff = effectiveBillStatus(statusResp);
+
+    if (eff === "00") {
+      const delivery = deriveBillDelivery({
+        category: r.category || "",
+        billerName: r.biller_name || "",
+        paymentItemName: r.payment_item_name,
+        amount: Number(r.amount),
+        reference: r.reference,
+        vfdResponse: statusResp,
+      });
+      await db.from("vfd_sandbox_bill_receipts").update({
+        status: "completed",
+        delivery_type: delivery.delivery_type,
+        delivery_token: delivery.delivery_token,
+        delivery_units: delivery.delivery_units,
+        delivery_status: delivery.delivery_status,
+        delivery_detail: delivery.delivery_detail,
+        raw_response: statusResp,
+      }).eq("id", r.id);
+      await sendNotification(
+        userId,
+        "Bill delivered",
+        `${r.biller_name} • ${r.customer_id} — ₦${Number(r.amount).toLocaleString()} confirmed by the biller.${delivery.delivery_token ? ` Token/PIN: ${delivery.delivery_token}.` : ""} Ref: ${r.reference}`,
+        "bill_payment",
+      );
+      result.delivered++;
+    } else if (eff && eff !== "09") {
+      // Genuine biller failure — return the money.
+      const refundRef = `${r.reference}-REFUND`;
+      const { data: dep, error: depErr } = await db.rpc("vestara_deposit", {
+        _user_id: userId,
+        _amount: Number(r.amount),
+        _reference: refundRef,
+        _metadata: { source: "bill_payment_refund", original_reference: r.reference, vfd_status: eff },
+      });
+      const depOk = (dep as { success?: boolean } | null)?.success;
+      if (depErr || !depOk) {
+        console.error("[bills] refund failed", r.reference, depErr || dep);
+        result.still_pending++;
+        continue;
+      }
+      await db.from("vfd_sandbox_transactions").insert({
+        user_id: userId, transaction_type: "credit", amount: Number(r.amount),
+        description: `Refund: failed bill payment ${r.biller_name} - ${r.customer_id}`,
+        reference: refundRef, status: "completed",
+      });
+      await db.from("vfd_sandbox_bill_receipts").update({
+        status: "failed",
+        delivery_status: "failed",
+        delivery_detail: { instruction: "The biller could not complete this purchase. Your wallet has been refunded in full." },
+        raw_response: statusResp,
+      }).eq("id", r.id);
+      await sendNotification(
+        userId,
+        "Bill payment refunded",
+        `${r.biller_name} • ${r.customer_id} — the biller could not complete this purchase, so ₦${Number(r.amount).toLocaleString()} has been refunded to your wallet. Ref: ${r.reference}`,
+        "bill_payment",
+      );
+      result.refunded++;
+    } else {
+      result.still_pending++;
+    }
+  }
+
+  return jsonResponse({ data: result });
+}
+
 // Compute next run timestamp in WAT (UTC+1). Hour stored is WAT hour.
 function computeNextRunAt(frequency: string, hourWat: number, dayOfWeek: number | null, dayOfMonth: number | null, from = new Date()): string {
   // Convert from now (UTC) by shifting to WAT, then back.
