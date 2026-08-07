@@ -3094,10 +3094,15 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
 
       "bill_payment",
     );
-    return jsonResponse({ data: { status: "00", message: "Payment successful (sandbox)", reference, receipt_expires_at: expiresAt, ...delivery } });
+    return jsonResponse({ data: { status: "00", message: "Payment successful", reference, receipt_expires_at: expiresAt, ...delivery } });
   }
 
-  return jsonResponse({ data: { ...data, reference, status: data?.status || "99", message: data?.message || "Bill payment could not be processed" } });
+  console.error("[bills] pay failed", { reference, http: resp.status, status: data?.status, message: data?.message });
+  return jsonResponse({
+    error: (data?.message as string) || "The biller could not complete this purchase. Your wallet was not debited. Please try again.",
+    code: "BILL_PAYMENT_FAILED",
+    data: { ...data, reference, status: data?.status || "99" },
+  }, 400);
 }
 
 // Subscription-style bills get an expiry → enables expiry reminders.
