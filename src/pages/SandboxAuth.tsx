@@ -1,5 +1,5 @@
 import { useState, FormEvent, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mail, Lock, User, Eye, EyeOff, ArrowRight, FlaskConical, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,8 +13,10 @@ import { toast } from "sonner";
 import { getUserFriendlyError } from "@/lib/errorMessages";
 export default function SandboxAuth() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { signIn, signUp } = useSandboxAuth();
-  const [isSignUp, setIsSignUp] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(() => searchParams.get("mode") === "signup");
+
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", password: "" });
