@@ -2034,13 +2034,10 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
     const token = await getVfdAccessToken();
     if (token) {
       const splitRequestId = crypto.randomUUID();
-      // Same MSISDN rule as the direct pay path: airtime/data must carry the
-      // phone number, falling back to the customerId when none was captured.
-      const splitIsMsisdn = /airtime|data|mobile|mtn|glo|airtel|9mobile|telco/i.test(
-        `${category || ""} ${paymentItemName || ""} ${billerId}`,
-      );
-      const splitPhone = phoneNumber ||
-        (splitIsMsisdn && /^0?\d{10,13}$/.test(String(customerId).replace(/\s/g, "")) ? customerId : "");
+      // Same MSISDN rule as the direct pay path: VFD /pay expects a contact
+      // phone number on every bill, resolved from metadata, the customerId, or
+      // the payer's registered phone.
+      const splitPhone = await resolveBillMsisdn(split.creator_id, phoneNumber, customerId);
       const payBody: Record<string, string> = {
         customerId, amount: String(amount), division, paymentItem, productId, billerId, reference,
       };
