@@ -3075,14 +3075,28 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   if (!token) return jsonResponse({ error: "VFD auth failed" }, 500);
 
   const reference = `wesave-bill-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const payBody: Record<string, string> = { customerId, amount: amount.toString(), division, paymentItem, productId, billerId, reference };
-  if (phoneNumber) payBody.phoneNumber = phoneNumber;
+  const requestId = crypto.randomUUID();
+  const payCategory = ((body.category as string) || "").toLowerCase();
+  const payItemName = ((body.paymentItemName as string) || "").toLowerCase();
+  // Airtime/data purchases are delivered to an MSISDN — VFD expects the phone
+  // number on the payload. When the user did not type one separately the
+  // customerId IS the phone number, so fall back to it rather than omitting
+  // the field (an omitted MSISDN leaves the purchase parked at the biller).
+  const isMsisdnBill = /airtime|data|mobile|mtn|glo|airtel|9mobile|telco/.test(`${payCategory} ${payItemName} ${billerId}`.toLowerCase());
+  const resolvedPhone = phoneNumber || (isMsisdnBill && /^0?\d{10,13}$/.test(String(customerId).replace(/\s/g, "")) ? customerId : "");
 
-  const resp = await vfdFetch(`${getBillsBase()}/pay`, {
-    method: "POST",
-    headers: { AccessToken: token, "Content-Type": "application/json" },
-    body: JSON.stringify(payBody),
-  });
+  const payBody: Record<string, string> = { customerId, amount: amount.toString(), division, paymentItem, productId, billerId, reference };
+  if (resolvedPhone) payBody.phoneNumber = resolvedPhone;
+
+  const resp = await fetchWithTimeout(
+    `${getBillsBase()}/pay`,
+    {
+      method: "POST",
+      headers: { AccessToken: token, "Content-Type": "application/json", "x-request-id": requestId },
+      body: JSON.stringify(payBody),
+    },
+    VFD_BILLS_PAY_TIMEOUT_MS,
+  );
   let data = await safeJson(resp);
 
   // In production every non-"00"/non-pending response is a genuine biller
@@ -3098,6 +3112,13 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   const isProduction = (Deno.env.get("VFD_MODE") || "sandbox").toLowerCase() === "production";
   let isPending = false;
   let effStatus = effectiveBillStatus(data as Record<string, unknown> | null);
+  console.log(
+    `[bills][pay] ref=${reference} request_id=${requestId} biller=${billerId} item=${paymentItem} ` +
+    `amount=${numAmount} msisdn_sent=${resolvedPhone ? "yes" : "no"} http=${resp.status} ` +
+    `status=${String(effStatus ?? "")} outcome=${classifyBillStatus(effStatus)} ` +
+    `message=${String((data as Record<string, unknown>)?.message ?? "").slice(0, 160)}`,
+  );
+
   if (isProduction && (effStatus === "09" || effStatus === null)) {
     const statusResp = await fetchVfdBillArtefact(reference);
     const statusEff = effectiveBillStatus(statusResp);
