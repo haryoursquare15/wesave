@@ -3707,6 +3707,13 @@ function deriveBillDelivery(params: {
 
   if (isElectricity && isPrepaid) {
     const token = vfdToken ? formatMeterToken(vfdToken) : null;
+    // First-time vends on some discos (notably AEDC) also return two key-change
+    // tokens. They must be entered on the meter BEFORE the credit token.
+    const kct1Raw = pickField(inner, ["kct1", "keychangetoken1", "kct_1"]) || pickField(raw, ["kct1", "keychangetoken1", "kct_1"]);
+    const kct2Raw = pickField(inner, ["kct2", "keychangetoken2", "kct_2"]) || pickField(raw, ["kct2", "keychangetoken2", "kct_2"]);
+    const kct1 = kct1Raw ? formatMeterToken(kct1Raw) : null;
+    const kct2 = kct2Raw ? formatMeterToken(kct2Raw) : null;
+    const hasKct = !!(kct1 || kct2);
     return {
       delivery_type: "token",
       delivery_token: token,
@@ -3714,13 +3721,17 @@ function deriveBillDelivery(params: {
       delivery_status: token ? "delivered" : "pending",
       delivery_detail: {
         instruction: token
-          ? "Enter this one-time token on your prepaid meter keypad to load the units."
+          ? (hasKct
+            ? "Enter the two key-change tokens (KCT1 then KCT2) on your meter first, then enter the credit token to load the units."
+            : "Enter this one-time token on your prepaid meter keypad to load the units.")
           : "Your payment was received. The meter token from the disco has not been returned yet — it will appear here as soon as the biller releases it.",
         meter_type: "prepaid",
         token_source: token ? "vfd" : null,
+        ...(hasKct ? { kct1, kct2 } : {}),
       },
     };
   }
+
 
 
   if (isElectricity) {
