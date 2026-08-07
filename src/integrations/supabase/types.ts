@@ -1330,6 +1330,54 @@ export type Database = {
           },
         ]
       }
+      ledger_drift_findings: {
+        Row: {
+          account_id: string | null
+          account_type: string | null
+          actual: number
+          created_at: string
+          delta: number
+          details: Json
+          detected_at: string
+          expected: number
+          id: string
+          kind: string
+          resolved_at: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          account_id?: string | null
+          account_type?: string | null
+          actual?: number
+          created_at?: string
+          delta?: number
+          details?: Json
+          detected_at?: string
+          expected?: number
+          id?: string
+          kind: string
+          resolved_at?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          account_id?: string | null
+          account_type?: string | null
+          actual?: number
+          created_at?: string
+          delta?: number
+          details?: Json
+          detected_at?: string
+          expected?: number
+          id?: string
+          kind?: string
+          resolved_at?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       ledger_entries: {
         Row: {
           amount: number
@@ -7814,6 +7862,26 @@ export type Database = {
         Args: { _metadata?: Json; _reference: string }
         Returns: Json
       }
+      vestara_campaign_contribute: {
+        Args: {
+          _amount: number
+          _campaign_id: string
+          _metadata?: Json
+          _reference: string
+          _user_id: string
+        }
+        Returns: Json
+      }
+      vestara_campaign_withdraw: {
+        Args: {
+          _amount: number
+          _campaign_id: string
+          _metadata?: Json
+          _reference: string
+          _user_id: string
+        }
+        Returns: Json
+      }
       vestara_create_savings: {
         Args: {
           _principal: number
@@ -7863,6 +7931,7 @@ export type Database = {
         }
         Returns: Json
       }
+      vestara_detect_balance_drift: { Args: never; Returns: Json }
       vestara_early_withdraw_savings: {
         Args: { _savings_id: string; _user_id: string }
         Returns: Json
@@ -7952,6 +8021,30 @@ export type Database = {
           _metadata?: Json
           _reference: string
           _split_id: string
+          _user_id: string
+        }
+        Returns: Json
+      }
+      vestara_split_refund: {
+        Args: {
+          _amount: number
+          _metadata?: Json
+          _reference: string
+          _split_id: string
+          _user_id: string
+        }
+        Returns: Json
+      }
+      vestara_sync_user_balance_cache: {
+        Args: { _user_id: string }
+        Returns: Json
+      }
+      vestara_target_payout: {
+        Args: {
+          _amount: number
+          _group_id: string
+          _metadata?: Json
+          _reference: string
           _user_id: string
         }
         Returns: Json
