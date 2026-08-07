@@ -110,6 +110,12 @@ export function SandboxBillReceipts() {
                   {r.delivery_type === "pin" ? "PIN" : "Token"}: {r.delivery_token}
                 </p>
               )}
+              {kcts.length > 0 && (
+                <p className="text-[11px] font-mono text-warning truncate">
+                  Key change: {kcts.map((k, i) => `KCT${i + 1} ${k}`).join(" • ")}
+                </p>
+              )}
+
               {(isPending || isFailed) && instruction && (
                 <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">{instruction}</p>
               )}
