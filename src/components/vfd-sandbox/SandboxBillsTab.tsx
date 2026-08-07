@@ -852,9 +852,19 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
 
             {/* Total */}
             {Number(amount) > 0 && (
-              <div className="bg-primary/5 border border-primary/15 rounded-xl p-4">
+              <div className="bg-primary/5 border border-primary/15 rounded-xl p-4 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Total</span>
+                  <span className="text-xs text-muted-foreground">Bill amount</span>
+                  <span className="text-sm font-medium text-foreground">₦{Number(amount).toLocaleString()}</span>
+                </div>
+                {convenienceFee > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Convenience fee</span>
+                    <span className="text-sm font-medium text-warning">₦{convenienceFee.toLocaleString()}</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between border-t border-border/50 pt-2">
+                  <span className="text-sm text-muted-foreground">Total to debit</span>
                   <span className="text-xl font-bold text-foreground">
                     ₦{(Number(amount) + convenienceFee).toLocaleString()}
                   </span>
