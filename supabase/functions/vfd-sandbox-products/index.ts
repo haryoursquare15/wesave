@@ -3119,22 +3119,30 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
     `message=${String((data as Record<string, unknown>)?.message ?? "").slice(0, 160)}`,
   );
 
-  if (isProduction && (effStatus === "09" || effStatus === null)) {
-    const statusResp = await fetchVfdBillArtefact(reference);
-    const statusEff = effectiveBillStatus(statusResp);
-    if (statusEff === "00") {
-      data = statusResp;
-      effStatus = "00";
-    } else if (statusEff && statusEff !== "09") {
-      data = statusResp;
+  let payOutcome = classifyBillStatus(effStatus);
+  if (isProduction && (payOutcome === "pending" || payOutcome === "unknown")) {
+    const lookup = await lookupVfdBillStatus(reference);
+    const statusEff = effectiveBillStatus(lookup.body);
+    const statusOutcome = classifyBillStatus(statusEff);
+    if (lookup.lookup_ok && (statusOutcome === "success" || statusOutcome === "failed" || statusOutcome === "reversed")) {
+      data = lookup.body as Record<string, unknown>;
       effStatus = statusEff;
+      payOutcome = statusOutcome;
     } else {
+      // Either still processing at the biller, or we could not reach VFD. Both
+      // are held (not refunded, not settled) and left to the reconciler.
       isPending = true;
+      payOutcome = "pending";
     }
+    console.log(
+      `[bills][pay] ref=${reference} request_id=${requestId} post_tsq lookup_ok=${lookup.lookup_ok} ` +
+      `tsq_request_id=${lookup.request_id} status=${String(statusEff ?? "")} outcome=${payOutcome}`,
+    );
   }
   const isSuccess = isProduction
-    ? (resp.ok && (effStatus === "00" || isPending))
+    ? (payOutcome === "success" || isPending)
     : (resp.ok || effStatus === "00" || effStatus === "99" || !!data);
+
 
   if (isSuccess) {
     const db = getSupabaseAdmin();
