@@ -4119,6 +4119,7 @@ async function handleRunDueRecurringBills() {
           status: "completed",
           expires_at: computeBillExpiry(r.category, r.payment_item_name),
           recurring_bill_id: r.id,
+          raw_response: { via: "recurring", validation: validationAudit(recGate.record) },
         });
         await sendNotification(
           r.user_id,
