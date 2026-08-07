@@ -1958,8 +1958,8 @@ async function handleTransfer(
           to_account: toAccount,
           bank_code: body.bankCode as string,
           beneficiary_name: body.beneficiaryName ?? null,
-          vfd_reference: vfdTxnId,
-          session_id: sessionId,
+          vfd_reference: resolvedVfdRef,
+          session_id: resolvedSessionId,
         },
       });
       const senderWdRes = senderWd as { success?: boolean; error?: string } | null;
