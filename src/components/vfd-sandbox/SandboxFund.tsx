@@ -2,7 +2,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft, CreditCard, RefreshCw, CheckCircle2, Building2,
-  Smartphone, QrCode, Copy, Check, Banknote, ChevronRight, TestTube,
+  Smartphone, QrCode, Copy, Check, Banknote, ChevronRight,
   ArrowDownLeft, Info,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
