@@ -3196,7 +3196,7 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   const reference = `wesave-bill-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const requestId = crypto.randomUUID();
   const payCategory = ((body.category as string) || "").toLowerCase();
-  const payItemName = ((body.paymentItemName as string) || "").toLowerCase();
+  void payCategory;
   // VFD's /pay spec lists phoneNumber as a required field for every bill, not
   // only telco items: it is the contact/delivery MSISDN the biller notifies.
   // Resolve in order: explicit input → phone-shaped customerId → the customer's
