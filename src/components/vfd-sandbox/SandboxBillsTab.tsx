@@ -885,7 +885,7 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
                     Processing...
                   </>
                 ) : (
-                  `Pay ₦${Number(amount || 0).toLocaleString()}`
+                  `Pay ₦${(Number(amount || 0) + convenienceFee).toLocaleString()}`
                 )}
               </Button>
               <Button
