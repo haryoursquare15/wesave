@@ -7414,6 +7414,46 @@ export type Database = {
         Args: { _group_id: string }
         Returns: number
       }
+      get_own_group_mandate: {
+        Args: { _group_id: string }
+        Returns: {
+          mandate_authorized_at: string
+          mandate_code: string
+          mandate_end_date: string
+          mandate_expires_at: string
+          mandate_frequency: string
+          mandate_nibss_account: string
+          mandate_nibss_message: string
+          mandate_payer_account_number: string
+          mandate_payer_address: string
+          mandate_payer_bank_code: string
+          mandate_payer_email: string
+          mandate_payer_phone: string
+          mandate_reference: string
+          mandate_start_date: string
+          mandate_status: string
+        }[]
+      }
+      get_own_target_mandate: {
+        Args: { _target_id: string }
+        Returns: {
+          mandate_authorized_at: string
+          mandate_code: string
+          mandate_end_date: string
+          mandate_expires_at: string
+          mandate_frequency: string
+          mandate_nibss_account: string
+          mandate_nibss_message: string
+          mandate_payer_account_number: string
+          mandate_payer_address: string
+          mandate_payer_bank_code: string
+          mandate_payer_email: string
+          mandate_payer_phone: string
+          mandate_reference: string
+          mandate_start_date: string
+          mandate_status: string
+        }[]
+      }
       get_own_vfd_client_pii: {
         Args: never
         Returns: {
