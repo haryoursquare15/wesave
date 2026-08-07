@@ -2099,7 +2099,7 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
     convenience_fee: 0,
     status: "completed",
     expires_at: expiresAt,
-    raw_response: { via: "splitpay", split_id: split.id, vfd: vfdData },
+    raw_response: { via: "splitpay", split_id: split.id, vfd: vfdData, validation: validationAudit(splitValidation) },
   });
 
   // Note: per-share debits are already recorded in vfd_sandbox_transactions by handlePaySplit
