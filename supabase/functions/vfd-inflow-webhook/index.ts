@@ -56,26 +56,26 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return ok({ error: "Method not allowed" }, 405);
 
-  const url = new URL(req.url);
-  const provided =
-    req.headers.get("x-webhook-secret") ||
-    req.headers.get("X-Webhook-Secret") ||
-    url.searchParams.get("secret") ||
-    "";
-  if (!WEBHOOK_SECRET || provided !== WEBHOOK_SECRET) {
-    return ok({ error: "Unauthorized" }, 401);
-  }
+  const db = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } });
 
-  let payload: Record<string, unknown> = {};
-  try { payload = await req.json(); } catch { payload = {}; }
+  // Multi-layer verification: constant-time shared secret, optional HMAC-SHA256
+  // signature over the raw body, and replay-window enforcement. Every rejection
+  // is logged to vfd_sandbox_webhook_logs + edge logs for probe alerting.
+  const verified = await verifyWebhookRequest(req, {
+    secret: WEBHOOK_SECRET,
+    db,
+    source: "vfd-inflow-webhook",
+  });
+  if (!verified.ok) {
+    return ok({ error: "Unauthorized" }, verified.status);
+  }
+  const payload = verified.payload;
   const p = payload as Record<string, unknown> & { data?: Record<string, unknown> };
   const root = (p.data && typeof p.data === "object") ? p.data as Record<string, unknown> : p;
   const get = (k: string): string => {
     const v = root[k];
     return v == null ? "" : String(v);
   };
-
-  const db = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } });
 
   // Raw audit trail
   await db.from("vfd_sandbox_webhook_logs").insert({
