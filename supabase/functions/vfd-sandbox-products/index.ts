@@ -3232,6 +3232,23 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
         },
       };
     }
+    // Provider trace kept on the receipt so any VFD dispute can be traced to the
+    // exact request. No credentials or customer PII are stored here.
+    delivery = {
+      ...delivery,
+      delivery_detail: {
+        ...delivery.delivery_detail,
+        vfd: {
+          request_id: requestId,
+          http_status: resp.status,
+          status_code: effStatus,
+          outcome: payOutcome,
+          message: String((data as Record<string, unknown>)?.message ?? "").slice(0, 200),
+          msisdn_sent: !!resolvedPhone,
+        },
+      },
+    };
+
 
     await db.from("vfd_sandbox_bill_receipts").insert({
       delivery_type: delivery.delivery_type,
