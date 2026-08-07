@@ -4023,11 +4023,22 @@ async function handleSendBillReminders() {
 async function handleBillsStatus(body: Record<string, unknown>) {
   const { transactionId } = body as { transactionId: string };
   if (!transactionId) return jsonResponse({ error: "transactionId required" }, 400);
-  const token = await getVfdAccessToken();
-  if (!token) return jsonResponse({ error: "VFD auth failed" }, 500);
-  const resp = await vfdFetch(`${getBillsBase()}/transactionStatus?transactionId=${encodeURIComponent(transactionId)}`, { headers: { AccessToken: token } });
-  return jsonResponse({ data: await safeJson(resp) });
+  const lookup = await lookupVfdBillStatus(transactionId);
+  if (!lookup.lookup_ok) {
+    return jsonResponse(
+      { error: "The bill status could not be retrieved right now.", lookup_ok: false, request_id: lookup.request_id },
+      502,
+    );
+  }
+  const eff = effectiveBillStatus(lookup.body);
+  return jsonResponse({
+    data: lookup.body,
+    status_code: eff,
+    outcome: classifyBillStatus(eff),
+    request_id: lookup.request_id,
+  });
 }
+
 
 // =============================================
 // VIRTUAL CARDS (VFD BaaS)
