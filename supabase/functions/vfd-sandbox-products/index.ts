@@ -2400,7 +2400,12 @@ async function handleRemoveSplitParticipant(userId: string, body: Record<string,
       ? (participantUserId === split.creator_id ? Number(split.platform_fee || 100) : 0)
       : (storedFeePerPerson || (Math.ceil(100 / split.split_count * 100) / 100));
     const refundAmount = Number(participant.amount) + feeShare;
-    await creditWallet(participantUserId, refundAmount);
+    const refunded = await ledgerSplitRefund(
+      participantUserId, splitId, refundAmount,
+      `splitpay-${splitId}-${participantUserId}-REFUND`,
+      { reason: "participant_removed", split_title: split.title },
+    );
+    if (!refunded) return jsonResponse({ error: "Could not refund this participant. Please try again." }, 400);
     await db.from("vfd_sandbox_splits").update({
       paid_count: Math.max(0, split.paid_count - 1),
       updated_at: new Date().toISOString(),
