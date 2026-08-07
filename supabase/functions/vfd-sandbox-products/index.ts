@@ -3424,9 +3424,11 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
     const billerName = (body.billerName as string) || billerId.toUpperCase();
     const paymentItemName = (body.paymentItemName as string) || null;
     const recurringBillId = (body.recurring_bill_id as string) || null;
-    const description = `Bill Payment: ${billerName} - ${customerId}`;
+    const description = convenienceFee > 0
+      ? `Bill Payment: ${billerName} - ${customerId} (incl. ₦${convenienceFee.toLocaleString()} fee)`
+      : `Bill Payment: ${billerName} - ${customerId}`;
     await db.from("vfd_sandbox_transactions").insert({
-      user_id: userId, transaction_type: "debit", amount: numAmount,
+      user_id: userId, transaction_type: "debit", amount: totalDebit,
       description, reference, status: "completed",
     });
 
