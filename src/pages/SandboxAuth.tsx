@@ -60,7 +60,7 @@ export default function SandboxAuth() {
         }
         toast.success("Account ready. Welcome to Vestara!");
         sessionStorage.setItem("vestara_sandbox_signed_in", "1");
-        navigate("/vfd-sandbox");
+        navigate("/app");
       } else {
         const { error } = await signIn(form.email, form.password);
         if (error) {
@@ -69,7 +69,7 @@ export default function SandboxAuth() {
         }
         toast.success("Welcome back to Vestara");
         sessionStorage.setItem("vestara_sandbox_signed_in", "1");
-        navigate("/vfd-sandbox");
+        navigate("/app");
       }
     } finally {
       setIsLoading(false);
@@ -95,7 +95,7 @@ export default function SandboxAuth() {
         className="w-full max-w-md"
       >
         <Link
-          to="/vfd-sandbox"
+          to="/app"
           className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -182,7 +182,7 @@ export default function SandboxAuth() {
             {!isSignUp && (
               <div className="flex justify-end -mt-2">
                 <Link
-                  to="/vfd-sandbox/forgot-password"
+                  to="/password/forgot"
                   className="text-xs text-primary hover:underline"
                 >
                   Forgot password?

@@ -54,7 +54,7 @@ export function SandboxAuthProvider({ children }: { children: ReactNode }) {
       email,
       password,
       options: {
-        emailRedirectTo: `${window.location.origin}/vfd-sandbox`,
+        emailRedirectTo: `${window.location.origin}/app`,
         data: { full_name: fullName, sandbox_account: true },
       },
     });

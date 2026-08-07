@@ -69,7 +69,7 @@ function VfdSandboxInner() {
   const [initialSavingsProduct, setInitialSavingsProduct] = useState<string | null>(null);
   const [banks, setBanks] = useState<Array<{ code: string; name: string }>>([]);
 
-  // Inactivity sign-out (2m foreground / 5m background) → /vfd-sandbox/auth
+  // Inactivity sign-out (2m foreground / 5m background) → /signin
   useSandboxSessionEnforcement({ enabled: !!user });
 
   // Vestara-driven balance (single source of truth)
@@ -89,11 +89,11 @@ function VfdSandboxInner() {
   useEffect(() => {
     if (authLoading) return;
     if (!user) {
-      navigate("/vfd-sandbox/auth");
+      navigate("/signin");
       return;
     }
     if (!sessionStorage.getItem("vestara_sandbox_signed_in")) {
-      void signOut().finally(() => navigate("/vfd-sandbox/auth"));
+      void signOut().finally(() => navigate("/signin"));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, authLoading]);
@@ -471,7 +471,7 @@ function VfdSandboxInner() {
           size="sm"
           onClick={async () => {
             await signOut();
-            navigate("/vfd-sandbox/auth");
+            navigate("/signin");
           }}
           className="h-7 text-xs"
         >

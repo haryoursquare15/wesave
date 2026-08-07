@@ -201,10 +201,10 @@ export default function VestaraLanding() {
           </a>
           <div className="flex items-center gap-2">
             <Button asChild variant="ghost" size="sm">
-              <a href="/vfd-sandbox/auth">Sign in</a>
+              <a href="/signin">Sign in</a>
             </Button>
             <Button asChild size="sm">
-              <a href="/vfd-sandbox/auth?mode=signup">Get started</a>
+              <a href="/signin?mode=signup">Get started</a>
             </Button>
           </div>
         </div>
@@ -255,12 +255,12 @@ export default function VestaraLanding() {
               className="mt-8 flex flex-col sm:flex-row gap-3 justify-center"
             >
               <Button asChild size="lg" className="gap-2">
-                <a href="/vfd-sandbox/auth?mode=signup">
+                <a href="/signin?mode=signup">
                   Create your free account <ArrowRight className="h-4 w-4" />
                 </a>
               </Button>
               <Button asChild size="lg" variant="outline">
-                <a href="/vfd-sandbox/auth">Sign in</a>
+                <a href="/signin">Sign in</a>
               </Button>
             </motion.div>
             <div className="mt-8 flex flex-wrap justify-center gap-4 text-xs text-muted-foreground">
@@ -365,7 +365,7 @@ export default function VestaraLanding() {
           </p>
           <div className="relative mt-8 flex flex-col sm:flex-row gap-3 justify-center">
             <Button asChild size="lg" variant="secondary" className="gap-2">
-              <a href="/vfd-sandbox/auth?mode=signup">
+              <a href="/signin?mode=signup">
                 Create your free account <ArrowRight className="h-4 w-4" />
               </a>
             </Button>
@@ -375,7 +375,7 @@ export default function VestaraLanding() {
               variant="outline"
               className="bg-transparent border-primary-foreground/40 text-primary-foreground hover:bg-primary-foreground/10"
             >
-              <a href="/vfd-sandbox/auth">Sign in</a>
+              <a href="/signin">Sign in</a>
             </Button>
           </div>
         </div>

@@ -19,7 +19,7 @@ export default function SandboxForgotPassword() {
     setLoading(true);
     try {
       const { error } = await sandboxSupabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/vfd-sandbox/reset-password`,
+        redirectTo: `${window.location.origin}/password/reset`,
       });
       if (error) {
         toast.error(getUserFriendlyError(error.message));
@@ -40,7 +40,7 @@ export default function SandboxForgotPassword() {
         className="w-full max-w-md"
       >
         <Link
-          to="/vfd-sandbox/auth"
+          to="/signin"
           className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -75,7 +75,7 @@ export default function SandboxForgotPassword() {
                 .
               </p>
               <Button asChild variant="outline" className="w-full">
-                <Link to="/vfd-sandbox/auth">Return to sign in</Link>
+                <Link to="/signin">Return to sign in</Link>
               </Button>
             </div>
           ) : (

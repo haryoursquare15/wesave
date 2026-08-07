@@ -48,7 +48,7 @@ function SandboxInviteInner() {
   const handleJoin = async () => {
     if (!user) {
       sessionStorage.setItem("pending_sandbox_invite_token", token || "");
-      navigate("/vfd-sandbox/auth");
+      navigate("/signin");
       return;
     }
     setJoining(true);
@@ -60,7 +60,7 @@ function SandboxInviteInner() {
     }
     setJoined(true);
     toast.success("You've joined the group!");
-    setTimeout(() => navigate("/vfd-sandbox"), 1500);
+    setTimeout(() => navigate("/app"), 1500);
   };
 
   if (authLoading || validating) {
@@ -84,7 +84,7 @@ function SandboxInviteInner() {
             <p className="text-muted-foreground mb-6">
               {validation?.error_message || "This invitation link is invalid or has expired."}
             </p>
-            <Button onClick={() => navigate("/vfd-sandbox")} className="w-full">
+            <Button onClick={() => navigate("/app")} className="w-full">
               Go to Vestara
             </Button>
           </CardContent>
@@ -177,7 +177,7 @@ function PendingInviteHandler({ children }: { children: React.ReactNode }) {
     const pending = sessionStorage.getItem("pending_sandbox_invite_token");
     if (user && pending) {
       sessionStorage.removeItem("pending_sandbox_invite_token");
-      navigate(`/vfd-sandbox/invite/${pending}`, { replace: true });
+      navigate(`/join/${pending}`, { replace: true });
     }
   }, [user, navigate]);
   return <>{children}</>;
