@@ -3210,6 +3210,20 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   const numAmount = Number(amount);
   if (isNaN(numAmount) || numAmount <= 0) return jsonResponse({ error: "Invalid amount" }, 400);
 
+  // Biller-specific rules published by VFD: IBEDC (Band A) will not process a
+  // vend below ₦5,000, so reject it up-front instead of losing the money to a
+  // failed purchase at the biller.
+  const billerHay = `${billerId} ${(body.billerName as string) || ""} ${(body.paymentItemName as string) || ""}`.toLowerCase();
+  if (/ibedc|ibadan/.test(billerHay) && numAmount < 5000) {
+    return jsonResponse({
+      error: "IBEDC requires a minimum purchase of ₦5,000. Please enter ₦5,000 or more.",
+      code: "BILLER_MINIMUM_AMOUNT",
+      minimum: 5000,
+    }, 400);
+  }
+
+
+
   const bal = await ensureBalanceRow(userId);
   const available = bal.total_balance - bal.locked_balance - bal.savings_balance;
   if (numAmount > available) {
@@ -3235,6 +3249,15 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   // Resolve in order: explicit input → phone-shaped customerId → the customer's
   // registered phone on their Vestara account.
   const resolvedPhone = await resolveBillMsisdn(userId, phoneNumber, customerId);
+  // VFD documents phoneNumber as mandatory for Ikeja Electric (IKEDC).
+  if (!resolvedPhone && /ikedc|ikeja/.test(billerHay)) {
+    return jsonResponse({
+      error: "Ikeja Electric requires a phone number for this payment. Please enter the customer's phone number.",
+      code: "PHONE_NUMBER_REQUIRED",
+    }, 400);
+  }
+
+
 
   // --- Backend validation gate (never trusts the frontend's verdict) ---
   const payIdentity: BillIdentity = {
@@ -3653,7 +3676,12 @@ const VFD_BILL_STATUS_MAP: Record<string, BillOutcome> = {
   COMPLETED: "success",
   "09": "pending",
   "91": "pending",
+  // VFD /transactionStatus returns 108 "No Transaction!" when the reference is
+  // not (yet) known to the biller store. Per the spec only 99 warrants a
+  // reversal, so 108 is held as pending and re-queried by the reconciler.
+  "108": "pending",
   PENDING: "pending",
+
   PROCESSING: "pending",
   "01": "failed",
   "06": "failed",
@@ -3702,6 +3730,13 @@ function deriveBillDelivery(params: {
 
   if (isElectricity && isPrepaid) {
     const token = vfdToken ? formatMeterToken(vfdToken) : null;
+    // First-time vends on some discos (notably AEDC) also return two key-change
+    // tokens. They must be entered on the meter BEFORE the credit token.
+    const kct1Raw = pickField(inner, ["kct1", "keychangetoken1", "kct_1"]) || pickField(raw, ["kct1", "keychangetoken1", "kct_1"]);
+    const kct2Raw = pickField(inner, ["kct2", "keychangetoken2", "kct_2"]) || pickField(raw, ["kct2", "keychangetoken2", "kct_2"]);
+    const kct1 = kct1Raw ? formatMeterToken(kct1Raw) : null;
+    const kct2 = kct2Raw ? formatMeterToken(kct2Raw) : null;
+    const hasKct = !!(kct1 || kct2);
     return {
       delivery_type: "token",
       delivery_token: token,
@@ -3709,13 +3744,17 @@ function deriveBillDelivery(params: {
       delivery_status: token ? "delivered" : "pending",
       delivery_detail: {
         instruction: token
-          ? "Enter this one-time token on your prepaid meter keypad to load the units."
+          ? (hasKct
+            ? "Enter the two key-change tokens (KCT1 then KCT2) on your meter first, then enter the credit token to load the units."
+            : "Enter this one-time token on your prepaid meter keypad to load the units.")
           : "Your payment was received. The meter token from the disco has not been returned yet — it will appear here as soon as the biller releases it.",
         meter_type: "prepaid",
         token_source: token ? "vfd" : null,
+        ...(hasKct ? { kct1, kct2 } : {}),
       },
     };
   }
+
 
 
   if (isElectricity) {
