@@ -55,7 +55,6 @@ export function SandboxFund({
   const [channel, setChannel] = useState<FundingChannel>("select");
   const [amount, setAmount] = useState("");
   const [copied, setCopied] = useState<string | null>(null);
-  const canFund = parseFloat(amount) > 0;
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -69,7 +68,7 @@ export function SandboxFund({
   };
 
   return (
-    <div className="space-y-5" aria-busy={loading || funding}>
+    <div className="space-y-5" aria-busy={loading}>
       {/* Header */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={goBack}>
@@ -299,30 +298,5 @@ function PresetGrid({ amount, setAmount }: { amount: string; setAmount: (v: stri
         </button>
       ))}
     </div>
-  );
-}
-
-function FundButtonContent({
-  loading,
-  funded,
-  amount,
-  label,
-}: {
-  loading: boolean;
-  funded: boolean;
-  amount: string;
-  label: string;
-}) {
-  if (funded)
-    return <><CheckCircle2 className="h-4 w-4 mr-2" /> Funded!</>;
-  if (loading)
-    return <><RefreshCw className="h-4 w-4 animate-spin mr-2" /> Processing...</>;
-
-  const amt = parseFloat(amount);
-  const formatted = !isNaN(amt) && amt > 0 ? ` ₦${amt.toLocaleString()}` : "";
-  return (
-    <>
-      <Banknote className="h-4 w-4 mr-2" /> {label}{formatted}
-    </>
   );
 }

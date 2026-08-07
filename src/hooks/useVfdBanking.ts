@@ -251,12 +251,6 @@ export function useVfdBanking() {
     [invokeVfd]
   );
 
-  const sandboxCredit = useCallback(
-    (accountNo: string, amount: number) =>
-      invokeVfd("sandbox_credit", { accountNo, amount }),
-    [invokeVfd]
-  );
-
   // Lock Funds methods
   const getLockConfigs = useCallback(() => invokeVfd("get_lock_configs"), [invokeVfd]);
   const getUserBalance = useCallback(() => invokeVfd("get_user_balance"), [invokeVfd]);
@@ -319,7 +313,6 @@ export function useVfdBanking() {
     validateBeneficiary,
     transfer,
     quoteTransfer,
-    sandboxCredit,
     getLockConfigs,
     getUserBalance,
     syncBalance,
