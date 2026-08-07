@@ -85,7 +85,7 @@ function SandboxInviteInner() {
               {validation?.error_message || "This invitation link is invalid or has expired."}
             </p>
             <Button onClick={() => navigate("/vfd-sandbox")} className="w-full">
-              Go to Sandbox
+              Go to Vestara
             </Button>
           </CardContent>
         </Card>
@@ -100,7 +100,7 @@ function SandboxInviteInner() {
           <CardContent className="pt-6 text-center">
             <CheckCircle className="h-16 w-16 text-success mx-auto mb-4" />
             <h2 className="text-xl font-bold text-foreground mb-2">Welcome to the Group!</h2>
-            <p className="text-muted-foreground">Redirecting you to the sandbox...</p>
+            <p className="text-muted-foreground">Taking you to your dashboard...</p>
           </CardContent>
         </Card>
       </div>
@@ -154,7 +154,7 @@ function SandboxInviteInner() {
               <div className="space-y-2">
                 <Button className="w-full" onClick={handleJoin}>Sign In / Sign Up to Join</Button>
                 <p className="text-xs text-center text-muted-foreground">
-                  You need a sandbox account to join this group
+                  You need a Vestara account to join this group
                 </p>
               </div>
             ) : (

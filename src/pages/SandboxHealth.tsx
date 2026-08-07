@@ -96,7 +96,7 @@ export default function SandboxHealth() {
               <Activity className="h-5 w-5" />
             </div>
             <div>
-              <h1 className="text-xl font-semibold tracking-tight">Sandbox Flow Health</h1>
+              <h1 className="text-xl font-semibold tracking-tight">Platform Flow Health</h1>
               <p className="text-xs text-muted-foreground">
                 {lastCheck
                   ? `Last check ${formatDistanceToNow(new Date(lastCheck), { addSuffix: true })}`

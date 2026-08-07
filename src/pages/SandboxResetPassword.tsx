@@ -71,7 +71,7 @@ export default function SandboxResetPassword() {
           className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          Back to sandbox sign in
+          Back to sign in
         </Link>
 
         <div className="bg-card border border-border rounded-2xl shadow-xl p-8">
@@ -81,7 +81,7 @@ export default function SandboxResetPassword() {
             </div>
             <div>
               <h1 className="text-xl font-bold text-foreground">Set a new password</h1>
-              <p className="text-xs text-muted-foreground">Sandbox account</p>
+              <p className="text-xs text-muted-foreground">Vestara account</p>
             </div>
           </div>
 

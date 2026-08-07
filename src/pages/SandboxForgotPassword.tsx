@@ -44,7 +44,7 @@ export default function SandboxForgotPassword() {
           className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          Back to sandbox sign in
+          Back to sign in
         </Link>
 
         <div className="bg-card border border-border rounded-2xl shadow-xl p-8">
@@ -53,8 +53,8 @@ export default function SandboxForgotPassword() {
               <FlaskConical className="w-6 h-6 text-primary" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-foreground">Reset sandbox password</h1>
-              <p className="text-xs text-muted-foreground">Sandbox account only</p>
+              <h1 className="text-xl font-bold text-foreground">Reset your password</h1>
+              <p className="text-xs text-muted-foreground">Vestara account</p>
             </div>
           </div>
 
@@ -64,7 +64,7 @@ export default function SandboxForgotPassword() {
                 <Mail className="h-7 w-7 text-primary" />
               </div>
               <p className="text-sm text-muted-foreground mb-4">
-                If a sandbox account exists for <strong className="text-foreground">{email}</strong>,
+                If an account exists for <strong className="text-foreground">{email}</strong>,
                 we've sent a reset link.
               </p>
               <p className="text-xs text-muted-foreground mb-6">
@@ -81,8 +81,8 @@ export default function SandboxForgotPassword() {
           ) : (
             <>
               <p className="text-sm text-muted-foreground mb-6">
-                Enter your sandbox email and we'll send you a link to set a new password. This is
-                independent of your main Vestara account.
+                Enter the email on your Vestara account and we'll send you a link to set a new
+                password.
               </p>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
@@ -94,7 +94,7 @@ export default function SandboxForgotPassword() {
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder="test1@sandbox.local"
+                      placeholder="you@example.com"
                       className="pl-10"
                       required
                     />
