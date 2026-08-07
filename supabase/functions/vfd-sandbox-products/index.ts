@@ -2962,17 +2962,30 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   // VFD "09" means the biller accepted but has not confirmed yet: re-query the
   // transaction once, and if still unresolved treat it as an accepted-pending
   // purchase (debited, delivery pending) — never as a hard failure.
+  //
+  // IMPORTANT: on /transactionStatus the envelope `status` only reports whether
+  // the *lookup* succeeded ("00" = Successful Transaction Retrieval). The real
+  // biller outcome lives in `data.transactionStatus`. Reading the envelope alone
+  // marked pending purchases as delivered — always use the effective status.
   const isProduction = (Deno.env.get("VFD_MODE") || "sandbox").toLowerCase() === "production";
   let isPending = false;
-  if (isProduction && data?.status === "09") {
+  let effStatus = effectiveBillStatus(data as Record<string, unknown> | null);
+  if (isProduction && (effStatus === "09" || effStatus === null)) {
     const statusResp = await fetchVfdBillArtefact(reference);
-    if (statusResp?.status === "00") data = statusResp;
-    else if (statusResp && statusResp.status && statusResp.status !== "09") data = statusResp;
-    else isPending = true;
+    const statusEff = effectiveBillStatus(statusResp);
+    if (statusEff === "00") {
+      data = statusResp;
+      effStatus = "00";
+    } else if (statusEff && statusEff !== "09") {
+      data = statusResp;
+      effStatus = statusEff;
+    } else {
+      isPending = true;
+    }
   }
   const isSuccess = isProduction
-    ? (resp.ok && (data?.status === "00" || isPending))
-    : (resp.ok || data?.status === "00" || data?.status === "99" || !!data);
+    ? (resp.ok && (effStatus === "00" || isPending))
+    : (resp.ok || effStatus === "00" || effStatus === "99" || !!data);
 
   if (isSuccess) {
     const db = getSupabaseAdmin();
@@ -3191,6 +3204,22 @@ async function fetchVfdBillArtefact(reference: string): Promise<Record<string, u
   }
 }
 
+/**
+ * Effective biller outcome for a VFD bills response.
+ * `/pay` reports the outcome on the envelope `status`, while
+ * `/transactionStatus` puts the lookup result on `status` ("00" = retrieval
+ * succeeded) and the real biller outcome on `data.transactionStatus`.
+ * Always prefer the inner value when present.
+ */
+function effectiveBillStatus(resp: Record<string, unknown> | null | undefined): string | null {
+  if (!resp) return null;
+  const inner = (resp.data && typeof resp.data === "object" ? resp.data : {}) as Record<string, unknown>;
+  const innerStatus = pickField(inner, ["transactionstatus", "txnstatus"]);
+  if (innerStatus) return innerStatus;
+  const outer = resp.status;
+  return outer === null || outer === undefined || String(outer).trim() === "" ? null : String(outer).trim();
+}
+
 function deriveBillDelivery(params: {
   category: string;
   billerName: string;
@@ -3353,6 +3382,96 @@ async function handleListReceipts(userId: string, body: Record<string, unknown>)
     .select("*").eq("user_id", userId).order("paid_at", { ascending: false }).limit(limit);
   if (error) return jsonResponse({ error: error.message }, 500);
   return jsonResponse({ data: data || [] });
+}
+
+/**
+ * Re-queries VFD for every bill receipt still awaiting delivery and closes it out:
+ *  - biller confirmed ("00")  -> receipt completed, artefact stored, customer notified
+ *  - biller failed (anything else, not "09") -> wallet refunded, receipt failed, customer notified
+ *  - still "09" -> left pending for the next sweep
+ */
+async function handleReconcilePendingBills(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const limit = Math.min(Number(body.limit) || 25, 100);
+  const { data: rows, error } = await db.from("vfd_sandbox_bill_receipts")
+    .select("*")
+    .eq("user_id", userId)
+    .or("status.eq.pending,delivery_status.eq.pending")
+    .order("paid_at", { ascending: false })
+    .limit(limit);
+  if (error) return jsonResponse({ error: error.message }, 500);
+
+  const result = { scanned: 0, delivered: 0, refunded: 0, still_pending: 0 };
+
+  for (const r of (rows || []) as Record<string, any>[]) {
+    result.scanned++;
+    const statusResp = await fetchVfdBillArtefact(r.reference);
+    const eff = effectiveBillStatus(statusResp);
+
+    if (eff === "00") {
+      const delivery = deriveBillDelivery({
+        category: r.category || "",
+        billerName: r.biller_name || "",
+        paymentItemName: r.payment_item_name,
+        amount: Number(r.amount),
+        reference: r.reference,
+        vfdResponse: statusResp,
+      });
+      await db.from("vfd_sandbox_bill_receipts").update({
+        status: "completed",
+        delivery_type: delivery.delivery_type,
+        delivery_token: delivery.delivery_token,
+        delivery_units: delivery.delivery_units,
+        delivery_status: delivery.delivery_status,
+        delivery_detail: delivery.delivery_detail,
+        raw_response: statusResp,
+      }).eq("id", r.id);
+      await sendNotification(
+        userId,
+        "Bill delivered",
+        `${r.biller_name} • ${r.customer_id} — ₦${Number(r.amount).toLocaleString()} confirmed by the biller.${delivery.delivery_token ? ` Token/PIN: ${delivery.delivery_token}.` : ""} Ref: ${r.reference}`,
+        "bill_payment",
+      );
+      result.delivered++;
+    } else if (eff && eff !== "09") {
+      // Genuine biller failure — return the money.
+      const refundRef = `${r.reference}-REFUND`;
+      const { data: dep, error: depErr } = await db.rpc("vestara_deposit", {
+        _user_id: userId,
+        _amount: Number(r.amount),
+        _reference: refundRef,
+        _metadata: { source: "bill_payment_refund", original_reference: r.reference, vfd_status: eff },
+      });
+      const depOk = (dep as { success?: boolean } | null)?.success;
+      if (depErr || !depOk) {
+        console.error("[bills] refund failed", r.reference, depErr || dep);
+        result.still_pending++;
+        continue;
+      }
+      await db.from("vfd_sandbox_transactions").insert({
+        user_id: userId, transaction_type: "credit", amount: Number(r.amount),
+        description: `Refund: failed bill payment ${r.biller_name} - ${r.customer_id}`,
+        reference: refundRef, status: "completed",
+      });
+      await db.from("vfd_sandbox_bill_receipts").update({
+        status: "failed",
+        delivery_status: "failed",
+        delivery_detail: { instruction: "The biller could not complete this purchase. Your wallet has been refunded in full." },
+        raw_response: statusResp,
+      }).eq("id", r.id);
+      await sendNotification(
+        userId,
+        "Bill payment refunded",
+        `${r.biller_name} • ${r.customer_id} — the biller could not complete this purchase, so ₦${Number(r.amount).toLocaleString()} has been refunded to your wallet. Ref: ${r.reference}`,
+        "bill_payment",
+      );
+      result.refunded++;
+    } else {
+      result.still_pending++;
+    }
+  }
+
+  return jsonResponse({ data: result });
 }
 
 // Compute next run timestamp in WAT (UTC+1). Hour stored is WAT hour.
@@ -5774,6 +5893,7 @@ Deno.serve(async (req) => {
       case "save_bill_beneficiary": return await handleSaveBeneficiary(userId, body);
       case "delete_bill_beneficiary": return await handleDeleteBeneficiary(userId, body);
       case "list_bill_receipts": return await handleListReceipts(userId, body);
+      case "reconcile_pending_bills": return await handleReconcilePendingBills(userId, body);
       case "create_recurring_bill": return await handleCreateRecurringBill(userId, body);
       case "list_recurring_bills": return await handleListRecurringBills(userId);
       case "update_recurring_bill": return await handleUpdateRecurringBill(userId, body);
