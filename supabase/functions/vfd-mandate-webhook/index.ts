@@ -10,6 +10,7 @@
 // retries on non-2xx and we don't want duplicate retries clobbering state.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { timingSafeEqual, logAuthFailure } from "../_shared/webhook-security.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

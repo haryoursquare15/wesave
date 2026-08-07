@@ -12,6 +12,7 @@
 // Always returns 200 (except on auth failure) so VFD does not retry-storm.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { verifyWebhookRequest } from "../_shared/webhook-security.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
