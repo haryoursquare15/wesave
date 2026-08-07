@@ -1,4 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { useIsAdmin } from "@/hooks/useAdmin";
+import { applyNoIndex } from "@/lib/adminRoutes";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +31,9 @@ const STATUS_META: Record<string, { label: string; className: string; Icon: any 
 
 export default function SandboxHealth() {
   const { toast } = useToast();
+  const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
+  const { isAdmin, loading: adminLoading } = useIsAdmin();
   const [rows, setRows] = useState<FlowRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
@@ -47,8 +54,25 @@ export default function SandboxHealth() {
   };
 
   useEffect(() => {
-    load();
+    applyNoIndex();
   }, []);
+
+  // Staff-only page: unauthenticated users go to sign-in, non-admins are bounced out.
+  useEffect(() => {
+    if (authLoading || adminLoading) return;
+    if (!user) {
+      navigate("/auth", { replace: true });
+      return;
+    }
+    if (!isAdmin) {
+      toast({ title: "Not authorised", description: "This page is restricted to Vestara staff.", variant: "destructive" });
+      navigate("/", { replace: true });
+    }
+  }, [user, isAdmin, authLoading, adminLoading, navigate, toast]);
+
+  useEffect(() => {
+    if (isAdmin) load();
+  }, [isAdmin]);
 
   // Latest entry per flow
   const latest = useMemo(() => {
@@ -86,6 +110,15 @@ export default function SandboxHealth() {
   };
 
   const overallMeta = STATUS_META[overall] ?? STATUS_META.idle;
+
+  if (authLoading || adminLoading) {
+    return (
+      <div className="min-h-[100dvh] flex items-center justify-center bg-background">
+        <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+  if (!isAdmin) return null;
 
   return (
     <div className="min-h-[100dvh] bg-background pb-12">
