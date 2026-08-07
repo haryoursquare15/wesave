@@ -3111,6 +3111,19 @@ async function gateBillPayment(args: {
   return result;
 }
 
+/** Exposes the backend policy so the UI never keeps its own category list. */
+function handleBillsValidationPolicy(body: Record<string, unknown>) {
+  const policy = billCategoryRequiresValidation({
+    category: (body.category as string) || null,
+    billerId: (body.billerId as string) || null,
+    billerName: (body.billerName as string) || null,
+    paymentItemName: (body.paymentItemName as string) || null,
+    productId: (body.productId as string) || null,
+    divisionId: (body.divisionId as string) || null,
+  });
+  return jsonResponse({ data: policy });
+}
+
 /** Compact record persisted alongside the receipt for reconciliation. */
 function validationAudit(r: ValidationRecord) {
   return {
