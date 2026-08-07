@@ -2004,6 +2004,30 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
   const reference = `wesave-split-bill-${split.id.slice(0, 8)}-${Date.now()}`;
   const displayBillerName = billerName || String(billerId).toUpperCase();
 
+  // --- Backend validation gate: SplitPay settlement must clear the same bar ---
+  const splitGate = await gateBillPayment({
+    identity: {
+      category, billerId, billerName: displayBillerName,
+      paymentItemName, productId, divisionId: division,
+    },
+    customerId, divisionId: division, paymentItem, billerId,
+    paymentReference: reference, origin: "splitpay_settlement",
+  });
+  if (!splitGate.allowed) {
+    await db.from("vfd_sandbox_splits").update({
+      settlement_status: "failed",
+      settlement_reference: reference,
+      settlement_completed_at: new Date().toISOString(),
+      settlement_failure_reason: splitGate.error || "Customer validation failed",
+    }).eq("id", split.id);
+    await sendNotification(split.creator_id, "SplitPay collected — bill needs attention",
+      `Funds for "${split.title}" were collected but ${displayBillerName} could not verify ${customerId}. Our team will follow up.`,
+      "split_completed");
+    return { delivered: false, reference, biller_name: displayBillerName, customer_id: customerId, amount, message: splitGate.error };
+  }
+  const splitValidation = splitGate.record;
+
+
   let vfdData: any = null;
   let vfdOk = false;
   try {
