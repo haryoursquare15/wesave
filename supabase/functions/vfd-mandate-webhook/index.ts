@@ -50,13 +50,21 @@ Deno.serve(async (req) => {
   // 2. Parse payload — be defensive, VFD's schema has drifted historically.
   let payload: Record<string, unknown> = {};
   try { payload = await req.json(); } catch { payload = {}; }
-  const reference = String((payload as any)?.reference || (payload as any)?.data?.reference || "");
-  const mandateCode = String((payload as any)?.mandateCode || (payload as any)?.data?.mandateCode || "");
-  const workflowStatus = String(
-    (payload as any)?.mandateWorkflowStatus ||
-    (payload as any)?.data?.mandateWorkflowStatus ||
-    (payload as any)?.mandateWorkflowStatusDescription ||
-    "",
+  const d = ((payload as any)?.data ?? {}) as Record<string, unknown>;
+  const pick = (...keys: string[]): string => {
+    for (const k of keys) {
+      const v = (payload as any)?.[k] ?? d[k];
+      if (v != null && String(v) !== "") return String(v);
+    }
+    return "";
+  };
+  const reference = pick("reference", "mandate_reference", "mandateReference");
+  const mandateCode = pick("mandateCode", "mandate_code");
+  const workflowStatus = pick(
+    "mandateWorkflowStatus",
+    "mandate_workflow_status",
+    "mandateWorkflowStatusDescription",
+    "mandate_workflow_status_description",
   );
 
 
