@@ -44,9 +44,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   const provided = req.headers.get("x-ops-secret") || "";
-  const PROBE_SECRET = Deno.env.get("OPS_PROBE_SECRET") || "";
-  let authorized = (!!OPS_SECRET && !!provided && timingSafeEqual(provided, OPS_SECRET)) ||
-    (!!PROBE_SECRET && !!provided && timingSafeEqual(provided, PROBE_SECRET));
+  let authorized = !!OPS_SECRET && !!provided && timingSafeEqual(provided, OPS_SECRET);
 
   // Alternative auth: a signed-in super_admin (ops console / agent diagnostics).
   if (!authorized) {
