@@ -3795,13 +3795,13 @@ async function handleReconcilePendingBills(userId: string, body: Record<string, 
         "bill_payment",
       );
       result.delivered++;
-    } else if (eff && eff !== "09") {
-      // Genuine biller failure — return the money.
+    } else if (outcome === "failed" || outcome === "reversed") {
+      // Genuine biller failure/reversal, confirmed by a successful lookup — return the money.
       if (await refundReceipt(r, owner, String(eff), statusResp)) result.refunded++;
       else result.still_pending++;
     } else {
-      // Still pending at VFD — auto-refund once it goes stale.
-      const ageMin = (Date.now() - new Date(r.paid_at).getTime()) / 60000;
+      // Pending at VFD, an unrecognised code, or a lookup we could not complete.
+      // Never refund on a guess — hold until the stale timeout closes it out.
       if (ageMin >= STALE_PENDING_MINUTES) {
         if (await refundReceipt(r, owner, "stale_pending", statusResp)) result.timed_out++;
         else result.still_pending++;
@@ -3809,6 +3809,7 @@ async function handleReconcilePendingBills(userId: string, body: Record<string, 
         result.still_pending++;
       }
     }
+
   }
 
 
