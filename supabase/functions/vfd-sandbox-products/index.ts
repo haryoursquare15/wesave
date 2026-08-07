@@ -3379,7 +3379,7 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
     // failed purchase releases the hold back to the customer's wallet.
     const { data: hdData, error: hdErr } = await db.rpc("vestara_bill_reserve", {
       _user_id: userId,
-      _amount: numAmount,
+      _amount: totalDebit,
       _reference: reference,
       _metadata: {
         source: "bill_payment",
@@ -3387,6 +3387,8 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
         customer_id: customerId,
         division,
         product_id: productId,
+        bill_amount: numAmount,
+        convenience_fee: convenienceFee,
       },
     });
     const hdResult = hdData as { success?: boolean; error?: string } | null;
