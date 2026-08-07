@@ -6414,6 +6414,7 @@ Deno.serve(async (req) => {
       case "bills_billers": return await handleBillsBillers(body);
       case "bills_items": return await handleBillsItems(body);
       case "bills_validate": return await handleBillsValidate(body);
+      case "bills_validation_policy": return handleBillsValidationPolicy(body);
       case "bills_pay": return await handleBillsPay(userId, body);
       case "bills_status": return await handleBillsStatus(body);
 
