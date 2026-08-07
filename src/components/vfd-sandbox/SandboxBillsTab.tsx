@@ -289,17 +289,22 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
         });
         setStep("success");
         toast({
-          title: resData.delivery_token
-            ? "Token delivered!"
-            : resData.delivery_type === "token"
-              ? "Payment received — token pending"
-              : "Payment Successful!",
-          description: resData.delivery_token
-            ? `Token ${resData.delivery_token}${resData.delivery_units ? ` • ${resData.delivery_units}` : ""}`
-            : resData.delivery_type === "token"
-              ? "The disco has not released your meter token yet. It will appear in your receipt as soon as it does."
-              : `₦${Number(amount).toLocaleString()} paid for ${selectedBiller.name}`,
+          title: resData.pending
+            ? "Purchase accepted — awaiting biller"
+            : resData.delivery_token
+              ? "Token delivered!"
+              : resData.delivery_type === "token"
+                ? "Payment received — token pending"
+                : "Payment Successful!",
+          description: resData.pending
+            ? "The biller has accepted this purchase but hasn't confirmed it yet. We'll notify you once it's delivered, or refund you automatically if it fails."
+            : resData.delivery_token
+              ? `Token ${resData.delivery_token}${resData.delivery_units ? ` • ${resData.delivery_units}` : ""}`
+              : resData.delivery_type === "token"
+                ? "The disco has not released your meter token yet. It will appear in your receipt as soon as it does."
+                : `₦${Number(amount).toLocaleString()} paid for ${selectedBiller.name}`,
         });
+
 
       } else {
         toast({ title: "Payment Failed", description: resData?.message || "Transaction could not be processed", variant: "destructive" });
