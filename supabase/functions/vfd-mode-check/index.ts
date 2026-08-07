@@ -12,7 +12,7 @@ Deno.serve((req) => {
   const gw = Deno.env.get('VFD_GATEWAY_URL') || null
   const resolved = {
     products_api: apiBase || host,
-    mandate_api: (baseUrl || host) + '/vtech-mandate/api/v2/directdebit',
+    mandate_api: baseUrl || (host + '/vtech-mandate/api/v2/directdebit'),
     wallet_api: host + '/vtech-wallet/api/v2/wallet2',
     bills_api: host + '/vtech-bills/api/v2/billspaymentstore',
     gateway_url: gw,
