@@ -3108,7 +3108,11 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
       expires_at: expiresAt,
       raw_response: data || null,
       recurring_bill_id: recurringBillId,
+      hold_state: holdState,
+      held_at: new Date().toISOString(),
+      settled_at: settledAt,
     });
+
 
     // Upsert beneficiary (auto-save) — last_used touch; preserve user-edited nickname on repeat pay
     if (category && billerId && customerId) {
