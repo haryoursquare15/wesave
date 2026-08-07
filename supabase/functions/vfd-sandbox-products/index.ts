@@ -1,5 +1,11 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { vfdFetch, getGatewayAccessToken } from "../_shared/vfd-gateway.ts";
+import {
+  billCategoryRequiresValidation,
+  enforceBillCustomerValidation,
+  type BillIdentity,
+  type ValidationRecord,
+} from "../_shared/bill-validation.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
