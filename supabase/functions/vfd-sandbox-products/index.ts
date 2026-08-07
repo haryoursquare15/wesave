@@ -4048,6 +4048,36 @@ async function handleRunDueRecurringBills() {
     const amount = Number(r.amount);
     let outcome: { status: string; reason?: string; reference?: string };
     try {
+      // --- Backend validation gate: the scheduler is held to the same bar ---
+      const recRef = `wesave-rec-${r.id}-${Date.now()}`;
+      const recGate = await gateBillPayment({
+        identity: {
+          category: r.category, billerId: r.biller_id, billerName: r.biller_name,
+          paymentItemName: r.payment_item_name, productId: r.product_id, divisionId: r.division,
+        },
+        customerId: r.customer_id, divisionId: r.division,
+        paymentItem: r.payment_item_code, billerId: r.biller_id,
+        paymentReference: recRef, origin: "recurring_bill",
+      });
+      if (!recGate.allowed) {
+        outcome = { status: "validation_failed", reason: recGate.error || "Customer validation failed" };
+        await sendNotification(
+          r.user_id,
+          "Recurring bill skipped",
+          `${r.biller_name} (₦${amount.toLocaleString()}) was skipped — we couldn't verify ${r.customer_id} with the biller. Update the details to keep ${r.nickname || r.biller_name} active.`,
+          "bill_recurring_failed",
+        );
+        const nextSkip = computeNextRunAt(r.frequency, r.hour_wat, r.day_of_week, r.day_of_month);
+        await db.from("vfd_sandbox_recurring_bills").update({
+          last_run_at: new Date().toISOString(),
+          last_run_status: outcome.status,
+          last_run_reason: outcome.reason || null,
+          next_run_at: nextSkip,
+          consecutive_failures: Number(r.consecutive_failures) + 1,
+        }).eq("id", r.id);
+        results.push({ id: r.id, ...outcome });
+        continue;
+      }
       const debited = await ledgerDebitWallet(
         r.user_id, amount, `wesave-rec-debit-${r.id}-${Date.now()}`,
         { source: "recurring_bill", recurring_bill_id: r.id, biller: r.biller_name },
