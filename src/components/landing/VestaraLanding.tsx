@@ -363,9 +363,20 @@ export default function VestaraLanding() {
           <p className="relative mt-4 text-primary-foreground/80 max-w-xl mx-auto">
             Join thousands building their financial future with Vestara — Split Pay, savings & ajo, all in one app.
           </p>
-          <div className="relative mt-8 inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-primary-foreground/10 text-primary-foreground text-sm font-medium border border-primary-foreground/20">
-            <Sparkles className="h-4 w-4" />
-            Account sign-ups opening soon — stay tuned
+          <div className="relative mt-8 flex flex-col sm:flex-row gap-3 justify-center">
+            <Button asChild size="lg" variant="secondary" className="gap-2">
+              <a href="/auth?mode=signup">
+                Create your free account <ArrowRight className="h-4 w-4" />
+              </a>
+            </Button>
+            <Button
+              asChild
+              size="lg"
+              variant="outline"
+              className="bg-transparent border-primary-foreground/40 text-primary-foreground hover:bg-primary-foreground/10"
+            >
+              <a href="/auth">Sign in</a>
+            </Button>
           </div>
         </div>
       </section>
