@@ -3496,7 +3496,7 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
       customer_id: customerId,
       phone_number: phoneNumber || null,
       amount: numAmount,
-      convenience_fee: 0,
+      convenience_fee: convenienceFee,
       status: isPending ? "pending" : "completed",
       expires_at: expiresAt,
       raw_response: { ...(data || {}), validation: validationAudit(validationRecord) },
