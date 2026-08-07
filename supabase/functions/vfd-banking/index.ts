@@ -1888,6 +1888,10 @@ async function handleTransfer(
     // bankTransactionId. Hit /transactions once to capture both into the row
     // before any webhook arrives. Fire-and-forget — failures here don't
     // unwind the (already-committed) transfer.
+    // The resolved ids are hoisted so the ledger mirror below can stamp them
+    // on the recipient's credit row — the inflow webhook dedupes on them.
+    let resolvedSessionId: string | null = sessionId || null;
+    let resolvedVfdRef: string | null = vfdTxnId || null;
     await (async () => {
       try {
         const tsqParams: Record<string, string> = { reference };
