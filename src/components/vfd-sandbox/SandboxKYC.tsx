@@ -61,12 +61,7 @@ const TIERS = [
   },
 ];
 
-// Test data from VFD docs
-const TEST_DATA = [
-  { bvn: "22222222252", nin: "23230042941", dob: "05-Apr-1994", name: "Phil Bull Holden" },
-  { bvn: "22222222253", nin: "01947597293", dob: "05-Apr-1994", name: "Golaith Chesnut David" },
-  { bvn: "22222222254", nin: "10392320193", dob: "05-Apr-1994", name: "Abdul Adesanya Ibrahim" },
-];
+
 
 interface SandboxKYCProps {
   vfd: {
@@ -535,28 +530,6 @@ export function SandboxKYC({ vfd, onComplete }: SandboxKYCProps) {
               />
             )}
 
-            {/* Test Data Helper */}
-            <div className="rounded-xl bg-warning/5 border border-warning/20 p-3">
-              <p className="text-[11px] text-warning font-medium mb-1.5">🧪 Sandbox Test Data</p>
-              <div className="space-y-1.5">
-                {TEST_DATA.slice(0, 2).map((td, i) => (
-                  <button
-                    key={i}
-                    onClick={() => {
-                      setBvn(td.bvn);
-                      setNin(td.nin);
-                      if (!dob) {
-                        setDob("1994-04-05");
-                      }
-                    }}
-                    className="w-full text-left text-[10px] p-1.5 rounded-lg hover:bg-warning/10 transition-colors"
-                  >
-                    <span className="font-medium text-foreground">{td.name}</span>
-                    <span className="text-muted-foreground ml-1">BVN: {td.bvn} | NIN: {td.nin}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
 
             <div className="flex gap-3">
               <Button variant="outline" onClick={() => setStep("tier_select")} className="flex-1">

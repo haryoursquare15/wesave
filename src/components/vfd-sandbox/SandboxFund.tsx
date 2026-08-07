@@ -2,7 +2,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft, CreditCard, RefreshCw, CheckCircle2, Building2,
-  Smartphone, QrCode, Copy, Check, Banknote, ChevronRight, TestTube,
+  Smartphone, QrCode, Copy, Check, Banknote, ChevronRight,
   ArrowDownLeft, Info,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,7 @@ interface Props {
   onBack: () => void;
 }
 
-type FundingChannel = "select" | "bank_transfer" | "card" | "ussd" | "sandbox_credit";
+type FundingChannel = "select" | "bank_transfer" | "card" | "ussd";
 
 const presets = [1000, 5000, 10000, 25000, 50000, 100000];
 
@@ -43,13 +43,6 @@ const channels = [
     desc: "Fund using USSD banking code",
     icon: Smartphone,
     badge: null,
-  },
-  {
-    id: "sandbox_credit" as FundingChannel,
-    label: "Sandbox Credit",
-    desc: "Instantly credit test funds (sandbox only)",
-    icon: TestTube,
-    badge: "Test",
   },
 ];
 
@@ -291,48 +284,6 @@ export function SandboxFund({
 
             <Button onClick={goBack} variant="outline" className="w-full">
               Done
-            </Button>
-          </motion.div>
-        )}
-
-        {/* ── Sandbox Credit (Test Only) ── */}
-        {channel === "sandbox_credit" && (
-          <motion.div
-            key="sandbox_credit"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            className="bg-card rounded-2xl border border-border/50 p-5 space-y-5"
-          >
-            <div className="text-center space-y-1">
-              <div className="h-12 w-12 rounded-full bg-amber-500/10 flex items-center justify-center mx-auto mb-3">
-                <TestTube className="h-6 w-6 text-amber-600" />
-              </div>
-              <p className="text-sm font-medium">Sandbox Test Credit</p>
-              <p className="text-xs text-muted-foreground">
-                Instantly simulate an inward credit to{" "}
-                <span className="font-mono font-semibold">{accountNumber}</span>
-              </p>
-            </div>
-
-            <AmountInput amount={amount} setAmount={setAmount} />
-            <PresetGrid amount={amount} setAmount={setAmount} />
-
-            <div className="flex items-start gap-2 bg-amber-500/10 rounded-xl p-3">
-              <Info className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-              <p className="text-xs text-amber-700 dark:text-amber-400">
-                Uses VFD's <code className="font-mono bg-amber-500/10 px-1 rounded">/credit</code> sandbox endpoint.
-                Not available in production — use Bank Transfer or Card instead.
-              </p>
-            </div>
-
-            <Button
-              onClick={handleFund}
-              disabled={funding || !canFund || funded}
-              className="w-full h-12"
-              variant={funded ? "success" : "hero"}
-            >
-              <FundButtonContent loading={funding} funded={funded} amount={amount} label="Credit Account" />
             </Button>
           </motion.div>
         )}
