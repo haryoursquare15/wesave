@@ -154,9 +154,10 @@ Deno.serve(async (req) => {
       vfd_session_id: sessionId,
       vfd_reference: vfdRef,
       narration,
-      payer_name: get("originatorName") || get("sourceName") || null,
-      payer_account: get("originatorAccountNumber") || get("sourceAccount") || null,
-      payer_bank: get("originatorBankName") || get("sourceBank") || null,
+      // Sender details only — informational metadata, never used for lookup.
+      payer_name: get("originator_account_name") || get("originatorName") || get("sourceName") || null,
+      payer_account: get("originator_account_number") || get("originatorAccountNumber") || get("sourceAccount") || null,
+      payer_bank: get("originator_bank") || get("originatorBankName") || get("sourceBank") || null,
     },
   });
 
