@@ -66,6 +66,7 @@ Deno.serve(async (req) => {
     });
   }
 
+  const billRef = url.searchParams.get("billRef") || (req.method === "POST" ? undefined : undefined);
   const attempts: Array<Record<string, unknown>> = [];
   const queries: Array<Record<string, string>> = [];
   if (sessionId) queries.push({ sessionId });
