@@ -4059,106 +4059,77 @@ async function handleRunDueRecurringBills() {
   const results: unknown[] = [];
   for (const r of (due || [])) {
     const amount = Number(r.amount);
-    let outcome: { status: string; reason?: string; reference?: string };
+    let outcome: { status: string; reason?: string; reference?: string; pending?: boolean };
     try {
-      // --- Backend validation gate: the scheduler is held to the same bar ---
-      const recRef = `wesave-rec-${r.id}-${Date.now()}`;
-      const recGate = await gateBillPayment({
-        identity: {
-          category: r.category, billerId: r.biller_id, billerName: r.biller_name,
-          paymentItemName: r.payment_item_name, productId: r.product_id, divisionId: r.division,
-        },
-        customerId: r.customer_id, divisionId: r.division,
-        paymentItem: r.payment_item_code, billerId: r.biller_id,
-        paymentReference: recRef, origin: "recurring_bill",
+      // A scheduled bill is a real purchase: it goes through the exact same
+      // production lifecycle as a customer-initiated payment — backend
+      // validation gate → POST /pay → TSQ → hold/settle → receipt carrying the
+      // VFD reference and provider trace. Never fabricate a receipt here.
+      const payResp = await handleBillsPay(r.user_id, {
+        customerId: r.customer_id,
+        amount: String(amount),
+        division: r.division,
+        paymentItem: r.payment_item_code,
+        productId: r.product_id,
+        billerId: r.biller_id,
+        phoneNumber: r.phone_number || undefined,
+        category: r.category,
+        billerName: r.biller_name,
+        paymentItemName: r.payment_item_name,
+        recurring_bill_id: r.id,
       });
-      if (!recGate.allowed) {
-        outcome = { status: "validation_failed", reason: recGate.error || "Customer validation failed" };
-        await sendNotification(
-          r.user_id,
-          "Recurring bill skipped",
-          `${r.biller_name} (₦${amount.toLocaleString()}) was skipped — we couldn't verify ${r.customer_id} with the biller. Update the details to keep ${r.nickname || r.biller_name} active.`,
-          "bill_recurring_failed",
-        );
-        const nextSkip = computeNextRunAt(r.frequency, r.hour_wat, r.day_of_week, r.day_of_month);
-        await db.from("vfd_sandbox_recurring_bills").update({
-          last_run_at: new Date().toISOString(),
-          last_run_status: outcome.status,
-          last_run_reason: outcome.reason || null,
-          next_run_at: nextSkip,
-          consecutive_failures: Number(r.consecutive_failures) + 1,
-        }).eq("id", r.id);
-        results.push({ id: r.id, ...outcome });
-        continue;
-      }
-      const debited = await ledgerDebitWallet(
-        r.user_id, amount, `wesave-rec-debit-${r.id}-${Date.now()}`,
-        { source: "recurring_bill", recurring_bill_id: r.id, biller: r.biller_name },
-      );
-      if (!debited) {
-        outcome = { status: "insufficient_funds", reason: "Wallet balance too low" };
-        await sendNotification(
-          r.user_id,
-          "Recurring bill skipped",
-          `${r.biller_name} (₦${amount.toLocaleString()}) was skipped — wallet balance too low. Fund your wallet to keep ${r.nickname || r.biller_name} active.`,
-          "bill_recurring_failed",
-        );
+      const payJson = await payResp.clone().json().catch(() => ({} as Record<string, unknown>));
+      const payData = (payJson as Record<string, unknown>).data as Record<string, unknown> | undefined;
+
+      if (payResp.ok && payData) {
+        const reference = String(payData.reference || "");
+        const pending = !!payData.pending;
+        // handleBillsPay already notified the customer with the delivered
+        // artefact (token/PIN) or the pending notice — no duplicate here.
+        outcome = { status: pending ? "pending" : "paid", reference, pending };
+        console.log(`[bills][recurring] id=${r.id} ref=${reference} outcome=${outcome.status}`);
       } else {
-        const reference = `wesave-rec-${r.id}-${Date.now()}`;
-        await db.from("vfd_sandbox_transactions").insert({
-          user_id: r.user_id, transaction_type: "debit", amount,
-          description: `Recurring bill: ${r.biller_name} - ${r.customer_id}`,
-          reference, status: "completed",
-        });
-        const recDelivery = deriveBillDelivery({
-          category: r.category, billerName: r.biller_name,
-          paymentItemName: r.payment_item_name, amount, reference,
-        });
-        await db.from("vfd_sandbox_bill_receipts").insert({
-          delivery_type: recDelivery.delivery_type,
-          delivery_token: recDelivery.delivery_token,
-          delivery_units: recDelivery.delivery_units,
-          delivery_status: recDelivery.delivery_status,
-          delivery_detail: recDelivery.delivery_detail,
-          user_id: r.user_id,
-          reference,
-          category: r.category,
-          biller_id: r.biller_id,
-          biller_name: r.biller_name,
-          payment_item_name: r.payment_item_name,
-          customer_id: r.customer_id,
-          phone_number: r.phone_number,
-          amount,
-          status: "completed",
-          expires_at: computeBillExpiry(r.category, r.payment_item_name),
-          recurring_bill_id: r.id,
-          raw_response: { via: "recurring", validation: validationAudit(recGate.record) },
-        });
+        const code = String((payJson as Record<string, unknown>).code || "");
+        const reason = String((payJson as Record<string, unknown>).error || "Bill payment failed");
+        const status = code === "INSUFFICIENT_BALANCE"
+          ? "insufficient_funds"
+          : code === "CUSTOMER_VALIDATION_FAILED" || code === "BILLER_CONFIG_REVIEW"
+            ? "validation_failed"
+            : "failed";
+        outcome = { status, reason };
+        const why = status === "insufficient_funds"
+          ? "wallet balance too low. Fund your wallet"
+          : status === "validation_failed"
+            ? `we couldn't verify ${r.customer_id} with the biller. Update the details`
+            : `the biller declined it. Your wallet was not debited. Check the details`;
         await sendNotification(
           r.user_id,
-          "Recurring bill paid",
-          `₦${amount.toLocaleString()} paid to ${r.biller_name} (${r.customer_id}) automatically.`,
-          "bill_recurring_success",
+          "Recurring bill skipped",
+          `${r.biller_name} (₦${amount.toLocaleString()}) was skipped — ${why} to keep ${r.nickname || r.biller_name} active.`,
+          "bill_recurring_failed",
         );
-        outcome = { status: "paid", reference };
+        console.error(`[bills][recurring] id=${r.id} outcome=${status} code=${code} reason=${reason.slice(0, 160)}`);
       }
     } catch (e) {
       outcome = { status: "error", reason: e instanceof Error ? e.message : String(e) };
+      console.error(`[bills][recurring] id=${r.id} error=${outcome.reason}`);
     }
 
     const next = computeNextRunAt(r.frequency, r.hour_wat, r.day_of_week, r.day_of_month);
+    const succeeded = outcome.status === "paid" || outcome.status === "pending";
     await db.from("vfd_sandbox_recurring_bills").update({
       last_run_at: new Date().toISOString(),
       last_run_status: outcome.status,
       last_run_reason: outcome.reason || null,
       next_run_at: next,
-      consecutive_failures: outcome.status === "paid" ? 0 : (Number(r.consecutive_failures) + 1),
+      consecutive_failures: succeeded ? 0 : (Number(r.consecutive_failures) + 1),
     }).eq("id", r.id);
 
     results.push({ id: r.id, ...outcome });
   }
   return jsonResponse({ data: { processed: results.length, results } });
 }
+
 
 // CRON: send expiry reminders 3 days before subscription bill expires.
 async function handleSendBillReminders() {
