@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Routes, Route, useLocation, useNavigate } from "react-router-dom";
+import { Routes, Route, useLocation, useNavigate, Navigate, useParams } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { useSessionEnforcement } from "@/hooks/useSessionEnforcement";
 import { useEffect } from "react";
@@ -51,16 +51,34 @@ import SandboxHealth from "./pages/SandboxHealth";
 import { SandboxAuthProvider } from "./contexts/SandboxAuthContext";
 import NotFound from "./pages/NotFound";
 import Unsubscribe from "./pages/Unsubscribe";
-import { ADMIN_LOGIN_PATH, ADMIN_CONSOLE_PATH, ADMIN_RECURRING_TEST_PATH } from "@/lib/adminRoutes";
+import { ADMIN_BASE, ADMIN_LOGIN_PATH, ADMIN_CONSOLE_PATH, ADMIN_RECURRING_TEST_PATH } from "@/lib/adminRoutes";
+import { APP_HOME, SIGN_IN, FORGOT_PASSWORD, RESET_PASSWORD, JOIN } from "@/lib/appRoutes";
 
 const queryClient = new QueryClient();
 
-const PUBLIC_ROUTES = ["/", "/auth", "/forgot-password", "/invite", "/onboarding", "/terms", "/privacy", "/aml-policy", "/kyc-policy", "/goal", "/delete-account", "/app-home", "/vfd-sandbox", "/vfd-sandbox/auth", "/unsubscribe", ADMIN_LOGIN_PATH];
+const PUBLIC_ROUTES = ["/", "/auth", "/forgot-password", "/invite", "/onboarding", "/terms", "/privacy", "/aml-policy", "/kyc-policy", "/goal", "/delete-account", "/app-home", "/vfd-sandbox", "/vfd-sandbox/auth", "/unsubscribe", APP_HOME, SIGN_IN, FORGOT_PASSWORD, RESET_PASSWORD, JOIN, ADMIN_LOGIN_PATH];
 
 function isPublicRoute(pathname: string) {
-  return PUBLIC_ROUTES.some(route => 
-    pathname === route || pathname.startsWith("/invite/") || pathname.startsWith("/goal/") || pathname.startsWith("/vfd-sandbox")
+  return PUBLIC_ROUTES.some(route =>
+    pathname === route ||
+    pathname.startsWith("/invite/") ||
+    pathname.startsWith("/goal/") ||
+    pathname.startsWith("/vfd-sandbox") ||
+    pathname.startsWith(`${JOIN}/`) ||
+    pathname.startsWith(`${APP_HOME}/`)
   );
+}
+
+/**
+ * Redirect-only route for the legacy /vfd-sandbox/* paths. Preserves the
+ * query string and the hash fragment (password-recovery links carry the
+ * session in the hash — dropping it silently breaks the reset flow).
+ */
+function LegacyRedirect({ to }: { to: string }) {
+  const { search, hash } = useLocation();
+  const params = useParams();
+  const target = params.token ? `${to}/${params.token}` : to;
+  return <Navigate to={`${target}${search}${hash}`} replace />;
 }
 
 // Session enforcement wrapper - only runs hook on protected routes
@@ -160,16 +178,25 @@ const App = () => {
                 <Route path="/kyc-policy" element={<KycPolicy />} />
                 <Route path="/delete-account" element={<DeleteAccount />} />
                 <Route path="/unsubscribe" element={<Unsubscribe />} />
-                <Route path="/vfd-sandbox/auth" element={
+                <Route path={SIGN_IN} element={
                   <SandboxAuthProvider>
                     <SandboxAuth />
                   </SandboxAuthProvider>
                 } />
-                <Route path="/vfd-sandbox/forgot-password" element={<SandboxForgotPassword />} />
-                <Route path="/vfd-sandbox/reset-password" element={<SandboxResetPassword />} />
-                <Route path="/vfd-sandbox/invite/:token" element={<SandboxInvite />} />
-                <Route path="/vfd-sandbox" element={<VfdSandbox />} />
-                <Route path="/sandbox-health" element={<SandboxHealth />} />
+                <Route path={FORGOT_PASSWORD} element={<SandboxForgotPassword />} />
+                <Route path={RESET_PASSWORD} element={<SandboxResetPassword />} />
+                <Route path={`${JOIN}/:token`} element={<SandboxInvite />} />
+                <Route path={APP_HOME} element={<VfdSandbox />} />
+                <Route path={`${ADMIN_BASE}/health`} element={<SandboxHealth />} />
+
+                {/* Legacy paths — kept forever so old invite links, reset
+                    emails and bookmarks never 404. */}
+                <Route path="/vfd-sandbox/auth" element={<LegacyRedirect to={SIGN_IN} />} />
+                <Route path="/vfd-sandbox/forgot-password" element={<LegacyRedirect to={FORGOT_PASSWORD} />} />
+                <Route path="/vfd-sandbox/reset-password" element={<LegacyRedirect to={RESET_PASSWORD} />} />
+                <Route path="/vfd-sandbox/invite/:token" element={<LegacyRedirect to={JOIN} />} />
+                <Route path="/vfd-sandbox" element={<LegacyRedirect to={APP_HOME} />} />
+                <Route path="/sandbox-health" element={<LegacyRedirect to={`${ADMIN_BASE}/health`} />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </OnboardingRedirect>
