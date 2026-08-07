@@ -272,9 +272,9 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
         paymentItem: selectedItem.paymentCode,
         productId: selectedBiller.product,
         billerId: selectedBiller.id,
-        // Airtime/data is delivered to a phone number: when none was typed the
-        // customer ID is the MSISDN, so send it rather than omitting the field.
-        phoneNumber: phoneNumber || customerId || undefined,
+        // Only the typed phone number is sent here; for airtime/data the backend
+        // falls back to the customer ID (which is the MSISDN) when this is empty.
+        phoneNumber: phoneNumber || undefined,
         category: selectedCategory,
         billerName: selectedBiller.name,
         paymentItemName: selectedItem.paymentitemname,
