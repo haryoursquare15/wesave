@@ -59,5 +59,8 @@ project_id = "sdwkqwmqgpsjrmijkdix"
     verify_jwt = false
   [functions.vfd-campaign-inflow-webhook]
     verify_jwt = false
+  [functions.vfd-inflow-webhook]
+    verify_jwt = false
+
 
 
