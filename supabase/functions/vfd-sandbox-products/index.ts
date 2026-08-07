@@ -3012,7 +3012,9 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
       category, billerName, paymentItemName, amount: numAmount, reference,
       vfdResponse: data as Record<string, unknown> | null,
     });
-    if (delivery.delivery_status === "pending" && delivery.delivery_type === "token") {
+    // Re-query whenever the artefact (meter token, recharge PIN, airtime
+    // top-up token) is still missing — not just for electricity tokens.
+    if (delivery.delivery_status === "pending" || !delivery.delivery_token) {
       const statusResp = await fetchVfdBillArtefact(reference);
       if (statusResp) {
         const retry = deriveBillDelivery({
