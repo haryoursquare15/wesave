@@ -521,7 +521,6 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
     loadCategories();
   }
 
-  const needsValidation = selectedCategory === "Utility" || selectedCategory === "Cable TV";
   const isAmountFixed = selectedItem?.isAmountFixed === "true" && Number(selectedItem.amount) > 0;
   const convenienceFee = selectedBiller?.convenienceFee ? Number(selectedBiller.convenienceFee) : 0;
 
