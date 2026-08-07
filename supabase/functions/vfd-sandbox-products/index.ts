@@ -3036,6 +3036,16 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
         if (retry.delivery_token) delivery = retry;
       }
     }
+    if (isPending) {
+      delivery = {
+        ...delivery,
+        delivery_status: "pending",
+        delivery_detail: {
+          ...delivery.delivery_detail,
+          instruction: "The biller has accepted this purchase but has not confirmed delivery yet. It will update automatically once confirmed.",
+        },
+      };
+    }
 
     await db.from("vfd_sandbox_bill_receipts").insert({
       delivery_type: delivery.delivery_type,
@@ -3053,7 +3063,7 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
       phone_number: phoneNumber || null,
       amount: numAmount,
       convenience_fee: 0,
-      status: "completed",
+      status: isPending ? "pending" : "completed",
       expires_at: expiresAt,
       raw_response: data || null,
       recurring_bill_id: recurringBillId,
