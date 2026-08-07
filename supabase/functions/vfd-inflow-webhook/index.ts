@@ -146,6 +146,35 @@ Deno.serve(async (req) => {
     .maybeSingle();
   if (existing) return ok({ deduped: true, reference });
 
+  // Intra-Vestara guard: when the sender is also a Vestara user, vfd-banking
+  // already mirrored the credit as `<ref>-IN` at transfer time. VFD then fires
+  // this inflow alert for the same money — crediting again would double-pay.
+  // Match on the VFD session id / reference recorded on the recipient's row.
+  const sessionKeys = [sessionId, vfdRef].filter(Boolean);
+  if (sessionKeys.length) {
+    const orFilter = sessionKeys
+      .flatMap((k) => [`session_id.eq.${k}`, `vfd_reference.eq.${k}`])
+      .join(",");
+    const { data: mirrored } = await db
+      .from("vfd_sandbox_transactions")
+      .select("id, reference")
+      .eq("user_id", client.user_id)
+      .eq("transaction_type", "credit")
+      .or(orFilter)
+      .limit(1)
+      .maybeSingle();
+    if (mirrored) {
+      if (auditId) {
+        await db.from("vfd_sandbox_webhook_logs")
+          .update({ processed: true, processed_at: new Date().toISOString() })
+          .eq("id", auditId);
+      }
+      return ok({ deduped: true, reason: "already_credited_by_intra_transfer_mirror", reference: (mirrored as { reference?: string }).reference });
+    }
+  }
+
+
+
   const { data: dep, error: depErr } = await db.rpc("vestara_deposit", {
     _user_id: client.user_id,
     _amount: amount,
