@@ -93,7 +93,10 @@ export function SandboxBillReceipts() {
         const expiringSoon = r.expires_at && new Date(r.expires_at).getTime() - Date.now() < 3 * 24 * 60 * 60 * 1000;
         const isPending = r.status === "pending" || r.delivery_status === "pending";
         const isFailed = r.status === "failed" || r.delivery_status === "failed";
-        const instruction = (r.delivery_detail as { instruction?: string } | null)?.instruction;
+        const detail = r.delivery_detail as { instruction?: string; kct1?: string | null; kct2?: string | null } | null;
+        const instruction = detail?.instruction;
+        const kcts = [detail?.kct1, detail?.kct2].filter(Boolean) as string[];
+
         return (
           <div key={r.id} className="bg-card rounded-xl border border-border/50 p-3.5 flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
