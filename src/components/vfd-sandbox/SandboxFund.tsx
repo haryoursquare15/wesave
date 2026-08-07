@@ -18,7 +18,7 @@ interface Props {
   onBack: () => void;
 }
 
-type FundingChannel = "select" | "bank_transfer" | "card" | "ussd" | "sandbox_credit";
+type FundingChannel = "select" | "bank_transfer" | "card" | "ussd";
 
 const presets = [1000, 5000, 10000, 25000, 50000, 100000];
 
@@ -43,13 +43,6 @@ const channels = [
     desc: "Fund using USSD banking code",
     icon: Smartphone,
     badge: null,
-  },
-  {
-    id: "sandbox_credit" as FundingChannel,
-    label: "Sandbox Credit",
-    desc: "Instantly credit test funds (sandbox only)",
-    icon: TestTube,
-    badge: "Test",
   },
 ];
 

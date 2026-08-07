@@ -61,12 +61,7 @@ const TIERS = [
   },
 ];
 
-// Test data from VFD docs
-const TEST_DATA = [
-  { bvn: "22222222252", nin: "23230042941", dob: "05-Apr-1994", name: "Phil Bull Holden" },
-  { bvn: "22222222253", nin: "01947597293", dob: "05-Apr-1994", name: "Golaith Chesnut David" },
-  { bvn: "22222222254", nin: "10392320193", dob: "05-Apr-1994", name: "Abdul Adesanya Ibrahim" },
-];
+
 
 interface SandboxKYCProps {
   vfd: {
