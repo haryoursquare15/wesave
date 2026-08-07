@@ -1917,6 +1917,8 @@ async function handleTransfer(
           tsqBankTxnId ||
           (tsqInnerTxnId && tsqInnerTxnId !== reference ? tsqInnerTxnId : null) ||
           vfdTxnId;
+        resolvedSessionId = tsqSessionId || resolvedSessionId;
+        resolvedVfdRef = tsqTxnId || resolvedVfdRef;
         if (reservedTx?.id && (tsqSessionId || tsqBankTxnId || tsqTxnId)) {
           await supabaseAdmin
             .from("vfd_sandbox_transactions")
