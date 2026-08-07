@@ -149,29 +149,57 @@ Deno.serve(async (req) => {
   // Intra-Vestara guard: when the sender is also a Vestara user, vfd-banking
   // already mirrored the credit as `<ref>-IN` at transfer time. VFD then fires
   // this inflow alert for the same money — crediting again would double-pay.
-  // Match on the VFD session id / reference recorded on the recipient's row.
-  const sessionKeys = [sessionId, vfdRef].filter(Boolean);
-  if (sessionKeys.length) {
-    const orFilter = sessionKeys
-      .flatMap((k) => [`session_id.eq.${k}`, `vfd_reference.eq.${k}`])
-      .join(",");
-    const { data: mirrored } = await db
-      .from("vfd_sandbox_transactions")
-      .select("id, reference")
-      .eq("user_id", client.user_id)
-      .eq("transaction_type", "credit")
-      .or(orFilter)
-      .limit(1)
-      .maybeSingle();
-    if (mirrored) {
-      if (auditId) {
-        await db.from("vfd_sandbox_webhook_logs")
-          .update({ processed: true, processed_at: new Date().toISOString() })
-          .eq("id", auditId);
-      }
-      return ok({ deduped: true, reason: "already_credited_by_intra_transfer_mirror", reference: (mirrored as { reference?: string }).reference });
+  const dedupe = async (): Promise<string | null> => {
+    // (a) Match on the VFD session id / reference when the mirror captured it.
+    const sessionKeys = [sessionId, vfdRef].filter(Boolean);
+    if (sessionKeys.length) {
+      const orFilter = sessionKeys
+        .flatMap((k) => [`session_id.eq.${k}`, `vfd_reference.eq.${k}`])
+        .join(",");
+      const { data: m } = await db
+        .from("vfd_sandbox_transactions")
+        .select("id, reference")
+        .eq("user_id", client.user_id)
+        .eq("transaction_type", "credit")
+        .or(orFilter)
+        .limit(1)
+        .maybeSingle();
+      if (m) return (m as { reference?: string }).reference ?? "matched_session";
     }
+
+    // (b) VFD's intra (/transfer, bankCode 999999) response omits sessionId, so
+    // the mirror row can have NULL session_id/vfd_reference. Fall back to a
+    // same-amount, same-destination mirror deposit inside a short window.
+    const since = new Date(Date.now() - 20 * 60 * 1000).toISOString();
+    const { data: recent } = await db
+      .from("vestara_transactions")
+      .select("reference, amount, metadata, created_at")
+      .eq("initiated_by", client.user_id)
+      .eq("type", "deposit")
+      .gte("created_at", since)
+      .order("created_at", { ascending: false })
+      .limit(25);
+    for (const row of (recent ?? []) as Array<Record<string, unknown>>) {
+      const meta = (row.metadata ?? {}) as Record<string, unknown>;
+      if (meta.source !== "vfd_transfer_mirror") continue;
+      if (String(meta.to_account ?? "") !== accountNo) continue;
+      if (Math.abs(Number(row.amount) - amount) > 0.009) continue;
+      return String(row.reference);
+    }
+    return null;
+  };
+
+  const dupRef = await dedupe();
+  if (dupRef) {
+    if (auditId) {
+      await db.from("vfd_sandbox_webhook_logs")
+        .update({ processed: true, processed_at: new Date().toISOString() })
+        .eq("id", auditId);
+    }
+    return ok({ deduped: true, reason: "already_credited_by_intra_transfer_mirror", reference: dupRef });
   }
+
+
 
 
 
