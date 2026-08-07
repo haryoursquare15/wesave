@@ -2954,10 +2954,13 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   });
   const data = await safeJson(resp);
 
-  // Sandbox tolerance: VFD test endpoint frequently returns "99" / "Contact Admin"
-  // or other non-success codes for legitimate test inputs. Treat any non-network
-  // failure as a simulated success so the user can complete the bill payment flow.
-  const isSuccess = resp.ok || data?.status === "00" || data?.status === "99" || !!data;
+  // In production every non-"00" response is a genuine biller failure — the
+  // wallet must NOT be debited and no receipt/token may be fabricated.
+  // Sandbox keeps the old tolerance so test inputs can complete the flow.
+  const isProduction = (Deno.env.get("VFD_MODE") || "sandbox").toLowerCase() === "production";
+  const isSuccess = isProduction
+    ? resp.ok && data?.status === "00"
+    : (resp.ok || data?.status === "00" || data?.status === "99" || !!data);
 
   if (isSuccess) {
     const db = getSupabaseAdmin();
