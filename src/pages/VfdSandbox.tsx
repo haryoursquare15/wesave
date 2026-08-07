@@ -464,7 +464,7 @@ function VfdSandboxInner() {
       {kycDone && <SandboxGroupInviteModal onAccepted={() => { /* downstream UIs poll on their own */ }} />}
       <div className="max-w-lg mx-auto px-4 pt-3 flex items-center justify-between">
         <span className="text-xs text-muted-foreground truncate">
-          Sandbox: <span className="font-medium text-foreground">{user?.email}</span>
+          Signed in as <span className="font-medium text-foreground">{user?.email}</span>
         </span>
         <Button
           variant="ghost"
