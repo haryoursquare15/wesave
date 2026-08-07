@@ -3558,7 +3558,7 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
           : `₦${numAmount.toLocaleString()} paid to ${billerName} (${customerId}). Ref: ${reference}`;
     await sendNotification(userId, notifTitle, notifBody, "bill_payment");
 
-    return jsonResponse({ data: { status: "00", message: isPending ? "Purchase accepted — awaiting biller confirmation" : "Payment successful", pending: isPending, reference, receipt_expires_at: expiresAt, ...delivery } });
+    return jsonResponse({ data: { status: "00", message: isPending ? "Purchase accepted — awaiting biller confirmation" : "Payment successful", pending: isPending, reference, receipt_expires_at: expiresAt, bill_amount: numAmount, convenience_fee: convenienceFee, total_debited: totalDebit, ...delivery } });
   }
 
   console.error(
