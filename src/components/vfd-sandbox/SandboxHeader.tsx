@@ -1,7 +1,6 @@
-import { ArrowLeft, FlaskConical } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
 import vestaraLogo from "@/assets/vestara-logo.jpg";
 import { SandboxNotificationBell } from "./SandboxNotificationBell";
 import { BillDeliveryPopupListener } from "./BillDeliveryPopupListener";
@@ -36,14 +35,6 @@ export function SandboxHeader() {
           />
         </div>
         <SandboxNotificationBell />
-        <motion.div
-          animate={{ opacity: [0.6, 1, 0.6] }}
-          transition={{ duration: 2, repeat: Infinity }}
-          className="flex items-center gap-1 px-2 py-1 rounded-full bg-warning/10 border border-warning/30 shrink-0"
-        >
-          <FlaskConical className="h-3 w-3 text-warning" />
-          <span className="text-[10px] font-medium text-warning">Sandbox</span>
-        </motion.div>
       </div>
       <BillDeliveryPopupListener />
     </div>

@@ -639,7 +639,7 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
               </div>
             ) : filteredBillers.length === 0 ? (
               <div className="text-center py-12">
-                <p className="text-sm text-muted-foreground">No billers available for this category in sandbox mode</p>
+                <p className="text-sm text-muted-foreground">No billers available for this category right now</p>
               </div>
             ) : (
               <div className="bg-card rounded-2xl border border-border/50 divide-y divide-border/30 overflow-hidden">
@@ -688,7 +688,7 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
               </div>
             ) : items.length === 0 ? (
               <div className="text-center py-12">
-                <p className="text-sm text-muted-foreground">No items available for this biller in sandbox</p>
+                <p className="text-sm text-muted-foreground">No packages available for this biller right now</p>
               </div>
             ) : (
               <div className="bg-card rounded-2xl border border-border/50 divide-y divide-border/30 overflow-hidden">

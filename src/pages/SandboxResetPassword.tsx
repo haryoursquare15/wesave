@@ -1,7 +1,7 @@
 import { useState, useEffect, FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Lock, Eye, EyeOff, FlaskConical, ArrowLeft } from "lucide-react";
+import { Lock, Eye, EyeOff, ShieldCheck, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -71,17 +71,17 @@ export default function SandboxResetPassword() {
           className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          Back to sandbox sign in
+          Back to sign in
         </Link>
 
         <div className="bg-card border border-border rounded-2xl shadow-xl p-8">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
-              <FlaskConical className="w-6 h-6 text-primary" />
+              <ShieldCheck className="w-6 h-6 text-primary" />
             </div>
             <div>
               <h1 className="text-xl font-bold text-foreground">Set a new password</h1>
-              <p className="text-xs text-muted-foreground">Sandbox account</p>
+              <p className="text-xs text-muted-foreground">Vestara account</p>
             </div>
           </div>
 

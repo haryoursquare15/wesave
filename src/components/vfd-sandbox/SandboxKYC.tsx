@@ -123,7 +123,7 @@ export function SandboxKYC({ vfd, onComplete }: SandboxKYCProps) {
         if (stillVirtual) {
           toast({
             title: "VFD still returned the pool account",
-            description: "Your KYC details did not map to a unique VFD sub-NUBAN. Contact support so we can assign a real sandbox sub-account.",
+            description: "We could not assign your account number automatically. Please contact support and we will complete this for you.",
             variant: "destructive",
           });
         } else {

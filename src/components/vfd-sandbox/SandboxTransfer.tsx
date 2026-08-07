@@ -170,7 +170,7 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
       result = await onTransfer({
         fromAccount: accountNumber, toAccount: form.toAccount,
         bankCode: form.bankCode, amount,
-        narration: form.narration || "Sandbox Transfer",
+        narration: form.narration || "Vestara Transfer",
         beneficiaryName: form.beneficiaryName,
       });
     } finally {

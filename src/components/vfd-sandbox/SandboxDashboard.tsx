@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Wallet, Lock, Users, Target, Heart, Receipt, Send,
   CreditCard, Eye, EyeOff, TrendingUp, Plus, ArrowDownLeft, ArrowUpRight,
-  Shield, ChevronRight, ChevronLeft, Sparkles, PiggyBank, Banknote,
+  Shield, ChevronRight, ChevronLeft, PiggyBank, Banknote,
   Clock, Copy, Check, Building2, Vault as VaultIcon, Zap, Gift,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -193,16 +193,6 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
 
   return (
     <div className="space-y-6">
-      {/* Sandbox Indicator */}
-      <motion.div
-        initial={{ opacity: 0, y: -8 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex items-center gap-2 rounded-lg bg-warning/5 border border-warning/20 px-3 py-2"
-      >
-        <Sparkles className="h-3.5 w-3.5 text-warning" />
-        <p className="text-[11px] font-medium text-warning">Sandbox Mode — Test Environment</p>
-      </motion.div>
-
       {/* Greeting */}
       <motion.div
         initial={{ opacity: 0, y: 8 }}

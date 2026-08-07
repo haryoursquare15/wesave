@@ -34,7 +34,7 @@ export default function AmlPolicy() {
         <section className="space-y-6">
           <div>
             <h2 className="text-lg font-semibold text-foreground">1. Purpose & Scope</h2>
-            <p className="text-muted-foreground">Vestara detects, prevents, and reports money laundering and terrorist financing across all digital thrift, savings, target-Ajo, association, SplitPay, and crowdfunding services. Applies to staff, contractors, mobile-app (Android/iOS) wrapper users, and our partner bank VFD Microfinance Bank Plc — the sole banking provider in the sandbox.</p>
+            <p className="text-muted-foreground">Vestara detects, prevents, and reports money laundering and terrorist financing across all digital thrift, savings, target-Ajo, association, SplitPay, and crowdfunding services. Applies to staff, contractors, mobile-app (Android/iOS) wrapper users, and our partner bank VFD Microfinance Bank Plc — our sole licensed banking provider.</p>
           </div>
 
           <div>
