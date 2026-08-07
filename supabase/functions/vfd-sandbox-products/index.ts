@@ -3258,12 +3258,13 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
 
   const bal = await ensureBalanceRow(userId);
   const available = bal.total_balance - bal.locked_balance - bal.savings_balance;
-  if (numAmount > available) {
-    const shortfall = Math.max(0, numAmount - available);
+  if (totalDebit > available) {
+    const shortfall = Math.max(0, totalDebit - available);
     return jsonResponse({
-      error: `Insufficient wallet balance. You need ₦${numAmount.toLocaleString()} but have ₦${available.toLocaleString()} available. Please fund your wallet with at least ₦${shortfall.toLocaleString()}.`,
+      error: `Insufficient wallet balance. You need ₦${totalDebit.toLocaleString()}${convenienceFee > 0 ? ` (₦${numAmount.toLocaleString()} + ₦${convenienceFee.toLocaleString()} convenience fee)` : ""} but have ₦${available.toLocaleString()} available. Please fund your wallet with at least ₦${shortfall.toLocaleString()}.`,
       code: "INSUFFICIENT_BALANCE",
-      required: numAmount,
+      required: totalDebit,
+      convenience_fee: convenienceFee,
       available,
       shortfall,
     }, 400);
