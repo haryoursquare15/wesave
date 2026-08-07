@@ -3166,6 +3166,42 @@ async function handleBillsValidate(body: Record<string, unknown>) {
   return jsonResponse({ data: normalized });
 }
 
+/**
+ * VFD /pay requires a contact MSISDN on every bill payment. Resolve it from the
+ * explicit input, then a phone-shaped customerId (airtime/data), then the
+ * customer's registered phone number on their Vestara account.
+ */
+async function resolveBillMsisdn(
+  userId: string,
+  explicitPhone?: string | null,
+  customerId?: string | null,
+): Promise<string> {
+  const clean = (v?: string | null) => String(v ?? "").replace(/[\s-]/g, "");
+  const looksLikePhone = (v: string) => /^(0|234|\+234)?\d{10,13}$/.test(v);
+
+  const direct = clean(explicitPhone);
+  if (direct && looksLikePhone(direct)) return direct;
+
+  const cust = clean(customerId);
+  if (cust && looksLikePhone(cust)) return cust;
+
+  try {
+    const db = getSupabaseAdmin();
+    const { data: client } = await db.from("vfd_sandbox_clients")
+      .select("phone").eq("user_id", userId).maybeSingle();
+    const fromClient = clean((client as { phone?: string } | null)?.phone);
+    if (fromClient && looksLikePhone(fromClient)) return fromClient;
+
+    const { data: profile } = await db.from("profiles")
+      .select("phone").eq("id", userId).maybeSingle();
+    const fromProfile = clean((profile as { phone?: string } | null)?.phone);
+    if (fromProfile && looksLikePhone(fromProfile)) return fromProfile;
+  } catch (e) {
+    console.error("[bills] resolveBillMsisdn lookup failed", e);
+  }
+  return "";
+}
+
 async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   const { customerId, amount, division, paymentItem, productId, billerId, phoneNumber } = body as {
     customerId: string; amount: string; division: string; paymentItem: string;
