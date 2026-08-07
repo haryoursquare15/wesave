@@ -2909,9 +2909,10 @@ async function handleBillsValidate(body: Record<string, unknown>) {
     { headers: { AccessToken: token } }
   );
   const data = await safeJson(resp) as Record<string, unknown>;
-  // Sandbox tolerance: VFD test environment frequently returns non-"00" (e.g. "Contact Admin")
-  // even for legitimate test customer IDs. Treat any response as valid in sandbox so the
-  // user can complete the payment flow.
+  // Production: return the biller's real verdict. Sandbox keeps the tolerance
+  // so VFD test inputs ("Contact Admin") don't block the flow.
+  const isProd = (Deno.env.get("VFD_MODE") || "sandbox").toLowerCase() === "production";
+  if (isProd) return jsonResponse({ data });
   const normalized = data?.status === "00"
     ? data
     : { ...data, status: "00", message: "Customer validated (sandbox)", customerName: (data as Record<string, unknown>)?.customerName || "Sandbox Customer" };
