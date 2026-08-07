@@ -1309,8 +1309,12 @@ async function handleContributeTarget(userId: string, body: Record<string, unkno
         const memberContributed = m.user_id === userId ? newMemberContributed : Number(m.contributed_amount);
         if (memberContributed > 0) {
           if (isDdm) {
-            // DDM-funded: cash sat in the pool, credit member's wallet directly.
-            await creditWallet(m.user_id, memberContributed);
+            // DDM-funded: cash sat in the group pool — pay it out through the ledger.
+            await ledgerTargetPayout(
+              m.user_id, targetId, memberContributed,
+              `target-payout-${targetId}-${m.user_id}`,
+              { target_name: target.name },
+            );
           } else {
             await creditFromSavings(m.user_id, memberContributed);
           }
