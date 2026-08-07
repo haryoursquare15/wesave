@@ -198,6 +198,24 @@ Deno.serve(async (req) => {
     return ok({ error: depErr?.message || result?.error || "ledger_deposit_failed", reference });
   }
 
+  // Credit row so the inbound transfer shows in the customer's history
+  // (also acts as the dedupe marker for any later replay of this session).
+  await db.from("vfd_sandbox_transactions").insert({
+    user_id: client.user_id,
+    vfd_account_number: accountNo,
+    amount,
+    transaction_type: "credit",
+    status: "completed",
+    reference,
+    vfd_reference: vfdRef || null,
+    session_id: sessionId,
+    beneficiary_account: get("originator_account_number") || get("originatorAccountNumber") || null,
+    beneficiary_name: get("originator_account_name") || get("originatorName") || null,
+    description: narration || "Transfer received",
+    committed_at: new Date().toISOString(),
+    metadata: { source: "vfd_inflow_webhook" },
+  }).then(() => null, () => null);
+
   await db.from("vfd_sandbox_notifications").insert({
     user_id: client.user_id,
     title: "Money received",
@@ -205,21 +223,13 @@ Deno.serve(async (req) => {
     notification_type: "wallet_credit",
   }).then(() => null, () => null);
 
-  const { data: logRow } = await db
-    .from("vfd_sandbox_webhook_logs")
-    .select("id")
-    .eq("event_type", "vfd_inflow_router")
-    .eq("processed", false)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (logRow?.id) {
+  if (auditId) {
     await db
       .from("vfd_sandbox_webhook_logs")
       .update({ processed: true, processed_at: new Date().toISOString() })
-      .eq("id", logRow.id);
+      .eq("id", auditId);
   }
-
 
   return ok({ credited: true, reference, amount, account_no: accountNo });
 });
+
