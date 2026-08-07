@@ -94,6 +94,17 @@ function assertCronCaller(req: Request) {
   return !!serviceRole && bearer === serviceRole;
 }
 
+// pg_cron jobs authenticate with a token stored in internal_cron_tokens
+// (service-role readable only) — never exposed to anon/authenticated clients.
+async function assertCronToken(req: Request, name: string) {
+  const provided = req.headers.get("x-cron-token") || "";
+  if (!provided) return false;
+  const db = getSupabaseAdmin();
+  const { data } = await db.from("internal_cron_tokens").select("token").eq("name", name).maybeSingle();
+  return !!data?.token && data.token === provided;
+}
+
+
 function jsonResponse(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -3116,20 +3127,24 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
       }
     }
 
-    await sendNotification(
-      userId,
-      delivery.delivery_type === "token"
+    const isAirtimeLike = /airtime|data/i.test(category) || /airtime|data/i.test(paymentItemName || "");
+    const notifTitle = isPending
+      ? (isAirtimeLike ? "Airtime purchase pending" : "Bill payment pending")
+      : delivery.delivery_type === "token"
         ? (delivery.delivery_token ? "Electricity token delivered" : "Token pending from disco")
-        : "Bill payment successful",
-      delivery.delivery_token
-        ? `₦${numAmount.toLocaleString()} paid to ${billerName} (${customerId}). Token: ${delivery.delivery_token}${delivery.delivery_units ? ` • ${delivery.delivery_units}` : ""}`
+        : isAirtimeLike
+          ? (delivery.delivery_token ? "Recharge PIN delivered" : "Airtime top-up successful")
+          : "Bill payment successful";
+    const notifBody = isPending
+      ? `₦${numAmount.toLocaleString()} to ${billerName} (${customerId}) has been accepted but not yet confirmed by the biller. We'll notify you the moment it completes, or refund you if it fails. Ref: ${reference}`
+      : delivery.delivery_token
+        ? `₦${numAmount.toLocaleString()} paid to ${billerName} (${customerId}). ${isAirtimeLike ? "Recharge PIN" : "Token"}: ${delivery.delivery_token}${delivery.delivery_units ? ` • ${delivery.delivery_units}` : ""}`
         : delivery.delivery_type === "token"
           ? `₦${numAmount.toLocaleString()} paid to ${billerName} (${customerId}). Awaiting meter token from the disco. Ref: ${reference}`
-          : `₦${numAmount.toLocaleString()} paid to ${billerName} (${customerId}). Ref: ${reference}`,
+          : `₦${numAmount.toLocaleString()} paid to ${billerName} (${customerId}). Ref: ${reference}`;
+    await sendNotification(userId, notifTitle, notifBody, "bill_payment");
 
-      "bill_payment",
-    );
-    return jsonResponse({ data: { status: "00", message: "Payment successful", reference, receipt_expires_at: expiresAt, ...delivery } });
+    return jsonResponse({ data: { status: "00", message: isPending ? "Purchase accepted — awaiting biller confirmation" : "Payment successful", pending: isPending, reference, receipt_expires_at: expiresAt, ...delivery } });
   }
 
   console.error("[bills] pay failed", { reference, http: resp.status, status: data?.status, message: data?.message });
@@ -3392,11 +3407,13 @@ async function handleListReceipts(userId: string, body: Record<string, unknown>)
  */
 async function handleReconcilePendingBills(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
-  const limit = Math.min(Number(body.limit) || 25, 100);
-  const { data: rows, error } = await db.from("vfd_sandbox_bill_receipts")
+  const isSystem = userId === "system";
+  const limit = Math.min(Number(body.limit) || (isSystem ? 100 : 25), 200);
+  let query = db.from("vfd_sandbox_bill_receipts")
     .select("*")
-    .eq("user_id", userId)
-    .or("status.eq.pending,delivery_status.eq.pending")
+    .or("status.eq.pending,delivery_status.eq.pending");
+  if (!isSystem) query = query.eq("user_id", userId);
+  const { data: rows, error } = await query
     .order("paid_at", { ascending: false })
     .limit(limit);
   if (error) return jsonResponse({ error: error.message }, 500);
@@ -3404,9 +3421,11 @@ async function handleReconcilePendingBills(userId: string, body: Record<string, 
   const result = { scanned: 0, delivered: 0, refunded: 0, still_pending: 0 };
 
   for (const r of (rows || []) as Record<string, any>[]) {
+    const owner = r.user_id as string;
     result.scanned++;
     const statusResp = await fetchVfdBillArtefact(r.reference);
     const eff = effectiveBillStatus(statusResp);
+
 
     if (eff === "00") {
       const delivery = deriveBillDelivery({
@@ -3427,7 +3446,7 @@ async function handleReconcilePendingBills(userId: string, body: Record<string, 
         raw_response: statusResp,
       }).eq("id", r.id);
       await sendNotification(
-        userId,
+        owner,
         "Bill delivered",
         `${r.biller_name} • ${r.customer_id} — ₦${Number(r.amount).toLocaleString()} confirmed by the biller.${delivery.delivery_token ? ` Token/PIN: ${delivery.delivery_token}.` : ""} Ref: ${r.reference}`,
         "bill_payment",
@@ -3437,7 +3456,7 @@ async function handleReconcilePendingBills(userId: string, body: Record<string, 
       // Genuine biller failure — return the money.
       const refundRef = `${r.reference}-REFUND`;
       const { data: dep, error: depErr } = await db.rpc("vestara_deposit", {
-        _user_id: userId,
+        _user_id: owner,
         _amount: Number(r.amount),
         _reference: refundRef,
         _metadata: { source: "bill_payment_refund", original_reference: r.reference, vfd_status: eff },
@@ -3449,7 +3468,7 @@ async function handleReconcilePendingBills(userId: string, body: Record<string, 
         continue;
       }
       await db.from("vfd_sandbox_transactions").insert({
-        user_id: userId, transaction_type: "credit", amount: Number(r.amount),
+        user_id: owner, transaction_type: "credit", amount: Number(r.amount),
         description: `Refund: failed bill payment ${r.biller_name} - ${r.customer_id}`,
         reference: refundRef, status: "completed",
       });
@@ -3460,7 +3479,7 @@ async function handleReconcilePendingBills(userId: string, body: Record<string, 
         raw_response: statusResp,
       }).eq("id", r.id);
       await sendNotification(
-        userId,
+        owner,
         "Bill payment refunded",
         `${r.biller_name} • ${r.customer_id} — the biller could not complete this purchase, so ₦${Number(r.amount).toLocaleString()} has been refunded to your wallet. Ref: ${r.reference}`,
         "bill_payment",
@@ -5778,12 +5797,17 @@ Deno.serve(async (req) => {
       "run_due_recurring_bills",
       "send_bill_reminders",
       "poll_pending_mandates",
+      "reconcile_pending_bills_cron",
     ]);
+    if (action === "reconcile_pending_bills_cron" && await assertCronToken(req, "bills_reconciler")) {
+      return await handleReconcilePendingBills("system", body);
+    }
     if (CRON_ACTIONS.has(action) && assertCronCaller(req)) {
       if (action === "sandbox_auto_contribute") return await handleSandboxAutoContribute("system", body);
       if (action === "run_due_recurring_bills") return await handleRunDueRecurringBills();
       if (action === "send_bill_reminders") return await handleSendBillReminders();
       if (action === "poll_pending_mandates") return await handlePollPendingMandates();
+      if (action === "reconcile_pending_bills_cron") return await handleReconcilePendingBills("system", body);
     }
 
 
