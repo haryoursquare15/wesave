@@ -5893,6 +5893,7 @@ Deno.serve(async (req) => {
       case "save_bill_beneficiary": return await handleSaveBeneficiary(userId, body);
       case "delete_bill_beneficiary": return await handleDeleteBeneficiary(userId, body);
       case "list_bill_receipts": return await handleListReceipts(userId, body);
+      case "reconcile_pending_bills": return await handleReconcilePendingBills(userId, body);
       case "create_recurring_bill": return await handleCreateRecurringBill(userId, body);
       case "list_recurring_bills": return await handleListRecurringBills(userId);
       case "update_recurring_bill": return await handleUpdateRecurringBill(userId, body);
