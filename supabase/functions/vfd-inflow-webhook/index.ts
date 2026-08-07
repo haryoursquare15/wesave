@@ -79,11 +79,13 @@ Deno.serve(async (req) => {
   };
 
   // Raw audit trail
-  await db.from("vfd_sandbox_webhook_logs").insert({
+  const { data: auditRow } = await db.from("vfd_sandbox_webhook_logs").insert({
     event_type: "vfd_inflow_router",
     payload,
     processed: false,
-  });
+  }).select("id").maybeSingle();
+  const auditId = (auditRow as { id?: string } | null)?.id ?? null;
+
 
   // ── 1. Mandate lifecycle event? ───────────────────────────────
   const mandateCode = get("mandateCode") || get("mandate_code");
