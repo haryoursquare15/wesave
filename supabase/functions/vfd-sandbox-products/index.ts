@@ -1901,7 +1901,9 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
         body: JSON.stringify(payBody),
       }, VFD_BILLS_PAY_TIMEOUT_MS);
       vfdData = await safeJson(resp);
-      vfdOk = resp.ok || vfdData?.status === "00" || vfdData?.status === "99" || !!vfdData;
+      vfdOk = (Deno.env.get("VFD_MODE") || "sandbox").toLowerCase() === "production"
+        ? (resp.ok && vfdData?.status === "00")
+        : (resp.ok || vfdData?.status === "00" || vfdData?.status === "99" || !!vfdData);
     }
   } catch (e) {
     console.error("[settleSplitBill] vfd call failed", e);
@@ -2907,9 +2909,10 @@ async function handleBillsValidate(body: Record<string, unknown>) {
     { headers: { AccessToken: token } }
   );
   const data = await safeJson(resp) as Record<string, unknown>;
-  // Sandbox tolerance: VFD test environment frequently returns non-"00" (e.g. "Contact Admin")
-  // even for legitimate test customer IDs. Treat any response as valid in sandbox so the
-  // user can complete the payment flow.
+  // Production: return the biller's real verdict. Sandbox keeps the tolerance
+  // so VFD test inputs ("Contact Admin") don't block the flow.
+  const isProd = (Deno.env.get("VFD_MODE") || "sandbox").toLowerCase() === "production";
+  if (isProd) return jsonResponse({ data });
   const normalized = data?.status === "00"
     ? data
     : { ...data, status: "00", message: "Customer validated (sandbox)", customerName: (data as Record<string, unknown>)?.customerName || "Sandbox Customer" };
@@ -2952,12 +2955,24 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
     headers: { AccessToken: token, "Content-Type": "application/json" },
     body: JSON.stringify(payBody),
   });
-  const data = await safeJson(resp);
+  let data = await safeJson(resp);
 
-  // Sandbox tolerance: VFD test endpoint frequently returns "99" / "Contact Admin"
-  // or other non-success codes for legitimate test inputs. Treat any non-network
-  // failure as a simulated success so the user can complete the bill payment flow.
-  const isSuccess = resp.ok || data?.status === "00" || data?.status === "99" || !!data;
+  // In production every non-"00"/non-pending response is a genuine biller
+  // failure — the wallet must NOT be debited and no artefact fabricated.
+  // VFD "09" means the biller accepted but has not confirmed yet: re-query the
+  // transaction once, and if still unresolved treat it as an accepted-pending
+  // purchase (debited, delivery pending) — never as a hard failure.
+  const isProduction = (Deno.env.get("VFD_MODE") || "sandbox").toLowerCase() === "production";
+  let isPending = false;
+  if (isProduction && data?.status === "09") {
+    const statusResp = await fetchVfdBillArtefact(reference);
+    if (statusResp?.status === "00") data = statusResp;
+    else if (statusResp && statusResp.status && statusResp.status !== "09") data = statusResp;
+    else isPending = true;
+  }
+  const isSuccess = isProduction
+    ? (resp.ok && (data?.status === "00" || isPending))
+    : (resp.ok || data?.status === "00" || data?.status === "99" || !!data);
 
   if (isSuccess) {
     const db = getSupabaseAdmin();
@@ -3009,7 +3024,9 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
       category, billerName, paymentItemName, amount: numAmount, reference,
       vfdResponse: data as Record<string, unknown> | null,
     });
-    if (delivery.delivery_status === "pending" && delivery.delivery_type === "token") {
+    // Re-query whenever the artefact (meter token, recharge PIN, airtime
+    // top-up token) is still missing — not just for electricity tokens.
+    if (delivery.delivery_status === "pending" || !delivery.delivery_token) {
       const statusResp = await fetchVfdBillArtefact(reference);
       if (statusResp) {
         const retry = deriveBillDelivery({
@@ -3018,6 +3035,16 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
         });
         if (retry.delivery_token) delivery = retry;
       }
+    }
+    if (isPending) {
+      delivery = {
+        ...delivery,
+        delivery_status: "pending",
+        delivery_detail: {
+          ...delivery.delivery_detail,
+          instruction: "The biller has accepted this purchase but has not confirmed delivery yet. It will update automatically once confirmed.",
+        },
+      };
     }
 
     await db.from("vfd_sandbox_bill_receipts").insert({
@@ -3036,7 +3063,7 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
       phone_number: phoneNumber || null,
       amount: numAmount,
       convenience_fee: 0,
-      status: "completed",
+      status: isPending ? "pending" : "completed",
       expires_at: expiresAt,
       raw_response: data || null,
       recurring_bill_id: recurringBillId,
@@ -3089,10 +3116,15 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
 
       "bill_payment",
     );
-    return jsonResponse({ data: { status: "00", message: "Payment successful (sandbox)", reference, receipt_expires_at: expiresAt, ...delivery } });
+    return jsonResponse({ data: { status: "00", message: "Payment successful", reference, receipt_expires_at: expiresAt, ...delivery } });
   }
 
-  return jsonResponse({ data: { ...data, reference, status: data?.status || "99", message: data?.message || "Bill payment could not be processed" } });
+  console.error("[bills] pay failed", { reference, http: resp.status, status: data?.status, message: data?.message });
+  return jsonResponse({
+    error: (data?.message as string) || "The biller could not complete this purchase. Your wallet was not debited. Please try again.",
+    code: "BILL_PAYMENT_FAILED",
+    data: { ...data, reference, status: data?.status || "99" },
+  }, 400);
 }
 
 // Subscription-style bills get an expiry → enables expiry reminders.
@@ -3227,12 +3259,19 @@ function deriveBillDelivery(params: {
   }
 
   if (isAirtimeOrData) {
+    // Some networks/aggregators return a recharge token or voucher on top-up.
+    // Surface it verbatim when VFD sends one; otherwise it is a direct top-up.
+    const topupToken = vfdPin || vfdToken;
     return {
-      delivery_type: "topup",
-      delivery_token: null,
+      delivery_type: topupToken ? "pin" : "topup",
+      delivery_token: topupToken,
       delivery_units: vfdUnits || paymentItemName,
       delivery_status: "delivered",
-      delivery_detail: { instruction: "Top-up delivered to the phone number instantly." },
+      delivery_detail: {
+        instruction: topupToken
+          ? "Dial *555*PIN# (or your network's recharge code) to load this credit."
+          : "Top-up delivered directly to the phone number — no recharge token is issued for this network.",
+      },
     };
   }
 
