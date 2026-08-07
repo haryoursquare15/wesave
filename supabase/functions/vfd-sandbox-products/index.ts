@@ -3392,11 +3392,13 @@ async function handleListReceipts(userId: string, body: Record<string, unknown>)
  */
 async function handleReconcilePendingBills(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
-  const limit = Math.min(Number(body.limit) || 25, 100);
-  const { data: rows, error } = await db.from("vfd_sandbox_bill_receipts")
+  const isSystem = userId === "system";
+  const limit = Math.min(Number(body.limit) || (isSystem ? 100 : 25), 200);
+  let query = db.from("vfd_sandbox_bill_receipts")
     .select("*")
-    .eq("user_id", userId)
-    .or("status.eq.pending,delivery_status.eq.pending")
+    .or("status.eq.pending,delivery_status.eq.pending");
+  if (!isSystem) query = query.eq("user_id", userId);
+  const { data: rows, error } = await query
     .order("paid_at", { ascending: false })
     .limit(limit);
   if (error) return jsonResponse({ error: error.message }, 500);
@@ -3404,9 +3406,11 @@ async function handleReconcilePendingBills(userId: string, body: Record<string, 
   const result = { scanned: 0, delivered: 0, refunded: 0, still_pending: 0 };
 
   for (const r of (rows || []) as Record<string, any>[]) {
+    const owner = r.user_id as string;
     result.scanned++;
     const statusResp = await fetchVfdBillArtefact(r.reference);
     const eff = effectiveBillStatus(statusResp);
+
 
     if (eff === "00") {
       const delivery = deriveBillDelivery({
