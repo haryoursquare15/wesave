@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Wallet, Lock, Users, Target, Heart, Receipt, Send,
   CreditCard, Eye, EyeOff, TrendingUp, Plus, ArrowDownLeft, ArrowUpRight,
-  Shield, ChevronRight, ChevronLeft, Sparkles, PiggyBank, Banknote,
+  Shield, ChevronRight, ChevronLeft, PiggyBank, Banknote,
   Clock, Copy, Check, Building2, Vault as VaultIcon, Zap, Gift,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
