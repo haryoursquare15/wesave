@@ -77,8 +77,17 @@ function isPublicRoute(pathname: string) {
 function LegacyRedirect({ to }: { to: string }) {
   const { search, hash } = useLocation();
   const params = useParams();
-  const target = params.token ? `${to}/${params.token}` : to;
-  return <Navigate to={`${target}${search}${hash}`} replace />;
+  const target = `${params.token ? `${to}/${params.token}` : to}${search}${hash}`;
+
+  // Belt and braces: Navigate swaps the rendered route, and replaceState makes
+  // sure the address bar itself no longer shows the legacy path.
+  useEffect(() => {
+    if (window.location.pathname + window.location.search + window.location.hash !== target) {
+      window.history.replaceState(window.history.state, "", target);
+    }
+  }, [target]);
+
+  return <Navigate to={target} replace />;
 }
 
 // Session enforcement wrapper - only runs hook on protected routes
