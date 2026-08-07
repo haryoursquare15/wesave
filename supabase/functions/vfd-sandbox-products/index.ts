@@ -94,6 +94,17 @@ function assertCronCaller(req: Request) {
   return !!serviceRole && bearer === serviceRole;
 }
 
+// pg_cron jobs authenticate with a token stored in internal_cron_tokens
+// (service-role readable only) — never exposed to anon/authenticated clients.
+async function assertCronToken(req: Request, name: string) {
+  const provided = req.headers.get("x-cron-token") || "";
+  if (!provided) return false;
+  const db = getSupabaseAdmin();
+  const { data } = await db.from("internal_cron_tokens").select("token").eq("name", name).maybeSingle();
+  return !!data?.token && data.token === provided;
+}
+
+
 function jsonResponse(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
