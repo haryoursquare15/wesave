@@ -3039,6 +3039,74 @@ async function handleBillsItems(body: Record<string, unknown>) {
   return jsonResponse({ data: await safeJson(resp) });
 }
 
+// --- Backend customer-validation gate (source of truth for ALL pay paths) ---
+// The frontend may validate for UX, but its verdict is never trusted: every
+// path that reaches VFD /pay runs this first.
+const VFD_BILLS_VALIDATE_TIMEOUT_MS = 15_000;
+
+async function runVfdCustomerValidate(a: {
+  customerId: string; divisionId: string; paymentItem: string; billerId: string; requestId: string;
+}): Promise<{ ok: boolean; body: Record<string, unknown> | null }> {
+  const token = await getVfdAccessToken();
+  if (!token) return { ok: false, body: { message: "VFD auth failed" } };
+  const url = `${getBillsBase()}/customervalidate?customerId=${encodeURIComponent(a.customerId)}` +
+    `&divisionId=${encodeURIComponent(a.divisionId)}&paymentItem=${encodeURIComponent(a.paymentItem)}` +
+    `&billerId=${encodeURIComponent(a.billerId)}`;
+  const resp = await fetchWithTimeout(
+    url,
+    { headers: { AccessToken: token, "x-request-id": a.requestId } },
+    VFD_BILLS_VALIDATE_TIMEOUT_MS,
+  );
+  const body = await safeJson(resp);
+  return { ok: resp.ok, body };
+}
+
+/** Runs the policy + validation call and logs the outcome for reconciliation. */
+async function gateBillPayment(args: {
+  identity: BillIdentity;
+  customerId: string; divisionId: string; paymentItem: string; billerId: string;
+  paymentReference: string; origin: string;
+}) {
+  const result = await enforceBillCustomerValidation({
+    identity: args.identity,
+    customerId: args.customerId,
+    divisionId: args.divisionId,
+    paymentItem: args.paymentItem,
+    billerId: args.billerId,
+    paymentReference: args.paymentReference,
+    validate: runVfdCustomerValidate,
+  });
+  const r = result.record;
+  console.log(
+    `[bills][validate] origin=${args.origin} ref=${args.paymentReference} family=${r.family} ` +
+    `matched_by=${r.matched_by} required=${r.required} performed=${r.performed} passed=${r.passed} ` +
+    `validation_request_id=${r.validation_request_id ?? "-"} status=${r.validation_status ?? "-"} ` +
+    `biller=${r.biller_id ?? "-"} customer=${r.customer_id ?? "-"} at=${r.validated_at ?? "-"} ` +
+    `message=${String(r.validation_message ?? "").slice(0, 160)}`,
+  );
+  return result;
+}
+
+/** Compact record persisted alongside the receipt for reconciliation. */
+function validationAudit(r: ValidationRecord) {
+  return {
+    required: r.required,
+    family: r.family,
+    matched_by: r.matched_by,
+    performed: r.performed,
+    passed: r.passed,
+    validation_request_id: r.validation_request_id,
+    validation_status: r.validation_status,
+    validation_message: r.validation_message,
+    customer_name: r.customer_name,
+    validated_at: r.validated_at,
+    biller_id: r.biller_id,
+    customer_id: r.customer_id,
+    payment_reference: r.payment_reference,
+  };
+}
+
+
 async function handleBillsValidate(body: Record<string, unknown>) {
   const { customerId, divisionId, paymentItem, billerId } = body as {
     customerId: string; divisionId: string; paymentItem: string; billerId: string;
