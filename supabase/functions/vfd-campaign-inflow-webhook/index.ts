@@ -79,7 +79,6 @@ Deno.serve(async (req) => {
   const payerName = get("originatorName") || get("sourceName") || "";
   const payerBank = get("originatorBankName") || get("sourceBank") || "";
 
-  const db = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } });
 
   // Log raw event for traceability (admin-only readable)
   await db.from("vfd_sandbox_webhook_logs").insert({

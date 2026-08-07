@@ -59,7 +59,6 @@ Deno.serve(async (req) => {
     "",
   );
 
-  const db = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } });
 
   // 3. Locate the membership by mandate_reference (preferred) or mandate_code.
   let memberQuery = db.from("vfd_sandbox_group_members")
