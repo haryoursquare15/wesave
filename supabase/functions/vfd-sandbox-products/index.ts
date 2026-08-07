@@ -130,7 +130,10 @@ async function fetchVfdLiveBalance(userId: string): Promise<number> {
   if (!client?.vfd_account_number) return 0;
 
   try {
-    const vfdBase = Deno.env.get("VFD_API_BASE") || "https://api-devapps.vfdbank.systems";
+    const vfdBase = Deno.env.get("VFD_API_BASE") ||
+      ((Deno.env.get("VFD_MODE") || "sandbox").toLowerCase() === "production"
+        ? "https://api-apps.vfdbank.systems"
+        : "https://api-devapps.vfdbank.systems");
     let accessToken = await getGatewayAccessToken();
 
     if (!accessToken) {
@@ -3530,7 +3533,10 @@ async function handleBillsStatus(body: Record<string, unknown>) {
 const CARD_ISSUANCE_FEE = 1000; // ₦1,000
 
 function getCardsBase(): string {
-  const vfdBase = Deno.env.get("VFD_API_BASE") || "https://api-devapps.vfdbank.systems";
+  const vfdBase = Deno.env.get("VFD_API_BASE") ||
+      ((Deno.env.get("VFD_MODE") || "sandbox").toLowerCase() === "production"
+        ? "https://api-apps.vfdbank.systems"
+        : "https://api-devapps.vfdbank.systems");
   return `${vfdBase}/vtech-cards/api/v2/baascards`;
 }
 
@@ -4446,7 +4452,9 @@ const AJO_DDM_MANDATE_FEE = 100;
 const VFD_MANDATE_BASE =
   Deno.env.get("VFD_BASE_URL") ||
   Deno.env.get("VFD_MANDATE_BASE") ||
-  "https://api-devapps.vfdbank.systems/vtech-mandate/api/v2/directdebit";
+  ((Deno.env.get("VFD_MODE") || "sandbox").toLowerCase() === "production"
+    ? "https://api-apps.vfdbank.systems"
+    : "https://api-devapps.vfdbank.systems") + "/vtech-mandate/api/v2/directdebit";
 // Single Vestara corporate pool NUBAN — receiver of EVERY mandate debit.
 // Per-group wallets are internal ledger constructs only; they do not map to
 // separate VFD accounts. DDM funds always land in this pool first, then the
