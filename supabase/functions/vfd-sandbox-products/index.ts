@@ -3167,6 +3167,26 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   const isMsisdnBill = /airtime|data|mobile|mtn|glo|airtel|9mobile|telco/.test(`${payCategory} ${payItemName} ${billerId}`.toLowerCase());
   const resolvedPhone = phoneNumber || (isMsisdnBill && /^0?\d{10,13}$/.test(String(customerId).replace(/\s/g, "")) ? customerId : "");
 
+  // --- Backend validation gate (never trusts the frontend's verdict) ---
+  const payIdentity: BillIdentity = {
+    category: (body.category as string) || null,
+    billerId,
+    billerName: (body.billerName as string) || null,
+    paymentItemName: (body.paymentItemName as string) || null,
+    productId,
+    divisionId: division,
+  };
+  const gate = await gateBillPayment({
+    identity: payIdentity,
+    customerId, divisionId: division, paymentItem, billerId,
+    paymentReference: reference, origin: "bills_pay",
+  });
+  if (!gate.allowed) {
+    return jsonResponse({ error: gate.error, code: gate.code, validation: validationAudit(gate.record) }, 400);
+  }
+  const validationRecord = gate.record;
+
+
   const payBody: Record<string, string> = { customerId, amount: amount.toString(), division, paymentItem, productId, billerId, reference };
   if (resolvedPhone) payBody.phoneNumber = resolvedPhone;
 
