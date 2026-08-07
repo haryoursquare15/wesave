@@ -3199,6 +3199,34 @@ async function resolveBillMsisdn(
   return "";
 }
 
+// Convenience fee published by VFD on the biller list. Always resolved
+// server-side from VFD (never trusted from the client) so the customer is
+// debited exactly the fee the biller charges.
+async function resolveConvenienceFee(category: string | null, billerId: string): Promise<number> {
+  try {
+    const token = await getVfdAccessToken();
+    if (!token) return 0;
+    const cat = (category || "").trim();
+    const url = cat
+      ? `${getBillsBase()}/billerlist?categoryName=${encodeURIComponent(cat)}`
+      : `${getBillsBase()}/billerlist`;
+    const resp = await vfdFetch(url, { headers: { AccessToken: token } });
+    const raw = await safeJson(resp) as Record<string, unknown> | null;
+    const rawData = raw?.data as unknown;
+    let list: unknown[] = [];
+    if (Array.isArray(rawData)) list = rawData;
+    else if (rawData && typeof rawData === "object" && Array.isArray((rawData as Record<string, unknown>).data)) {
+      list = (rawData as { data: unknown[] }).data;
+    }
+    const match = list.find((b) => String((b as Record<string, unknown>)?.id ?? "") === String(billerId));
+    const fee = Number((match as Record<string, unknown> | undefined)?.convenienceFee ?? 0);
+    return Number.isFinite(fee) && fee > 0 ? fee : 0;
+  } catch (e) {
+    console.error("[bills] resolveConvenienceFee failed", e);
+    return 0;
+  }
+}
+
 async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   const { customerId, amount, division, paymentItem, productId, billerId, phoneNumber } = body as {
     customerId: string; amount: string; division: string; paymentItem: string;
@@ -3209,6 +3237,10 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   }
   const numAmount = Number(amount);
   if (isNaN(numAmount) || numAmount <= 0) return jsonResponse({ error: "Invalid amount" }, 400);
+  // Biller convenience fee is charged on top of the bill amount: the customer
+  // is debited (bill + fee) while VFD's /pay only carries the bill amount.
+  const convenienceFee = await resolveConvenienceFee((body.category as string) || null, billerId);
+  const totalDebit = numAmount + convenienceFee;
 
   // Biller-specific rules published by VFD: IBEDC (Band A) will not process a
   // vend below ₦5,000, so reject it up-front instead of losing the money to a
