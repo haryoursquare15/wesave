@@ -87,18 +87,24 @@ Deno.serve(async (req) => {
 
   // ── 1. Mandate lifecycle event? ───────────────────────────────
   const mandateCode = get("mandateCode") || get("mandate_code");
-  const workflow = get("mandateWorkflowStatus") || get("mandateWorkflowStatusDescription");
+  const workflow = get("mandateWorkflowStatus") || get("mandate_workflow_status") ||
+    get("mandateWorkflowStatusDescription") || get("mandate_workflow_status_description");
   if (mandateCode || workflow) {
     const r = await forward("vfd-mandate-webhook", MANDATE_SECRET, payload);
     return ok({ routed: "mandate", upstream_status: r.status, result: r.body });
   }
 
   // ── 2. Credit alert ───────────────────────────────────────────
-  const accountNo = get("accountNo") || get("account_no") || get("creditAccount");
-  const amount = Number(get("amount") || get("transactionAmount"));
-  const sessionId = get("sessionId") || get("session_id") || get("reference");
-  const narration = get("originatorNarration") || get("narration") || get("description") || "";
-  const vfdRef = get("reference") || get("originatorReference") || sessionId;
+  // NOTE: `account_number` / `accountNo` is the CREDITED (receiving) NUBAN —
+  // never confuse it with `originator_account_number`, which is the SENDER.
+  const accountNo = get("account_number") || get("accountNo") || get("account_no") ||
+    get("creditAccount") || get("credit_account");
+  const amount = Number(get("amount") || get("transactionAmount") || get("transaction_amount"));
+  const sessionId = get("session_id") || get("sessionId") || get("reference");
+  const narration = get("originator_narration") || get("originatorNarration") ||
+    get("narration") || get("description") || "";
+  const vfdRef = get("reference") || get("originator_reference") || get("originatorReference") || sessionId;
+
 
   if (!amount || amount <= 0) return ok({ ignored: true, reason: "Invalid or missing amount" });
   if (!sessionId) return ok({ ignored: true, reason: "Missing sessionId" });
