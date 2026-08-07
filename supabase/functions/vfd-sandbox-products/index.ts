@@ -2034,13 +2034,10 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
     const token = await getVfdAccessToken();
     if (token) {
       const splitRequestId = crypto.randomUUID();
-      // Same MSISDN rule as the direct pay path: airtime/data must carry the
-      // phone number, falling back to the customerId when none was captured.
-      const splitIsMsisdn = /airtime|data|mobile|mtn|glo|airtel|9mobile|telco/i.test(
-        `${category || ""} ${paymentItemName || ""} ${billerId}`,
-      );
-      const splitPhone = phoneNumber ||
-        (splitIsMsisdn && /^0?\d{10,13}$/.test(String(customerId).replace(/\s/g, "")) ? customerId : "");
+      // Same MSISDN rule as the direct pay path: VFD /pay expects a contact
+      // phone number on every bill, resolved from metadata, the customerId, or
+      // the payer's registered phone.
+      const splitPhone = await resolveBillMsisdn(split.creator_id, phoneNumber, customerId);
       const payBody: Record<string, string> = {
         customerId, amount: String(amount), division, paymentItem, productId, billerId, reference,
       };
@@ -3166,6 +3163,42 @@ async function handleBillsValidate(body: Record<string, unknown>) {
   return jsonResponse({ data: normalized });
 }
 
+/**
+ * VFD /pay requires a contact MSISDN on every bill payment. Resolve it from the
+ * explicit input, then a phone-shaped customerId (airtime/data), then the
+ * customer's registered phone number on their Vestara account.
+ */
+async function resolveBillMsisdn(
+  userId: string,
+  explicitPhone?: string | null,
+  customerId?: string | null,
+): Promise<string> {
+  const clean = (v?: string | null) => String(v ?? "").replace(/[\s-]/g, "");
+  const looksLikePhone = (v: string) => /^(0|234|\+234)?\d{10,13}$/.test(v);
+
+  const direct = clean(explicitPhone);
+  if (direct && looksLikePhone(direct)) return direct;
+
+  const cust = clean(customerId);
+  if (cust && looksLikePhone(cust)) return cust;
+
+  try {
+    const db = getSupabaseAdmin();
+    const { data: client } = await db.from("vfd_sandbox_clients")
+      .select("phone").eq("user_id", userId).maybeSingle();
+    const fromClient = clean((client as { phone?: string } | null)?.phone);
+    if (fromClient && looksLikePhone(fromClient)) return fromClient;
+
+    const { data: profile } = await db.from("profiles")
+      .select("phone").eq("id", userId).maybeSingle();
+    const fromProfile = clean((profile as { phone?: string } | null)?.phone);
+    if (fromProfile && looksLikePhone(fromProfile)) return fromProfile;
+  } catch (e) {
+    console.error("[bills] resolveBillMsisdn lookup failed", e);
+  }
+  return "";
+}
+
 async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   const { customerId, amount, division, paymentItem, productId, billerId, phoneNumber } = body as {
     customerId: string; amount: string; division: string; paymentItem: string;
@@ -3196,13 +3229,12 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   const reference = `wesave-bill-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const requestId = crypto.randomUUID();
   const payCategory = ((body.category as string) || "").toLowerCase();
-  const payItemName = ((body.paymentItemName as string) || "").toLowerCase();
-  // Airtime/data purchases are delivered to an MSISDN — VFD expects the phone
-  // number on the payload. When the user did not type one separately the
-  // customerId IS the phone number, so fall back to it rather than omitting
-  // the field (an omitted MSISDN leaves the purchase parked at the biller).
-  const isMsisdnBill = /airtime|data|mobile|mtn|glo|airtel|9mobile|telco/.test(`${payCategory} ${payItemName} ${billerId}`.toLowerCase());
-  const resolvedPhone = phoneNumber || (isMsisdnBill && /^0?\d{10,13}$/.test(String(customerId).replace(/\s/g, "")) ? customerId : "");
+  void payCategory;
+  // VFD's /pay spec lists phoneNumber as a required field for every bill, not
+  // only telco items: it is the contact/delivery MSISDN the biller notifies.
+  // Resolve in order: explicit input → phone-shaped customerId → the customer's
+  // registered phone on their Vestara account.
+  const resolvedPhone = await resolveBillMsisdn(userId, phoneNumber, customerId);
 
   // --- Backend validation gate (never trusts the frontend's verdict) ---
   const payIdentity: BillIdentity = {
