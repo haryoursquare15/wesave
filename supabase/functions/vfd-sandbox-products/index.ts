@@ -2238,8 +2238,11 @@ async function handlePaySplit(userId: string, body: Record<string, unknown>) {
   const totalDebit = amount + feeShare;
 
 
-  // Production parity: debit bill share + fee share
-  const debited = await debitWallet(userId, totalDebit);
+  // Ledger-backed: bill share + fee share move from wallet into the split holding account,
+  // so a later cancellation/removal can release the exact same funds back.
+  const debited = await ledgerSplitPay(userId, splitId, totalDebit, `splitpay-${splitId}-${userId}`, {
+    split_title: split.title, bill_share: amount, fee_share: feeShare,
+  });
   if (!debited) return jsonResponse({ error: `Insufficient available balance. Need ₦${totalDebit.toLocaleString()} (₦${amount.toLocaleString()} share${feeShare > 0 ? ` + ₦${feeShare.toLocaleString()} fee` : ""})` }, 400);
 
   await db.from("vfd_sandbox_split_participants").update({
