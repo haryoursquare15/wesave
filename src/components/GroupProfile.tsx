@@ -13,7 +13,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase as supabaseClient } from "@/integrations/supabase/client";
+// LEGACY (WeSave decommission): this file still queries dropped tables/RPCs.
+// Kept as dead code pending a dedicated frontend cleanup pass.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const supabase = supabaseClient as any;
 import { useAuth } from "@/contexts/AuthContext";
 import { format } from "date-fns";
 import { toast } from "sonner";

@@ -9,7 +9,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAdminGroups } from "@/hooks/useAdmin";
 import { useAdminPermissions } from "@/hooks/useAdminPermissions";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase as supabaseClient } from "@/integrations/supabase/client";
+// LEGACY (WeSave decommission): this file still queries dropped tables/RPCs.
+// Kept as dead code pending a dedicated frontend cleanup pass.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const supabase = supabaseClient as any;
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { 

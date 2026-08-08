@@ -11,7 +11,11 @@ import { useAdminUsers, useAdminRoles } from "@/hooks/useAdmin";
 import { useAdminPermissions } from "@/hooks/useAdminPermissions";
 import { Database } from "@/integrations/supabase/types";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase as supabaseClient } from "@/integrations/supabase/client";
+// LEGACY (WeSave decommission): this file still queries dropped tables/RPCs.
+// Kept as dead code pending a dedicated frontend cleanup pass.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const supabase = supabaseClient as any;
 import { format } from "date-fns";
 import { Search, Snowflake, AlertTriangle, Shield, ChevronDown, ChevronRight, Wallet, Users, Trash2, UserX, Download, KeyRound, Copy } from "lucide-react";
 import { exportToCSV } from "@/lib/exportUtils";
