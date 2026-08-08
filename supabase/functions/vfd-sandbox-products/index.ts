@@ -3875,6 +3875,13 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
     `amount=${numAmount} msisdn_sent=${resolvedPhone ? "yes" : "no"} http=${resp.status} ` +
     `status=${String(effStatus ?? "")} outcome=${payOutcome} message=${String(data?.message ?? "").slice(0, 200)}`,
   );
+  // The wallet hold was placed before /pay — release it so the customer is
+  // made whole on a declined purchase.
+  const { error: relErr } = await dbHold.rpc("vestara_bill_release", {
+    _reference: reference,
+    _metadata: { reason: "biller_declined", biller_id: billerId, customer_id: customerId },
+  });
+  if (relErr) console.error("[bills] vestara_bill_release failed after decline:", relErr);
   return jsonResponse({
     error: (data?.message as string) || "The biller could not complete this purchase. Your wallet was not debited. Please try again.",
     code: "BILL_PAYMENT_FAILED",
