@@ -793,8 +793,7 @@ serve(async (req) => {
           return err("product_code, principal, and tenor_days are required");
         }
         const ref = reference || `sav-${crypto.randomUUID().slice(0, 8)}`;
-        // All savings now go through admin approval — funds are held in a
-        // pending_savings ledger account until an admin approves or rejects.
+        // Step 1 — internal hold: wallet debited, pending_savings credited.
         const { data, error: e } = await supabase.rpc("vestara_create_savings_pending", {
           _user_id: userId,
           _product_code: product_code,
@@ -803,14 +802,74 @@ serve(async (req) => {
           _reference: ref,
         });
         if (e) return err(e.message);
+
+        const savingsId = (data as { savings_id?: string })?.savings_id;
+
+        // Step 2 — REAL money move, at subscription time: debit the customer's
+        // NUBAN and credit the product's sub-account NUBAN at VFD. VFD requires
+        // real funds sitting in the sub-account before they will act on a manual
+        // placement instruction, so this cannot wait until approval.
+        // Idempotent: the VFD reference is derived from savings_id, so a retry
+        // replays the same reference and VFD rejects the duplicate instead of
+        // debiting twice.
+        let subAccount: Record<string, unknown> | null = null;
+        let fundingError: string | null = null;
+        if (savingsId) {
+          const authHeader = req.headers.get("Authorization") || "";
+          try {
+            const moveRes = await fetch(`${supabaseUrl}/functions/v1/vfd-banking`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: authHeader,
+                apikey: Deno.env.get("SUPABASE_ANON_KEY") || "",
+              },
+              body: JSON.stringify({
+                action: "admin_move_savings_to_subaccount",
+                savings_id: savingsId,
+              }),
+            });
+            const moveJson = await moveRes.json().catch(() => ({}));
+            if (!moveRes.ok || moveJson?.error) {
+              fundingError = moveJson?.error || "Could not place funds in the product sub-account at the bank.";
+            } else {
+              subAccount = moveJson?.data ?? null;
+            }
+          } catch (_e) {
+            fundingError = "Could not reach the bank to fund the product sub-account.";
+          }
+        }
+
         await supabase.from("user_notifications").insert({
           user_id: userId,
           type: "savings_pending_approval",
           title: "Investment submitted for review",
-          message: `Your ${product_code} investment of ₦${Number(principal).toLocaleString()} is awaiting admin approval. Funds are safely on hold.`,
-          metadata: { savings_id: (data as { savings_id?: string })?.savings_id, product_code },
+          message: `Your ${product_code} investment of ₦${Number(principal).toLocaleString()} is awaiting placement confirmation. Funds are safely on hold.`,
+          metadata: { savings_id: savingsId, product_code },
         }).then(() => {}, () => {});
-        result = data;
+
+        result = { ...(data as Record<string, unknown> ?? {}), sub_account: subAccount, funding_error: fundingError };
+        break;
+      }
+
+      case "retry_savings_funding": {
+        // Recovery path: replay step 2 for a contract whose real transfer did
+        // not complete. Safe to call repeatedly.
+        const { savings_id } = params;
+        if (!savings_id) return err("savings_id is required");
+        const authHeader = req.headers.get("Authorization") || "";
+        const moveRes = await fetch(`${supabaseUrl}/functions/v1/vfd-banking`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: authHeader,
+            apikey: Deno.env.get("SUPABASE_ANON_KEY") || "",
+          },
+          body: JSON.stringify({ action: "admin_move_savings_to_subaccount", savings_id }),
+        });
+        const moveJson = await moveRes.json().catch(() => ({}));
+        if (!moveRes.ok || moveJson?.error) return err(moveJson?.error || "Sub-account funding failed", moveRes.status || 400);
+        result = { success: true, sub_account: moveJson?.data ?? null };
         break;
       }
 
@@ -833,45 +892,28 @@ serve(async (req) => {
           for (const p of profs ?? []) profilesMap[p.id as string] = { full_name: p.full_name ?? null, email: p.email ?? null };
         }
         const pending = (data ?? []).map((r: Record<string, unknown>) => ({ ...r, profiles: profilesMap[r.user_id as string] ?? null }));
-        result = { success: true, pending };
+        const thresholdHours = Number(params.aging_threshold_hours ?? 48);
+        const { data: aging } = await supabase.rpc("vestara_aging_pending_savings", { _threshold_hours: thresholdHours });
+        result = { success: true, pending, aging: aging ?? null, aging_threshold_hours: thresholdHours };
         break;
       }
 
       case "approve_savings": {
-        const { savings_id, notes } = params;
+        const { savings_id, notes, vfd_confirmation_reference, vfd_confirmation_note } = params;
         if (!savings_id) return err("savings_id is required");
-
-        // Step 1: physically move the principal at VFD from the customer's
-        // NUBAN into the product's dedicated sub-account NUBAN (Vault /
-        // LockMax / Upfront Yield / GoalSave). If VFD refuses, DO NOT flip
-        // approval status — surface the bank error to the admin.
-        const authHeader = req.headers.get("Authorization") || "";
-        const moveRes = await fetch(`${supabaseUrl}/functions/v1/vfd-banking`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: authHeader,
-            apikey: Deno.env.get("SUPABASE_ANON_KEY") || "",
-          },
-          body: JSON.stringify({
-            action: "admin_move_savings_to_subaccount",
-            savings_id,
-          }),
-        });
-        const moveJson = await moveRes.json().catch(() => ({}));
-        if (!moveRes.ok || moveJson?.error) {
-          return err(
-            moveJson?.error ||
-              "Could not move funds into the product sub-account at VFD. Approval halted.",
-            moveRes.status || 400,
-          );
+        if (!vfd_confirmation_reference || !String(vfd_confirmation_reference).trim()) {
+          return err("A VFD placement confirmation reference is required before approving.");
         }
 
-        // Step 2: flip approval status on the Vestara ledger.
+        // NO real money moves here. The customer's funds were physically moved
+        // into the product sub-account at subscription time; approval only
+        // records VFD's placement confirmation and starts the interest clock.
         const { data, error: e } = await supabase.rpc("vestara_approve_savings", {
           _admin_id: userId,
           _savings_id: savings_id,
+          _vfd_confirmation_reference: String(vfd_confirmation_reference).trim(),
           _notes: notes ?? null,
+          _vfd_confirmation_note: vfd_confirmation_note ?? null,
         });
         if (e) return err(e.message);
         const { data: s } = await supabase.from("vestara_savings")
@@ -881,17 +923,45 @@ serve(async (req) => {
             user_id: s.user_id,
             type: "savings_approved",
             title: "Investment approved 🎉",
-            message: `Your ${s.product_code} investment of ₦${Number(s.principal).toLocaleString()} is now active.`,
+            message: `Your ${s.product_code} investment of ₦${Number(s.principal).toLocaleString()} is now active and earning.`,
             metadata: { savings_id, sub_account_nuban: s.sub_account_nuban, sub_account_transfer_ref: s.sub_account_transfer_ref },
           }).then(() => {}, () => {});
         }
-        result = { ...(data as Record<string, unknown> ?? {}), sub_account: moveJson?.data ?? null };
+        result = data;
         break;
       }
 
       case "reject_savings": {
         const { savings_id, notes } = params;
         if (!savings_id) return err("savings_id is required");
+
+        // If real funds already landed in the product sub-account, reverse them
+        // at the bank FIRST (sub-account NUBAN -> customer NUBAN). The DB
+        // function refuses to reject until that reversal is stamped.
+        const { data: pre } = await supabase.from("vestara_savings")
+          .select("sub_account_transferred_at, sub_account_reversed_at").eq("id", savings_id).maybeSingle();
+        let reversal: Record<string, unknown> | null = null;
+        if (pre?.sub_account_transferred_at && !pre?.sub_account_reversed_at) {
+          const authHeader = req.headers.get("Authorization") || "";
+          const revRes = await fetch(`${supabaseUrl}/functions/v1/vfd-banking`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: authHeader,
+              apikey: Deno.env.get("SUPABASE_ANON_KEY") || "",
+            },
+            body: JSON.stringify({ action: "reverse_savings_subaccount", savings_id }),
+          });
+          const revJson = await revRes.json().catch(() => ({}));
+          if (!revRes.ok || revJson?.error) {
+            return err(
+              revJson?.error || "Could not reverse the funds out of the product sub-account at VFD. Rejection halted.",
+              revRes.status || 400,
+            );
+          }
+          reversal = revJson?.data ?? null;
+        }
+
         const { data, error: e } = await supabase.rpc("vestara_reject_savings", {
           _admin_id: userId,
           _savings_id: savings_id,
@@ -909,9 +979,10 @@ serve(async (req) => {
             metadata: { savings_id, reason: notes ?? null },
           }).then(() => {}, () => {});
         }
-        result = data;
+        result = { ...(data as Record<string, unknown> ?? {}), reversal };
         break;
       }
+
 
       case "mature_savings": {
         const { savings_id } = params;

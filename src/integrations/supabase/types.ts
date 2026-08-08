@@ -3783,6 +3783,8 @@ export type Database = {
           approval_submitted_at: string | null
           commitment_amount: number | null
           commitment_frequency: string | null
+          confirmed_at: string | null
+          confirmed_by: string | null
           created_at: string
           discounted_interest_paid: number
           effective_rate: number | null
@@ -3820,13 +3822,18 @@ export type Database = {
           start_date: string
           status: Database["public"]["Enums"]["vestara_savings_status"]
           sub_account_nuban: string | null
+          sub_account_reversal_ref: string | null
+          sub_account_reversed_at: string | null
           sub_account_transfer_ref: string | null
           sub_account_transferred_at: string | null
+          subaccount_funded_at: string | null
           tenor_count: number | null
           tenor_days: number
           updated_at: string
           user_id: string
           user_rate: number
+          vfd_confirmation_note: string | null
+          vfd_confirmation_reference: string | null
           vfd_rate: number
           withdrawn_at: string | null
         }
@@ -3840,6 +3847,8 @@ export type Database = {
           approval_submitted_at?: string | null
           commitment_amount?: number | null
           commitment_frequency?: string | null
+          confirmed_at?: string | null
+          confirmed_by?: string | null
           created_at?: string
           discounted_interest_paid?: number
           effective_rate?: number | null
@@ -3877,13 +3886,18 @@ export type Database = {
           start_date?: string
           status?: Database["public"]["Enums"]["vestara_savings_status"]
           sub_account_nuban?: string | null
+          sub_account_reversal_ref?: string | null
+          sub_account_reversed_at?: string | null
           sub_account_transfer_ref?: string | null
           sub_account_transferred_at?: string | null
+          subaccount_funded_at?: string | null
           tenor_count?: number | null
           tenor_days: number
           updated_at?: string
           user_id: string
           user_rate: number
+          vfd_confirmation_note?: string | null
+          vfd_confirmation_reference?: string | null
           vfd_rate: number
           withdrawn_at?: string | null
         }
@@ -3897,6 +3911,8 @@ export type Database = {
           approval_submitted_at?: string | null
           commitment_amount?: number | null
           commitment_frequency?: string | null
+          confirmed_at?: string | null
+          confirmed_by?: string | null
           created_at?: string
           discounted_interest_paid?: number
           effective_rate?: number | null
@@ -3934,13 +3950,18 @@ export type Database = {
           start_date?: string
           status?: Database["public"]["Enums"]["vestara_savings_status"]
           sub_account_nuban?: string | null
+          sub_account_reversal_ref?: string | null
+          sub_account_reversed_at?: string | null
           sub_account_transfer_ref?: string | null
           sub_account_transferred_at?: string | null
+          subaccount_funded_at?: string | null
           tenor_count?: number | null
           tenor_days?: number
           updated_at?: string
           user_id?: string
           user_rate?: number
+          vfd_confirmation_note?: string | null
+          vfd_confirmation_reference?: string | null
           vfd_rate?: number
           withdrawn_at?: string | null
         }
@@ -7883,8 +7904,18 @@ export type Database = {
         }
         Returns: Json
       }
+      vestara_aging_pending_savings: {
+        Args: { _threshold_hours?: number }
+        Returns: Json
+      }
       vestara_approve_savings: {
-        Args: { _admin_id: string; _notes?: string; _savings_id: string }
+        Args: {
+          _admin_id: string
+          _notes?: string
+          _savings_id: string
+          _vfd_confirmation_note?: string
+          _vfd_confirmation_reference: string
+        }
         Returns: Json
       }
       vestara_auto_mature_due: { Args: never; Returns: Json }

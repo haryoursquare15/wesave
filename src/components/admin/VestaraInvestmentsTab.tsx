@@ -54,7 +54,16 @@ interface SavingsRow {
   withdrawn_at: string | null;
   penalty_amount: number;
   created_at: string;
+  approval_status?: string | null;
+  subaccount_funded_at?: string | null;
+  sub_account_nuban?: string | null;
+  sub_account_transfer_ref?: string | null;
+  sub_account_reversed_at?: string | null;
+  vfd_confirmation_reference?: string | null;
+  vfd_confirmation_note?: string | null;
+  confirmed_at?: string | null;
 }
+
 
 interface EnrichedRow extends SavingsRow {
   customer_name: string;
@@ -336,7 +345,9 @@ export function VestaraInvestmentsTab() {
                   <TableHead>VFD %</TableHead>
                   <TableHead>Customer ROI</TableHead>
                   <TableHead>Spread ROI</TableHead>
+                  <TableHead>Placement</TableHead>
                   <TableHead>Status</TableHead>
+
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -360,11 +371,39 @@ export function VestaraInvestmentsTab() {
                     <TableCell>
                       <Badge variant="secondary">{naira(r.vestara_spread_roi)}</Badge>
                     </TableCell>
+                    <TableCell className="text-xs space-y-0.5 min-w-[190px]">
+                      <div>
+                        Sub-account funded:{" "}
+                        {r.subaccount_funded_at ? fmtDate(r.subaccount_funded_at) : <span className="text-muted-foreground">—</span>}
+                      </div>
+                      {r.sub_account_nuban && (
+                        <div className="font-mono text-[10px] text-muted-foreground">{r.sub_account_nuban}</div>
+                      )}
+                      <div>
+                        VFD confirmation:{" "}
+                        {r.vfd_confirmation_reference
+                          ? <span className="font-mono text-[10px]">{r.vfd_confirmation_reference}</span>
+                          : <span className="text-muted-foreground">—</span>}
+                      </div>
+                      {r.confirmed_at && (
+                        <div className="text-[10px] text-muted-foreground">Confirmed {fmtDate(r.confirmed_at)}</div>
+                      )}
+                      {r.vfd_confirmation_note && (
+                        <div className="text-[10px] text-muted-foreground">{r.vfd_confirmation_note}</div>
+                      )}
+                      {r.sub_account_reversed_at && (
+                        <div className="text-[10px] text-destructive">Reversed {fmtDate(r.sub_account_reversed_at)}</div>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Badge variant={r.status === "active" ? "default" : "outline"}>
                         {r.status}
                       </Badge>
+                      {r.approval_status && r.approval_status !== "approved" && (
+                        <div className="text-[10px] text-muted-foreground mt-0.5">{r.approval_status}</div>
+                      )}
                     </TableCell>
+
                   </TableRow>
                 ))}
               </TableBody>
