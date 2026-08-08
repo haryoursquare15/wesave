@@ -3916,7 +3916,9 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
 
 
 
-  const payBody: Record<string, string> = { customerId, amount: amount.toString(), division, paymentItem, productId, billerId, reference };
+  // amount uses the validated numeric value (never the raw client string), and
+  // `reference` is freshly generated per attempt — VFD rejects reused refs.
+  const payBody: Record<string, string> = { customerId, amount: numAmount.toString(), division, paymentItem, productId, billerId, reference };
   if (resolvedPhone) payBody.phoneNumber = resolvedPhone;
 
   // Durable forensic trace of the exact outbound /pay request, written BEFORE
