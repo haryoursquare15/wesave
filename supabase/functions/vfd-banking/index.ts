@@ -3685,8 +3685,18 @@ async function handleAdminMoveSavingsToSubaccount(
 
   // 6) signature + /transfer intra
   const signature = await generateTransferSignature(customerNuban, subAccountNuban);
-  const walletPrefix = Deno.env.get("VFD_WALLET_NAME") || "VFD";
-  const reference = `INV-${savings.product_code.toUpperCase()}-${Date.now()}-${crypto.randomUUID().slice(0, 6)}`;
+  // DETERMINISTIC reference — this is the crash-safety anchor. If the VFD call
+  // succeeds but our DB stamp never lands, a retry replays the SAME reference
+  // and VFD rejects it as a duplicate ("Reference Exist") instead of debiting
+  // the customer twice. We then treat that duplicate as proof of success.
+  const reference = `INV-${savings.product_code.toUpperCase()}-${savingsId.replace(/-/g, "").slice(0, 16)}`;
+
+  // Pre-claim: record the reference we are about to use BEFORE calling VFD, so
+  // even a hard crash mid-call leaves a breadcrumb pointing at the exact ref.
+  await db.from("vestara_savings").update({
+    sub_account_nuban: subAccountNuban,
+    sub_account_transfer_ref: reference,
+  }).eq("id", savingsId).is("sub_account_transferred_at", null);
 
   const payload = {
     fromAccount: customerNuban,
@@ -3709,29 +3719,34 @@ async function handleAdminMoveSavingsToSubaccount(
     uniqueSenderAccountId: senderSavingsId,
   };
 
-  console.log("[admin_move_savings_to_subaccount] payload:", JSON.stringify(payload));
+  console.log("[move_savings_to_subaccount] payload:", JSON.stringify(payload));
 
   const { data: transferResp, status: transferStatus } = await vfdRequest("/transfer", "POST", payload);
   const respData = transferResp as Record<string, unknown>;
-  const ok = respData?.status === "00";
+  const vfdStatusCode = String(respData?.status ?? "");
+  const vfdMessage = String(respData?.message ?? "");
+  const duplicate = vfdStatusCode === "98" || /reference exist/i.test(vfdMessage);
+  const ok = vfdStatusCode === "00" || duplicate;
 
   if (!ok) {
-    console.error("[admin_move_savings_to_subaccount] VFD rejected:", respData);
+    console.error("[move_savings_to_subaccount] VFD rejected:", respData);
     return jsonResponse({
-      error: (respData?.message as string) || "VFD refused the sub-account transfer.",
+      error: vfdMessage || "VFD refused the sub-account transfer.",
       code: "VFD_TRANSFER_REJECTED",
       vfd_status: transferStatus,
       data: respData,
     }, 400);
   }
 
-  // 7) stamp the savings row
+  // 7) stamp the savings row (both the bank-move stamp and the business-level
+  // "funds landed in sub-account" event timestamp)
   const nowIso = new Date().toISOString();
   await db.from("vestara_savings").update({
     sub_account_nuban: subAccountNuban,
     sub_account_transfer_ref: reference,
     sub_account_transferred_at: nowIso,
-  }).eq("id", savingsId);
+    subaccount_funded_at: nowIso,
+  }).eq("id", savingsId).is("sub_account_transferred_at", null);
 
   return jsonResponse({
     data: {
@@ -3740,7 +3755,162 @@ async function handleAdminMoveSavingsToSubaccount(
       sub_account_nuban: subAccountNuban,
       reference,
       moved_at: nowIso,
+      replayed: duplicate,
       vfd: respData?.data ?? null,
     },
   });
 }
+
+// =============================================
+// REVERSE A SAVINGS SUB-ACCOUNT FUNDING TRANSFER
+// =============================================
+//
+// Used when an investment is rejected AFTER the real funds already moved to
+// the product sub-account (VFD never placed them, admin changed their mind,
+// product discontinued, etc.). Moves the principal back: product sub-account
+// NUBAN -> customer NUBAN. Admin-only, idempotent on the same deterministic
+// reversal reference.
+async function handleReverseSavingsSubaccount(
+  callerUserId: string,
+  body: Record<string, unknown>
+) {
+  const db = getSupabaseAdmin();
+
+  const { data: roles } = await db
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", callerUserId)
+    .in("role", ["admin", "super_admin"]);
+  if (!roles || roles.length === 0) {
+    return jsonResponse({ error: "Admin only" }, 403);
+  }
+
+  const savingsId = String(body.savings_id || "").trim();
+  if (!savingsId) return jsonResponse({ error: "savings_id is required" }, 400);
+
+  const { data: savings } = await db
+    .from("vestara_savings")
+    .select("id, user_id, principal, product_code, sub_account_nuban, sub_account_transferred_at, sub_account_reversed_at, sub_account_reversal_ref")
+    .eq("id", savingsId)
+    .maybeSingle();
+  if (!savings) return jsonResponse({ error: "Investment not found" }, 404);
+
+  // Nothing physically moved yet — nothing to reverse at the bank.
+  if (!savings.sub_account_transferred_at) {
+    return jsonResponse({ data: { success: true, nothing_to_reverse: true } });
+  }
+  if (savings.sub_account_reversed_at) {
+    return jsonResponse({
+      data: {
+        success: true,
+        already_reversed: true,
+        reference: savings.sub_account_reversal_ref,
+        reversed_at: savings.sub_account_reversed_at,
+      },
+    });
+  }
+
+  const subAccountNuban = savings.sub_account_nuban as string | null;
+  if (!subAccountNuban) {
+    return jsonResponse({ error: "No sub-account NUBAN recorded on this contract.", code: "SUBACCOUNT_MISSING" }, 400);
+  }
+
+  const { data: client } = await db
+    .from("vfd_sandbox_clients")
+    .select("vfd_account_number")
+    .eq("user_id", savings.user_id)
+    .maybeSingle();
+  const customerNuban = client?.vfd_account_number as string | null | undefined;
+  if (!customerNuban) {
+    return jsonResponse({ error: "Customer has no VFD account provisioned.", code: "CUSTOMER_NUBAN_MISSING" }, 400);
+  }
+
+  const amount = Number(savings.principal);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return jsonResponse({ error: "Invalid principal amount on savings row" }, 400);
+  }
+
+  // sender = product sub-account
+  const { data: senderEnquiry, status: senderStatus } = await vfdRequest(
+    "/account/enquiry", "GET", undefined, { accountNumber: subAccountNuban },
+  );
+  if (senderStatus !== 200 || (senderEnquiry as Record<string, unknown>)?.status !== "00") {
+    return jsonResponse({ error: `Could not retrieve product sub-account (${subAccountNuban}) at VFD.`, data: senderEnquiry }, 400);
+  }
+  const sEnv = (senderEnquiry as Record<string, unknown>)?.data as Record<string, unknown>;
+  const sAcct = (sEnv?.account as Record<string, unknown> | undefined) || sEnv;
+  const fromSavingsId = sAcct?.id?.toString?.() || sEnv?.accountId?.toString?.() || "";
+  if (!fromSavingsId) {
+    return jsonResponse({ error: "VFD enquiry returned no id for the product sub-account.", data: senderEnquiry }, 400);
+  }
+
+  // beneficiary = customer
+  const { data: benEnquiry, status: benStatus } = await vfdRequest(
+    "/account/enquiry", "GET", undefined, { accountNumber: customerNuban },
+  );
+  if (benStatus !== 200 || (benEnquiry as Record<string, unknown>)?.status !== "00") {
+    return jsonResponse({ error: "Could not retrieve customer VFD account details.", data: benEnquiry }, 400);
+  }
+  const bEnv = (benEnquiry as Record<string, unknown>)?.data as Record<string, unknown>;
+  const bAcct = (bEnv?.account as Record<string, unknown> | undefined) || bEnv;
+
+  const signature = await generateTransferSignature(subAccountNuban, customerNuban);
+  const reference = `INVREV-${String(savings.product_code).toUpperCase()}-${savingsId.replace(/-/g, "").slice(0, 16)}`;
+
+  await db.from("vestara_savings").update({ sub_account_reversal_ref: reference })
+    .eq("id", savingsId).is("sub_account_reversed_at", null);
+
+  const payload = {
+    fromAccount: subAccountNuban,
+    fromClientId: sEnv?.clientId?.toString?.() || "",
+    fromClient: sEnv?.client?.toString?.() || "",
+    fromSavingsId,
+    fromBvn: sEnv?.bvn?.toString?.() || "",
+    toAccount: customerNuban,
+    toBank: "999999",
+    toClient: bEnv?.client?.toString?.() || bAcct?.client?.toString?.() || "Customer",
+    toClientId: bEnv?.clientId?.toString?.() || bAcct?.clientId?.toString?.() || "",
+    toSavingsId: bAcct?.id?.toString?.() || bEnv?.accountId?.toString?.() || "",
+    toSession: "",
+    toBvn: bEnv?.bvn?.toString?.() || "",
+    signature,
+    amount: String(amount),
+    remark: `${savings.product_code} investment reversal`,
+    transferType: "intra",
+    reference,
+    uniqueSenderAccountId: fromSavingsId,
+  };
+
+  const { data: transferResp, status: transferStatus } = await vfdRequest("/transfer", "POST", payload);
+  const respData = transferResp as Record<string, unknown>;
+  const code = String(respData?.status ?? "");
+  const msg = String(respData?.message ?? "");
+  const duplicate = code === "98" || /reference exist/i.test(msg);
+  if (!(code === "00" || duplicate)) {
+    console.error("[reverse_savings_subaccount] VFD rejected:", respData);
+    return jsonResponse({
+      error: msg || "VFD refused the reversal transfer.",
+      code: "VFD_REVERSAL_REJECTED",
+      vfd_status: transferStatus,
+      data: respData,
+    }, 400);
+  }
+
+  const nowIso = new Date().toISOString();
+  await db.from("vestara_savings").update({
+    sub_account_reversal_ref: reference,
+    sub_account_reversed_at: nowIso,
+  }).eq("id", savingsId).is("sub_account_reversed_at", null);
+
+  return jsonResponse({
+    data: {
+      success: true,
+      savings_id: savingsId,
+      reference,
+      reversed_at: nowIso,
+      replayed: duplicate,
+      vfd: respData?.data ?? null,
+    },
+  });
+}
+
