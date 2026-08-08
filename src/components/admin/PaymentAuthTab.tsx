@@ -28,11 +28,7 @@ export function PaymentAuthTab() {
     setLoading(true);
     try {
       const [tokensRes, virtualRes, mandatesRes] = await Promise.all([
-        supabase
-          .from("card_tokens")
-          .select("id, user_id, card_last4, card_type, card_status, first_6digits, group_id, created_at")
-          .order("created_at", { ascending: false })
-          .limit(200),
+        supabase.rpc("admin_list_card_tokens" as any, { _limit: 200 }),
         supabase
           .from("vfd_sandbox_virtual_cards")
           .select("id, user_id, masked_pan, status, created_at")
@@ -46,9 +42,9 @@ export function PaymentAuthTab() {
       ]);
 
       const merged: PaymentAuthRow[] = [];
-      (tokensRes.data ?? []).forEach((t: any) => merged.push({
+      (((tokensRes as any).data as any[]) ?? []).forEach((t: any) => merged.push({
         id: t.id, user_id: t.user_id,
-        label: t.first_6digits ? `${t.first_6digits}••••${t.card_last4}` : `••••${t.card_last4 || "????"}`,
+        label: `••••${t.card_last4 || "????"}`,
         detail: t.card_type || "—",
         kind: "card", status: t.card_status, group_id: t.group_id,
         created_at: t.created_at, source: "legacy",

@@ -6378,6 +6378,18 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_list_card_tokens: {
+        Args: { _limit?: number }
+        Returns: {
+          card_last4: string
+          card_status: string
+          card_type: string
+          created_at: string
+          group_id: string
+          id: string
+          user_id: string
+        }[]
+      }
       admin_list_staff: {
         Args: never
         Returns: {
