@@ -37,6 +37,13 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   const supabase = admin();
+
+  // Caller verification MUST run before any DB read/write. Service-to-service
+  // only: the scheduler presents `x-cron-token`.
+  if (!(await verifyCronToken(req, "goalsave_debit_worker", supabase))) {
+    return unauthorized(corsHeaders);
+  }
+
   const now = new Date().toISOString();
 
   // Resolve the single system settlement account (DDM funds land here from VFD)
