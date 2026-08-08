@@ -90,6 +90,32 @@ Deno.serve(async (req) => {
     }
   }
 
+  // Ops probe: read-only /account/enquiry. `enquiry=<nuban>` queries a
+  // specific account; `enquiry=self` omits accountNumber, which returns the
+  // corporate/pool account tied to our VFD credentials.
+  const enquiry = url.searchParams.get("enquiry") || "";
+  if (enquiry) {
+    try {
+      const accessToken = await getAccessToken();
+      const target = new URL(`${WALLET_BASE}/account/enquiry`);
+      if (enquiry !== "self") target.searchParams.set("accountNumber", enquiry);
+      const res = await vfdFetch(target.toString(), {
+        method: "GET",
+        headers: { "Content-Type": "application/json", AccessToken: accessToken },
+      });
+      const text = await res.text();
+      let parsed: unknown = text;
+      try { parsed = JSON.parse(text); } catch { /* keep raw */ }
+      return new Response(JSON.stringify({ vfd_mode: VFD_MODE, probe: "enquiry", queried: enquiry, http_status: res.status, response: parsed }, null, 2), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (err) {
+      return new Response(JSON.stringify({ error: String(err) }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }
+
   // Ops probe: post a raw payload straight to VFD /pay (no wallet movement,
   // no receipt) so we can compare our request against VFD's own sample.
   if (billPay) {
