@@ -3074,15 +3074,18 @@ function getBillsBase(): string {
 // ===========================================================================
 // BILLS SETTLEMENT FUNDING (real money movement BEFORE /pay)
 //
-// VFD's bills model debits our settlement position when they process a bill.
-// Our settlement position must therefore be credited with the bill amount
-// BEFORE /pay is called. This block performs that real VFD intra transfer
-// from the Vestara corporate pool NUBAN, using the same crash-safe pattern
-// proven in vfd-banking (deterministic pre-claimed reference + independent
-// verification via /transactions?reference=, never trusting a status code).
+// VFD debits our settlement position (the corporate pool) when they process a
+// bill. Each bill therefore performs a REAL VFD intra transfer from the
+// CUSTOMER'S OWN NUBAN into the pool for that exact bill, using the crash-safe
+// pattern proven in vfd-banking's admin_move_savings_to_subaccount:
+// deterministic pre-claimed reference + independent verification via
+// /transactions?reference=, never trusting a status code (98 != success).
 //
-// ASSUMPTION (flagged): only the BILL AMOUNT is funded to settlement, not the
-// convenience fee. The convenience fee is Vestara/biller revenue collected
+// No balance-sufficiency read is used: the pool is funded BY this request, so
+// concurrent bills cannot both pass a stale shared-balance check.
+//
+// ASSUMPTION (flagged): only the BILL AMOUNT is transferred to the pool, not
+// the convenience fee. The convenience fee is Vestara/biller revenue collected
 // from the customer's wallet and is not part of what VFD debits for the vend.
 // ===========================================================================
 const VFD_WALLET_BASE_TEST = "https://api-devapps.vfdbank.systems/vtech-wallet/api/v2/wallet2";
@@ -3093,13 +3096,12 @@ function getWalletBase(): string {
   return mode === "production" || mode === "live" ? VFD_WALLET_BASE_LIVE : VFD_WALLET_BASE_TEST;
 }
 
-// Confirmed Vestara corporate pool NUBAN (source of bills settlement funding).
+// Confirmed Vestara corporate pool NUBAN (destination of bills funding).
 const VFD_CORPORATE_POOL_NUBAN =
   Deno.env.get("VFD_CORPORATE_POOL_NUBAN") || "1047279595";
-// Account VFD debits for bills. CONFIRMED to be the corporate pool itself
-// (1047279595) — no separate bills float exists. Overridable if VFD later
-// issues a dedicated bills settlement account, in which case the real
-// transfer path below activates automatically.
+// Account VFD debits for bills — the corporate pool itself (1047279595).
+// If VFD later issues a dedicated bills float account, set this env var and
+// customer transfers are routed there instead; no other change is needed.
 const VFD_BILLS_SETTLEMENT_NUBAN =
   Deno.env.get("VFD_BILLS_SETTLEMENT_NUBAN") || VFD_CORPORATE_POOL_NUBAN;
 
