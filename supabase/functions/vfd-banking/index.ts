@@ -3455,6 +3455,9 @@ Deno.serve(async (req) => {
 
       case "admin_move_savings_to_subaccount":
         return await handleAdminMoveSavingsToSubaccount(userId, body);
+      case "reverse_savings_subaccount":
+        return await handleReverseSavingsSubaccount(userId, body);
+
 
       default:
         return jsonResponse({ error: `Unknown action: ${action}` }, 400);
