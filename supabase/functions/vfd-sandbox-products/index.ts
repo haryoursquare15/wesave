@@ -3262,6 +3262,7 @@ async function fundBillsSettlement(params: {
       `${String(toEnq?.message)}) — retrying corporate self-enquiry`,
     );
     const self = await walletRequest("/account/enquiry", "GET", undefined, {});
+    console.log(`[bills][fund][self-enquiry] ${JSON.stringify(self.data ?? {}).slice(0, 800)}`);
     const selfEnv = (self.data?.data as Record<string, unknown>) || {};
     const selfAcct = (selfEnv?.account as Record<string, unknown>) || selfEnv;
     const selfNuban = String(selfEnv?.accountNo ?? selfAcct?.accountNo ?? "");
@@ -3296,6 +3297,37 @@ async function fundBillsSettlement(params: {
     };
   }
 
+  // Beneficiary identity. Empty strings must NOT satisfy `??`, so coalesce on
+  // "first non-empty". Env overrides win: the corporate pool's client/savings
+  // ids are stable and VFD's enquiry does not always echo them.
+  const firstNonEmpty = (...vals: unknown[]): string => {
+    for (const v of vals) {
+      const s = v === undefined || v === null ? "" : String(v).trim();
+      if (s) return s;
+    }
+    return "";
+  };
+  const toClient = firstNonEmpty(
+    Deno.env.get("VFD_POOL_CLIENT_NAME"), tEnv?.client, tAcct?.client, tEnv?.name, tAcct?.name,
+  );
+  const toClientId = firstNonEmpty(
+    Deno.env.get("VFD_POOL_CLIENT_ID"), tEnv?.clientId, tAcct?.clientId,
+  );
+  const toSavingsId = firstNonEmpty(
+    Deno.env.get("VFD_POOL_SAVINGS_ID"), tAcct?.id, tEnv?.accountId, tEnv?.id,
+  );
+  if (!toClient || !toClientId || !toSavingsId) {
+    console.error(
+      `[bills][fund] pool identity incomplete client="${toClient}" clientId="${toClientId}" ` +
+      `savingsId="${toSavingsId}" enquiry=${JSON.stringify(toEnq ?? {}).slice(0, 500)}`,
+    );
+    return {
+      confirmed: false, reference: fundingRef, code: "SETTLEMENT_DEST_IDENTITY_MISSING",
+      error: "We could not reach our settlement account. Your wallet was not debited. Please try again shortly.",
+      evidence: toEnq,
+    };
+  }
+
   const payload = {
     fromAccount: customerNuban,
     fromClientId: String(fEnv?.clientId ?? ""),
@@ -3304,9 +3336,9 @@ async function fundBillsSettlement(params: {
     fromBvn: String(fEnv?.bvn ?? ""),
     toAccount: VFD_BILLS_SETTLEMENT_NUBAN,
     toBank: "999999",
-    toClient: String(tEnv?.client ?? tAcct?.client ?? "Vestara Pool"),
-    toClientId: String(tEnv?.clientId ?? tAcct?.clientId ?? ""),
-    toSavingsId: String(tAcct?.id ?? tEnv?.accountId ?? ""),
+    toClient,
+    toClientId,
+    toSavingsId,
     toSession: "",
     toBvn: String(tEnv?.bvn ?? ""),
     signature: await transferSignature(customerNuban, VFD_BILLS_SETTLEMENT_NUBAN),
@@ -3316,6 +3348,7 @@ async function fundBillsSettlement(params: {
     reference: fundingRef,
     uniqueSenderAccountId: fromSavingsId,
   };
+
 
   console.log(`[bills][fund][request] ${JSON.stringify(payload)}`);
   const { data: transferResp } = await walletRequest("/transfer", "POST", payload);
