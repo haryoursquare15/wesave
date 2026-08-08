@@ -3051,6 +3051,232 @@ function getBillsBase(): string {
   return mode === "production" || mode === "live" ? VFD_BILLS_BASE_LIVE : VFD_BILLS_BASE_TEST;
 }
 
+// ===========================================================================
+// BILLS SETTLEMENT FUNDING (real money movement BEFORE /pay)
+//
+// VFD's bills model debits our settlement position when they process a bill.
+// Our settlement position must therefore be credited with the bill amount
+// BEFORE /pay is called. This block performs that real VFD intra transfer
+// from the Vestara corporate pool NUBAN, using the same crash-safe pattern
+// proven in vfd-banking (deterministic pre-claimed reference + independent
+// verification via /transactions?reference=, never trusting a status code).
+//
+// ASSUMPTION (flagged): only the BILL AMOUNT is funded to settlement, not the
+// convenience fee. The convenience fee is Vestara/biller revenue collected
+// from the customer's wallet and is not part of what VFD debits for the vend.
+// ===========================================================================
+const VFD_WALLET_BASE_TEST = "https://api-devapps.vfdbank.systems/vtech-wallet/api/v2/wallet2";
+const VFD_WALLET_BASE_LIVE = "https://api-apps.vfdbank.systems/vtech-wallet/api/v2/wallet2";
+
+function getWalletBase(): string {
+  const mode = (Deno.env.get("VFD_MODE") || "sandbox").toLowerCase();
+  return mode === "production" || mode === "live" ? VFD_WALLET_BASE_LIVE : VFD_WALLET_BASE_TEST;
+}
+
+// Confirmed Vestara corporate pool NUBAN (source of bills settlement funding).
+const VFD_CORPORATE_POOL_NUBAN =
+  Deno.env.get("VFD_CORPORATE_POOL_NUBAN") || "1047279595";
+// Destination account VFD debits for bills. MUST be configured explicitly —
+// we never guess this. When unset, bills are refused before any money moves.
+const VFD_BILLS_SETTLEMENT_NUBAN =
+  Deno.env.get("VFD_BILLS_SETTLEMENT_NUBAN") || "";
+
+async function walletRequest(
+  endpoint: string,
+  method: "GET" | "POST",
+  body?: Record<string, unknown>,
+  query?: Record<string, string>,
+): Promise<{ data: Record<string, unknown>; status: number }> {
+  const token = await getVfdAccessToken();
+  if (!token) return { data: { error: "VFD auth failed" }, status: 401 };
+  const url = new URL(`${getWalletBase()}${endpoint}`);
+  for (const [k, v] of Object.entries(query || {})) url.searchParams.set(k, v);
+  const resp = await vfdFetch(url.toString(), {
+    method,
+    headers: { "Content-Type": "application/json", AccessToken: token },
+    body: body && method === "POST" ? JSON.stringify(body) : undefined,
+  });
+  return { data: await safeJson(resp), status: resp.status };
+}
+
+async function transferSignature(fromAccount: string, toAccount: string): Promise<string> {
+  const buf = await crypto.subtle.digest("SHA-512", new TextEncoder().encode(`${fromAccount}${toAccount}`));
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// Independent verification: a transfer counts as funded ONLY when VFD's own
+// transaction record reports transactionStatus "00". Any pending / failed /
+// unreadable envelope is treated as NOT funded.
+async function verifyVfdTransfer(reference: string): Promise<{ confirmed: boolean; evidence: unknown }> {
+  try {
+    const { data } = await walletRequest("/transactions", "GET", undefined, { reference });
+    const inner = (data?.data as Record<string, unknown>) ?? {};
+    const txStatus = String(inner?.transactionStatus ?? inner?.status ?? data?.status ?? "").trim();
+    const txMessage = String(inner?.transactionStatusMessage ?? data?.message ?? "");
+    return {
+      confirmed: txStatus === "00" && !/pending|fail|revers/i.test(txMessage),
+      evidence: data,
+    };
+  } catch (e) {
+    return { confirmed: false, evidence: { error: e instanceof Error ? e.message : String(e) } };
+  }
+}
+
+type SettlementFunding = {
+  confirmed: boolean;
+  reference: string;
+  code?: string;
+  error?: string;
+  evidence?: unknown;
+  replayed?: boolean;
+};
+
+async function fundBillsSettlement(params: {
+  reference: string;
+  amount: number;
+  userId: string | null;
+  origin: string;
+}): Promise<SettlementFunding> {
+  const db = getSupabaseAdmin();
+  const fundingRef = `${params.reference}-FUND`;
+
+  if (!VFD_BILLS_SETTLEMENT_NUBAN) {
+    return {
+      confirmed: false,
+      reference: fundingRef,
+      code: "BILLS_SETTLEMENT_NOT_CONFIGURED",
+      error: "Bill payments are temporarily unavailable while our settlement account is being configured. No funds were debited.",
+    };
+  }
+  if (VFD_BILLS_SETTLEMENT_NUBAN === VFD_CORPORATE_POOL_NUBAN) {
+    return {
+      confirmed: false,
+      reference: fundingRef,
+      code: "BILLS_SETTLEMENT_SELF_TRANSFER",
+      error: "Bill payments are temporarily unavailable (settlement routing misconfigured). No funds were debited.",
+    };
+  }
+
+  // Pre-claim the deterministic reference BEFORE any outbound call, so a crash
+  // mid-flight leaves a breadcrumb and a retry replays the SAME reference
+  // (VFD rejects it as a duplicate rather than moving money twice).
+  await db.from("vfd_transaction_events").insert({
+    user_id: params.userId,
+    reference: fundingRef,
+    event_type: "bill_settlement_funding_claim",
+    actor: "system",
+    payload: {
+      origin: params.origin,
+      bill_reference: params.reference,
+      amount: params.amount,
+      from: VFD_CORPORATE_POOL_NUBAN,
+      to: VFD_BILLS_SETTLEMENT_NUBAN,
+      claimed_at: new Date().toISOString(),
+    },
+  }).then(undefined, (e: unknown) => console.error("[bills][fund] pre-claim persist failed", e));
+
+  // Resumability: if this reference already settled on a prior attempt, do not
+  // move money again — reuse the confirmed outcome.
+  const prior = await verifyVfdTransfer(fundingRef);
+  if (prior.confirmed) {
+    return { confirmed: true, reference: fundingRef, evidence: prior.evidence, replayed: true };
+  }
+
+  const { data: fromEnq, status: fromStatus } = await walletRequest(
+    "/account/enquiry", "GET", undefined, { accountNumber: VFD_CORPORATE_POOL_NUBAN },
+  );
+  if (fromStatus !== 200 || fromEnq?.status !== "00") {
+    return {
+      confirmed: false, reference: fundingRef, code: "SETTLEMENT_SOURCE_ENQUIRY_FAILED",
+      error: "We could not reach the settlement account. Your wallet was not debited. Please try again shortly.",
+      evidence: fromEnq,
+    };
+  }
+  const { data: toEnq, status: toStatus } = await walletRequest(
+    "/account/enquiry", "GET", undefined, { accountNumber: VFD_BILLS_SETTLEMENT_NUBAN },
+  );
+  if (toStatus !== 200 || toEnq?.status !== "00") {
+    return {
+      confirmed: false, reference: fundingRef, code: "SETTLEMENT_DEST_ENQUIRY_FAILED",
+      error: "We could not reach the settlement account. Your wallet was not debited. Please try again shortly.",
+      evidence: toEnq,
+    };
+  }
+
+  const fEnv = (fromEnq?.data as Record<string, unknown>) || {};
+  const fAcct = (fEnv?.account as Record<string, unknown>) || fEnv;
+  const tEnv = (toEnq?.data as Record<string, unknown>) || {};
+  const tAcct = (tEnv?.account as Record<string, unknown>) || tEnv;
+  const fromSavingsId = String(fAcct?.id ?? fEnv?.accountId ?? "");
+  if (!fromSavingsId) {
+    return {
+      confirmed: false, reference: fundingRef, code: "SETTLEMENT_SOURCE_ID_MISSING",
+      error: "Settlement account details are incomplete. Your wallet was not debited.",
+      evidence: fromEnq,
+    };
+  }
+
+  const payload = {
+    fromAccount: VFD_CORPORATE_POOL_NUBAN,
+    fromClientId: String(fEnv?.clientId ?? ""),
+    fromClient: String(fEnv?.client ?? ""),
+    fromSavingsId,
+    fromBvn: String(fEnv?.bvn ?? ""),
+    toAccount: VFD_BILLS_SETTLEMENT_NUBAN,
+    toBank: "999999",
+    toClient: String(tEnv?.client ?? tAcct?.client ?? "Bills Settlement"),
+    toClientId: String(tEnv?.clientId ?? tAcct?.clientId ?? ""),
+    toSavingsId: String(tAcct?.id ?? tEnv?.accountId ?? ""),
+    toSession: "",
+    toBvn: String(tEnv?.bvn ?? ""),
+    signature: await transferSignature(VFD_CORPORATE_POOL_NUBAN, VFD_BILLS_SETTLEMENT_NUBAN),
+    amount: String(params.amount),
+    remark: `Bills settlement funding ${params.reference}`.slice(0, 60),
+    transferType: "intra",
+    reference: fundingRef,
+    uniqueSenderAccountId: fromSavingsId,
+  };
+
+  console.log(`[bills][fund][request] ${JSON.stringify(payload)}`);
+  const { data: transferResp } = await walletRequest("/transfer", "POST", payload);
+  const vfdStatus = String(transferResp?.status ?? "");
+  const vfdMessage = String(transferResp?.message ?? "");
+  const duplicate = vfdStatus === "98" || /reference exist/i.test(vfdMessage);
+
+  // Never trust the transfer response alone — confirm against VFD's own record.
+  const verified = await verifyVfdTransfer(fundingRef);
+
+  await db.from("vfd_transaction_events").insert({
+    user_id: params.userId,
+    reference: fundingRef,
+    event_type: "bill_settlement_funding_result",
+    actor: "system",
+    payload: {
+      bill_reference: params.reference,
+      transfer_status: vfdStatus,
+      transfer_message: vfdMessage,
+      duplicate,
+      verified: verified.confirmed,
+      transfer_response: transferResp,
+      tsq: verified.evidence,
+    },
+  }).then(undefined, (e: unknown) => console.error("[bills][fund] result persist failed", e));
+
+  if (!verified.confirmed) {
+    return {
+      confirmed: false,
+      reference: fundingRef,
+      code: duplicate ? "SETTLEMENT_FUNDING_UNCONFIRMED" : "SETTLEMENT_FUNDING_FAILED",
+      error: duplicate
+        ? "This bill's settlement funding was already submitted to the bank but has not settled yet. It is being tracked — no funds were debited twice."
+        : (vfdMessage || "We could not fund the settlement account for this bill. Your wallet was not debited. Please try again."),
+      evidence: { transfer: transferResp, tsq: verified.evidence },
+    };
+  }
+
+  return { confirmed: true, reference: fundingRef, evidence: verified.evidence, replayed: duplicate };
+}
+
 async function safeJson(resp: Response): Promise<Record<string, unknown>> {
   try {
     const raw = await resp.text();
