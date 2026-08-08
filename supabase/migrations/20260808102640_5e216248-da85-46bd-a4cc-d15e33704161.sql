@@ -1,0 +1,1 @@
+ALTER TABLE public.vfd_sandbox_bill_receipts ADD COLUMN IF NOT EXISTS request_payload jsonb;

@@ -3915,6 +3915,7 @@ export type Database = {
           reference: string
           refunded_at: string | null
           reminder_sent_at: string | null
+          request_payload: Json | null
           settled_at: string | null
           status: string
           timed_out_at: string | null
@@ -3945,6 +3946,7 @@ export type Database = {
           reference: string
           refunded_at?: string | null
           reminder_sent_at?: string | null
+          request_payload?: Json | null
           settled_at?: string | null
           status?: string
           timed_out_at?: string | null
@@ -3975,6 +3977,7 @@ export type Database = {
           reference?: string
           refunded_at?: string | null
           reminder_sent_at?: string | null
+          request_payload?: Json | null
           settled_at?: string | null
           status?: string
           timed_out_at?: string | null
