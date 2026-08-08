@@ -857,7 +857,30 @@ serve(async (req) => {
         // not complete. Safe to call repeatedly.
         const { savings_id } = params;
         if (!savings_id) return err("savings_id is required");
+
+        // Redundant, independently-fetched ownership/admin gate. The downstream
+        // vfd-banking handler enforces the same rule, but we do not trust the
+        // forward: resolve the contract owner and the caller's roles here too.
+        const { data: ownerRow, error: ownerErr } = await supabase
+          .from("vestara_savings")
+          .select("user_id")
+          .eq("id", savings_id)
+          .maybeSingle();
+        if (ownerErr) return err(ownerErr.message);
+        if (!ownerRow) return err("Savings contract not found", 404);
+        if ((ownerRow as { user_id: string }).user_id !== userId) {
+          const { data: callerRoles } = await supabase
+            .from("user_roles")
+            .select("role")
+            .eq("user_id", userId)
+            .in("role", ["admin", "super_admin"]);
+          if (!callerRoles || callerRoles.length === 0) {
+            return err("You can only retry funding for your own investment.", 403);
+          }
+        }
+
         const authHeader = req.headers.get("Authorization") || "";
+
         const moveRes = await fetch(`${supabaseUrl}/functions/v1/vfd-banking`, {
           method: "POST",
           headers: {
