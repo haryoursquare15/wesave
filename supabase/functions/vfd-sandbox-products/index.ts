@@ -3248,9 +3248,33 @@ async function fundBillsSettlement(params: {
       evidence: fromEnq,
     };
   }
-  const { data: toEnq, status: toStatus } = await walletRequest(
+  // Beneficiary enquiry on the corporate pool. VFD's wallet2 /account/enquiry
+  // resolves SUB-ACCOUNTS by accountNumber; the corporate/pool account itself
+  // is not addressable that way and answers 01 "Account Not Found". For the
+  // corporate account VFD returns its details when accountNumber is OMITTED
+  // (the account tied to our credentials), so fall back to that.
+  let { data: toEnq, status: toStatus } = await walletRequest(
     "/account/enquiry", "GET", undefined, { accountNumber: VFD_BILLS_SETTLEMENT_NUBAN },
   );
+  if (toStatus !== 200 || toEnq?.status !== "00") {
+    console.warn(
+      `[bills][fund] pool enquiry by accountNumber failed (${String(toEnq?.status)}: ` +
+      `${String(toEnq?.message)}) — retrying corporate self-enquiry`,
+    );
+    const self = await walletRequest("/account/enquiry", "GET", undefined, {});
+    const selfEnv = (self.data?.data as Record<string, unknown>) || {};
+    const selfAcct = (selfEnv?.account as Record<string, unknown>) || selfEnv;
+    const selfNuban = String(selfEnv?.accountNo ?? selfAcct?.accountNo ?? "");
+    if (self.status === 200 && self.data?.status === "00" && (!selfNuban || selfNuban === VFD_BILLS_SETTLEMENT_NUBAN)) {
+      toEnq = self.data;
+      toStatus = self.status;
+    } else {
+      console.error(
+        `[bills][fund] corporate self-enquiry mismatch: returned=${selfNuban || "none"} ` +
+        `expected=${VFD_BILLS_SETTLEMENT_NUBAN} status=${String(self.data?.status)}`,
+      );
+    }
+  }
   if (toStatus !== 200 || toEnq?.status !== "00") {
     return {
       confirmed: false, reference: fundingRef, code: "SETTLEMENT_DEST_ENQUIRY_FAILED",
