@@ -3262,6 +3262,7 @@ async function fundBillsSettlement(params: {
       `${String(toEnq?.message)}) — retrying corporate self-enquiry`,
     );
     const self = await walletRequest("/account/enquiry", "GET", undefined, {});
+    console.log(`[bills][fund][self-enquiry] ${JSON.stringify(self.data ?? {}).slice(0, 800)}`);
     const selfEnv = (self.data?.data as Record<string, unknown>) || {};
     const selfAcct = (selfEnv?.account as Record<string, unknown>) || selfEnv;
     const selfNuban = String(selfEnv?.accountNo ?? selfAcct?.accountNo ?? "");
