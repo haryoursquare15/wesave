@@ -1983,6 +1983,53 @@ async function handleJoinSplit(userId: string, body: Record<string, unknown>) {
 }
 
 // Finalize a bill-payment SplitPay: call VFD bills/pay, write receipt + ledger entry, notify creator + all participants
+// ---------------------------------------------------------------------------
+// Bills: durable outbound /pay request trace.
+// Logged as structured JSON (greppable: "[bills][pay][request]") AND persisted
+// to vfd_transaction_events immediately, before the VFD call is made, so a
+// timeout or crash still leaves the exact request behind. The same snapshot is
+// attached to the bill receipt (request_payload) once the receipt is written.
+// ---------------------------------------------------------------------------
+const billPayRequestCache = new Map<string, Record<string, unknown>>();
+
+async function recordBillPayRequest(params: {
+  reference: string;
+  request_id: string;
+  user_id: string | null;
+  origin: string;
+  url: string;
+  payload: Record<string, string>;
+}) {
+  const snapshot: Record<string, unknown> = {
+    reference: params.reference,
+    request_id: params.request_id,
+    origin: params.origin,
+    url: params.url,
+    method: "POST",
+    sent_at: new Date().toISOString(),
+    body: params.payload,
+  };
+  billPayRequestCache.set(params.reference, snapshot);
+  console.log(`[bills][pay][request] ${JSON.stringify(snapshot)}`);
+  try {
+    await getSupabaseAdmin().from("vfd_transaction_events").insert({
+      user_id: params.user_id,
+      reference: params.reference,
+      event_type: "bill_pay_request",
+      actor: "system",
+      payload: snapshot,
+    });
+  } catch (e) {
+    console.error("[bills][pay][request] persist failed", e);
+  }
+}
+
+function consumeBillPayRequest(reference: string): Record<string, unknown> | null {
+  const snap = billPayRequestCache.get(reference) ?? null;
+  billPayRequestCache.delete(reference);
+  return snap;
+}
+
 async function settleSplitBill(split: Record<string, any>): Promise<{ delivered: boolean; reference?: string; biller_name?: string; customer_id?: string; amount?: number; message?: string }> {
   const db = getSupabaseAdmin();
   const meta = split.bill_metadata || {};
@@ -2001,7 +2048,7 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
   }
 
   const amount = Number(split.total_amount);
-  const reference = `wesave-split-bill-${split.id.slice(0, 8)}-${Date.now()}`;
+  const reference = `vestara-split-bill-${split.id.slice(0, 8)}-${Date.now()}`;
   const displayBillerName = billerName || String(billerId).toUpperCase();
 
   // --- Backend validation gate: SplitPay settlement must clear the same bar ---
@@ -2042,6 +2089,10 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
         customerId, amount: String(amount), division, paymentItem, productId, billerId, reference,
       };
       if (splitPhone) payBody.phoneNumber = splitPhone;
+      await recordBillPayRequest({
+        reference, request_id: splitRequestId, user_id: split.creator_id, origin: "split_bill_pay",
+        url: `${getBillsBase()}/pay`, payload: payBody,
+      });
       const resp = await fetchWithTimeout(`${getBillsBase()}/pay`, {
         method: "POST",
         headers: { AccessToken: token, "Content-Type": "application/json", "x-request-id": splitRequestId },
@@ -2079,6 +2130,7 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
     vfdResponse: vfdData as Record<string, unknown> | null,
   });
   await db.from("vfd_sandbox_bill_receipts").insert({
+    request_payload: consumeBillPayRequest(reference),
     delivery_type: splitDelivery.delivery_type,
     delivery_token: splitDelivery.delivery_token,
     delivery_units: splitDelivery.delivery_units,
@@ -3273,7 +3325,7 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   const token = await getVfdAccessToken();
   if (!token) return jsonResponse({ error: "VFD auth failed" }, 500);
 
-  const reference = `wesave-bill-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const reference = `vestara-bill-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const requestId = crypto.randomUUID();
   const payCategory = ((body.category as string) || "").toLowerCase();
   void payCategory;
@@ -3314,6 +3366,13 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
 
   const payBody: Record<string, string> = { customerId, amount: amount.toString(), division, paymentItem, productId, billerId, reference };
   if (resolvedPhone) payBody.phoneNumber = resolvedPhone;
+
+  // Durable forensic trace of the exact outbound /pay request, written BEFORE
+  // the call so it survives a timeout, crash, or log rotation.
+  await recordBillPayRequest({
+    reference, request_id: requestId, user_id: userId, origin: "bills_pay",
+    url: `${getBillsBase()}/pay`, payload: payBody,
+  });
 
   const resp = await fetchWithTimeout(
     `${getBillsBase()}/pay`,
@@ -3482,6 +3541,7 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
 
 
     await db.from("vfd_sandbox_bill_receipts").insert({
+      request_payload: consumeBillPayRequest(reference),
       delivery_type: delivery.delivery_type,
       delivery_token: delivery.delivery_token,
       delivery_units: delivery.delivery_units,
