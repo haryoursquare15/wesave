@@ -12,7 +12,11 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-cron-secret",
 };
 
-const PLATFORM_POOL_NUBAN = "1001695610";
+// Confirmed Vestara corporate pool NUBAN.
+const PLATFORM_POOL_NUBAN = Deno.env.get("VFD_CORPORATE_POOL_NUBAN") || "1047279595";
+// Bills settlement position (funded before every /pay). Reconciled alongside
+// the pool so bills float is never invisible.
+const BILLS_SETTLEMENT_NUBAN = Deno.env.get("VFD_BILLS_SETTLEMENT_NUBAN") || "";
 
 // Wallet API base — must be the vtech-wallet host (NOT the mandate/directdebit
 // base held in VFD_BASE_URL, which has no /account/enquiry endpoint).
