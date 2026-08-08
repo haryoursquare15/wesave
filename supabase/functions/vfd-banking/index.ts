@@ -3729,7 +3729,49 @@ async function handleAdminMoveSavingsToSubaccount(
   const vfdStatusCode = String(respData?.status ?? "");
   const vfdMessage = String(respData?.message ?? "");
   const duplicate = vfdStatusCode === "98" || /reference exist/i.test(vfdMessage);
-  const ok = vfdStatusCode === "00" || duplicate;
+
+  // "98 / Reference Exist" only tells us VFD has SEEN this reference before —
+  // it does NOT tell us the original attempt settled. The prior attempt may
+  // have failed or still be pending (VFD returns 09 for pending transfers and
+  // keeps the reference reserved either way). Treating 98 as success would
+  // stamp the contract as funded while no money actually reached the product
+  // sub-account. So on a duplicate we MUST resolve the real outcome via TSQ.
+  let duplicateConfirmed = false;
+  let tsqEvidence: unknown = null;
+  if (duplicate) {
+    try {
+      const { data: tsq } = await vfdRequest("/transactions", "GET", undefined, { reference });
+      tsqEvidence = tsq;
+      const tsqEnv = tsq as Record<string, unknown>;
+      const tsqInner = (tsqEnv?.data as Record<string, unknown>) ?? {};
+      const txStatus = String(
+        tsqInner?.transactionStatus ?? tsqInner?.status ?? tsqEnv?.status ?? ""
+      ).trim();
+      const txMessage = String(tsqInner?.transactionStatusMessage ?? tsqEnv?.message ?? "");
+      // VFD settles successful transactions as "00". Anything else — 09
+      // (pending), 99/failed, or an empty/unknown TSQ envelope — is NOT proof.
+      duplicateConfirmed =
+        txStatus === "00" && !/pending|fail|revers/i.test(txMessage);
+    } catch (e) {
+      console.warn("[move_savings_to_subaccount] TSQ after duplicate failed:",
+        e instanceof Error ? e.message : String(e));
+    }
+
+    if (!duplicateConfirmed) {
+      // Leave the row UNSTAMPED: sub_account_transfer_ref is already pre-claimed
+      // so a later retry replays the same reference and can never double-debit.
+      console.error("[move_savings_to_subaccount] duplicate reference unconfirmed by TSQ:", reference, tsqEvidence);
+      return jsonResponse({
+        error: "This funding transfer was already submitted to the bank but has not settled yet. It is being tracked and will be confirmed automatically — no funds have been debited twice.",
+        code: "VFD_TRANSFER_UNCONFIRMED",
+        reference,
+        vfd_status: transferStatus,
+        data: { transfer: respData, tsq: tsqEvidence },
+      }, 409);
+    }
+  }
+
+  const ok = vfdStatusCode === "00" || duplicateConfirmed;
 
   if (!ok) {
     console.error("[move_savings_to_subaccount] VFD rejected:", respData);
@@ -3740,6 +3782,7 @@ async function handleAdminMoveSavingsToSubaccount(
       data: respData,
     }, 400);
   }
+
 
   // 7) stamp the savings row (both the bank-move stamp and the business-level
   // "funds landed in sub-account" event timestamp)
@@ -3758,7 +3801,7 @@ async function handleAdminMoveSavingsToSubaccount(
       sub_account_nuban: subAccountNuban,
       reference,
       moved_at: nowIso,
-      replayed: duplicate,
+      replayed: duplicateConfirmed,
       vfd: respData?.data ?? null,
     },
   });
@@ -3889,7 +3932,41 @@ async function handleReverseSavingsSubaccount(
   const code = String(respData?.status ?? "");
   const msg = String(respData?.message ?? "");
   const duplicate = code === "98" || /reference exist/i.test(msg);
-  if (!(code === "00" || duplicate)) {
+
+  // Same rule as the funding leg: "Reference Exist" is not proof the earlier
+  // reversal settled. Confirm via TSQ before marking the funds as returned,
+  // otherwise a rejection could be recorded as refunded while the money is
+  // still sitting in the product sub-account.
+  let duplicateConfirmed = false;
+  let tsqEvidence: unknown = null;
+  if (duplicate) {
+    try {
+      const { data: tsq } = await vfdRequest("/transactions", "GET", undefined, { reference });
+      tsqEvidence = tsq;
+      const tsqEnv = tsq as Record<string, unknown>;
+      const tsqInner = (tsqEnv?.data as Record<string, unknown>) ?? {};
+      const txStatus = String(
+        tsqInner?.transactionStatus ?? tsqInner?.status ?? tsqEnv?.status ?? ""
+      ).trim();
+      const txMessage = String(tsqInner?.transactionStatusMessage ?? tsqEnv?.message ?? "");
+      duplicateConfirmed = txStatus === "00" && !/pending|fail|revers/i.test(txMessage);
+    } catch (e) {
+      console.warn("[reverse_savings_subaccount] TSQ after duplicate failed:",
+        e instanceof Error ? e.message : String(e));
+    }
+    if (!duplicateConfirmed) {
+      console.error("[reverse_savings_subaccount] duplicate reference unconfirmed by TSQ:", reference, tsqEvidence);
+      return jsonResponse({
+        error: "A reversal for this investment was already sent to the bank but has not settled yet. Please retry shortly — the funds have not been sent twice.",
+        code: "VFD_REVERSAL_UNCONFIRMED",
+        reference,
+        vfd_status: transferStatus,
+        data: { transfer: respData, tsq: tsqEvidence },
+      }, 409);
+    }
+  }
+
+  if (!(code === "00" || duplicateConfirmed)) {
     console.error("[reverse_savings_subaccount] VFD rejected:", respData);
     return jsonResponse({
       error: msg || "VFD refused the reversal transfer.",
@@ -3898,6 +3975,7 @@ async function handleReverseSavingsSubaccount(
       data: respData,
     }, 400);
   }
+
 
   const nowIso = new Date().toISOString();
   await db.from("vestara_savings").update({
@@ -3911,7 +3989,7 @@ async function handleReverseSavingsSubaccount(
       savings_id: savingsId,
       reference,
       reversed_at: nowIso,
-      replayed: duplicate,
+      replayed: duplicateConfirmed,
       vfd: respData?.data ?? null,
     },
   });
