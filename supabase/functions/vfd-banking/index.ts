@@ -3562,20 +3562,10 @@ async function handleAdminMoveSavingsToSubaccount(
 ) {
   const db = getSupabaseAdmin();
 
-  // 1) admin gate
-  const { data: roles } = await db
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", callerUserId)
-    .in("role", ["admin", "super_admin"]);
-  if (!roles || roles.length === 0) {
-    return jsonResponse({ error: "Admin only" }, 403);
-  }
-
   const savingsId = String(body.savings_id || "").trim();
   if (!savingsId) return jsonResponse({ error: "savings_id is required" }, 400);
 
-  // 2) fetch savings + product sub-account NUBAN
+  // 1) fetch savings + product sub-account NUBAN
   const { data: savings, error: sErr } = await db
     .from("vestara_savings")
     .select("id, user_id, principal, product_code, sub_account_transferred_at, sub_account_transfer_ref")
@@ -3584,6 +3574,21 @@ async function handleAdminMoveSavingsToSubaccount(
   if (sErr || !savings) {
     return jsonResponse({ error: "Investment not found" }, 404);
   }
+
+  // 2) access gate — the funding transfer now happens at SUBSCRIPTION time, so
+  // the owner of the contract may trigger it. Admins may still trigger it for
+  // recovery/retry purposes.
+  if (savings.user_id !== callerUserId) {
+    const { data: roles } = await db
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", callerUserId)
+      .in("role", ["admin", "super_admin"]);
+    if (!roles || roles.length === 0) {
+      return jsonResponse({ error: "Admin only" }, 403);
+    }
+  }
+
   if (savings.sub_account_transferred_at) {
     return jsonResponse({
       data: {
@@ -3593,6 +3598,7 @@ async function handleAdminMoveSavingsToSubaccount(
       },
     });
   }
+
 
   const { data: product } = await db
     .from("vestara_products")
