@@ -13,7 +13,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase as supabaseClient } from "@/integrations/supabase/client";
+// LEGACY (WeSave decommission): this file still queries dropped tables/RPCs.
+// Kept as dead code pending a dedicated frontend cleanup pass.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const supabase = supabaseClient as any;
 import { useAuth } from "@/contexts/AuthContext";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -178,7 +182,7 @@ export function GroupProfile({ groupId, group, memberCount, onGroupUpdated }: Gr
           // Use secure RPC function to fetch public profile data
           const { data: profiles } = await supabase.rpc("get_public_profiles", { user_ids: userIds });
 
-          const profileMap = new Map(profiles?.map((p: { id: string; full_name: string | null; username: string | null; avatar_url: string | null }) => [p.id, p]) || []);
+          const profileMap = new Map<string, { id: string; full_name: string | null; username: string | null; avatar_url: string | null }>(profiles?.map((p: { id: string; full_name: string | null; username: string | null; avatar_url: string | null }) => [p.id, p]) || []);
 
           const auditWithProfiles = audit.map((a) => ({
             ...a,

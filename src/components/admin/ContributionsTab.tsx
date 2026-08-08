@@ -5,7 +5,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase as supabaseClient } from "@/integrations/supabase/client";
+// LEGACY (WeSave decommission): this file still queries dropped tables/RPCs.
+// Kept as dead code pending a dedicated frontend cleanup pass.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const supabase = supabaseClient as any;
 import { format } from "date-fns";
 import { RefreshCw, CheckCircle, Clock, CreditCard, AlertTriangle, XCircle, Search, Download } from "lucide-react";
 import { exportToCSV } from "@/lib/exportUtils";

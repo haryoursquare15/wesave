@@ -372,22 +372,7 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "card_tokens_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "public_groups"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "card_tokens_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "thrift_groups"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       chat_messages: {
         Row: {
@@ -417,22 +402,7 @@ export type Database = {
           metadata?: Json | null
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "chat_messages_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "public_groups"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "chat_messages_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "thrift_groups"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       contribution_audit: {
         Row: {
@@ -465,89 +435,7 @@ export type Database = {
           status?: string
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "contribution_audit_cycle_id_fkey"
-            columns: ["cycle_id"]
-            isOneToOne: false
-            referencedRelation: "contribution_cycles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "contribution_audit_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "public_groups"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "contribution_audit_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "thrift_groups"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      contribution_cycles: {
-        Row: {
-          completed_at: string | null
-          contribution_deadline: string | null
-          created_at: string
-          cycle_number: number
-          group_id: string
-          id: string
-          payout_amount: number | null
-          payout_date: string | null
-          payout_recipient_id: string | null
-          platform_fee: number | null
-          status: string | null
-          total_contributions: number | null
-        }
-        Insert: {
-          completed_at?: string | null
-          contribution_deadline?: string | null
-          created_at?: string
-          cycle_number: number
-          group_id: string
-          id?: string
-          payout_amount?: number | null
-          payout_date?: string | null
-          payout_recipient_id?: string | null
-          platform_fee?: number | null
-          status?: string | null
-          total_contributions?: number | null
-        }
-        Update: {
-          completed_at?: string | null
-          contribution_deadline?: string | null
-          created_at?: string
-          cycle_number?: number
-          group_id?: string
-          id?: string
-          payout_amount?: number | null
-          payout_date?: string | null
-          payout_recipient_id?: string | null
-          platform_fee?: number | null
-          status?: string | null
-          total_contributions?: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "contribution_cycles_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "public_groups"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "contribution_cycles_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "thrift_groups"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       contribution_retries: {
         Row: {
@@ -730,79 +618,6 @@ export type Database = {
             columns: ["campaign_id"]
             isOneToOne: false
             referencedRelation: "crowdfunding_campaigns"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      cycle_contributions: {
-        Row: {
-          amount: number
-          card_charge_amount: number | null
-          card_charge_status: string | null
-          card_charged_at: string | null
-          card_verified_at: string | null
-          contributed_at: string | null
-          created_at: string
-          cycle_id: string
-          flw_transaction_id: string | null
-          flw_transaction_ref: string | null
-          group_id: string
-          id: string
-          status: string | null
-          user_id: string
-        }
-        Insert: {
-          amount: number
-          card_charge_amount?: number | null
-          card_charge_status?: string | null
-          card_charged_at?: string | null
-          card_verified_at?: string | null
-          contributed_at?: string | null
-          created_at?: string
-          cycle_id: string
-          flw_transaction_id?: string | null
-          flw_transaction_ref?: string | null
-          group_id: string
-          id?: string
-          status?: string | null
-          user_id: string
-        }
-        Update: {
-          amount?: number
-          card_charge_amount?: number | null
-          card_charge_status?: string | null
-          card_charged_at?: string | null
-          card_verified_at?: string | null
-          contributed_at?: string | null
-          created_at?: string
-          cycle_id?: string
-          flw_transaction_id?: string | null
-          flw_transaction_ref?: string | null
-          group_id?: string
-          id?: string
-          status?: string | null
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "cycle_contributions_cycle_id_fkey"
-            columns: ["cycle_id"]
-            isOneToOne: false
-            referencedRelation: "contribution_cycles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "cycle_contributions_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "public_groups"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "cycle_contributions_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "thrift_groups"
             referencedColumns: ["id"]
           },
         ]
@@ -1059,22 +874,7 @@ export type Database = {
           max_uses?: number | null
           use_count?: number | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "group_invitations_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "public_groups"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "group_invitations_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "thrift_groups"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       group_join_reminders: {
         Row: {
@@ -1096,69 +896,6 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
-      }
-      group_memberships: {
-        Row: {
-          flw_mandate_id: string | null
-          group_id: string
-          has_contributed_this_cycle: boolean | null
-          has_received_payout: boolean | null
-          has_used_swap: boolean | null
-          id: string
-          joined_at: string | null
-          mandate_status: string | null
-          payout_position: number | null
-          status: Database["public"]["Enums"]["membership_status"]
-          terms_accepted_at: string | null
-          tokenization_completed: boolean | null
-          user_id: string
-        }
-        Insert: {
-          flw_mandate_id?: string | null
-          group_id: string
-          has_contributed_this_cycle?: boolean | null
-          has_received_payout?: boolean | null
-          has_used_swap?: boolean | null
-          id?: string
-          joined_at?: string | null
-          mandate_status?: string | null
-          payout_position?: number | null
-          status?: Database["public"]["Enums"]["membership_status"]
-          terms_accepted_at?: string | null
-          tokenization_completed?: boolean | null
-          user_id: string
-        }
-        Update: {
-          flw_mandate_id?: string | null
-          group_id?: string
-          has_contributed_this_cycle?: boolean | null
-          has_received_payout?: boolean | null
-          has_used_swap?: boolean | null
-          id?: string
-          joined_at?: string | null
-          mandate_status?: string | null
-          payout_position?: number | null
-          status?: Database["public"]["Enums"]["membership_status"]
-          terms_accepted_at?: string | null
-          tokenization_completed?: boolean | null
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "group_memberships_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "public_groups"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "group_memberships_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "thrift_groups"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       group_wallets: {
         Row: {
@@ -1182,22 +919,7 @@ export type Database = {
           id?: string
           updated_at?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "group_wallets_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: true
-            referencedRelation: "public_groups"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "group_wallets_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: true
-            referencedRelation: "thrift_groups"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       internal_cron_tokens: {
         Row: {
@@ -1495,22 +1217,7 @@ export type Database = {
           responded_at?: string | null
           status?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "member_invites_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "public_groups"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "member_invites_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "thrift_groups"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       notification_dlq: {
         Row: {
@@ -1617,73 +1324,6 @@ export type Database = {
         }
         Relationships: []
       }
-      payouts: {
-        Row: {
-          created_at: string
-          cycle_id: string
-          flw_transfer_id: string | null
-          flw_transfer_ref: string | null
-          gross_amount: number
-          group_id: string
-          id: string
-          net_amount: number
-          platform_fee: number
-          processed_at: string | null
-          recipient_id: string
-          status: string | null
-        }
-        Insert: {
-          created_at?: string
-          cycle_id: string
-          flw_transfer_id?: string | null
-          flw_transfer_ref?: string | null
-          gross_amount: number
-          group_id: string
-          id?: string
-          net_amount: number
-          platform_fee: number
-          processed_at?: string | null
-          recipient_id: string
-          status?: string | null
-        }
-        Update: {
-          created_at?: string
-          cycle_id?: string
-          flw_transfer_id?: string | null
-          flw_transfer_ref?: string | null
-          gross_amount?: number
-          group_id?: string
-          id?: string
-          net_amount?: number
-          platform_fee?: number
-          processed_at?: string | null
-          recipient_id?: string
-          status?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "payouts_cycle_id_fkey"
-            columns: ["cycle_id"]
-            isOneToOne: false
-            referencedRelation: "contribution_cycles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "payouts_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "public_groups"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "payouts_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "thrift_groups"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       pending_card_charges: {
         Row: {
           amount: number
@@ -1742,36 +1382,7 @@ export type Database = {
           user_id?: string
           verified_at?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "pending_card_charges_contribution_id_fkey"
-            columns: ["contribution_id"]
-            isOneToOne: false
-            referencedRelation: "cycle_contributions"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pending_card_charges_cycle_id_fkey"
-            columns: ["cycle_id"]
-            isOneToOne: false
-            referencedRelation: "contribution_cycles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pending_card_charges_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "public_groups"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pending_card_charges_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "thrift_groups"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       pending_invitees: {
         Row: {
@@ -1795,22 +1406,7 @@ export type Database = {
           id?: string
           invite_token?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "pending_invitees_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "public_groups"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pending_invitees_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "thrift_groups"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       pending_join_requests: {
         Row: {
@@ -1834,22 +1430,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["request_status"]
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "pending_join_requests_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "public_groups"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pending_join_requests_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "thrift_groups"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       pin_audit_log: {
         Row: {
@@ -2048,57 +1629,6 @@ export type Database = {
           wallet_type?: string
         }
         Relationships: []
-      }
-      position_swap_requests: {
-        Row: {
-          created_at: string
-          group_id: string
-          id: string
-          requester_id: string
-          requester_position: number
-          responded_at: string | null
-          status: string
-          target_id: string
-          target_position: number
-        }
-        Insert: {
-          created_at?: string
-          group_id: string
-          id?: string
-          requester_id: string
-          requester_position: number
-          responded_at?: string | null
-          status?: string
-          target_id: string
-          target_position: number
-        }
-        Update: {
-          created_at?: string
-          group_id?: string
-          id?: string
-          requester_id?: string
-          requester_position?: number
-          responded_at?: string | null
-          status?: string
-          target_id?: string
-          target_position?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "position_swap_requests_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "public_groups"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "position_swap_requests_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "thrift_groups"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       profiles: {
         Row: {
@@ -2664,107 +2194,6 @@ export type Database = {
         }
         Relationships: []
       }
-      target_ajo_contributions: {
-        Row: {
-          amount: number
-          contribution_date: string
-          created_at: string
-          group_id: string
-          id: string
-          reference: string | null
-          source: string
-          status: string
-          user_id: string
-        }
-        Insert: {
-          amount: number
-          contribution_date?: string
-          created_at?: string
-          group_id: string
-          id?: string
-          reference?: string | null
-          source?: string
-          status?: string
-          user_id: string
-        }
-        Update: {
-          amount?: number
-          contribution_date?: string
-          created_at?: string
-          group_id?: string
-          id?: string
-          reference?: string | null
-          source?: string
-          status?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "target_ajo_contributions_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "target_ajo_groups"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      target_ajo_groups: {
-        Row: {
-          admin_user_id: string
-          amount_raised: number
-          contribution_amount: number
-          created_at: string
-          description: string | null
-          frequency: string
-          id: string
-          max_members: number
-          member_count: number
-          name: string
-          reason: string | null
-          savings_type: string
-          status: string
-          target_amount: number
-          target_date: string | null
-          updated_at: string
-        }
-        Insert: {
-          admin_user_id: string
-          amount_raised?: number
-          contribution_amount: number
-          created_at?: string
-          description?: string | null
-          frequency?: string
-          id?: string
-          max_members?: number
-          member_count?: number
-          name: string
-          reason?: string | null
-          savings_type?: string
-          status?: string
-          target_amount: number
-          target_date?: string | null
-          updated_at?: string
-        }
-        Update: {
-          admin_user_id?: string
-          amount_raised?: number
-          contribution_amount?: number
-          created_at?: string
-          description?: string | null
-          frequency?: string
-          id?: string
-          max_members?: number
-          member_count?: number
-          name?: string
-          reason?: string | null
-          savings_type?: string
-          status?: string
-          target_amount?: number
-          target_date?: string | null
-          updated_at?: string
-        }
-        Relationships: []
-      }
       target_ajo_invites: {
         Row: {
           created_at: string
@@ -2793,15 +2222,7 @@ export type Database = {
           responded_at?: string | null
           status?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "target_ajo_invites_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "target_ajo_groups"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       target_ajo_member_contributions: {
         Row: {
@@ -2825,129 +2246,7 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "target_ajo_member_contributions_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "target_ajo_groups"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      target_ajo_memberships: {
-        Row: {
-          group_id: string
-          id: string
-          joined_at: string
-          status: string
-          user_id: string
-        }
-        Insert: {
-          group_id: string
-          id?: string
-          joined_at?: string
-          status?: string
-          user_id: string
-        }
-        Update: {
-          group_id?: string
-          id?: string
-          joined_at?: string
-          status?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "target_ajo_memberships_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "target_ajo_groups"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      target_ajo_withdrawal_requests: {
-        Row: {
-          amount: number
-          approval_count: number
-          created_at: string
-          group_id: string
-          id: string
-          reason: string | null
-          rejection_count: number
-          requested_by: string
-          required_votes: number
-          resolved_at: string | null
-          status: string
-        }
-        Insert: {
-          amount: number
-          approval_count?: number
-          created_at?: string
-          group_id: string
-          id?: string
-          reason?: string | null
-          rejection_count?: number
-          requested_by: string
-          required_votes?: number
-          resolved_at?: string | null
-          status?: string
-        }
-        Update: {
-          amount?: number
-          approval_count?: number
-          created_at?: string
-          group_id?: string
-          id?: string
-          reason?: string | null
-          rejection_count?: number
-          requested_by?: string
-          required_votes?: number
-          resolved_at?: string | null
-          status?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "target_ajo_withdrawal_requests_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "target_ajo_groups"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      target_ajo_withdrawal_votes: {
-        Row: {
-          created_at: string
-          id: string
-          user_id: string
-          vote: string
-          withdrawal_request_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          user_id: string
-          vote: string
-          withdrawal_request_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          user_id?: string
-          vote?: string
-          withdrawal_request_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "target_ajo_withdrawal_votes_withdrawal_request_id_fkey"
-            columns: ["withdrawal_request_id"]
-            isOneToOne: false
-            referencedRelation: "target_ajo_withdrawal_requests"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       test_ledger_entries: {
         Row: {
@@ -3018,84 +2317,6 @@ export type Database = {
           mode?: string
           name?: string
           status?: string
-        }
-        Relationships: []
-      }
-      thrift_groups: {
-        Row: {
-          admin_id: string
-          auto_debit: boolean | null
-          contribution_amount: number
-          contribution_day_of_month: number | null
-          contribution_day_of_week: number | null
-          contribution_hour: number | null
-          contribution_minute: number | null
-          created_at: string | null
-          current_cycle: number | null
-          current_payout_position: number | null
-          description: string | null
-          flw_subaccount_id: string | null
-          id: string
-          invite_code: string | null
-          max_members: number
-          name: string
-          next_contribution_date: string | null
-          next_payout_date: string | null
-          payout_order: string[] | null
-          period: Database["public"]["Enums"]["contribution_period"]
-          rating: number | null
-          status: Database["public"]["Enums"]["group_status"]
-          updated_at: string | null
-        }
-        Insert: {
-          admin_id: string
-          auto_debit?: boolean | null
-          contribution_amount: number
-          contribution_day_of_month?: number | null
-          contribution_day_of_week?: number | null
-          contribution_hour?: number | null
-          contribution_minute?: number | null
-          created_at?: string | null
-          current_cycle?: number | null
-          current_payout_position?: number | null
-          description?: string | null
-          flw_subaccount_id?: string | null
-          id?: string
-          invite_code?: string | null
-          max_members?: number
-          name: string
-          next_contribution_date?: string | null
-          next_payout_date?: string | null
-          payout_order?: string[] | null
-          period?: Database["public"]["Enums"]["contribution_period"]
-          rating?: number | null
-          status?: Database["public"]["Enums"]["group_status"]
-          updated_at?: string | null
-        }
-        Update: {
-          admin_id?: string
-          auto_debit?: boolean | null
-          contribution_amount?: number
-          contribution_day_of_month?: number | null
-          contribution_day_of_week?: number | null
-          contribution_hour?: number | null
-          contribution_minute?: number | null
-          created_at?: string | null
-          current_cycle?: number | null
-          current_payout_position?: number | null
-          description?: string | null
-          flw_subaccount_id?: string | null
-          id?: string
-          invite_code?: string | null
-          max_members?: number
-          name?: string
-          next_contribution_date?: string | null
-          next_payout_date?: string | null
-          payout_order?: string[] | null
-          period?: Database["public"]["Enums"]["contribution_period"]
-          rating?: number | null
-          status?: Database["public"]["Enums"]["group_status"]
-          updated_at?: string | null
         }
         Relationships: []
       }
@@ -3176,20 +2397,6 @@ export type Database = {
           wallet_id?: string | null
         }
         Relationships: [
-          {
-            foreignKeyName: "transactions_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "public_groups"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "transactions_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "thrift_groups"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "transactions_wallet_id_fkey"
             columns: ["wallet_id"]
@@ -3299,22 +2506,7 @@ export type Database = {
           title?: string
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "user_notifications_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "public_groups"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "user_notifications_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "thrift_groups"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       user_payment_tokens_test: {
         Row: {
@@ -7075,42 +6267,6 @@ export type Database = {
         }
         Relationships: []
       }
-      public_groups: {
-        Row: {
-          contribution_amount: number | null
-          id: string | null
-          max_members: number | null
-          member_count: number | null
-          name: string | null
-          pending_requests: number | null
-          period: Database["public"]["Enums"]["contribution_period"] | null
-          rating: number | null
-          status: Database["public"]["Enums"]["group_status"] | null
-        }
-        Insert: {
-          contribution_amount?: number | null
-          id?: string | null
-          max_members?: number | null
-          member_count?: never
-          name?: string | null
-          pending_requests?: never
-          period?: Database["public"]["Enums"]["contribution_period"] | null
-          rating?: number | null
-          status?: Database["public"]["Enums"]["group_status"] | null
-        }
-        Update: {
-          contribution_amount?: number | null
-          id?: string | null
-          max_members?: number | null
-          member_count?: never
-          name?: string | null
-          pending_requests?: never
-          period?: Database["public"]["Enums"]["contribution_period"] | null
-          rating?: number | null
-          status?: Database["public"]["Enums"]["group_status"] | null
-        }
-        Relationships: []
-      }
       vestara_account_drift: {
         Row: {
           account_type:
@@ -7187,31 +6343,12 @@ export type Database = {
       }
     }
     Functions: {
-      add_member_to_group: {
-        Args: { target_group_id: string; target_user_id: string }
-        Returns: Json
-      }
       admin_assign_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
         }
         Returns: Json
-      }
-      admin_get_all_groups: {
-        Args: never
-        Returns: {
-          admin_id: string
-          admin_name: string
-          contribution_amount: number
-          created_at: string
-          id: string
-          member_count: number
-          name: string
-          period: string
-          source: string
-          status: string
-        }[]
       }
       admin_get_all_users: {
         Args: never
@@ -7315,8 +6452,6 @@ export type Database = {
       }
       cleanup_orphan_card_tokens: { Args: never; Returns: Json }
       cleanup_rate_limits: { Args: never; Returns: undefined }
-      commence_thrift: { Args: { target_group_id: string }; Returns: Json }
-      confirm_continue_group: { Args: { _group_id: string }; Returns: Json }
       confirm_withdrawal_debit: {
         Args: {
           _amount: number
@@ -7334,50 +6469,6 @@ export type Database = {
           _user_id?: string
         }
         Returns: boolean
-      }
-      create_thrift_group: {
-        Args: {
-          _auto_debit: boolean
-          _contribution_amount: number
-          _contribution_day_of_month?: number
-          _contribution_day_of_week?: number
-          _contribution_hour?: number
-          _contribution_minute?: number
-          _max_members: number
-          _name: string
-          _period: Database["public"]["Enums"]["contribution_period"]
-        }
-        Returns: {
-          admin_id: string
-          auto_debit: boolean | null
-          contribution_amount: number
-          contribution_day_of_month: number | null
-          contribution_day_of_week: number | null
-          contribution_hour: number | null
-          contribution_minute: number | null
-          created_at: string | null
-          current_cycle: number | null
-          current_payout_position: number | null
-          description: string | null
-          flw_subaccount_id: string | null
-          id: string
-          invite_code: string | null
-          max_members: number
-          name: string
-          next_contribution_date: string | null
-          next_payout_date: string | null
-          payout_order: string[] | null
-          period: Database["public"]["Enums"]["contribution_period"]
-          rating: number | null
-          status: Database["public"]["Enums"]["group_status"]
-          updated_at: string | null
-        }
-        SetofOptions: {
-          from: "*"
-          to: "thrift_groups"
-          isOneToOne: true
-          isSetofReturn: false
-        }
       }
       credit_wallet_atomic: {
         Args: {
@@ -7422,7 +6513,6 @@ export type Database = {
         Args: { payload: Json; queue_name: string }
         Returns: number
       }
-      exit_completed_group: { Args: { _group_id: string }; Returns: Json }
       freeze_wallet_for_withdrawal: {
         Args: {
           _amount: number
@@ -7434,10 +6524,6 @@ export type Database = {
       }
       gen_random_bytes: { Args: { n: number }; Returns: string }
       gen_random_uuid: { Args: never; Returns: string }
-      get_group_active_member_count: {
-        Args: { _group_id: string }
-        Returns: number
-      }
       get_own_group_mandate: {
         Args: { _group_id: string }
         Returns: {
@@ -7485,17 +6571,6 @@ export type Database = {
           bvn: string
           date_of_birth: string
           nin: string
-        }[]
-      }
-      get_payout_order: {
-        Args: { target_group_id: string }
-        Returns: {
-          member_avatar_url: string
-          member_full_name: string
-          member_has_received_payout: boolean
-          member_user_id: string
-          member_username: string
-          payout_position: number
         }[]
       }
       get_public_goal_campaign: {
@@ -7700,7 +6775,6 @@ export type Database = {
         Args: { _target_id: string; _user_id: string }
         Returns: boolean
       }
-      join_group_via_invite: { Args: { token: string }; Returns: Json }
       log_audit_event: {
         Args: {
           _action: string
@@ -7724,37 +6798,12 @@ export type Database = {
         Args: { _amount: number; _group_id: string; _user_id: string }
         Returns: Json
       }
-      process_contribution_ledger_atomic: {
-        Args: { _amount: number; _group_id: string; _user_id: string }
-        Returns: Json
-      }
-      process_payout_atomic: {
-        Args: { _admin_id: string; _group_id: string }
-        Returns: Json
-      }
-      process_payout_internal:
-        | { Args: { _group_id: string }; Returns: Json }
-        | {
-            Args: {
-              _cycle_id: string
-              _gross_amount: number
-              _group_id: string
-              _net_amount: number
-              _platform_fee: number
-              _recipient_id: string
-            }
-            Returns: Json
-          }
       process_referral_reward: {
         Args: { p_referred_user_id: string }
         Returns: Json
       }
       process_split_payment: {
         Args: { _amount: number; _split_request_id: string; _user_id: string }
-        Returns: Json
-      }
-      process_target_ajo_contribution: {
-        Args: { _amount: number; _group_id: string; _user_id: string }
         Returns: Json
       }
       read_email_batch: {
@@ -7816,19 +6865,6 @@ export type Database = {
         }
         Returns: Json
       }
-      request_position_swap: {
-        Args: { _group_id: string; _target_user_id: string }
-        Returns: Json
-      }
-      respond_to_invite: {
-        Args: { accept: boolean; invite_id: string }
-        Returns: Json
-      }
-      respond_to_swap_request: {
-        Args: { _accept: boolean; _request_id: string }
-        Returns: Json
-      }
-      restart_completed_group: { Args: { _group_id: string }; Returns: Json }
       search_public_profiles: {
         Args: { _limit?: number; _query: string }
         Returns: {
@@ -7849,10 +6885,6 @@ export type Database = {
           membership_tier: Database["public"]["Enums"]["membership_tier"]
           username: string
         }[]
-      }
-      send_member_invite: {
-        Args: { target_group_id: string; target_user_id: string }
-        Returns: Json
       }
       send_split_invite: {
         Args: {
@@ -7876,19 +6908,6 @@ export type Database = {
           _user_id: string
         }
         Returns: Json
-      }
-      validate_invite_token: {
-        Args: { token: string }
-        Returns: {
-          contribution_amount: number
-          error_message: string
-          group_id: string
-          group_name: string
-          max_members: number
-          member_count: number
-          period: Database["public"]["Enums"]["contribution_period"]
-          valid: boolean
-        }[]
       }
       verify_pending_transaction: {
         Args: { amount: number; tx_ref: string }

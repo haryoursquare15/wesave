@@ -15,7 +15,11 @@ import { useUserGroupCount } from "@/hooks/useUserGroupCount";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { AddMembersDialog } from "@/components/AddMembersDialog";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase as supabaseClient } from "@/integrations/supabase/client";
+// LEGACY (WeSave decommission): this file still queries dropped tables/RPCs.
+// Kept as dead code pending a dedicated frontend cleanup pass.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const supabase = supabaseClient as any;
 
 const daysOfWeek = [
   { value: 0, label: "Sunday" },

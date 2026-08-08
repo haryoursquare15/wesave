@@ -1,9 +1,14 @@
 import { useState, useEffect, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { Tables } from "@/integrations/supabase/types";
+import { supabase as supabaseClient } from "@/integrations/supabase/client";
+// LEGACY (WeSave decommission): this file still queries dropped tables/RPCs.
+// Kept as dead code pending a dedicated frontend cleanup pass.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const supabase = supabaseClient as any;
 import { useAuth } from "@/contexts/AuthContext";
 
-type ThriftGroup = Tables<"thrift_groups">;
+/** Legacy shape — the `thrift_groups` table has been dropped. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ThriftGroup = Record<string, any>;
 
 interface GroupWithMemberInfo extends ThriftGroup {
   memberCount: number;
