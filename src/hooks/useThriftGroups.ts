@@ -4,10 +4,11 @@ import { supabase as supabaseClient } from "@/integrations/supabase/client";
 // Kept as dead code pending a dedicated frontend cleanup pass.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const supabase = supabaseClient as any;
-import { Tables } from "@/integrations/supabase/types";
 import { useAuth } from "@/contexts/AuthContext";
 
-type ThriftGroup = Tables<"thrift_groups">;
+/** Legacy shape — the `thrift_groups` table has been dropped. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ThriftGroup = Record<string, any>;
 
 interface GroupWithMemberInfo extends ThriftGroup {
   memberCount: number;
