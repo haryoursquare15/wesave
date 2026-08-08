@@ -345,7 +345,9 @@ export function VestaraInvestmentsTab() {
                   <TableHead>VFD %</TableHead>
                   <TableHead>Customer ROI</TableHead>
                   <TableHead>Spread ROI</TableHead>
+                  <TableHead>Placement</TableHead>
                   <TableHead>Status</TableHead>
+
                 </TableRow>
               </TableHeader>
               <TableBody>
