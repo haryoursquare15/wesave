@@ -3096,10 +3096,12 @@ function getWalletBase(): string {
 // Confirmed Vestara corporate pool NUBAN (source of bills settlement funding).
 const VFD_CORPORATE_POOL_NUBAN =
   Deno.env.get("VFD_CORPORATE_POOL_NUBAN") || "1047279595";
-// Destination account VFD debits for bills. MUST be configured explicitly —
-// we never guess this. When unset, bills are refused before any money moves.
+// Account VFD debits for bills. CONFIRMED to be the corporate pool itself
+// (1047279595) — no separate bills float exists. Overridable if VFD later
+// issues a dedicated bills settlement account, in which case the real
+// transfer path below activates automatically.
 const VFD_BILLS_SETTLEMENT_NUBAN =
-  Deno.env.get("VFD_BILLS_SETTLEMENT_NUBAN") || "";
+  Deno.env.get("VFD_BILLS_SETTLEMENT_NUBAN") || VFD_CORPORATE_POOL_NUBAN;
 
 async function walletRequest(
   endpoint: string,
