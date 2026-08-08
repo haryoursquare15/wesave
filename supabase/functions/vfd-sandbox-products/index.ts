@@ -3589,6 +3589,53 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   }
   const validationRecord = gate.record;
 
+  // --- Step 8.5: fund the settlement account for real, BEFORE /pay ---------
+  // VFD debits our settlement position when they process the bill, so it must
+  // hold the funds first. /pay is NEVER called unless this is independently
+  // verified as settled via /transactions?reference=.
+  const funding = await fundBillsSettlement({
+    reference, amount: numAmount, userId, origin: "bills_pay",
+  });
+  if (!funding.confirmed) {
+    console.error(`[bills][fund] ref=${reference} NOT FUNDED code=${funding.code} — /pay skipped`);
+    return jsonResponse({
+      error: funding.error,
+      code: funding.code,
+      data: { reference, funding_reference: funding.reference, evidence: funding.evidence },
+    }, 503);
+  }
+  console.log(`[bills][fund] ref=${reference} funded=${funding.reference} replayed=${!!funding.replayed}`);
+
+  // --- Step 8.6: reserve the customer's wallet funds (hold) ----------------
+  // Sequenced AFTER confirmed settlement funding and BEFORE /pay. If the
+  // biller declines, the hold is released back to the wallet.
+  const dbHold = getSupabaseAdmin();
+  const { data: hdData, error: hdErr } = await dbHold.rpc("vestara_bill_reserve", {
+    _user_id: userId,
+    _amount: totalDebit,
+    _reference: reference,
+    _metadata: {
+      source: "bill_payment",
+      biller_id: billerId,
+      customer_id: customerId,
+      division,
+      product_id: productId,
+      bill_amount: numAmount,
+      convenience_fee: convenienceFee,
+      settlement_funding_reference: funding.reference,
+    },
+  });
+  const hdResult = hdData as { success?: boolean; error?: string } | null;
+  if (hdErr || !hdResult?.success) {
+    console.error("[bills] vestara_bill_reserve failed:", hdErr || hdResult);
+    return jsonResponse(
+      { error: "Bill payment could not be recorded. Please contact support.", details: hdErr?.message || hdResult?.error },
+      500,
+    );
+  }
+
+
+
 
   const payBody: Record<string, string> = { customerId, amount: amount.toString(), division, paymentItem, productId, billerId, reference };
   if (resolvedPhone) payBody.phoneNumber = resolvedPhone;
