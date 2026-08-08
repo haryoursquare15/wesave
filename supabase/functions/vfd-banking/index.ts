@@ -3801,7 +3801,7 @@ async function handleAdminMoveSavingsToSubaccount(
       sub_account_nuban: subAccountNuban,
       reference,
       moved_at: nowIso,
-      replayed: duplicate,
+      replayed: duplicateConfirmed,
       vfd: respData?.data ?? null,
     },
   });
@@ -3989,7 +3989,7 @@ async function handleReverseSavingsSubaccount(
       savings_id: savingsId,
       reference,
       reversed_at: nowIso,
-      replayed: duplicate,
+      replayed: duplicateConfirmed,
       vfd: respData?.data ?? null,
     },
   });
