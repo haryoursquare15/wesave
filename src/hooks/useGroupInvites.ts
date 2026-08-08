@@ -188,8 +188,8 @@ export function usePendingInvites() {
           supabase.rpc("get_public_profiles", { user_ids: inviterIds }),
         ]);
 
-        const groupMap = new Map(groupsRes.data?.map(g => [g.id, g]) || []);
-        const profileMap = new Map(profilesRes.data?.map((p: { id: string; full_name: string | null; username: string | null }) => [p.id, p]) || []);
+        const groupMap = new Map<string, { id: string; name: string; contribution_amount: number; period: string }>(groupsRes.data?.map((g: { id: string; name: string; contribution_amount: number; period: string }) => [g.id, g]) || []);
+        const profileMap = new Map<string, { id: string; full_name: string | null; username: string | null }>(profilesRes.data?.map((p: { id: string; full_name: string | null; username: string | null }) => [p.id, p]) || []);
 
         const enrichedInvites = data.map(invite => {
           const group = groupMap.get(invite.group_id);

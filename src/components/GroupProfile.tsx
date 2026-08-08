@@ -182,7 +182,7 @@ export function GroupProfile({ groupId, group, memberCount, onGroupUpdated }: Gr
           // Use secure RPC function to fetch public profile data
           const { data: profiles } = await supabase.rpc("get_public_profiles", { user_ids: userIds });
 
-          const profileMap = new Map(profiles?.map((p: { id: string; full_name: string | null; username: string | null; avatar_url: string | null }) => [p.id, p]) || []);
+          const profileMap = new Map<string, { id: string; full_name: string | null; username: string | null; avatar_url: string | null }>(profiles?.map((p: { id: string; full_name: string | null; username: string | null; avatar_url: string | null }) => [p.id, p]) || []);
 
           const auditWithProfiles = audit.map((a) => ({
             ...a,
