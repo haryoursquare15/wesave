@@ -3705,32 +3705,8 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
 
   if (isSuccess) {
     const db = getSupabaseAdmin();
-    // Hold-and-settle: reserve the funds (wallet → bills_hold) instead of
-    // debiting straight to settlement. The money only reaches settlement once
-    // VFD confirms the biller actually delivered ("00"); a pending ("09") or
-    // failed purchase releases the hold back to the customer's wallet.
-    const { data: hdData, error: hdErr } = await db.rpc("vestara_bill_reserve", {
-      _user_id: userId,
-      _amount: totalDebit,
-      _reference: reference,
-      _metadata: {
-        source: "bill_payment",
-        biller_id: billerId,
-        customer_id: customerId,
-        division,
-        product_id: productId,
-        bill_amount: numAmount,
-        convenience_fee: convenienceFee,
-      },
-    });
-    const hdResult = hdData as { success?: boolean; error?: string } | null;
-    if (hdErr || !hdResult?.success) {
-      console.error("[bills] vestara_bill_reserve failed:", hdErr || hdResult);
-      return jsonResponse(
-        { error: "Bill payment could not be recorded. Please contact support.", details: hdErr?.message || hdResult?.error },
-        500,
-      );
-    }
+    // The wallet hold was already placed at step 8.6, after settlement funding
+    // was confirmed and before /pay. Here we only settle it.
     // Confirmed delivery → settle the hold to the settlement account now.
     let holdState = "held";
     let settledAt: string | null = null;
