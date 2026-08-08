@@ -371,11 +371,39 @@ export function VestaraInvestmentsTab() {
                     <TableCell>
                       <Badge variant="secondary">{naira(r.vestara_spread_roi)}</Badge>
                     </TableCell>
+                    <TableCell className="text-xs space-y-0.5 min-w-[190px]">
+                      <div>
+                        Sub-account funded:{" "}
+                        {r.subaccount_funded_at ? fmtDate(r.subaccount_funded_at) : <span className="text-muted-foreground">—</span>}
+                      </div>
+                      {r.sub_account_nuban && (
+                        <div className="font-mono text-[10px] text-muted-foreground">{r.sub_account_nuban}</div>
+                      )}
+                      <div>
+                        VFD confirmation:{" "}
+                        {r.vfd_confirmation_reference
+                          ? <span className="font-mono text-[10px]">{r.vfd_confirmation_reference}</span>
+                          : <span className="text-muted-foreground">—</span>}
+                      </div>
+                      {r.confirmed_at && (
+                        <div className="text-[10px] text-muted-foreground">Confirmed {fmtDate(r.confirmed_at)}</div>
+                      )}
+                      {r.vfd_confirmation_note && (
+                        <div className="text-[10px] text-muted-foreground">{r.vfd_confirmation_note}</div>
+                      )}
+                      {r.sub_account_reversed_at && (
+                        <div className="text-[10px] text-destructive">Reversed {fmtDate(r.sub_account_reversed_at)}</div>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Badge variant={r.status === "active" ? "default" : "outline"}>
                         {r.status}
                       </Badge>
+                      {r.approval_status && r.approval_status !== "approved" && (
+                        <div className="text-[10px] text-muted-foreground mt-0.5">{r.approval_status}</div>
+                      )}
                     </TableCell>
+
                   </TableRow>
                 ))}
               </TableBody>
