@@ -160,6 +160,47 @@ serve(async (req) => {
     }
 
     results.corporate_pool = { status, variance, ledger_sum: ledgerSum, vfd_balance: enquiry.balance, run_id: runRow?.id };
+
+    // Bills settlement position: real bank balance vs the internal
+    // bills_hold + settlement ledger accounts.
+    if (BILLS_SETTLEMENT_NUBAN) {
+      const settleEnq = await vfdAccountEnquiry(BILLS_SETTLEMENT_NUBAN);
+      const { data: settleAccts } = await supabase
+        .from("vestara_accounts")
+        .select("account_type, balance")
+        .in("account_type", ["bills_hold", "settlement"]);
+      let internalSum = 0;
+      for (const a of settleAccts ?? []) internalSum += Number(a.balance ?? 0);
+      internalSum = Math.round(internalSum * 100) / 100;
+      const settleVariance =
+        settleEnq.ok && settleEnq.balance !== null
+          ? Math.round((settleEnq.balance - internalSum) * 100) / 100
+          : null;
+      const settleStatus =
+        settleVariance === null ? "error" : Math.abs(settleVariance) < 0.01 ? "matched" : "discrepancy";
+
+      await supabase.from("reconciliation_runs").insert({
+        run_type: "bills_settlement",
+        vfd_corporate_balance: settleEnq.ok ? settleEnq.balance : null,
+        ledger_sum: internalSum,
+        variance: settleVariance,
+        status: settleStatus,
+        notes:
+          settleStatus === "matched"
+            ? "Bills settlement balanced with internal hold/settlement accounts"
+            : settleStatus === "error"
+              ? "VFD bills settlement /account/enquiry failed"
+              : `Variance ₦${settleVariance} between bills settlement NUBAN and internal accounts`,
+        details: { account: BILLS_SETTLEMENT_NUBAN, enquiry_raw: settleEnq.raw },
+      });
+
+      results.bills_settlement = {
+        status: settleStatus,
+        variance: settleVariance,
+        internal_sum: internalSum,
+        vfd_balance: settleEnq.balance,
+      };
+    }
   }
 
   // ============================================================
