@@ -3787,6 +3787,7 @@ export type Database = {
           discounted_interest_paid: number
           effective_rate: number | null
           id: string
+          last_accrued_on: string | null
           lock_account_id: string
           mandate_authorized_at: string | null
           mandate_code: string | null
@@ -3843,6 +3844,7 @@ export type Database = {
           discounted_interest_paid?: number
           effective_rate?: number | null
           id?: string
+          last_accrued_on?: string | null
           lock_account_id: string
           mandate_authorized_at?: string | null
           mandate_code?: string | null
@@ -3899,6 +3901,7 @@ export type Database = {
           discounted_interest_paid?: number
           effective_rate?: number | null
           id?: string
+          last_accrued_on?: string | null
           lock_account_id?: string
           mandate_authorized_at?: string | null
           mandate_code?: string | null
