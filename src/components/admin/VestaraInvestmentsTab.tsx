@@ -54,7 +54,16 @@ interface SavingsRow {
   withdrawn_at: string | null;
   penalty_amount: number;
   created_at: string;
+  approval_status?: string | null;
+  subaccount_funded_at?: string | null;
+  sub_account_nuban?: string | null;
+  sub_account_transfer_ref?: string | null;
+  sub_account_reversed_at?: string | null;
+  vfd_confirmation_reference?: string | null;
+  vfd_confirmation_note?: string | null;
+  confirmed_at?: string | null;
 }
+
 
 interface EnrichedRow extends SavingsRow {
   customer_name: string;
