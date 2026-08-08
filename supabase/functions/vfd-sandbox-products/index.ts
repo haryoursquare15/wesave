@@ -3627,16 +3627,173 @@ async function resolveConvenienceFee(category: string | null, billerId: string):
   }
 }
 
+/**
+ * Re-resolve the biller item from VFD immediately before /pay.
+ *
+ * billerId / divisionId / productId / paymentItem can be sent by the client
+ * from a saved beneficiary or a cached catalogue page, and VFD rotates these
+ * values. Vending with a stale item is a common cause of a bill that debits
+ * and then never resolves. This call re-reads /billerItems and returns the
+ * canonical values plus the item's amount rules.
+ *
+ * Fails CLOSED only when VFD answers and the item is genuinely absent; if VFD
+ * is unreachable we keep the caller's values and log, so a catalogue outage
+ * cannot block every payment.
+ */
+type FreshBillerItem = {
+  reachable: boolean;
+  found: boolean;
+  billerId: string;
+  divisionId: string;
+  productId: string;
+  paymentItem: string;
+  paymentItemName: string | null;
+  amountFixed: boolean;
+  fixedAmount: number | null;
+  minimumAmount: number | null;
+  maximumAmount: number | null;
+  raw: Record<string, unknown> | null;
+};
+
+async function resolveFreshBillerItem(a: {
+  billerId: string; divisionId: string; productId: string; paymentItem: string;
+}): Promise<FreshBillerItem> {
+  const base: FreshBillerItem = {
+    reachable: false, found: false,
+    billerId: a.billerId, divisionId: a.divisionId, productId: a.productId,
+    paymentItem: a.paymentItem, paymentItemName: null,
+    amountFixed: false, fixedAmount: null, minimumAmount: null, maximumAmount: null,
+    raw: null,
+  };
+  try {
+    const token = await getVfdAccessToken();
+    if (!token) return base;
+    const resp = await fetchWithTimeout(
+      `${getBillsBase()}/billerItems?billerId=${encodeURIComponent(a.billerId)}` +
+      `&divisionId=${encodeURIComponent(a.divisionId)}&productId=${encodeURIComponent(a.productId)}`,
+      { headers: { AccessToken: token } },
+      VFD_BILLS_VALIDATE_TIMEOUT_MS,
+    );
+    const raw = await safeJson(resp) as Record<string, unknown>;
+    if (!resp.ok) return { ...base, raw };
+    const inner = (raw.data && typeof raw.data === "object" ? raw.data : {}) as Record<string, unknown>;
+    const list: unknown[] = Array.isArray(inner.paymentitems)
+      ? inner.paymentitems as unknown[]
+      : Array.isArray(inner.paymentItems)
+        ? inner.paymentItems as unknown[]
+        : Array.isArray(raw.data) ? raw.data as unknown[] : [];
+    const wanted = String(a.paymentItem).trim().toLowerCase();
+    const item = (list as Array<Record<string, unknown>>).find((it) => {
+      const candidates = [it?.id, it?.code, it?.paymentitemid, it?.paymentCode, it?.paymentitemname, it?.paymentItemName]
+        .map((v) => String(v ?? "").trim().toLowerCase());
+      return candidates.includes(wanted);
+    });
+    if (!item) return { ...base, reachable: true, raw };
+    const num = (v: unknown) => {
+      const n = Number(String(v ?? "").replace(/[^\d.]/g, ""));
+      return Number.isFinite(n) && n > 0 ? n : null;
+    };
+    const fixedFlag = String(item.isAmountFixed ?? item.amountFixed ?? "").toLowerCase();
+    return {
+      reachable: true,
+      found: true,
+      billerId: String(item.billerid ?? item.billerId ?? a.billerId),
+      divisionId: String(item.divisionId ?? item.division ?? a.divisionId),
+      productId: String(item.productId ?? item.productid ?? a.productId),
+      paymentItem: String(item.paymentCode ?? item.code ?? item.id ?? a.paymentItem),
+      paymentItemName: (item.paymentitemname ?? item.paymentItemName) ? String(item.paymentitemname ?? item.paymentItemName) : null,
+      amountFixed: fixedFlag === "true" || fixedFlag === "yes" || fixedFlag === "1",
+      fixedAmount: num(item.amount),
+      minimumAmount: num(item.minimumAmount ?? item.minAmount),
+      maximumAmount: num(item.maximumAmount ?? item.maxAmount),
+      raw,
+    };
+  } catch (e) {
+    console.error("[bills][item] refresh failed", e instanceof Error ? e.message : String(e));
+    return base;
+  }
+}
+
+/**
+ * Poll VFD /transactionStatus after /pay with backoff (30s, 2min, 5min) so a
+ * bill that VFD resolves asynchronously does not sit "pending" in our DB until
+ * the 10-minute cron sweep. Each pass reuses the reconciler, so settlement,
+ * refund and ledger correction stay in one place.
+ */
+function scheduleBillTsqPolls(userId: string, reference: string) {
+  const delays = [30_000, 90_000, 180_000]; // 30s, 2min, 5min from /pay
+  const task = (async () => {
+    for (const wait of delays) {
+      await new Promise((r) => setTimeout(r, wait));
+      try {
+        const db = getSupabaseAdmin();
+        const { data: row } = await db.from("vfd_sandbox_bill_receipts")
+          .select("status, delivery_status").eq("reference", reference).maybeSingle();
+        if (!row) return;
+        if (row.status !== "pending" && row.delivery_status !== "pending") return;
+        console.log(`[bills][tsq-poll] ref=${reference} re-checking after ${wait}ms`);
+        await handleReconcilePendingBills(userId, { limit: 25 });
+      } catch (e) {
+        console.error(`[bills][tsq-poll] ref=${reference} failed`, e instanceof Error ? e.message : String(e));
+      }
+    }
+  })();
+  const edgeRuntime = (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime;
+  if (edgeRuntime?.waitUntil) edgeRuntime.waitUntil(task);
+}
+
 async function handleBillsPay(userId: string, body: Record<string, unknown>) {
-  const { customerId, amount, division, paymentItem, productId, billerId, phoneNumber } = body as {
-    customerId: string; amount: string; division: string; paymentItem: string;
-    productId: string; billerId: string; phoneNumber?: string;
+  const { customerId, amount, phoneNumber } = body as {
+    customerId: string; amount: string; phoneNumber?: string;
+  };
+  let { division, paymentItem, productId, billerId } = body as {
+    division: string; paymentItem: string; productId: string; billerId: string;
   };
   if (!customerId || !amount || !division || !paymentItem || !productId || !billerId) {
     return jsonResponse({ error: "Missing required payment fields" }, 400);
   }
   const numAmount = Number(amount);
   if (isNaN(numAmount) || numAmount <= 0) return jsonResponse({ error: "Invalid amount" }, 400);
+
+  // --- Step 1: refresh the biller item from VFD (never vend on stale values) --
+  const fresh = await resolveFreshBillerItem({ billerId, divisionId: division, productId, paymentItem });
+  console.log(
+    `[bills][item] biller=${billerId} item=${paymentItem} reachable=${fresh.reachable} found=${fresh.found} ` +
+    `fixed=${fresh.amountFixed} fixed_amount=${fresh.fixedAmount ?? "-"} min=${fresh.minimumAmount ?? "-"} max=${fresh.maximumAmount ?? "-"}`,
+  );
+  if (fresh.reachable && !fresh.found) {
+    return jsonResponse({
+      error: "This biller package is no longer available from the provider. Please reselect the biller and package, then try again.",
+      code: "BILLER_ITEM_STALE",
+    }, 400);
+  }
+  if (fresh.found) {
+    billerId = fresh.billerId || billerId;
+    division = fresh.divisionId || division;
+    productId = fresh.productId || productId;
+    paymentItem = fresh.paymentItem || paymentItem;
+    if (fresh.amountFixed && fresh.fixedAmount && Math.abs(fresh.fixedAmount - numAmount) > 0.009) {
+      return jsonResponse({
+        error: `This package has a fixed price of ₦${fresh.fixedAmount.toLocaleString()}. Please pay exactly that amount.`,
+        code: "BILLER_FIXED_AMOUNT",
+        required_amount: fresh.fixedAmount,
+      }, 400);
+    }
+    if (fresh.minimumAmount && numAmount < fresh.minimumAmount) {
+      return jsonResponse({
+        error: `${fresh.paymentItemName || "This biller"} requires a minimum of ₦${fresh.minimumAmount.toLocaleString()}.`,
+        code: "BILLER_MINIMUM_AMOUNT",
+        minimum: fresh.minimumAmount,
+      }, 400);
+    }
+    if (fresh.maximumAmount && numAmount > fresh.maximumAmount) {
+      return jsonResponse({
+        error: `${fresh.paymentItemName || "This biller"} allows a maximum of ₦${fresh.maximumAmount.toLocaleString()}.`,
+        code: "BILLER_MAXIMUM_AMOUNT",
+        maximum: fresh.maximumAmount,
+      }, 400);
+    }
+  }
   // Biller convenience fee is charged on top of the bill amount: the customer
   // is debited (bill + fee) while VFD's /pay only carries the bill amount.
   const convenienceFee = await resolveConvenienceFee((body.category as string) || null, billerId);
