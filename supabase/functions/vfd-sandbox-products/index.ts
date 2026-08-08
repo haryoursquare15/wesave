@@ -2074,6 +2074,26 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
   }
   const splitValidation = splitGate.record;
 
+  // --- Fund settlement for real BEFORE /pay (same rule as the direct path) ---
+  const splitFunding = await fundBillsSettlement({
+    reference, amount, userId: split.creator_id, origin: "split_bill_pay",
+  });
+  if (!splitFunding.confirmed) {
+    console.error(`[settleSplitBill] ref=${reference} NOT FUNDED code=${splitFunding.code} — /pay skipped`);
+    await db.from("vfd_sandbox_splits").update({
+      settlement_status: "failed",
+      settlement_reference: reference,
+      settlement_completed_at: new Date().toISOString(),
+      settlement_failure_reason: splitFunding.error || "Settlement funding could not be confirmed",
+    }).eq("id", split.id);
+    await sendNotification(split.creator_id, "SplitPay collected — bill delivery pending",
+      `Funds for "${split.title}" were collected but the bill could not be sent to ${displayBillerName} yet. Our team will retry shortly.`,
+      "split_completed");
+    return { delivered: false, reference, biller_name: displayBillerName, customer_id: customerId, amount, message: splitFunding.error };
+  }
+
+
+
 
   let vfdData: any = null;
   let vfdOk = false;
