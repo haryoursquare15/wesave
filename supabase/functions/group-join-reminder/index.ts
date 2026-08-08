@@ -1,9 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { verifyCronToken, requireAdminJwt, unauthorized } from "../_shared/cron-auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-cron-token',
 };
 
 function buildReminderEmail(fullName: string): string {
@@ -131,6 +132,46 @@ serve(async (req) => {
       // No body = default behavior (pending users, reminder email)
     }
 
+    // ---------------------------------------------------------------
+    // CALLER VERIFICATION — runs before any recipient query or send.
+    //
+    // Two strictly separated paths:
+    //   1. type: 'custom'  -> arbitrary subject/body. ALWAYS requires an
+    //      authenticated admin JWT. The cron token is never accepted here.
+    //   2. anything else   -> fixed, hard-coded reminder template. Accepts
+    //      the scheduler's x-cron-token, or an authenticated admin JWT.
+    // ---------------------------------------------------------------
+    const isCustom = emailType === 'custom';
+
+    if (isCustom) {
+      const caller = await requireAdminJwt(req, supabase);
+      if (!caller) {
+        console.warn('[group-join-reminder] rejected custom send: no admin JWT');
+        return new Response(
+          JSON.stringify({ error: 'Custom messages require an authenticated admin session' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+      if (!customSubject || !customBody) {
+        return new Response(
+          JSON.stringify({ error: 'subject and body are required for custom messages' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+      console.log(`[group-join-reminder] custom send authorised by admin ${caller.userId} (${caller.role})`);
+    } else {
+      const cronOk = await verifyCronToken(req, 'group_join_reminder', supabase);
+      const adminCaller = cronOk ? null : await requireAdminJwt(req, supabase);
+      if (!cronOk && !adminCaller) {
+        return unauthorized(corsHeaders);
+      }
+      // The scheduled/reminder path can never carry caller-supplied content.
+      emailType = 'reminder';
+      customSubject = '';
+      customBody = '';
+    }
+
+
     // Fetch all profiles with emails
     const { data: profiles, error: profilesError } = await supabase
       .from('profiles')
@@ -200,7 +241,8 @@ serve(async (req) => {
         let html: string;
         let subject: string;
 
-        if (emailType === 'custom' && customSubject && customBody) {
+        // `isCustom` is only ever true after the admin-JWT gate above.
+        if (isCustom) {
           html = buildGenericEmail(user.full_name || '', customSubject, customBody);
           subject = customSubject;
         } else {
