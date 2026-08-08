@@ -4148,6 +4148,10 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
           : `₦${numAmount.toLocaleString()} paid to ${billerName} (${customerId}). Ref: ${reference}`;
     await sendNotification(userId, notifTitle, notifBody, "bill_payment");
 
+    // Async settlement at the biller: poll TSQ with backoff (30s/2min/5min)
+    // instead of waiting for the 10-minute cron sweep.
+    if (isPending) scheduleBillTsqPolls(userId, reference);
+
     return jsonResponse({ data: { status: "00", message: isPending ? "Purchase accepted — awaiting biller confirmation" : "Payment successful", pending: isPending, reference, receipt_expires_at: expiresAt, bill_amount: numAmount, convenience_fee: convenienceFee, total_debited: totalDebit, ...delivery } });
   }
 
@@ -4163,10 +4167,43 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
     _metadata: { reason: "biller_declined", biller_id: billerId, customer_id: customerId },
   });
   if (relErr) console.error("[bills] vestara_bill_release failed after decline:", relErr);
+
+  // Persist a failed receipt so every /pay attempt — including declines — has a
+  // durable record of the exact request and VFD's raw response.
+  try {
+    await dbHold.from("vfd_sandbox_bill_receipts").insert({
+      request_payload: consumeBillPayRequest(reference),
+      user_id: userId,
+      reference,
+      category: (body.category as string) || "Other",
+      biller_id: billerId,
+      biller_name: (body.billerName as string) || billerId.toUpperCase(),
+      payment_item_name: (body.paymentItemName as string) || null,
+      customer_id: customerId,
+      phone_number: phoneNumber || null,
+      amount: numAmount,
+      convenience_fee: convenienceFee,
+      status: "failed",
+      delivery_status: "failed",
+      hold_state: "released",
+      held_at: new Date().toISOString(),
+      raw_response: {
+        ...(data || {}),
+        http_status: resp.status,
+        effective_status: effStatus,
+        outcome: payOutcome,
+        request_id: requestId,
+        validation: validationAudit(validationRecord),
+      },
+    });
+  } catch (e) {
+    console.error("[bills] failed-receipt insert failed", e instanceof Error ? e.message : String(e));
+  }
+
   return jsonResponse({
     error: (data?.message as string) || "The biller could not complete this purchase. Your wallet was not debited. Please try again.",
     code: "BILL_PAYMENT_FAILED",
-    data: { ...data, reference, status: data?.status || "99" },
+    data: { ...data, reference, status: data?.status || "99", http_status: resp.status, effective_status: effStatus },
   }, 400);
 }
 
