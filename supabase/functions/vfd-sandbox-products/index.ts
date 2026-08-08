@@ -3168,14 +3168,70 @@ async function fundBillsSettlement(params: {
       error: "Bill payments are temporarily unavailable while our settlement account is being configured. No funds were debited.",
     };
   }
+
+  // CONFIRMED (2026-08-08): VFD debits the corporate pool NUBAN 1047279595
+  // directly when they process a bill — there is no separate bills float
+  // account. A transfer would be a self-transfer and VFD rejects it, so the
+  // pre-/pay guarantee becomes a VERIFIED BALANCE SUFFICIENCY CHECK against
+  // the live bank balance of that account. /pay is still never called unless
+  // this check independently passes against VFD's own /account/enquiry.
   if (VFD_BILLS_SETTLEMENT_NUBAN === VFD_CORPORATE_POOL_NUBAN) {
-    return {
-      confirmed: false,
+    const { data: enq, status } = await walletRequest(
+      "/account/enquiry", "GET", undefined, { accountNumber: VFD_BILLS_SETTLEMENT_NUBAN },
+    );
+    const env = (enq?.data as Record<string, unknown>) || {};
+    const rawBal = env?.accountBalance ?? (env?.account as Record<string, unknown>)?.accountBalance;
+    const liveBalance = rawBal !== undefined && rawBal !== null ? Number(rawBal) : NaN;
+    const reachable = status === 200 && enq?.status === "00" && Number.isFinite(liveBalance);
+
+    await db.from("vfd_transaction_events").insert({
+      user_id: params.userId,
       reference: fundingRef,
-      code: "BILLS_SETTLEMENT_SELF_TRANSFER",
-      error: "Bill payments are temporarily unavailable (settlement routing misconfigured). No funds were debited.",
+      event_type: "bill_settlement_balance_check",
+      actor: "system",
+      payload: {
+        origin: params.origin,
+        bill_reference: params.reference,
+        mode: "pool_direct_debit",
+        account: VFD_BILLS_SETTLEMENT_NUBAN,
+        required_amount: params.amount,
+        live_balance: reachable ? liveBalance : null,
+        reachable,
+        enquiry_raw: enq,
+        checked_at: new Date().toISOString(),
+      },
+    }).then(undefined, (e: unknown) => console.error("[bills][fund] balance-check persist failed", e));
+
+    if (!reachable) {
+      return {
+        confirmed: false,
+        reference: fundingRef,
+        code: "SETTLEMENT_BALANCE_UNVERIFIED",
+        error: "We could not verify our settlement account with the bank. Your wallet was not debited. Please try again shortly.",
+        evidence: enq,
+      };
+    }
+    if (liveBalance < params.amount) {
+      console.error(
+        `[bills][fund] ref=${params.reference} INSUFFICIENT settlement balance ` +
+        `have=${liveBalance} need=${params.amount} acct=${VFD_BILLS_SETTLEMENT_NUBAN}`,
+      );
+      return {
+        confirmed: false,
+        reference: fundingRef,
+        code: "SETTLEMENT_UNDERFUNDED",
+        error: "Bill payments are briefly unavailable while we top up our settlement account. Your wallet was not debited — please try again shortly.",
+        evidence: { live_balance: liveBalance, required: params.amount },
+      };
+    }
+
+    return {
+      confirmed: true,
+      reference: fundingRef,
+      evidence: { mode: "pool_direct_debit", account: VFD_BILLS_SETTLEMENT_NUBAN, live_balance: liveBalance },
     };
   }
+
 
   // Pre-claim the deterministic reference BEFORE any outbound call, so a crash
   // mid-flight leaves a breadcrumb and a retry replays the SAME reference
