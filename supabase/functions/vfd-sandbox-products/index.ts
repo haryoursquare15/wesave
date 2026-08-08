@@ -3654,10 +3654,10 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   }
   const validationRecord = gate.record;
 
-  // --- Step 8.5: fund the settlement account for real, BEFORE /pay ---------
-  // VFD debits our settlement position when they process the bill, so it must
-  // hold the funds first. /pay is NEVER called unless this is independently
-  // verified as settled via /transactions?reference=.
+  // --- Step 8.5: move the customer's REAL money into the pool, BEFORE /pay --
+  // A verified VFD intra transfer from the customer's own NUBAN to the
+  // corporate pool for the bill amount. /pay is NEVER called unless this
+  // transfer is independently confirmed via /transactions?reference=.
   const funding = await fundBillsSettlement({
     reference, amount: numAmount, userId, origin: "bills_pay",
   });
