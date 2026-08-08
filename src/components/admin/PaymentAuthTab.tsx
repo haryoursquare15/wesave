@@ -42,9 +42,9 @@ export function PaymentAuthTab() {
       ]);
 
       const merged: PaymentAuthRow[] = [];
-      (tokensRes.data ?? []).forEach((t: any) => merged.push({
+      (((tokensRes as any).data as any[]) ?? []).forEach((t: any) => merged.push({
         id: t.id, user_id: t.user_id,
-        label: t.first_6digits ? `${t.first_6digits}••••${t.card_last4}` : `••••${t.card_last4 || "????"}`,
+        label: `••••${t.card_last4 || "????"}`,
         detail: t.card_type || "—",
         kind: "card", status: t.card_status, group_id: t.group_id,
         created_at: t.created_at, source: "legacy",
