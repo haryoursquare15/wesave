@@ -241,7 +241,8 @@ serve(async (req) => {
         let html: string;
         let subject: string;
 
-        if (emailType === 'custom' && customSubject && customBody) {
+        // `isCustom` is only ever true after the admin-JWT gate above.
+        if (isCustom) {
           html = buildGenericEmail(user.full_name || '', customSubject, customBody);
           subject = customSubject;
         } else {
