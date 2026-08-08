@@ -3932,7 +3932,41 @@ async function handleReverseSavingsSubaccount(
   const code = String(respData?.status ?? "");
   const msg = String(respData?.message ?? "");
   const duplicate = code === "98" || /reference exist/i.test(msg);
-  if (!(code === "00" || duplicate)) {
+
+  // Same rule as the funding leg: "Reference Exist" is not proof the earlier
+  // reversal settled. Confirm via TSQ before marking the funds as returned,
+  // otherwise a rejection could be recorded as refunded while the money is
+  // still sitting in the product sub-account.
+  let duplicateConfirmed = false;
+  let tsqEvidence: unknown = null;
+  if (duplicate) {
+    try {
+      const { data: tsq } = await vfdRequest("/transactions", "GET", undefined, { reference });
+      tsqEvidence = tsq;
+      const tsqEnv = tsq as Record<string, unknown>;
+      const tsqInner = (tsqEnv?.data as Record<string, unknown>) ?? {};
+      const txStatus = String(
+        tsqInner?.transactionStatus ?? tsqInner?.status ?? tsqEnv?.status ?? ""
+      ).trim();
+      const txMessage = String(tsqInner?.transactionStatusMessage ?? tsqEnv?.message ?? "");
+      duplicateConfirmed = txStatus === "00" && !/pending|fail|revers/i.test(txMessage);
+    } catch (e) {
+      console.warn("[reverse_savings_subaccount] TSQ after duplicate failed:",
+        e instanceof Error ? e.message : String(e));
+    }
+    if (!duplicateConfirmed) {
+      console.error("[reverse_savings_subaccount] duplicate reference unconfirmed by TSQ:", reference, tsqEvidence);
+      return jsonResponse({
+        error: "A reversal for this investment was already sent to the bank but has not settled yet. Please retry shortly — the funds have not been sent twice.",
+        code: "VFD_REVERSAL_UNCONFIRMED",
+        reference,
+        vfd_status: transferStatus,
+        data: { transfer: respData, tsq: tsqEvidence },
+      }, 409);
+    }
+  }
+
+  if (!(code === "00" || duplicateConfirmed)) {
     console.error("[reverse_savings_subaccount] VFD rejected:", respData);
     return jsonResponse({
       error: msg || "VFD refused the reversal transfer.",
@@ -3941,6 +3975,7 @@ async function handleReverseSavingsSubaccount(
       data: respData,
     }, 400);
   }
+
 
   const nowIso = new Date().toISOString();
   await db.from("vestara_savings").update({
