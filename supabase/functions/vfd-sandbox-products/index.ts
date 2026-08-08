@@ -3153,6 +3153,12 @@ type SettlementFunding = {
   replayed?: boolean;
 };
 
+// Real per-transaction settlement funding: the CUSTOMER'S OWN VFD NUBAN is
+// debited and the corporate pool (VFD_BILLS_SETTLEMENT_NUBAN, default
+// 1047279595) is credited for the exact bill amount BEFORE /pay is called.
+// No balance-sufficiency read, no shared-float assumption: each request funds
+// the pool itself, atomically and independently verified via
+// /transactions?reference= (VFD status 98 is NEVER treated as success).
 async function fundBillsSettlement(params: {
   reference: string;
   amount: number;
@@ -3170,74 +3176,44 @@ async function fundBillsSettlement(params: {
       error: "Bill payments are temporarily unavailable while our settlement account is being configured. No funds were debited.",
     };
   }
-
-  // CONFIRMED (2026-08-08): VFD debits the corporate pool NUBAN 1047279595
-  // directly when they process a bill — there is no separate bills float
-  // account. A transfer would be a self-transfer and VFD rejects it, so the
-  // pre-/pay guarantee becomes a VERIFIED BALANCE SUFFICIENCY CHECK against
-  // the live bank balance of that account. /pay is still never called unless
-  // this check independently passes against VFD's own /account/enquiry.
-  if (VFD_BILLS_SETTLEMENT_NUBAN === VFD_CORPORATE_POOL_NUBAN) {
-    const { data: enq, status } = await walletRequest(
-      "/account/enquiry", "GET", undefined, { accountNumber: VFD_BILLS_SETTLEMENT_NUBAN },
-    );
-    const env = (enq?.data as Record<string, unknown>) || {};
-    const rawBal = env?.accountBalance ?? (env?.account as Record<string, unknown>)?.accountBalance;
-    const liveBalance = rawBal !== undefined && rawBal !== null ? Number(rawBal) : NaN;
-    const reachable = status === 200 && enq?.status === "00" && Number.isFinite(liveBalance);
-
-    await db.from("vfd_transaction_events").insert({
-      user_id: params.userId,
-      reference: fundingRef,
-      event_type: "bill_settlement_balance_check",
-      actor: "system",
-      payload: {
-        origin: params.origin,
-        bill_reference: params.reference,
-        mode: "pool_direct_debit",
-        account: VFD_BILLS_SETTLEMENT_NUBAN,
-        required_amount: params.amount,
-        live_balance: reachable ? liveBalance : null,
-        reachable,
-        enquiry_raw: enq,
-        checked_at: new Date().toISOString(),
-      },
-    }).then(undefined, (e: unknown) => console.error("[bills][fund] balance-check persist failed", e));
-
-    if (!reachable) {
-      return {
-        confirmed: false,
-        reference: fundingRef,
-        code: "SETTLEMENT_BALANCE_UNVERIFIED",
-        error: "We could not verify our settlement account with the bank. Your wallet was not debited. Please try again shortly.",
-        evidence: enq,
-      };
-    }
-    if (liveBalance < params.amount) {
-      console.error(
-        `[bills][fund] ref=${params.reference} INSUFFICIENT settlement balance ` +
-        `have=${liveBalance} need=${params.amount} acct=${VFD_BILLS_SETTLEMENT_NUBAN}`,
-      );
-      return {
-        confirmed: false,
-        reference: fundingRef,
-        code: "SETTLEMENT_UNDERFUNDED",
-        error: "Bill payments are briefly unavailable while we top up our settlement account. Your wallet was not debited — please try again shortly.",
-        evidence: { live_balance: liveBalance, required: params.amount },
-      };
-    }
-
+  if (!params.userId) {
     return {
-      confirmed: true,
+      confirmed: false,
       reference: fundingRef,
-      evidence: { mode: "pool_direct_debit", account: VFD_BILLS_SETTLEMENT_NUBAN, live_balance: liveBalance },
+      code: "SETTLEMENT_PAYER_UNKNOWN",
+      error: "We could not identify the paying account for this bill. Your wallet was not debited.",
     };
   }
 
+  // 1) Resolve the customer's own VFD NUBAN (the real source of funds).
+  const { data: client } = await db
+    .from("vfd_sandbox_clients")
+    .select("vfd_account_number, metadata, full_name")
+    .eq("user_id", params.userId)
+    .maybeSingle();
+  const customerNuban = (client?.vfd_account_number as string | null) || null;
+  if (!customerNuban) {
+    return {
+      confirmed: false, reference: fundingRef, code: "CUSTOMER_NUBAN_MISSING",
+      error: "Your bank account is not fully provisioned yet, so this bill cannot be paid. Your wallet was not debited.",
+    };
+  }
+  if ((client?.metadata as Record<string, unknown> | null)?.virtual_nuban) {
+    return {
+      confirmed: false, reference: fundingRef, code: "CUSTOMER_NUBAN_VIRTUAL",
+      error: "Your account is still on a temporary number, so funds cannot be moved for this bill yet. Your wallet was not debited.",
+    };
+  }
+  if (customerNuban === VFD_BILLS_SETTLEMENT_NUBAN) {
+    return {
+      confirmed: false, reference: fundingRef, code: "SELF_TRANSFER_BLOCKED",
+      error: "This payment could not be processed. Your wallet was not debited.",
+    };
+  }
 
-  // Pre-claim the deterministic reference BEFORE any outbound call, so a crash
-  // mid-flight leaves a breadcrumb and a retry replays the SAME reference
-  // (VFD rejects it as a duplicate rather than moving money twice).
+  // 2) Pre-claim the deterministic reference BEFORE any outbound call, so a
+  // crash mid-flight leaves a breadcrumb and a retry replays the SAME
+  // reference (VFD rejects it as a duplicate instead of debiting twice).
   await db.from("vfd_transaction_events").insert({
     user_id: params.userId,
     reference: fundingRef,
@@ -3247,26 +3223,26 @@ async function fundBillsSettlement(params: {
       origin: params.origin,
       bill_reference: params.reference,
       amount: params.amount,
-      from: VFD_CORPORATE_POOL_NUBAN,
+      from: customerNuban,
       to: VFD_BILLS_SETTLEMENT_NUBAN,
       claimed_at: new Date().toISOString(),
     },
   }).then(undefined, (e: unknown) => console.error("[bills][fund] pre-claim persist failed", e));
 
-  // Resumability: if this reference already settled on a prior attempt, do not
-  // move money again — reuse the confirmed outcome.
+  // 3) Resumability: if this reference already settled, do not move money again.
   const prior = await verifyVfdTransfer(fundingRef);
   if (prior.confirmed) {
     return { confirmed: true, reference: fundingRef, evidence: prior.evidence, replayed: true };
   }
 
+  // 4) Enquiries: customer (sender) and pool (beneficiary).
   const { data: fromEnq, status: fromStatus } = await walletRequest(
-    "/account/enquiry", "GET", undefined, { accountNumber: VFD_CORPORATE_POOL_NUBAN },
+    "/account/enquiry", "GET", undefined, { accountNumber: customerNuban },
   );
   if (fromStatus !== 200 || fromEnq?.status !== "00") {
     return {
-      confirmed: false, reference: fundingRef, code: "SETTLEMENT_SOURCE_ENQUIRY_FAILED",
-      error: "We could not reach the settlement account. Your wallet was not debited. Please try again shortly.",
+      confirmed: false, reference: fundingRef, code: "CUSTOMER_ENQUIRY_FAILED",
+      error: "We could not reach your bank account. Your wallet was not debited. Please try again shortly.",
       evidence: fromEnq,
     };
   }
@@ -3276,7 +3252,7 @@ async function fundBillsSettlement(params: {
   if (toStatus !== 200 || toEnq?.status !== "00") {
     return {
       confirmed: false, reference: fundingRef, code: "SETTLEMENT_DEST_ENQUIRY_FAILED",
-      error: "We could not reach the settlement account. Your wallet was not debited. Please try again shortly.",
+      error: "We could not reach our settlement account. Your wallet was not debited. Please try again shortly.",
       evidence: toEnq,
     };
   }
@@ -3288,28 +3264,28 @@ async function fundBillsSettlement(params: {
   const fromSavingsId = String(fAcct?.id ?? fEnv?.accountId ?? "");
   if (!fromSavingsId) {
     return {
-      confirmed: false, reference: fundingRef, code: "SETTLEMENT_SOURCE_ID_MISSING",
-      error: "Settlement account details are incomplete. Your wallet was not debited.",
+      confirmed: false, reference: fundingRef, code: "CUSTOMER_ACCOUNT_ID_MISSING",
+      error: "Your bank account details are incomplete. Your wallet was not debited.",
       evidence: fromEnq,
     };
   }
 
   const payload = {
-    fromAccount: VFD_CORPORATE_POOL_NUBAN,
+    fromAccount: customerNuban,
     fromClientId: String(fEnv?.clientId ?? ""),
-    fromClient: String(fEnv?.client ?? ""),
+    fromClient: String(fEnv?.client ?? client?.full_name ?? ""),
     fromSavingsId,
     fromBvn: String(fEnv?.bvn ?? ""),
     toAccount: VFD_BILLS_SETTLEMENT_NUBAN,
     toBank: "999999",
-    toClient: String(tEnv?.client ?? tAcct?.client ?? "Bills Settlement"),
+    toClient: String(tEnv?.client ?? tAcct?.client ?? "Vestara Pool"),
     toClientId: String(tEnv?.clientId ?? tAcct?.clientId ?? ""),
     toSavingsId: String(tAcct?.id ?? tEnv?.accountId ?? ""),
     toSession: "",
     toBvn: String(tEnv?.bvn ?? ""),
-    signature: await transferSignature(VFD_CORPORATE_POOL_NUBAN, VFD_BILLS_SETTLEMENT_NUBAN),
+    signature: await transferSignature(customerNuban, VFD_BILLS_SETTLEMENT_NUBAN),
     amount: String(params.amount),
-    remark: `Bills settlement funding ${params.reference}`.slice(0, 60),
+    remark: `Bill settlement ${params.reference}`.slice(0, 60),
     transferType: "intra",
     reference: fundingRef,
     uniqueSenderAccountId: fromSavingsId,
@@ -3330,7 +3306,11 @@ async function fundBillsSettlement(params: {
     event_type: "bill_settlement_funding_result",
     actor: "system",
     payload: {
+      origin: params.origin,
       bill_reference: params.reference,
+      from: customerNuban,
+      to: VFD_BILLS_SETTLEMENT_NUBAN,
+      amount: params.amount,
       transfer_status: vfdStatus,
       transfer_message: vfdMessage,
       duplicate,
@@ -3341,13 +3321,18 @@ async function fundBillsSettlement(params: {
   }).then(undefined, (e: unknown) => console.error("[bills][fund] result persist failed", e));
 
   if (!verified.confirmed) {
+    const insufficient = /insufficient|balance/i.test(vfdMessage);
     return {
       confirmed: false,
       reference: fundingRef,
-      code: duplicate ? "SETTLEMENT_FUNDING_UNCONFIRMED" : "SETTLEMENT_FUNDING_FAILED",
-      error: duplicate
-        ? "This bill's settlement funding was already submitted to the bank but has not settled yet. It is being tracked — no funds were debited twice."
-        : (vfdMessage || "We could not fund the settlement account for this bill. Your wallet was not debited. Please try again."),
+      code: insufficient
+        ? "CUSTOMER_INSUFFICIENT_FUNDS"
+        : duplicate ? "SETTLEMENT_FUNDING_UNCONFIRMED" : "SETTLEMENT_FUNDING_FAILED",
+      error: insufficient
+        ? "You do not have enough money in your account for this bill. Nothing was debited — top up and try again."
+        : duplicate
+          ? "This payment was already submitted to the bank and has not settled yet. It is being tracked — nothing was debited twice."
+          : (vfdMessage || "We could not move your funds for this bill, so it was not paid. Nothing was debited. Please try again."),
       evidence: { transfer: transferResp, tsq: verified.evidence },
     };
   }
