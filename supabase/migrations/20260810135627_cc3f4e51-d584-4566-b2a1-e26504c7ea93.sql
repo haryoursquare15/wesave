@@ -1,0 +1,2 @@
+ALTER TABLE public.vestara_savings DROP CONSTRAINT IF EXISTS vestara_savings_commitment_frequency_check;
+ALTER TABLE public.vestara_savings ADD CONSTRAINT vestara_savings_commitment_frequency_check CHECK (commitment_frequency = ANY (ARRAY['daily'::text,'weekly'::text,'monthly'::text]));
