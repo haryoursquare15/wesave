@@ -319,9 +319,27 @@ serve(async (req) => {
           .range(offset, offset + limit - 1);
 
         if (qErr) return err(qErr.message);
-        result = { success: true, transactions: data };
+
+        // Only surface transactions that actually moved money on one of THIS
+        // user's own accounts. Platform-side legs that merely carry the user as
+        // "initiated_by" (e.g. the SplitPay ₦10 fee sweep split_holding →
+        // revenue, which the user was already debited for as part of their
+        // share) must not appear as a second debit in their history.
+        const { data: ownAccounts } = await supabase
+          .from("vestara_accounts")
+          .select("id")
+          .eq("user_id", userId);
+        const ownIds = new Set((ownAccounts || []).map((a: { id: string }) => a.id));
+        const visible = (data || []).filter((tx: { vestara_ledger_entries?: Array<{ account_id: string }> }) => {
+          const entries = tx.vestara_ledger_entries || [];
+          if (entries.length === 0) return true;
+          return entries.some((e) => ownIds.has(e.account_id));
+        });
+
+        result = { success: true, transactions: visible };
         break;
       }
+
 
       // ── Withdraw (direct — for non-external withdrawals) ──
       case "withdraw": {
