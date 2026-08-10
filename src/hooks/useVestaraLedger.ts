@@ -93,7 +93,8 @@ export interface VestaraSavings {
   accrued_interest: number;
   discounted_interest_paid: number;
   effective_rate: number | null;
-  status: "active" | "matured" | "withdrawn_early" | "cancelled";
+  // NOTE: must match the DB enum `vestara_savings_status` exactly.
+  status: "active" | "matured" | "early_withdrawn" | "cancelled";
   approval_status?: "pending" | "approved" | "rejected";
   approval_notes?: string | null;
   approval_decision_at?: string | null;
