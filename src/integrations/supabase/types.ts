@@ -7254,6 +7254,7 @@ export type Database = {
         | "pending_transfer"
         | "pending_savings"
         | "bills_hold"
+        | "vfd_charges_expense"
       vestara_product_code: "goalsave" | "vault" | "lockmax" | "upfront_yield"
       vestara_savings_status:
         | "active"
@@ -7450,6 +7451,7 @@ export const Constants = {
         "pending_transfer",
         "pending_savings",
         "bills_hold",
+        "vfd_charges_expense",
       ],
       vestara_product_code: ["goalsave", "vault", "lockmax", "upfront_yield"],
       vestara_savings_status: [
