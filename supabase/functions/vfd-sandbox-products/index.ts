@@ -4257,9 +4257,13 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
     let holdState = "held";
     let settledAt: string | null = null;
     if (!isPending) {
+      // Fix D: the hold covers amount + convenience fee. Settlement receives
+      // only the bill amount (the real bank movement); the fee is credited to
+      // revenue as its own explicit leg.
       const { data: stData, error: stErr } = await db.rpc("vestara_bill_settle", {
         _reference: reference,
         _metadata: { biller_id: billerId, customer_id: customerId },
+        _fee_amount: convenienceFee,
       });
       const stResult = stData as { success?: boolean; error?: string } | null;
       if (stErr || !stResult?.success) {
