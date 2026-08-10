@@ -431,10 +431,12 @@ async function ensureBalanceRow(
   }
 
   let liveBalance = 0;
+  let liveOk = false;
   if (accountNo) {
     const { data: balData } = await vfdRequest("/account/enquiry", "GET", undefined, {
       accountNumber: accountNo,
     });
+    liveOk = String((balData as Record<string, unknown> | null)?.status ?? "") === "00";
     liveBalance = extractVfdBalance(balData);
   }
 
@@ -442,13 +444,20 @@ async function ensureBalanceRow(
   const lockedBalance = toNumber(existing?.locked_balance);
   const savingsBalance = toNumber(existing?.savings_balance);
   const existingTotal = toNumber(existing?.total_balance);
-  const totalBalance = Math.max(
-    liveBalance,
-    recordedBalance,
-    lockedBalance + savingsBalance,
-    preserveExisting ? existingTotal : 0
-  );
+  // The bank is the source of truth. When the live enquiry succeeds we take it
+  // verbatim — taking Math.max(live, internal) let a stale/optimistic internal
+  // figure show money that VFD does not actually hold, so transfers failed with
+  // "51 Insufficient Balance" after the user had already been shown the funds.
+  // Only fall back to internal figures when the enquiry itself failed.
+  const totalBalance = liveOk
+    ? liveBalance
+    : Math.max(
+      recordedBalance,
+      lockedBalance + savingsBalance,
+      preserveExisting ? existingTotal : 0,
+    );
   const availableBalance = Math.max(totalBalance - lockedBalance - savingsBalance, 0);
+
   const timestamp = new Date().toISOString();
 
   if (existing) {
