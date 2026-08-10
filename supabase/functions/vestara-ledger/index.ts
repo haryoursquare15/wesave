@@ -116,14 +116,18 @@ async function syncBalanceCachesFromVestara(supabase: ReturnType<typeof createCl
     { onConflict: "user_id" },
   );
 
+  // NOTE: `total_balance` and `last_synced_at` on vfd_user_balances are BANK
+  // truth, owned exclusively by the live VFD enquiry in ensureBalanceRow.
+  // Writing ledger-derived figures here (and stamping last_synced_at) made a
+  // stale internal number look like a fresh bank sync, so affordability gates
+  // authorised spending the bank could not honour. Only the ledger-owned
+  // locked/savings/available legs are synced here.
   await supabase.from("vfd_user_balances").upsert(
     {
       user_id: userId,
-      total_balance: wallet + locked + savings,
       available_balance: wallet,
       locked_balance: locked,
       savings_balance: savings,
-      last_synced_at: timestamp,
       updated_at: timestamp,
     },
     { onConflict: "user_id" },
