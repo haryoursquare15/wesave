@@ -4387,7 +4387,7 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
 
 
 
-  const bal = await ensureBalanceRow(userId);
+  const bal = await ensureBalanceRow(userId, true);
   const available = bal.total_balance - bal.locked_balance - bal.savings_balance;
   if (totalDebit > available) {
     const shortfall = Math.max(0, totalDebit - available);
@@ -5548,7 +5548,7 @@ async function handleCreateVirtualCard(userId: string, _body: Record<string, unk
   if (!client?.vfd_account_number) return jsonResponse({ error: "Complete KYC first" }, 400);
 
   // Check balance for issuance fee
-  const bal = await ensureBalanceRow(userId);
+  const bal = await ensureBalanceRow(userId, true);
   const available = bal.total_balance - bal.locked_balance - bal.savings_balance;
   if (available < CARD_ISSUANCE_FEE) return jsonResponse({ error: `Insufficient balance. Card issuance costs ₦${CARD_ISSUANCE_FEE.toLocaleString()}` }, 400);
 
