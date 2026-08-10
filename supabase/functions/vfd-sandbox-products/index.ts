@@ -2503,6 +2503,100 @@ async function handlePaySplit(userId: string, body: Record<string, unknown>) {
   return jsonResponse({ data: { paid: true, amount: totalDebit, bill_share: amount, fee_share: feeShare, all_paid: allPaid, bill_delivery: billDelivery } });
 }
 
+// SplitPay: creator (or Vestara admin) covers every outstanding share so the bill can complete.
+// The payer's wallet funds each pending share; once all shares are settled the normal
+// bill-payment / merchant settlement flow runs exactly as if each participant had paid.
+async function handleCoverSplitShares(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const splitId = body.split_id as string;
+
+  const { data: split } = await db.from("vfd_sandbox_splits").select("*").eq("id", splitId).single();
+  if (!split) return jsonResponse({ error: "Split not found" }, 404);
+  if (split.status !== "active") return jsonResponse({ error: "Split is not active" }, 400);
+
+  let allowed = split.creator_id === userId;
+  if (!allowed) {
+    const { data: isAdmin } = await db.rpc("is_any_admin", { _user_id: userId });
+    allowed = Boolean(isAdmin);
+  }
+  if (!allowed) return jsonResponse({ error: "Only the split creator can cover outstanding shares" }, 403);
+
+  const { data: pending } = await db.from("vfd_sandbox_split_participants")
+    .select("*").eq("split_id", splitId).eq("status", "pending");
+  if (!pending || pending.length === 0) return jsonResponse({ error: "There are no outstanding shares on this split" }, 400);
+
+  const covered: Array<{ participant_id: string; amount: number }> = [];
+  for (const p of pending) {
+    const amount = Number(p.amount);
+    const reference = `splitpay-cover-${splitId}-${p.id}`;
+    const debited = await ledgerSplitPay(userId, splitId, amount, reference, {
+      split_title: split.title, bill_share: amount, fee_share: 0,
+      covered_for_user: p.user_id, covered_by: userId,
+    });
+    if (!debited) {
+      return jsonResponse({
+        error: `Insufficient available balance to cover the outstanding ₦${amount.toLocaleString()} share.`,
+        data: { covered },
+      }, 400);
+    }
+
+    await db.from("vfd_sandbox_split_participants")
+      .update({ status: "paid", paid_at: new Date().toISOString() }).eq("id", p.id);
+    await db.from("vfd_sandbox_split_transactions").insert({ split_id: splitId, user_id: userId, amount });
+    await db.from("vfd_sandbox_transactions").insert({
+      user_id: userId,
+      transaction_type: "debit",
+      amount,
+      description: `SplitPay: covered outstanding share of ₦${amount.toLocaleString()} for "${split.title}"`,
+      reference,
+      status: "completed",
+    });
+    covered.push({ participant_id: p.id, amount });
+  }
+
+  const { data: activeParticipants } = await db.from("vfd_sandbox_split_participants")
+    .select("status").eq("split_id", splitId).in("status", ["pending", "paid"]);
+  const paidCount = (activeParticipants || []).filter((p) => p.status === "paid").length;
+  const activeCount = (activeParticipants || []).length;
+  const allPaid = paidCount >= Math.min(split.split_count, activeCount);
+
+  await db.from("vfd_sandbox_splits").update({
+    paid_count: paidCount,
+    status: allPaid ? "completed" : split.status,
+    updated_at: new Date().toISOString(),
+  }).eq("id", splitId);
+
+  let billDelivery: any = null;
+  if (allPaid) {
+    const fresh = { ...split, paid_count: paidCount, status: "completed" };
+    if (split.bill_metadata) {
+      billDelivery = await queueSplitBillSettlement(fresh);
+    } else if (split.merchant_account_name) {
+      await db.from("vfd_sandbox_splits").update({
+        settlement_status: "completed",
+        settlement_reference: `split-merchant-${splitId}`,
+        settlement_completed_at: new Date().toISOString(),
+      }).eq("id", splitId);
+      const merchantFee = Number(split.platform_fee || 0);
+      if (merchantFee > 0) {
+        await db.rpc("vestara_split_fee_to_revenue", {
+          _split_id: splitId,
+          _amount: merchantFee,
+          _reference: `split-merchant-${splitId}-FEE`,
+          _initiated_by: split.creator_id,
+          _metadata: { origin: "split_merchant_settlement_covered" },
+        });
+      }
+      await reconcileSplitPayments(fresh, { expectReceipt: false });
+    }
+    await sendNotification(split.creator_id, "SplitPay fully funded",
+      `Outstanding shares on "${split.title}" were covered. Delivering the bill now…`, "split_payment");
+  }
+
+  return jsonResponse({ data: { covered, count: covered.length, all_paid: allPaid, bill_delivery: billDelivery } });
+}
+
+
 // SplitPay: Decline
 async function handleDeclineSplit(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
