@@ -1985,12 +1985,20 @@ async function handleTransfer(
       // If the recipient is a Vestara user (intra-Vestara), credit their
       // Vestara wallet, insert a credit transaction row for history, push a
       // notification, and refresh their cached VFD balance row.
-      const { data: rcptClient } = await supabaseAdmin
+      const { data: rcptRows, error: rcptLookupErr } = await supabaseAdmin
         .from("vfd_sandbox_clients")
-        .select("user_id, full_name, vfd_account_number")
+        .select("user_id, full_name, vfd_account_number, created_at")
         .eq("vfd_account_number", toAccount)
-        .maybeSingle();
-      const rcptUserId = (rcptClient as { user_id?: string } | null)?.user_id;
+        .not("user_id", "is", null)
+        .order("created_at", { ascending: true })
+        .limit(2);
+      if (rcptLookupErr) {
+        console.error("[VFD Transfer] recipient lookup failed:", rcptLookupErr);
+      }
+      if ((rcptRows?.length ?? 0) > 1) {
+        console.warn(`[VFD Transfer] duplicate client rows for NUBAN ${toAccount}; crediting earliest owner`);
+      }
+      const rcptUserId = (rcptRows?.[0] as { user_id?: string } | undefined)?.user_id;
       if (rcptUserId) {
         const { data: rcptDep, error: rcptDepErr } = await supabaseAdmin.rpc("vestara_deposit", {
           _user_id: rcptUserId,
