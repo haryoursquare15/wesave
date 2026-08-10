@@ -4963,7 +4963,18 @@ async function handleReconcilePendingBills(userId: string, body: Record<string, 
   }
 
 
+  // Durable catch-up for Fix A: any settled bill whose real VFD pool debit has
+  // not been reconciled yet is retried on every sweep (10-minute cron), so the
+  // ledger converges on the bank statement even if the live request died first.
+  try {
+    const poolRecon = await reconcileOutstandingBillPoolDebits(isSystem ? 50 : 20);
+    (result as Record<string, unknown>).pool_reconciliation = poolRecon;
+  } catch (e) {
+    console.error("[bills][recon] sweep failed", e instanceof Error ? e.message : String(e));
+  }
+
   return jsonResponse({ data: result });
+
 }
 
 // Compute next run timestamp in WAT (UTC+1). Hour stored is WAT hour.
