@@ -285,7 +285,7 @@ export default function SplitPayDetail() {
         )}
 
         {/* Creator: cover the outstanding shares so the bill can be delivered */}
-        {isCreator && request.status === "active" && outstandingTotal > 0 && (
+        {(isCreator || isAdmin) && request.status === "active" && outstandingTotal > 0 && (
           <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 space-y-3">
             <div>
               <p className="font-semibold text-foreground">Outstanding shares</p>
