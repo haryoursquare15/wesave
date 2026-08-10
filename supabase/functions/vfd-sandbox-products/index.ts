@@ -3234,6 +3234,67 @@ async function handleAdminListPendingAssoc(userId: string) {
   return jsonResponse({ data: enriched });
 }
 
+// Admin: one-off cash sweep of a SplitPay service fee into the corporate pool.
+// Used to back-fill fees that were recognised as revenue internally before the
+// funding transfer started including them, so bank vs ledger reconciles.
+async function handleAdminSweepSplitFee(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  // "system" = trusted cron caller, already authenticated by CRON_SECRET.
+  if (userId !== "system" && !(await isPlatformAdmin(userId))) {
+    return jsonResponse({ error: "Admin access required" }, 403);
+  }
+
+  const billReference = String(body.bill_reference || "").trim();
+  const amount = Number(body.amount || 0);
+  if (!billReference || !(amount > 0)) {
+    return jsonResponse({ error: "bill_reference and a positive amount are required" }, 400);
+  }
+
+  const { data: split } = await db
+    .from("vfd_sandbox_splits")
+    .select("id, creator_id, platform_fee")
+    .eq("settlement_reference", billReference)
+    .maybeSingle();
+  const creatorId = (split?.creator_id as string | null) || (body.creator_id as string | null);
+  if (!creatorId) {
+    return jsonResponse({ error: "Could not resolve the split creator for that reference" }, 404);
+  }
+
+  const sweepRef = `${billReference}-FEE-SWEEP`;
+  const { data: already } = await db
+    .from("vfd_transaction_events")
+    .select("id")
+    .eq("reference", `${sweepRef}-FUND`)
+    .eq("event_type", "bill_settlement_funding_confirmed")
+    .maybeSingle();
+  if (already) {
+    return jsonResponse({ success: true, already_swept: true, reference: `${sweepRef}-FUND` });
+  }
+
+  const funding = await fundBillsSettlement({
+    reference: sweepRef,
+    amount,
+    userId: creatorId,
+    origin: "split_fee_backfill_sweep",
+  });
+
+  if (!funding.confirmed) {
+    return jsonResponse({
+      error: funding.error || "Fee sweep could not be confirmed",
+      code: funding.code,
+      reference: funding.reference,
+    }, 502);
+  }
+
+  return jsonResponse({
+    success: true,
+    reference: funding.reference,
+    amount,
+    message: `₦${amount} swept from the creator's NUBAN to the corporate pool.`,
+  });
+}
+
+
 // Admin: approve / reject association
 async function handleAdminReviewAssoc(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
@@ -7545,6 +7606,11 @@ Deno.serve(async (req) => {
     if (action === "recover_stuck_split_settlements" && await assertCronToken(req, "bills_reconciler")) {
       return await handleRecoverStuckSplitSettlements();
     }
+    if (action === "sweep_split_fee_cron" && assertCronCaller(req)) {
+      return await handleAdminSweepSplitFee("system", body);
+    }
+
+
 
     if (CRON_ACTIONS.has(action) && assertCronCaller(req)) {
       if (action === "sandbox_auto_contribute") return await handleSandboxAutoContribute("system", body);
@@ -7648,6 +7714,7 @@ Deno.serve(async (req) => {
       case "admin_list_pending_assoc": return await handleAdminListPendingAssoc(userId);
       case "admin_review_assoc": return await handleAdminReviewAssoc(userId, body);
       case "admin_assoc_doc_url": return await handleAdminAssocDocUrl(userId, body);
+      case "admin_sweep_split_fee": return await handleAdminSweepSplitFee(userId, body);
 
       // Bills Payment (VFD BaaS)
       case "bills_categories": return await handleBillsCategories();
