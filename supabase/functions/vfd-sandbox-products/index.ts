@@ -2151,6 +2151,9 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
     return { delivered: false, reference, biller_name: displayBillerName, customer_id: customerId, amount, message: vfdData?.message || "Bill delivery pending" };
   }
 
+  // Fix A: reconcile VFD's real pool debit for the split bill too.
+  scheduleBillPoolReconciliation(reference, amount, "split_bill_pay");
+
   // Bill receipt (creator owns the beneficiary record)
   const expiresAt = computeBillExpiry(category || "", paymentItemName || null);
   const splitDelivery = deriveBillDelivery({
@@ -4001,6 +4004,21 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   }
   const numAmount = Number(amount);
   if (isNaN(numAmount) || numAmount <= 0) return jsonResponse({ error: "Invalid amount" }, 400);
+
+  // --- Step 0: canonicalise the biller ID (Fix B) ------------------------------
+  // Saved beneficiaries / recurring bills / older clients can still send an ID
+  // VFD has renamed (e.g. MTN "2626" → "MTN_NIGERIA2"). Resolve it against the
+  // live /billerlist before it is used for the item refresh, the convenience
+  // fee lookup, the /pay payload or anything we persist.
+  {
+    const canonical = await canonicalizeBillerId(
+      billerId, (body.category as string) || null, (body.billerName as string) || null,
+    );
+    if (canonical && canonical !== billerId) {
+      console.warn(`[bills][pay] biller id normalised ${billerId} → ${canonical}`);
+      billerId = canonical;
+    }
+  }
 
   // --- Step 1: refresh the biller item from VFD (never vend on stale values) --
   const fresh = await resolveFreshBillerItem({ billerId, divisionId: division, productId, paymentItem });
