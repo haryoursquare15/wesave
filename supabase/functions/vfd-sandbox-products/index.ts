@@ -2164,29 +2164,38 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
   }
   const splitValidation = splitGate.record;
 
-  // --- Fund settlement for real BEFORE /pay (same rule as the direct path) ---
-  // Move the bill amount AND the Vestara SplitPay service fee out of the
-  // creator's NUBAN into the corporate pool, so the ₦10 revenue leg is backed
-  // by real cash in the pool (not just an internal ledger credit).
+  // --- Fund settlement for real BEFORE /pay -------------------------------
+  // PART B: every participant (creator included) now moves their own share +
+  // fee from their OWN NUBAN into the corporate pool at the moment they pay.
+  // When that real collection is confirmed for every paid participant, the
+  // pool ALREADY holds the full bill and the creator must NOT be debited again
+  // for anyone's share. Only legacy splits (paid before real collection
+  // existed) fall back to funding the whole bill from the creator's NUBAN.
   const splitFeeToMove = Number(split.platform_fee || 0);
-  const splitFunding = await fundBillsSettlement({
-    reference, amount: amount + (splitFeeToMove > 0 ? splitFeeToMove : 0),
-    userId: split.creator_id, origin: "split_bill_pay",
-  });
+  const poolPrefunded = await splitSharesRealCollected(split.id);
+  if (poolPrefunded.allCollected) {
+    console.log(`[settleSplitBill] ref=${reference} pool pre-funded by ${poolPrefunded.confirmed}/${poolPrefunded.expected} participant transfers — creator NUBAN not debited`);
+  } else {
+    const splitFunding = await fundBillsSettlement({
+      reference, amount: amount + (splitFeeToMove > 0 ? splitFeeToMove : 0),
+      userId: split.creator_id, origin: "split_bill_pay",
+    });
 
-  if (!splitFunding.confirmed) {
-    console.error(`[settleSplitBill] ref=${reference} NOT FUNDED code=${splitFunding.code} — /pay skipped`);
-    await db.from("vfd_sandbox_splits").update({
-      settlement_status: "failed",
-      settlement_reference: reference,
-      settlement_completed_at: new Date().toISOString(),
-      settlement_failure_reason: splitFunding.error || "Settlement funding could not be confirmed",
-    }).eq("id", split.id);
-    await sendNotification(split.creator_id, "SplitPay collected — bill delivery pending",
-      `Funds for "${split.title}" were collected but the bill could not be sent to ${displayBillerName} yet. Our team will retry shortly.`,
-      "split_completed");
-    return { delivered: false, reference, biller_name: displayBillerName, customer_id: customerId, amount, message: splitFunding.error };
+    if (!splitFunding.confirmed) {
+      console.error(`[settleSplitBill] ref=${reference} NOT FUNDED code=${splitFunding.code} — /pay skipped`);
+      await db.from("vfd_sandbox_splits").update({
+        settlement_status: "failed",
+        settlement_reference: reference,
+        settlement_completed_at: new Date().toISOString(),
+        settlement_failure_reason: splitFunding.error || "Settlement funding could not be confirmed",
+      }).eq("id", split.id);
+      await sendNotification(split.creator_id, "SplitPay collected — bill delivery pending",
+        `Funds for "${split.title}" were collected but the bill could not be sent to ${displayBillerName} yet. Our team will retry shortly.`,
+        "split_completed");
+      return { delivered: false, reference, biller_name: displayBillerName, customer_id: customerId, amount, message: splitFunding.error };
+    }
   }
+
 
 
 
