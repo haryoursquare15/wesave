@@ -7551,6 +7551,7 @@ Deno.serve(async (req) => {
       case "list_splits": return await handleListSplits(userId);
       case "join_split": return await handleJoinSplit(userId, body);
       case "pay_split": return await handlePaySplit(userId, body);
+      case "cover_split_shares": return await handleCoverSplitShares(userId, body);
       case "decline_split": return await handleDeclineSplit(userId, body);
       case "cancel_split": return await handleCancelSplit(userId, body);
       case "remove_split_participant": return await handleRemoveSplitParticipant(userId, body);
