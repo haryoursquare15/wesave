@@ -3562,7 +3562,48 @@ type SettlementFunding = {
 // No balance-sufficiency read, no shared-float assumption: each request funds
 // the pool itself, atomically and independently verified via
 // /transactions?reference= (VFD status 98 is NEVER treated as success).
+/**
+ * PART B support: has every paid participant's share ALREADY been collected
+ * into the corporate pool by a real, VFD-verified transfer from their own
+ * NUBAN? Only then may settlement skip debiting the creator for the full bill.
+ * Evidence is the funding-result event written by fundBillsSettlement, which
+ * only records verified=true after an independent /transactions?reference=
+ * confirmation.
+ */
+async function splitSharesRealCollected(
+  splitId: string,
+): Promise<{ allCollected: boolean; expected: number; confirmed: number }> {
+  const db = getSupabaseAdmin();
+  const { data: paid } = await db
+    .from("vfd_sandbox_split_participants")
+    .select("id, user_id")
+    .eq("split_id", splitId)
+    .eq("status", "paid");
+  const rows = paid || [];
+  if (rows.length === 0) return { allCollected: false, expected: 0, confirmed: 0 };
+
+  // Each participant may have paid themselves, or had their share covered.
+  const refGroups = rows.map((p: any) => [
+    `splitpay-${splitId}-${p.user_id}-FUND`,
+    `splitpay-cover-${splitId}-${p.id}-FUND`,
+  ]);
+  const allRefs = refGroups.flat();
+  const { data: events } = await db
+    .from("vfd_transaction_events")
+    .select("reference, payload")
+    .eq("event_type", "bill_settlement_funding_result")
+    .in("reference", allRefs);
+  const confirmedRefs = new Set(
+    (events || [])
+      .filter((e: any) => e?.payload?.verified === true)
+      .map((e: any) => e.reference as string),
+  );
+  const confirmed = refGroups.filter((g) => g.some((r) => confirmedRefs.has(r))).length;
+  return { allCollected: confirmed === rows.length, expected: rows.length, confirmed };
+}
+
 async function fundBillsSettlement(params: {
+
   reference: string;
   amount: number;
   userId: string | null;
