@@ -792,6 +792,12 @@ serve(async (req) => {
         if (!product_code || !principal || !tenor_days) {
           return err("product_code, principal, and tenor_days are required");
         }
+        // Classic lump-sum GoalSave is deprecated: GoalSave is installment-only
+        // (Goal Savings 2.0 / DDM). Existing contracts keep running under the
+        // legacy logic, but no new lump-sum goalsave contracts are accepted.
+        if (String(product_code) === "goalsave") {
+          return err("GoalSave is now a goal-based installment plan. Please set it up from the Goal Savings flow.", 400);
+        }
         const ref = reference || `sav-${crypto.randomUUID().slice(0, 8)}`;
         // Step 1 — internal hold: wallet debited, pending_savings credited.
         const { data, error: e } = await supabase.rpc("vestara_create_savings_pending", {
