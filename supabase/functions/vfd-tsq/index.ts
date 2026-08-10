@@ -46,6 +46,16 @@ Deno.serve(async (req) => {
   const provided = req.headers.get("x-ops-secret") || "";
   let authorized = !!OPS_SECRET && !!provided && timingSafeEqual(provided, OPS_SECRET);
 
+  // Alternative auth: internal ops token stored in internal_cron_tokens.
+  if (!authorized) {
+    try {
+      const { verifyCronToken } = await import("../_shared/cron-auth.ts");
+      authorized = await verifyCronToken(req, "ops_diagnostics");
+    } catch (e) {
+      console.error("[vfd-tsq] cron token check failed", e);
+    }
+  }
+
   // Alternative auth: a signed-in super_admin (ops console / agent diagnostics).
   if (!authorized) {
     const jwt = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
