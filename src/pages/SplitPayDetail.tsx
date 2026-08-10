@@ -48,6 +48,12 @@ export default function SplitPayDetail() {
     fetchWalletBalance();
   }, [fetchWalletBalance]);
 
+  useEffect(() => {
+    if (!user) { setIsAdmin(false); return; }
+    supabase.rpc("is_any_admin", { _user_id: user.id }).then(({ data }) => setIsAdmin(Boolean(data)));
+  }, [user]);
+
+
   if (loading || !request) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
