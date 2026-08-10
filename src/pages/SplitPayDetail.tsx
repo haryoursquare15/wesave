@@ -26,6 +26,7 @@ export default function SplitPayDetail() {
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [covering, setCovering] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/auth");
