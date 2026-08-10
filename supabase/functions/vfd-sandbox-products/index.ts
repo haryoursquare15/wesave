@@ -2264,6 +2264,21 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
     }
   }
 
+  // PART A: drain split_holding of the collected shares.
+  //   debit  split_holding        = every paid participant's share
+  //   credit creator wallet       = the NON-creator participants' share
+  //                                 (the creator fronted it on the real transfer)
+  //   credit settlement           = the creator's own share
+  // Mirrors how bills_hold resolves to settlement/revenue on the direct path.
+  const { data: splitSettle, error: splitSettleErr } = await db.rpc("vestara_split_settle", {
+    _split_id: split.id,
+    _creator_id: split.creator_id,
+    _reference: `${reference}-SETTLE`,
+    _metadata: { origin: "split_bill_pay", bill_reference: reference },
+  });
+  if (splitSettleErr || (splitSettle && (splitSettle as any).success === false)) {
+    console.error(`[settleSplitBill] holding settle failed ref=${reference}`, splitSettleErr || splitSettle);
+  }
 
 
   // Bill receipt (creator owns the beneficiary record)
