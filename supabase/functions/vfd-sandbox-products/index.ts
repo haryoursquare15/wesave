@@ -3676,7 +3676,21 @@ async function fundBillsSettlement(params: {
   // 3) Resumability: if this reference already settled, do not move money again.
   const prior = await verifyVfdTransfer(fundingRef);
   if (prior.confirmed) {
+    // Persist the confirmation so downstream checks (e.g. split settlement's
+    // "was the pool really pre-funded?" gate) can see it on a replay too.
+    await db.from("vfd_transaction_events").insert({
+      user_id: params.userId,
+      reference: fundingRef,
+      event_type: "bill_settlement_funding_result",
+      actor: "system",
+      payload: {
+        origin: params.origin, bill_reference: params.reference,
+        from: customerNuban, to: VFD_BILLS_SETTLEMENT_NUBAN,
+        amount: params.amount, verified: true, replayed: true, tsq: prior.evidence,
+      },
+    }).then(undefined, (e: unknown) => console.error("[bills][fund] replay persist failed", e));
     return { confirmed: true, reference: fundingRef, evidence: prior.evidence, replayed: true };
+
   }
 
   // 4) Enquiries: customer (sender) and pool (beneficiary).
