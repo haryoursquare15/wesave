@@ -1898,8 +1898,9 @@ async function handleCreateSplit(userId: string, body: Record<string, unknown>) 
     creatorAmount = perPerson;
   }
 
-  // PRODUCTION PARITY: ₦100 flat fee
-  const platformFee = 100;
+  // Vestara Split Pay service fee: flat ₦10 per split, standalone to Split Pay
+  // (unrelated to any bill convenience fee, which the split path never charges).
+  const platformFee = SPLITPAY_SERVICE_FEE;
   // When creator absorbs the fee, fee_per_person is 0 (signals handlePaySplit to charge creator the full fee)
   const feePerPerson = creatorPaysFullFee ? 0 : Math.ceil((platformFee / splitCount) * 100) / 100;
   const expiryDate = new Date();
