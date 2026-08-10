@@ -4925,9 +4925,12 @@ async function handleReconcilePendingBills(userId: string, body: Record<string, 
         vfdResponse: statusResp,
       });
       // Money only leaves the hold once the biller has confirmed delivery.
+      // Fix D: the fee leg is derived from the hold's stored convenience_fee,
+      // so settlement is credited with the bill amount only.
       const { data: st, error: stErr } = await db.rpc("vestara_bill_settle", {
         _reference: r.reference,
         _metadata: { source: "bill_reconciler" },
+        _fee_amount: r.convenience_fee != null ? Number(r.convenience_fee) : null,
       });
       const settled = !stErr && !!(st as { success?: boolean } | null)?.success;
       if (!settled) console.error("[bills] settle failed", r.reference, stErr || st);
