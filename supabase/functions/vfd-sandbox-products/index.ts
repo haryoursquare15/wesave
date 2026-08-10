@@ -2264,11 +2264,12 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
     }
   }
 
-  // PART A: drain split_holding of the collected shares.
-  //   debit  split_holding        = every paid participant's share
-  //   credit creator wallet       = the NON-creator participants' share
-  //                                 (the creator fronted it on the real transfer)
-  //   credit settlement           = the creator's own share
+  // PART A: drain split_holding of every collected share.
+  //   debit  split_holding = all paid participants' shares
+  //   credit settlement    = same amount (the pool that funded the vend)
+  // The creator is never credited here — any cash they fronted is squared with
+  // a real bank movement, never an internal ledger credit.
+
   // Mirrors how bills_hold resolves to settlement/revenue on the direct path.
   const { data: splitSettle, error: splitSettleErr } = await db.rpc("vestara_split_settle", {
     _split_id: split.id,
