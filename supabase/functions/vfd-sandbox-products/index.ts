@@ -2062,10 +2062,10 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
   // --- Backend validation gate: SplitPay settlement must clear the same bar ---
   const splitGate = await gateBillPayment({
     identity: {
-      category, billerId, billerName: displayBillerName,
+      category, billerId: canonicalBillerId, billerName: displayBillerName,
       paymentItemName, productId, divisionId: division,
     },
-    customerId, divisionId: division, paymentItem, billerId,
+    customerId, divisionId: division, paymentItem, billerId: canonicalBillerId,
     paymentReference: reference, origin: "splitpay_settlement",
   });
   if (!splitGate.allowed) {
@@ -2114,7 +2114,8 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
       // the payer's registered phone.
       const splitPhone = await resolveBillMsisdn(split.creator_id, phoneNumber, customerId);
       const payBody: Record<string, string> = {
-        customerId, amount: String(amount), division, paymentItem, productId, billerId, reference,
+        customerId, amount: String(amount), division, paymentItem, productId,
+        billerId: canonicalBillerId, reference,
       };
       if (splitPhone) payBody.phoneNumber = splitPhone;
       await recordBillPayRequest({
@@ -2167,7 +2168,7 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
     user_id: split.creator_id,
     reference,
     category: category || "Other",
-    biller_id: billerId,
+    biller_id: canonicalBillerId,
     biller_name: displayBillerName,
     payment_item_name: paymentItemName || null,
     customer_id: customerId,
