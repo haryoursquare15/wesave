@@ -1906,6 +1906,20 @@ async function handleCreateSplit(userId: string, body: Record<string, unknown>) 
   const platformFee = SPLITPAY_SERVICE_FEE;
   // When creator absorbs the fee, fee_per_person is 0 (signals handlePaySplit to charge creator the full fee)
   const feePerPerson = creatorPaysFullFee ? 0 : Math.ceil((platformFee / splitCount) * 100) / 100;
+
+  // Fail fast at creation time: the initiator must already hold enough to cover
+  // their own share PLUS the service fee they will be charged when they pay.
+  // Without this the split gets created and then dies at the payment step.
+  const creatorFeeAtCreation = creatorPaysFullFee ? platformFee : feePerPerson;
+  const creatorDueAtCreation = Math.round((creatorAmount + creatorFeeAtCreation) * 100) / 100;
+  const creatorAvailable = await getAvailableBalance(userId);
+  if (creatorAvailable < creatorDueAtCreation) {
+    return jsonResponse({
+      error: `Insufficient balance to start this split. You need ₦${creatorDueAtCreation.toLocaleString()} (₦${creatorAmount.toLocaleString()} your share + ₦${creatorFeeAtCreation.toLocaleString()} service fee) but have ₦${creatorAvailable.toLocaleString()}. Fund your wallet and try again.`,
+      code: "SPLIT_CREATOR_INSUFFICIENT_FUNDS",
+    }, 400);
+  }
+
   const expiryDate = new Date();
   expiryDate.setDate(expiryDate.getDate() + expiryDays);
 
