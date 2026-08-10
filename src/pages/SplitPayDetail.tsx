@@ -25,6 +25,8 @@ export default function SplitPayDetail() {
   const [nudgingId, setNudgingId] = useState<string | null>(null);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [covering, setCovering] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/auth");
@@ -47,6 +49,12 @@ export default function SplitPayDetail() {
     fetchWalletBalance();
   }, [fetchWalletBalance]);
 
+  useEffect(() => {
+    if (!user) { setIsAdmin(false); return; }
+    supabase.rpc("is_any_admin", { _user_id: user.id }).then(({ data }) => setIsAdmin(Boolean(data)));
+  }, [user]);
+
+
   if (loading || !request) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -61,6 +69,9 @@ export default function SplitPayDetail() {
   const activeParticipantsCount = participants.filter((p) => p.status !== "declined").length;
   const paidCount = participants.filter((p) => p.status === "paid").length;
   const slotsRemaining = Math.max(request.number_of_people - activeParticipantsCount, 0);
+
+  const pendingParticipants = participants.filter((p) => p.status === "pending");
+  const outstandingTotal = pendingParticipants.reduce((sum, p) => sum + Number(p.amount_due || 0), 0);
 
   const feePerPerson = request.number_of_people > 0
     ? Math.ceil((Number(request.platform_fee) / request.number_of_people) * 100) / 100
@@ -109,6 +120,30 @@ export default function SplitPayDetail() {
       toast({ title: "Payment Failed", description: getUserFriendlyError(err?.message || "An unexpected error occurred"), variant: "destructive" });
     }
   };
+
+  const handleCoverOutstanding = async () => {
+    setCovering(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("vfd-sandbox-products", {
+        body: { action: "cover_split_shares", split_id: requestId },
+      });
+      const err = error?.message || (data as any)?.error;
+      if (err) {
+        toast({ title: "Could not complete payment", description: getUserFriendlyError(err), variant: "destructive" });
+      } else {
+        toast({
+          title: "Outstanding shares paid",
+          description: "The split is fully funded — the bill is being delivered now.",
+        });
+        await fetchWalletBalance();
+      }
+    } catch (e: any) {
+      toast({ title: "Could not complete payment", description: getUserFriendlyError(e?.message || "Unexpected error"), variant: "destructive" });
+    } finally {
+      setCovering(false);
+    }
+  };
+
 
   const handleDecline = async () => {
     const result = await declineShare();
@@ -248,6 +283,29 @@ export default function SplitPayDetail() {
             )}
           </div>
         )}
+
+        {/* Creator: cover the outstanding shares so the bill can be delivered */}
+        {(isCreator || isAdmin) && request.status === "active" && outstandingTotal > 0 && (
+          <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 space-y-3">
+            <div>
+              <p className="font-semibold text-foreground">Outstanding shares</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                ₦{outstandingTotal.toLocaleString()} is still unpaid across {pendingParticipants.length} participant
+                {pendingParticipants.length > 1 ? "s" : ""}. You can pay it yourself to complete the bill — payment goes
+                through the normal bill delivery flow.
+              </p>
+            </div>
+            <Button
+              className="w-full min-h-[48px] text-base"
+              onClick={handleCoverOutstanding}
+              disabled={covering}
+            >
+              {covering ? "Processing..." : `Pay outstanding ₦${outstandingTotal.toLocaleString()}`}
+            </Button>
+          </div>
+        )}
+
+
 
         {/* Declined confirmation */}
         {myParticipation?.status === "declined" && (
