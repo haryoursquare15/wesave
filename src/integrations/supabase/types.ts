@@ -6953,6 +6953,16 @@ export type Database = {
         Returns: Json
       }
       vestara_auto_mature_due: { Args: never; Returns: Json }
+      vestara_bill_reconcile_vfd_debit: {
+        Args: {
+          _actual_debit: number
+          _charge_amount?: number
+          _face_amount: number
+          _metadata?: Json
+          _reference: string
+        }
+        Returns: Json
+      }
       vestara_bill_release: {
         Args: { _metadata?: Json; _reference: string }
         Returns: Json
