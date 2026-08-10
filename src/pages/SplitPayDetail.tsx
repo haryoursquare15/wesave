@@ -110,6 +110,30 @@ export default function SplitPayDetail() {
     }
   };
 
+  const handleCoverOutstanding = async () => {
+    setCovering(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("vfd-sandbox-products", {
+        body: { action: "cover_split_shares", split_id: requestId },
+      });
+      const err = error?.message || (data as any)?.error;
+      if (err) {
+        toast({ title: "Could not complete payment", description: getUserFriendlyError(err), variant: "destructive" });
+      } else {
+        toast({
+          title: "Outstanding shares paid",
+          description: "The split is fully funded — the bill is being delivered now.",
+        });
+        await fetchWalletBalance();
+      }
+    } catch (e: any) {
+      toast({ title: "Could not complete payment", description: getUserFriendlyError(e?.message || "Unexpected error"), variant: "destructive" });
+    } finally {
+      setCovering(false);
+    }
+  };
+
+
   const handleDecline = async () => {
     const result = await declineShare();
     if (result?.success === false) {
