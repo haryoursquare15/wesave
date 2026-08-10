@@ -178,7 +178,25 @@ async function fetchVfdLiveBalance(userId: string): Promise<{ ok: boolean; balan
       console.error("[VFD balance sync] enquiry not successful", balData?.status, balData?.message);
       return { ok: false, balance: 0 };
     }
-    return { ok: true, balance: Number(balData?.data?.availableBalance) || 0 };
+    // VFD's account enquiry returns `accountBalance` (string). Older/other
+    // endpoints use availableBalance / ledgerBalance. Accept all of them —
+    // reading the wrong field yields 0 and blocks a funded customer.
+    const inner = (balData?.data ?? {}) as Record<string, unknown>;
+    const toNum = (v: unknown) => {
+      const n = typeof v === "string" ? Number(v.replace(/,/g, "").trim()) : Number(v);
+      return Number.isFinite(n) ? n : 0;
+    };
+    const candidates = [
+      inner.availableBalance, inner.available_balance,
+      inner.accountBalance, inner.account_balance,
+      inner.ledgerBalance, inner.ledger_balance,
+    ];
+    const found = candidates.map(toNum).find((n) => n > 0);
+    if (found === undefined && candidates.every((c) => c === undefined || c === null)) {
+      console.error("[VFD balance sync] no balance field in enquiry payload", JSON.stringify(inner));
+      return { ok: false, balance: 0 };
+    }
+    return { ok: true, balance: found ?? 0 };
   } catch (e) {
     console.error("[VFD balance sync error]", e);
     return { ok: false, balance: 0 };
