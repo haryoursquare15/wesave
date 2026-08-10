@@ -2110,9 +2110,15 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
   const splitValidation = splitGate.record;
 
   // --- Fund settlement for real BEFORE /pay (same rule as the direct path) ---
+  // Move the bill amount AND the Vestara SplitPay service fee out of the
+  // creator's NUBAN into the corporate pool, so the ₦10 revenue leg is backed
+  // by real cash in the pool (not just an internal ledger credit).
+  const splitFeeToMove = Number(split.platform_fee || 0);
   const splitFunding = await fundBillsSettlement({
-    reference, amount, userId: split.creator_id, origin: "split_bill_pay",
+    reference, amount: amount + (splitFeeToMove > 0 ? splitFeeToMove : 0),
+    userId: split.creator_id, origin: "split_bill_pay",
   });
+
   if (!splitFunding.confirmed) {
     console.error(`[settleSplitBill] ref=${reference} NOT FUNDED code=${splitFunding.code} — /pay skipped`);
     await db.from("vfd_sandbox_splits").update({
