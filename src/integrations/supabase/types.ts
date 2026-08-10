@@ -6976,10 +6976,12 @@ export type Database = {
         }
         Returns: Json
       }
-      vestara_bill_settle: {
-        Args: { _metadata?: Json; _reference: string }
-        Returns: Json
-      }
+      vestara_bill_settle:
+        | { Args: { _metadata?: Json; _reference: string }; Returns: Json }
+        | {
+            Args: { _fee_amount?: number; _metadata?: Json; _reference: string }
+            Returns: Json
+          }
       vestara_campaign_contribute: {
         Args: {
           _amount: number
