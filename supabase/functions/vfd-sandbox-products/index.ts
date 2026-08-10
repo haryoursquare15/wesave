@@ -2050,6 +2050,14 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
   const amount = Number(split.total_amount);
   const reference = `vestara-split-bill-${split.id.slice(0, 8)}-${Date.now()}`;
   const displayBillerName = billerName || String(billerId).toUpperCase();
+  // Fix B: the split's stored bill_metadata can carry a biller ID that VFD has
+  // since renamed. Resolve it against the live /billerlist before anything
+  // (validation gate, /pay payload, receipt) uses it.
+  const canonicalBillerId = await canonicalizeBillerId(String(billerId), category || null, billerName || null);
+  if (canonicalBillerId !== String(billerId)) {
+    console.warn(`[settleSplitBill] biller id normalised ${billerId} → ${canonicalBillerId}`);
+  }
+
 
   // --- Backend validation gate: SplitPay settlement must clear the same bar ---
   const splitGate = await gateBillPayment({
