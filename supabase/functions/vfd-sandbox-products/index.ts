@@ -2062,6 +2062,29 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
     console.warn(`[settleSplitBill] biller id normalised ${billerId} → ${canonicalBillerId}`);
   }
 
+  // --- Biller-specific guards (parity with the direct pay path) --------------
+  const splitBillerHay = `${canonicalBillerId} ${billerName || ""} ${paymentItemName || ""}`.toLowerCase();
+  // IKEDC requires a contact MSISDN; resolve it before anything moves money.
+  const splitPhone = await resolveBillMsisdn(split.creator_id, phoneNumber, customerId);
+  const failSplit = async (reason: string) => {
+    await db.from("vfd_sandbox_splits").update({
+      settlement_status: "failed",
+      settlement_reference: reference,
+      settlement_completed_at: new Date().toISOString(),
+      settlement_failure_reason: reason,
+    }).eq("id", split.id);
+    await sendNotification(split.creator_id, "SplitPay collected — bill needs attention",
+      `Funds for "${split.title}" were collected but the bill could not be sent to ${displayBillerName}: ${reason}`,
+      "split_completed");
+    return { delivered: false, reference, biller_name: displayBillerName, customer_id: customerId, amount, message: reason };
+  };
+  if (/ibedc|ibadan/.test(splitBillerHay) && amount < 5000) {
+    return await failSplit("IBEDC requires a minimum purchase of ₦5,000.");
+  }
+  if (!splitPhone && /ikedc|ikeja/.test(splitBillerHay)) {
+    return await failSplit("Ikeja Electric requires a phone number for this payment.");
+  }
+
 
   // --- Backend validation gate: SplitPay settlement must clear the same bar ---
   const splitGate = await gateBillPayment({
@@ -2113,10 +2136,8 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
     const token = await getVfdAccessToken();
     if (token) {
       const splitRequestId = crypto.randomUUID();
-      // Same MSISDN rule as the direct pay path: VFD /pay expects a contact
-      // phone number on every bill, resolved from metadata, the customerId, or
-      // the payer's registered phone.
-      const splitPhone = await resolveBillMsisdn(split.creator_id, phoneNumber, customerId);
+      // splitPhone resolved above (same MSISDN rule as the direct pay path).
+
       const payBody: Record<string, string> = {
         customerId, amount: String(amount), division, paymentItem, productId,
         billerId: canonicalBillerId, reference,
