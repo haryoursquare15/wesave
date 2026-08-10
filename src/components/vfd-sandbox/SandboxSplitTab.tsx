@@ -31,7 +31,7 @@ interface Split {
   vfd_sandbox_split_participants?: { user_id: string; status: string; amount_due?: number; paid_at?: string }[];
 }
 
-const PLATFORM_FEE = 100;
+const PLATFORM_FEE = 10; // Vestara Split Pay standalone service fee (flat per split)
 const fmt = (n: number) => new Intl.NumberFormat("en-NG").format(n);
 
 export function SandboxSplitTab() {

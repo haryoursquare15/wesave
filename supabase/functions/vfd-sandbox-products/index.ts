@@ -1864,6 +1864,9 @@ async function handlePostCampaignUpdate(userId: string, body: Record<string, unk
 // SPLITPAY — FULL PRODUCTION PARITY
 // =============================================
 
+/** Vestara Split Pay standalone service fee (flat, per split). */
+const SPLITPAY_SERVICE_FEE = 10;
+
 async function handleCreateSplit(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const title = body.title as string;
@@ -1898,8 +1901,9 @@ async function handleCreateSplit(userId: string, body: Record<string, unknown>) 
     creatorAmount = perPerson;
   }
 
-  // PRODUCTION PARITY: ₦100 flat fee
-  const platformFee = 100;
+  // Vestara Split Pay service fee: flat ₦10 per split, standalone to Split Pay
+  // (unrelated to any bill convenience fee, which the split path never charges).
+  const platformFee = SPLITPAY_SERVICE_FEE;
   // When creator absorbs the fee, fee_per_person is 0 (signals handlePaySplit to charge creator the full fee)
   const feePerPerson = creatorPaysFullFee ? 0 : Math.ceil((platformFee / splitCount) * 100) / 100;
   const expiryDate = new Date();
@@ -2354,9 +2358,9 @@ async function handlePaySplit(userId: string, body: Record<string, unknown>) {
   // Otherwise, the legacy behaviour: each participant pays their proportional fee share.
   let feeShare: number;
   if (storedFeePerPerson === 0) {
-    feeShare = userId === split.creator_id ? Number(split.platform_fee || 100) : 0;
+    feeShare = userId === split.creator_id ? Number(split.platform_fee || SPLITPAY_SERVICE_FEE) : 0;
   } else {
-    feeShare = storedFeePerPerson || (Math.ceil(100 / split.split_count * 100) / 100);
+    feeShare = storedFeePerPerson || (Math.ceil((SPLITPAY_SERVICE_FEE / split.split_count) * 100) / 100);
   }
   const totalDebit = amount + feeShare;
 
@@ -2478,8 +2482,8 @@ async function handleCancelSplit(userId: string, body: Record<string, unknown>) 
   const storedFeePerPerson = Number(split.fee_per_person);
   for (const p of paidParticipants || []) {
     const feeShare = storedFeePerPerson === 0
-      ? (p.user_id === split.creator_id ? Number(split.platform_fee || 100) : 0)
-      : (storedFeePerPerson || (Math.ceil(100 / split.split_count * 100) / 100));
+      ? (p.user_id === split.creator_id ? Number(split.platform_fee || SPLITPAY_SERVICE_FEE) : 0)
+      : (storedFeePerPerson || (Math.ceil((SPLITPAY_SERVICE_FEE / split.split_count) * 100) / 100));
     const refundAmount = Number(p.amount) + feeShare;
     const refunded = await ledgerSplitRefund(
       p.user_id, splitId, refundAmount,
@@ -2520,8 +2524,8 @@ async function handleRemoveSplitParticipant(userId: string, body: Record<string,
   if (participant.status === "paid") {
     const storedFeePerPerson = Number(split.fee_per_person);
     const feeShare = storedFeePerPerson === 0
-      ? (participantUserId === split.creator_id ? Number(split.platform_fee || 100) : 0)
-      : (storedFeePerPerson || (Math.ceil(100 / split.split_count * 100) / 100));
+      ? (participantUserId === split.creator_id ? Number(split.platform_fee || SPLITPAY_SERVICE_FEE) : 0)
+      : (storedFeePerPerson || (Math.ceil((SPLITPAY_SERVICE_FEE / split.split_count) * 100) / 100));
     const refundAmount = Number(participant.amount) + feeShare;
     const refunded = await ledgerSplitRefund(
       participantUserId, splitId, refundAmount,
