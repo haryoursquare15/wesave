@@ -249,6 +249,29 @@ export default function SplitPayDetail() {
           </div>
         )}
 
+        {/* Creator: cover the outstanding shares so the bill can be delivered */}
+        {isCreator && request.status === "active" && outstandingTotal > 0 && (
+          <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 space-y-3">
+            <div>
+              <p className="font-semibold text-foreground">Outstanding shares</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                ₦{outstandingTotal.toLocaleString()} is still unpaid across {pendingParticipants.length} participant
+                {pendingParticipants.length > 1 ? "s" : ""}. You can pay it yourself to complete the bill — payment goes
+                through the normal bill delivery flow.
+              </p>
+            </div>
+            <Button
+              className="w-full min-h-[48px] text-base"
+              onClick={handleCoverOutstanding}
+              disabled={covering}
+            >
+              {covering ? "Processing..." : `Pay outstanding ₦${outstandingTotal.toLocaleString()}`}
+            </Button>
+          </div>
+        )}
+
+
+
         {/* Declined confirmation */}
         {myParticipation?.status === "declined" && (
           <div className="bg-destructive/10 border border-destructive/20 rounded-xl p-4 text-center">
