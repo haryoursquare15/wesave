@@ -2690,16 +2690,31 @@ async function handleCoverSplitShares(userId: string, body: Record<string, unkno
   for (const p of pending) {
     const amount = Number(p.amount);
     const reference = `splitpay-cover-${splitId}-${p.id}`;
+    // PART B parity: real money leaves the coverer's own NUBAN into the pool
+    // BEFORE any internal ledger entry is posted.
+    const coverCollection = await fundBillsSettlement({
+      reference, amount, userId, origin: "split_share_cover_collection",
+    });
+    if (!coverCollection.confirmed) {
+      return jsonResponse({
+        error: coverCollection.error || `We could not collect the outstanding ₦${amount.toLocaleString()} share from your account. Nothing was debited.`,
+        code: coverCollection.code || "SPLIT_COVER_COLLECTION_FAILED",
+        data: { covered },
+      }, 402);
+    }
     const debited = await ledgerSplitPay(userId, splitId, amount, reference, {
       split_title: split.title, bill_share: amount, fee_share: 0,
       covered_for_user: p.user_id, covered_by: userId,
+      collection_reference: coverCollection.reference, real_transfer_confirmed: true,
     });
     if (!debited) {
       return jsonResponse({
-        error: `Insufficient available balance to cover the outstanding ₦${amount.toLocaleString()} share.`,
+        error: "Your payment reached the bank but could not be recorded. Our team has been alerted — do not pay again.",
+        code: "SPLIT_LEDGER_MIRROR_FAILED",
         data: { covered },
-      }, 400);
+      }, 500);
     }
+
 
     await db.from("vfd_sandbox_split_participants")
       .update({ status: "paid", paid_at: new Date().toISOString() }).eq("id", p.id);
