@@ -6789,12 +6789,22 @@ async function handleGoalsaveV2Quote(_userId: string, body: Record<string, unkno
   const tenorDays = daysPerCycle * tenorCount;
   const rates = await pickGoalsaveRate(tenorDays);
   const totalContributions = amount * tenorCount;
-  // Flat per-frequency rate paid at maturity, prorated over actual tenor.
-  const projectedInterest = Math.round((totalContributions * rates.user_rate / 100) * (tenorDays / 365));
-  const projectedMaturity = totalContributions + projectedInterest;
   const start = new Date();
   const maturity = new Date(start); maturity.setDate(maturity.getDate() + tenorDays);
   const schedule = buildGoalsaveSchedule(start.toISOString(), frequency, tenorCount, amount);
+  // Time-weighted: each installment only earns for the days it is actually on
+  // deposit (from its own debit date to maturity). Mirrors the projection used
+  // by vestara-ledger's goalsave_v2_quote so signup quote == maturity payout.
+  let projectedInterest = 0;
+  for (const s of schedule) {
+    const remainingDays = Math.max(
+      0,
+      (maturity.getTime() - new Date(s.scheduled_at).getTime()) / 86400000,
+    );
+    projectedInterest += s.amount * (rates.user_rate / 100) * (remainingDays / 365);
+  }
+  projectedInterest = Math.round(projectedInterest * 100) / 100;
+  const projectedMaturity = Math.round((totalContributions + projectedInterest) * 100) / 100;
   return jsonResponse({
     success: true,
     rate: rates.user_rate,
