@@ -1308,11 +1308,17 @@ async function handleTransfer(
   // the recipient locally and record the move purely on our internal ledger.
   if (toAccount.startsWith("9")) {
     const adminClient2 = getSupabaseAdmin();
-    const { data: recipient } = await adminClient2
+    const { data: recipientRows } = await adminClient2
       .from("vfd_sandbox_clients")
-      .select("user_id, full_name, vfd_account_number")
+      .select("user_id, full_name, vfd_account_number, created_at")
       .eq("vfd_account_number", toAccount)
-      .maybeSingle();
+      .not("user_id", "is", null)
+      .order("created_at", { ascending: true })
+      .limit(2);
+    if ((recipientRows?.length ?? 0) > 1) {
+      console.warn(`[VFD Transfer] duplicate client rows for NUBAN ${toAccount}; using earliest owner`);
+    }
+    const recipient = (recipientRows?.[0] as { user_id?: string; full_name?: string } | undefined) ?? null;
     if (recipient?.user_id) {
       const amountNum2 = Number(body.amount);
       if (!Number.isFinite(amountNum2) || amountNum2 <= 0) {
