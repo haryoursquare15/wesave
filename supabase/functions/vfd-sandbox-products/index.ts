@@ -2540,13 +2540,36 @@ async function handlePaySplit(userId: string, body: Record<string, unknown>) {
   }
   const totalDebit = amount + feeShare;
 
-
-  // Ledger-backed: bill share + fee share move from wallet into the split holding account,
-  // so a later cancellation/removal can release the exact same funds back.
-  const debited = await ledgerSplitPay(userId, splitId, totalDebit, `splitpay-${splitId}-${userId}`, {
-    split_title: split.title, bill_share: amount, fee_share: feeShare,
+  // PART B — REAL COLLECTION FIRST.
+  // No internal-only "payment": the participant's OWN NUBAN is debited and the
+  // corporate pool credited for their share + fee, using the same idempotent
+  // pattern as bills (pre-claimed deterministic reference, independently
+  // verified via /transactions?reference=, never a bare status code).
+  // Only when that transfer is CONFIRMED do we post the internal ledger entry.
+  const shareRef = `splitpay-${splitId}-${userId}`;
+  const collection = await fundBillsSettlement({
+    reference: shareRef, amount: totalDebit, userId, origin: "split_share_collection",
   });
-  if (!debited) return jsonResponse({ error: `Insufficient available balance. Need ₦${totalDebit.toLocaleString()} (₦${amount.toLocaleString()} share${feeShare > 0 ? ` + ₦${feeShare.toLocaleString()} fee` : ""})` }, 400);
+  if (!collection.confirmed) {
+    console.error(`[handlePaySplit] share collection NOT confirmed split=${splitId} user=${userId} code=${collection.code}`);
+    return jsonResponse({
+      error: collection.error || "We could not collect your share from your account. Nothing was debited — please try again.",
+      code: collection.code || "SPLIT_SHARE_COLLECTION_FAILED",
+    }, 402);
+  }
+
+  // Ledger-backed mirror of the confirmed transfer: bill share + fee share move
+  // from wallet into the split holding account, so a later cancellation/removal
+  // can release the exact same funds back.
+  const debited = await ledgerSplitPay(userId, splitId, totalDebit, shareRef, {
+    split_title: split.title, bill_share: amount, fee_share: feeShare,
+    collection_reference: collection.reference, real_transfer_confirmed: true,
+  });
+  if (!debited) {
+    console.error(`[handlePaySplit] LEDGER MIRROR FAILED after confirmed transfer split=${splitId} user=${userId} ref=${collection.reference}`);
+    return jsonResponse({ error: "Your payment reached the bank but could not be recorded. Our team has been alerted — do not pay again.", code: "SPLIT_LEDGER_MIRROR_FAILED" }, 500);
+  }
+
 
   await db.from("vfd_sandbox_split_participants").update({
     status: "paid", paid_at: new Date().toISOString(),
