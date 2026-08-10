@@ -63,6 +63,9 @@ export default function SplitPayDetail() {
   const paidCount = participants.filter((p) => p.status === "paid").length;
   const slotsRemaining = Math.max(request.number_of_people - activeParticipantsCount, 0);
 
+  const pendingParticipants = participants.filter((p) => p.status === "pending");
+  const outstandingTotal = pendingParticipants.reduce((sum, p) => sum + Number(p.amount_due || 0), 0);
+
   const feePerPerson = request.number_of_people > 0
     ? Math.ceil((Number(request.platform_fee) / request.number_of_people) * 100) / 100
     : 0;
