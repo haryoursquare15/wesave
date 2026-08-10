@@ -7133,6 +7133,16 @@ export type Database = {
         }
         Returns: Json
       }
+      vestara_split_fee_to_revenue: {
+        Args: {
+          _amount: number
+          _initiated_by?: string
+          _metadata?: Json
+          _reference: string
+          _split_id: string
+        }
+        Returns: Json
+      }
       vestara_split_pay: {
         Args: {
           _amount: number

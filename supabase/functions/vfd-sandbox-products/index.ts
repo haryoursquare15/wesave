@@ -2179,6 +2179,23 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
   // Fix A: reconcile VFD's real pool debit for the split bill too.
   scheduleBillPoolReconciliation(reference, amount, "split_bill_pay");
 
+  // Sweep the SplitPay service fee out of split_holding into the Vestara pool/revenue account.
+  const splitServiceFee = Number(split.platform_fee || 0);
+  if (splitServiceFee > 0) {
+    const { data: feeSweep, error: feeSweepErr } = await db.rpc("vestara_split_fee_to_revenue", {
+      _split_id: split.id,
+      _amount: splitServiceFee,
+      _reference: `${reference}-FEE`,
+      _initiated_by: split.creator_id,
+      _metadata: { origin: "split_bill_pay", bill_reference: reference },
+    });
+    if (feeSweepErr || (feeSweep && (feeSweep as any).success === false)) {
+      console.error(`[settleSplitBill] fee sweep failed ref=${reference}`, feeSweepErr || feeSweep);
+    }
+  }
+
+
+
   // Bill receipt (creator owns the beneficiary record)
   const expiresAt = computeBillExpiry(category || "", paymentItemName || null);
   const splitDelivery = deriveBillDelivery({
@@ -2446,8 +2463,24 @@ async function handlePaySplit(userId: string, body: Record<string, unknown>) {
       `All participants have paid for "${split.title}". Settlement sent to ${split.merchant_account_name}.`,
       "split_completed");
 
+    // Sweep the SplitPay service fee into the Vestara pool/revenue account.
+    const merchantFee = Number(split.platform_fee || 0);
+    if (merchantFee > 0) {
+      const { data: mFee, error: mFeeErr } = await db.rpc("vestara_split_fee_to_revenue", {
+        _split_id: splitId,
+        _amount: merchantFee,
+        _reference: `split-merchant-${splitId}-FEE`,
+        _initiated_by: split.creator_id,
+        _metadata: { origin: "split_merchant_settlement" },
+      });
+      if (mFeeErr || (mFee && (mFee as any).success === false)) {
+        console.error(`[handlePaySplit] fee sweep failed split=${splitId}`, mFeeErr || mFee);
+      }
+    }
+
     await reconcileSplitPayments(split, { expectReceipt: false });
   }
+
 
   let billDelivery: any = null;
   if (allPaid && split.bill_metadata) {
