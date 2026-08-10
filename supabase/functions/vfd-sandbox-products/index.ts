@@ -2284,6 +2284,59 @@ async function queueSplitBillSettlement(split: Record<string, any>): Promise<{ q
   return { queued: true, status: "processing", message: "Bill delivery is processing; success notification will appear when delivered." };
 }
 
+/**
+ * Recovery sweep: a fully-paid bill SplitPay whose background settlement was
+ * killed mid-flight stays stuck on settlement_status="processing" forever
+ * (nothing retries it unless somebody happens to open the split detail page).
+ * This cron-callable sweep re-queues every such split — and retries failures —
+ * so the bill always gets delivered.
+ */
+async function handleRecoverStuckSplitSettlements(): Promise<Response> {
+  const db = getSupabaseAdmin();
+  const cutoff = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+
+  const { data: candidates, error } = await db
+    .from("vfd_sandbox_splits")
+    .select("*")
+    .is("settlement_completed_at", null)
+    .not("bill_metadata", "is", null)
+    .in("status", ["completed", "active"])
+    .lt("updated_at", cutoff)
+    .order("updated_at", { ascending: true })
+    .limit(25);
+
+  if (error) {
+    console.error("[recoverStuckSplits] query failed", error);
+    return jsonResponse({ error: "Recovery sweep failed" }, 500);
+  }
+
+  const results: Array<Record<string, unknown>> = [];
+  for (const split of candidates || []) {
+    const fullyPaid = split.status === "completed"
+      || Number(split.paid_count || 0) >= Number(split.split_count || 0);
+    if (!fullyPaid) continue;
+    const st = split.settlement_status;
+    if (st && !["processing", "pending", "failed"].includes(st)) continue;
+
+    console.warn(`[recoverStuckSplits] re-settling split=${split.id} status=${st}`);
+    try {
+      const outcome = await settleSplitBill({ ...split, settlement_status: "processing" });
+      results.push({ split_id: split.id, delivered: outcome.delivered, reference: outcome.reference, message: outcome.message });
+    } catch (e) {
+      console.error(`[recoverStuckSplits] split=${split.id} failed`, e);
+      await db.from("vfd_sandbox_splits").update({
+        settlement_status: "failed",
+        settlement_completed_at: new Date().toISOString(),
+        settlement_failure_reason: e instanceof Error ? e.message : "Recovery sweep failed",
+      }).eq("id", split.id);
+      results.push({ split_id: split.id, delivered: false, message: "Recovery sweep failed" });
+    }
+  }
+
+  return jsonResponse({ success: true, scanned: (candidates || []).length, recovered: results });
+}
+
+
 // Verify every paid participant has a vfd_sandbox_transactions row; backfill if missing.
 // If expectReceipt, verify a bill receipt exists for the delivery reference.
 async function reconcileSplitPayments(
