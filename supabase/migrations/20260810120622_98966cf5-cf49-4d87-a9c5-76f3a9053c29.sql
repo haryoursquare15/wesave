@@ -1,0 +1,1 @@
+DROP FUNCTION IF EXISTS public.vestara_bill_settle(text, jsonb);
