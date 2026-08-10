@@ -2050,14 +2050,22 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
   const amount = Number(split.total_amount);
   const reference = `vestara-split-bill-${split.id.slice(0, 8)}-${Date.now()}`;
   const displayBillerName = billerName || String(billerId).toUpperCase();
+  // Fix B: the split's stored bill_metadata can carry a biller ID that VFD has
+  // since renamed. Resolve it against the live /billerlist before anything
+  // (validation gate, /pay payload, receipt) uses it.
+  const canonicalBillerId = await canonicalizeBillerId(String(billerId), category || null, billerName || null);
+  if (canonicalBillerId !== String(billerId)) {
+    console.warn(`[settleSplitBill] biller id normalised ${billerId} → ${canonicalBillerId}`);
+  }
+
 
   // --- Backend validation gate: SplitPay settlement must clear the same bar ---
   const splitGate = await gateBillPayment({
     identity: {
-      category, billerId, billerName: displayBillerName,
+      category, billerId: canonicalBillerId, billerName: displayBillerName,
       paymentItemName, productId, divisionId: division,
     },
-    customerId, divisionId: division, paymentItem, billerId,
+    customerId, divisionId: division, paymentItem, billerId: canonicalBillerId,
     paymentReference: reference, origin: "splitpay_settlement",
   });
   if (!splitGate.allowed) {
@@ -2106,7 +2114,8 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
       // the payer's registered phone.
       const splitPhone = await resolveBillMsisdn(split.creator_id, phoneNumber, customerId);
       const payBody: Record<string, string> = {
-        customerId, amount: String(amount), division, paymentItem, productId, billerId, reference,
+        customerId, amount: String(amount), division, paymentItem, productId,
+        billerId: canonicalBillerId, reference,
       };
       if (splitPhone) payBody.phoneNumber = splitPhone;
       await recordBillPayRequest({
@@ -2142,6 +2151,9 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
     return { delivered: false, reference, biller_name: displayBillerName, customer_id: customerId, amount, message: vfdData?.message || "Bill delivery pending" };
   }
 
+  // Fix A: reconcile VFD's real pool debit for the split bill too.
+  scheduleBillPoolReconciliation(reference, amount, "split_bill_pay");
+
   // Bill receipt (creator owns the beneficiary record)
   const expiresAt = computeBillExpiry(category || "", paymentItemName || null);
   const splitDelivery = deriveBillDelivery({
@@ -2159,7 +2171,7 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
     user_id: split.creator_id,
     reference,
     category: category || "Other",
-    biller_id: billerId,
+    biller_id: canonicalBillerId,
     biller_name: displayBillerName,
     payment_item_name: paymentItemName || null,
     customer_id: customerId,
@@ -3742,6 +3754,244 @@ function scheduleBillTsqPolls(userId: string, reference: string) {
   if (edgeRuntime?.waitUntil) edgeRuntime.waitUntil(task);
 }
 
+// ===========================================================================
+// BILLER ID CANONICALISATION (Fix B)
+//
+// VFD renamed some biller IDs (MTN "2626" → "MTN_NIGERIA2"). Anything stored
+// from an older session — beneficiaries, recurring bills, client payloads —
+// can still carry the stale ID, which makes strict lookups (convenience fee,
+// biller item refresh) silently miss. Every /pay path canonicalises the ID
+// against a freshly pulled /billerlist before it is used or persisted.
+// ===========================================================================
+const LEGACY_BILLER_ID_ALIASES: Record<string, string> = {
+  "2626": "MTN_NIGERIA2",
+};
+
+let billerListCache: { at: number; list: Array<Record<string, unknown>> } | null = null;
+
+async function fetchBillerList(category: string | null): Promise<Array<Record<string, unknown>>> {
+  const cat = (category || "").trim();
+  if (!cat && billerListCache && Date.now() - billerListCache.at < 5 * 60_000) return billerListCache.list;
+  try {
+    const token = await getVfdAccessToken();
+    if (!token) return [];
+    const url = cat
+      ? `${getBillsBase()}/billerlist?categoryName=${encodeURIComponent(cat)}`
+      : `${getBillsBase()}/billerlist`;
+    const resp = await vfdFetch(url, { headers: { AccessToken: token } });
+    const raw = await safeJson(resp) as Record<string, unknown> | null;
+    const rawData = raw?.data as unknown;
+    let list: unknown[] = [];
+    if (Array.isArray(rawData)) list = rawData;
+    else if (rawData && typeof rawData === "object" && Array.isArray((rawData as Record<string, unknown>).data)) {
+      list = (rawData as { data: unknown[] }).data;
+    }
+    const typed = list as Array<Record<string, unknown>>;
+    if (!cat && typed.length) billerListCache = { at: Date.now(), list: typed };
+    return typed;
+  } catch (e) {
+    console.error("[bills] fetchBillerList failed", e instanceof Error ? e.message : String(e));
+    return [];
+  }
+}
+
+/** Returns the live billerlist ID for a possibly stale stored/sent biller ID. */
+async function canonicalizeBillerId(
+  billerId: string,
+  category: string | null,
+  billerName?: string | null,
+): Promise<string> {
+  const given = String(billerId || "").trim();
+  if (!given) return given;
+  const list = await fetchBillerList(category);
+  if (!list.length) return LEGACY_BILLER_ID_ALIASES[given] || given;
+
+  const ids = new Set(list.map((b) => String(b?.id ?? "")));
+  if (ids.has(given)) return given;
+
+  const alias = LEGACY_BILLER_ID_ALIASES[given];
+  if (alias && ids.has(alias)) {
+    console.warn(`[bills] biller id drift: "${given}" → "${alias}" (alias table)`);
+    return alias;
+  }
+  // Last resort: unique name match against the live list.
+  const wanted = String(billerName || "").trim().toLowerCase();
+  if (wanted) {
+    const matches = list.filter((b) => String(b?.name ?? "").trim().toLowerCase() === wanted);
+    if (matches.length === 1) {
+      const resolved = String(matches[0]?.id ?? "");
+      console.warn(`[bills] biller id drift: "${given}" → "${resolved}" (name match "${wanted}")`);
+      return resolved;
+    }
+  }
+  console.warn(`[bills] biller id "${given}" not present in live billerlist and no alias found`);
+  return given;
+}
+
+// ===========================================================================
+// FIX A — VFD POOL DEBIT RECONCILIATION
+//
+// Internally a settled bill posts bills_hold → settlement for the FULL face
+// amount. VFD's real pool debit is smaller (they retain a biller margin) and
+// they separately debit a per-transaction CHRG. Both are real money events and
+// were previously invisible. After settlement we read the pool's bank
+// statement, find the two lines carrying our reference, and post:
+//   (a) face − actual "Bill Payment" debit  → DEBIT settlement / CREDIT revenue
+//   (b) the "CHRG/..." debit                → DEBIT vfd_charges_expense / CREDIT settlement
+// via vestara_bill_reconcile_vfd_debit (idempotent on <ref>-VFDDISC/-VFDCHRG).
+// ===========================================================================
+type PoolDebitLines = { billDebit: number | null; charge: number; evidence: unknown };
+
+async function fetchPoolDebitLines(reference: string): Promise<PoolDebitLines> {
+  const end = new Date();
+  const start = new Date(end.getTime() - 3 * 24 * 60 * 60 * 1000);
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  const { data } = await walletRequest("/account/transactions", "GET", undefined, {
+    accountNo: VFD_BILLS_SETTLEMENT_NUBAN,
+    // "bank" is the ledger view that carries the biller debit + CHRG lines.
+    transactionType: "bank",
+    startDate: `${fmt(start)} 00:00:00`,
+    endDate: `${fmt(end)} 23:59:59`,
+    page: "0",
+    size: "100",
+  });
+  const inner = (data?.data as Record<string, unknown>) || {};
+  const content = (inner?.content as Array<Record<string, unknown>>) || [];
+  let billDebit: number | null = null;
+  let charge = 0;
+  const hits: Array<Record<string, unknown>> = [];
+  for (const row of content) {
+    const remarks = String(row?.remarks ?? "");
+    if (!remarks.includes(reference)) continue;
+    if (String(row?.transactionType ?? "").toUpperCase() !== "DEBIT") continue;
+    const amt = Number(row?.amount ?? 0);
+    if (!Number.isFinite(amt) || amt <= 0) continue;
+    hits.push(row);
+    if (/^CHRG\b|^CHRG\//i.test(remarks)) charge += amt;
+    else billDebit = (billDebit ?? 0) + amt;
+  }
+  return {
+    billDebit: billDebit === null ? null : Math.round(billDebit * 100) / 100,
+    charge: Math.round(charge * 100) / 100,
+    evidence: hits,
+  };
+}
+
+/**
+ * Reconcile one settled bill against the pool statement.
+ * Returns true once the correcting entries are posted.
+ */
+async function reconcileBillPoolDebit(params: {
+  reference: string;
+  faceAmount: number;
+  origin: string;
+}): Promise<{ reconciled: boolean; reason?: string; discount?: number; charge?: number }> {
+  const db = getSupabaseAdmin();
+  // Already reconciled? (idempotency guard before we spend a VFD call)
+  const { data: existing } = await db
+    .from("vestara_transactions")
+    .select("reference")
+    .in("reference", [`${params.reference}-VFDDISC`, `${params.reference}-VFDCHRG`]);
+  if ((existing?.length ?? 0) > 0) return { reconciled: true, reason: "already" };
+
+  const lines = await fetchPoolDebitLines(params.reference);
+  if (lines.billDebit === null) return { reconciled: false, reason: "debit_not_posted_yet" };
+
+  const { data, error } = await db.rpc("vestara_bill_reconcile_vfd_debit", {
+    _reference: params.reference,
+    _face_amount: params.faceAmount,
+    _actual_debit: lines.billDebit,
+    _charge_amount: lines.charge,
+    _metadata: { origin: params.origin, statement_lines: lines.evidence },
+  });
+  const res = data as { success?: boolean; error?: string; discount?: number; charge?: number } | null;
+  if (error || !res?.success) {
+    console.error("[bills][recon] rpc failed", error || res?.error);
+    return { reconciled: false, reason: res?.error || "rpc_failed" };
+  }
+  await db.from("vfd_transaction_events").insert({
+    user_id: null,
+    reference: `${params.reference}-VFDRECON`,
+    event_type: "bill_pool_debit_reconciled",
+    actor: "system",
+    payload: {
+      origin: params.origin,
+      face_amount: params.faceAmount,
+      actual_debit: lines.billDebit,
+      charge: lines.charge,
+      discount: Math.round((params.faceAmount - lines.billDebit) * 100) / 100,
+      statement_lines: lines.evidence,
+    },
+  }).then(undefined, () => {});
+  console.log(
+    `[bills][recon] ref=${params.reference} face=${params.faceAmount} actual=${lines.billDebit} ` +
+    `chrg=${lines.charge} discount=${Math.round((params.faceAmount - lines.billDebit) * 100) / 100}`,
+  );
+  return { reconciled: true, discount: res.discount, charge: res.charge };
+}
+
+/**
+ * VFD posts the pool debit a beat after /pay returns, so the first read can
+ * legitimately find nothing. Retry with backoff (20s, 1m, 5m, 15m) in the
+ * background. If every attempt still misses (function evicted, long VFD lag),
+ * the 10-minute bills cron sweep picks it up via
+ * `reconcileOutstandingBillPoolDebits`, so nothing is dropped silently.
+ */
+function scheduleBillPoolReconciliation(reference: string, faceAmount: number, origin: string) {
+  const delays = [20_000, 60_000, 300_000, 900_000];
+  const task = (async () => {
+    for (const wait of delays) {
+      await new Promise((r) => setTimeout(r, wait));
+      try {
+        const res = await reconcileBillPoolDebit({ reference, faceAmount, origin });
+        if (res.reconciled) return;
+        console.log(`[bills][recon] ref=${reference} not on statement yet (${res.reason}) — will retry`);
+      } catch (e) {
+        console.error(`[bills][recon] ref=${reference} attempt failed`, e instanceof Error ? e.message : String(e));
+      }
+    }
+    console.warn(`[bills][recon] ref=${reference} unreconciled after backoff — left to the cron sweep`);
+  })();
+  const edgeRuntime = (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime;
+  if (edgeRuntime?.waitUntil) edgeRuntime.waitUntil(task);
+}
+
+/**
+ * Durable catch-up: every settled bill receipt from the last 3 days that has
+ * no correcting entries yet is retried. Runs on the bills reconciler cron and
+ * is callable on demand, so reconciliation never depends on one live request
+ * surviving long enough to see the statement.
+ */
+async function reconcileOutstandingBillPoolDebits(limit = 50): Promise<{
+  checked: number; reconciled: number; pending: number; details: unknown[];
+}> {
+  const db = getSupabaseAdmin();
+  const since = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+  const { data: receipts } = await db
+    .from("vfd_sandbox_bill_receipts")
+    .select("reference, amount, status, created_at")
+    .eq("status", "completed")
+    .gte("created_at", since)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  let reconciled = 0;
+  let pending = 0;
+  const details: unknown[] = [];
+  for (const r of receipts ?? []) {
+    const reference = String(r.reference || "");
+    if (!reference) continue;
+    const res = await reconcileBillPoolDebit({
+      reference, faceAmount: Number(r.amount ?? 0), origin: "cron_sweep",
+    });
+    if (res.reconciled) reconciled += 1; else pending += 1;
+    details.push({ reference, ...res });
+  }
+  return { checked: receipts?.length ?? 0, reconciled, pending, details };
+}
+
+
+
 async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   const { customerId, amount, phoneNumber } = body as {
     customerId: string; amount: string; phoneNumber?: string;
@@ -3754,6 +4004,21 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   }
   const numAmount = Number(amount);
   if (isNaN(numAmount) || numAmount <= 0) return jsonResponse({ error: "Invalid amount" }, 400);
+
+  // --- Step 0: canonicalise the biller ID (Fix B) ------------------------------
+  // Saved beneficiaries / recurring bills / older clients can still send an ID
+  // VFD has renamed (e.g. MTN "2626" → "MTN_NIGERIA2"). Resolve it against the
+  // live /billerlist before it is used for the item refresh, the convenience
+  // fee lookup, the /pay payload or anything we persist.
+  {
+    const canonical = await canonicalizeBillerId(
+      billerId, (body.category as string) || null, (body.billerName as string) || null,
+    );
+    if (canonical && canonical !== billerId) {
+      console.warn(`[bills][pay] biller id normalised ${billerId} → ${canonical}`);
+      billerId = canonical;
+    }
+  }
 
   // --- Step 1: refresh the biller item from VFD (never vend on stale values) --
   const fresh = await resolveFreshBillerItem({ billerId, divisionId: division, productId, paymentItem });
@@ -4002,8 +4267,12 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
       } else {
         holdState = "settled";
         settledAt = new Date().toISOString();
+        // Fix A: capture VFD's REAL pool debit (biller margin + CHRG) and post
+        // the correcting entries once the statement shows the lines.
+        scheduleBillPoolReconciliation(reference, numAmount, "bills_pay");
       }
     }
+
     // No cache mirroring here: vestara_bill_reserve posts through
     // vestara_post_transaction, which updates the displayed balance in the
     // same database transaction.
@@ -4694,7 +4963,18 @@ async function handleReconcilePendingBills(userId: string, body: Record<string, 
   }
 
 
+  // Durable catch-up for Fix A: any settled bill whose real VFD pool debit has
+  // not been reconciled yet is retried on every sweep (10-minute cron), so the
+  // ledger converges on the bank statement even if the live request died first.
+  try {
+    const poolRecon = await reconcileOutstandingBillPoolDebits(isSystem ? 50 : 20);
+    (result as Record<string, unknown>).pool_reconciliation = poolRecon;
+  } catch (e) {
+    console.error("[bills][recon] sweep failed", e instanceof Error ? e.message : String(e));
+  }
+
   return jsonResponse({ data: result });
+
 }
 
 // Compute next run timestamp in WAT (UTC+1). Hour stored is WAT hour.

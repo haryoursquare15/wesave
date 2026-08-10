@@ -6953,6 +6953,16 @@ export type Database = {
         Returns: Json
       }
       vestara_auto_mature_due: { Args: never; Returns: Json }
+      vestara_bill_reconcile_vfd_debit: {
+        Args: {
+          _actual_debit: number
+          _charge_amount?: number
+          _face_amount: number
+          _metadata?: Json
+          _reference: string
+        }
+        Returns: Json
+      }
       vestara_bill_release: {
         Args: { _metadata?: Json; _reference: string }
         Returns: Json
@@ -7254,6 +7264,8 @@ export type Database = {
         | "pending_transfer"
         | "pending_savings"
         | "bills_hold"
+        | "vfd_charges_expense"
+        | "ledger_adjustment"
       vestara_product_code: "goalsave" | "vault" | "lockmax" | "upfront_yield"
       vestara_savings_status:
         | "active"
@@ -7450,6 +7462,8 @@ export const Constants = {
         "pending_transfer",
         "pending_savings",
         "bills_hold",
+        "vfd_charges_expense",
+        "ledger_adjustment",
       ],
       vestara_product_code: ["goalsave", "vault", "lockmax", "upfront_yield"],
       vestara_savings_status: [
