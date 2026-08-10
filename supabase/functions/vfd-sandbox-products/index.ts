@@ -3239,7 +3239,8 @@ async function handleAdminListPendingAssoc(userId: string) {
 // funding transfer started including them, so bank vs ledger reconciles.
 async function handleAdminSweepSplitFee(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
-  if (!(await isPlatformAdmin(userId))) {
+  // "system" = trusted cron caller, already authenticated by CRON_SECRET.
+  if (userId !== "system" && !(await isPlatformAdmin(userId))) {
     return jsonResponse({ error: "Admin access required" }, 403);
   }
 
