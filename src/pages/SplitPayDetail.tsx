@@ -25,6 +25,7 @@ export default function SplitPayDetail() {
   const [nudgingId, setNudgingId] = useState<string | null>(null);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [covering, setCovering] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/auth");
