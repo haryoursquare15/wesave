@@ -7163,6 +7163,15 @@ export type Database = {
         }
         Returns: Json
       }
+      vestara_split_settle: {
+        Args: {
+          _creator_id: string
+          _metadata?: Json
+          _reference: string
+          _split_id: string
+        }
+        Returns: Json
+      }
       vestara_sync_user_balance_cache: {
         Args: { _user_id: string }
         Returns: Json
