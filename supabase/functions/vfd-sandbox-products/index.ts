@@ -141,10 +141,10 @@ function attachNames<T extends { user_id?: string | null }>(rows: T[] | null | u
 // VFD ADAPTER LAYER
 // =============================================
 
-async function fetchVfdLiveBalance(userId: string): Promise<number> {
+async function fetchVfdLiveBalance(userId: string): Promise<{ ok: boolean; balance: number }> {
   const db = getSupabaseAdmin();
   const { data: client } = await db.from("vfd_sandbox_clients").select("vfd_account_number").eq("user_id", userId).maybeSingle();
-  if (!client?.vfd_account_number) return 0;
+  if (!client?.vfd_account_number) return { ok: false, balance: 0 };
 
   try {
     const vfdBase = Deno.env.get("VFD_API_BASE") ||
@@ -156,7 +156,7 @@ async function fetchVfdLiveBalance(userId: string): Promise<number> {
     if (!accessToken) {
       const consumerKey = Deno.env.get("VFD_CONSUMER_KEY");
       const consumerSecret = Deno.env.get("VFD_CONSUMER_SECRET");
-      if (!consumerKey || !consumerSecret) return 0;
+      if (!consumerKey || !consumerSecret) return { ok: false, balance: 0 };
 
       const authResp = await fetchWithTimeout(`${vfdBase}/vfd-tech/baas-portal/v1.1/baasauth/token`, {
         method: "POST",
@@ -167,16 +167,21 @@ async function fetchVfdLiveBalance(userId: string): Promise<number> {
       const authData = authRaw ? JSON.parse(authRaw) : {};
       accessToken = authData?.data?.access_token || null;
     }
-    if (!accessToken) return 0;
+    if (!accessToken) return { ok: false, balance: 0 };
 
     const balResp = await fetchWithTimeout(`${vfdBase}/vtech-wallet/api/v2/wallet2/account/enquiry?accountNumber=${client.vfd_account_number}`, {
       headers: { AccessToken: accessToken },
     }, 10_000);
     const balData = await balResp.json();
-    return Number(balData?.data?.availableBalance) || 0;
+    const ok = String(balData?.status ?? "") === "00";
+    if (!ok) {
+      console.error("[VFD balance sync] enquiry not successful", balData?.status, balData?.message);
+      return { ok: false, balance: 0 };
+    }
+    return { ok: true, balance: Number(balData?.data?.availableBalance) || 0 };
   } catch (e) {
     console.error("[VFD balance sync error]", e);
-    return 0;
+    return { ok: false, balance: 0 };
   }
 }
 
@@ -184,18 +189,34 @@ async function fetchVfdLiveBalance(userId: string): Promise<number> {
 // INTERNAL LEDGER (Source of Truth)
 // =============================================
 
+// Cached balances may only be served for this long. Anything older is
+// re-synced against VFD before it can authorise spending.
+const BALANCE_CACHE_TTL_MS = 30_000;
+
 async function ensureBalanceRow(userId: string, forceSync = false): Promise<{ total_balance: number; locked_balance: number; savings_balance: number }> {
   const db = getSupabaseAdmin();
   const { data } = await db.from("vfd_user_balances").select("*").eq("user_id", userId).maybeSingle();
 
-  if (data && !forceSync) {
+  const lastSynced = data?.last_synced_at ? new Date(data.last_synced_at as string).getTime() : 0;
+  const isFresh = Number.isFinite(lastSynced) && Date.now() - lastSynced < BALANCE_CACHE_TTL_MS;
+
+  if (data && !forceSync && isFresh) {
     return { total_balance: Number(data.total_balance), locked_balance: Number(data.locked_balance), savings_balance: Number(data.savings_balance) };
   }
 
-  const liveBalance = await fetchVfdLiveBalance(userId);
+  const live = await fetchVfdLiveBalance(userId);
   const locked = data ? Number(data.locked_balance) : 0;
   const savings = data ? Number(data.savings_balance) : 0;
-  const totalBalance = Math.max(liveBalance, locked + savings);
+  const existingTotal = data ? Number(data.total_balance) : 0;
+  // The bank is the source of truth. When the live enquiry succeeds we take it
+  // verbatim — Math.max(live, internal) let a stale/optimistic internal figure
+  // authorise spending against money VFD does not actually hold, so real
+  // transfers failed with "51 Insufficient Balance" after the customer had
+  // already been told they could afford it. Only fall back to internal figures
+  // when the enquiry itself failed.
+  const totalBalance = live.ok
+    ? live.balance
+    : Math.max(existingTotal, locked + savings);
 
   await db.from("vfd_user_balances").upsert({
     user_id: userId, total_balance: totalBalance, locked_balance: locked, savings_balance: savings,
@@ -206,9 +227,11 @@ async function ensureBalanceRow(userId: string, forceSync = false): Promise<{ to
 }
 
 async function getAvailableBalance(userId: string): Promise<number> {
-  const bal = await ensureBalanceRow(userId);
+  // Pre-debit affordability gate — always resolve against live bank truth.
+  const bal = await ensureBalanceRow(userId, true);
   return bal.total_balance - bal.locked_balance - bal.savings_balance;
 }
+
 
 // `apply_balance_delta` row-locks vfd_user_balances and is now used ONLY to
 // re-classify money already on the balance sheet between the spendable /
