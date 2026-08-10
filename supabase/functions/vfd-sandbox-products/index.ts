@@ -4240,8 +4240,12 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
       } else {
         holdState = "settled";
         settledAt = new Date().toISOString();
+        // Fix A: capture VFD's REAL pool debit (biller margin + CHRG) and post
+        // the correcting entries once the statement shows the lines.
+        scheduleBillPoolReconciliation(reference, numAmount, "bills_pay");
       }
     }
+
     // No cache mirroring here: vestara_bill_reserve posts through
     // vestara_post_transaction, which updates the displayed balance in the
     // same database transaction.
