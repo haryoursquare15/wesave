@@ -7605,6 +7605,11 @@ Deno.serve(async (req) => {
     if (action === "recover_stuck_split_settlements" && await assertCronToken(req, "bills_reconciler")) {
       return await handleRecoverStuckSplitSettlements();
     }
+    if (action === "sweep_split_fee_cron" && assertCronCaller(req)) {
+      return await handleAdminSweepSplitFee("system", body);
+    }
+
+
 
     if (CRON_ACTIONS.has(action) && assertCronCaller(req)) {
       if (action === "sandbox_auto_contribute") return await handleSandboxAutoContribute("system", body);
