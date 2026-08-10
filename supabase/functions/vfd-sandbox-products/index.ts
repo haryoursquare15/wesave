@@ -2463,8 +2463,24 @@ async function handlePaySplit(userId: string, body: Record<string, unknown>) {
       `All participants have paid for "${split.title}". Settlement sent to ${split.merchant_account_name}.`,
       "split_completed");
 
+    // Sweep the SplitPay service fee into the Vestara pool/revenue account.
+    const merchantFee = Number(split.platform_fee || 0);
+    if (merchantFee > 0) {
+      const { data: mFee, error: mFeeErr } = await db.rpc("vestara_split_fee_to_revenue", {
+        _split_id: splitId,
+        _amount: merchantFee,
+        _reference: `split-merchant-${splitId}-FEE`,
+        _initiated_by: split.creator_id,
+        _metadata: { origin: "split_merchant_settlement" },
+      });
+      if (mFeeErr || (mFee && (mFee as any).success === false)) {
+        console.error(`[handlePaySplit] fee sweep failed split=${splitId}`, mFeeErr || mFee);
+      }
+    }
+
     await reconcileSplitPayments(split, { expectReceipt: false });
   }
+
 
   let billDelivery: any = null;
   if (allPaid && split.bill_metadata) {
