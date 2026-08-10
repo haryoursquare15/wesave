@@ -2136,10 +2136,8 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
     const token = await getVfdAccessToken();
     if (token) {
       const splitRequestId = crypto.randomUUID();
-      // Same MSISDN rule as the direct pay path: VFD /pay expects a contact
-      // phone number on every bill, resolved from metadata, the customerId, or
-      // the payer's registered phone.
-      const splitPhone = await resolveBillMsisdn(split.creator_id, phoneNumber, customerId);
+      // splitPhone resolved above (same MSISDN rule as the direct pay path).
+
       const payBody: Record<string, string> = {
         customerId, amount: String(amount), division, paymentItem, productId,
         billerId: canonicalBillerId, reference,
