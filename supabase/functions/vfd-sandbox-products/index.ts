@@ -7708,6 +7708,7 @@ Deno.serve(async (req) => {
       case "admin_list_pending_assoc": return await handleAdminListPendingAssoc(userId);
       case "admin_review_assoc": return await handleAdminReviewAssoc(userId, body);
       case "admin_assoc_doc_url": return await handleAdminAssocDocUrl(userId, body);
+      case "admin_sweep_split_fee": return await handleAdminSweepSplitFee(userId, body);
 
       // Bills Payment (VFD BaaS)
       case "bills_categories": return await handleBillsCategories();
