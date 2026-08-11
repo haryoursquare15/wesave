@@ -3856,6 +3856,202 @@ async function fundBillsSettlement(params: {
   return { confirmed: true, reference: fundingRef, evidence: verified.evidence, replayed: duplicate };
 }
 
+/**
+ * REAL reversal of a settlement funding leg: corporate pool -> customer NUBAN.
+ *
+ * Mandatory counterpart of fundBillsSettlement. When /pay fails AFTER the
+ * customer's real money has already moved into the pool, releasing only the
+ * internal ledger hold would leave real cash stranded in the pool while the
+ * books show the customer refunded. This moves the bank money back, using the
+ * same idempotent + independently-verified pattern:
+ *   - deterministic reference `${billRef}-FUND-REV`
+ *   - pre-claim event before any outbound call
+ *   - replay-safe: an already-confirmed reversal is never sent twice
+ *   - success is ONLY ever decided by /transactions?reference=, never by the
+ *     /transfer response status (98 duplicate / ambiguous codes included)
+ */
+async function reverseBillsSettlementFunding(params: {
+  reference: string;
+  amount: number;
+  userId: string | null;
+  origin: string;
+}): Promise<SettlementFunding & { nothingToReverse?: boolean }> {
+  const db = getSupabaseAdmin();
+  const fundingRef = `${params.reference}-FUND`;
+  const reversalRef = `${params.reference}-FUND-REV`;
+
+  if (!params.userId) {
+    return { confirmed: false, reference: reversalRef, code: "REVERSAL_PAYEE_UNKNOWN", error: "Refund recipient unknown" };
+  }
+
+  // 1) Was real money actually moved into the pool for this bill? If not,
+  //    there is nothing at the bank to reverse and the caller may safely
+  //    release the internal hold on its own.
+  const { data: fundEvents } = await db
+    .from("vfd_transaction_events")
+    .select("payload")
+    .eq("reference", fundingRef)
+    .eq("event_type", "bill_settlement_funding_result");
+  let funded = (fundEvents || []).some((e: any) => e?.payload?.verified === true);
+  if (!funded) funded = (await verifyVfdTransfer(fundingRef)).confirmed;
+  if (!funded) {
+    return { confirmed: true, reference: reversalRef, code: "NO_FUNDING_TO_REVERSE", nothingToReverse: true };
+  }
+
+  // 2) Replay guard — never send the same reversal twice.
+  const prior = await verifyVfdTransfer(reversalRef);
+  if (prior.confirmed) {
+    return { confirmed: true, reference: reversalRef, evidence: prior.evidence, replayed: true };
+  }
+
+  const { data: client } = await db
+    .from("vfd_sandbox_clients")
+    .select("vfd_account_number, metadata, full_name")
+    .eq("user_id", params.userId)
+    .maybeSingle();
+  const customerNuban = (client?.vfd_account_number as string | null) || null;
+  if (!customerNuban || customerNuban === VFD_BILLS_SETTLEMENT_NUBAN) {
+    return { confirmed: false, reference: reversalRef, code: "REVERSAL_DEST_UNAVAILABLE", error: "Customer bank account unavailable for refund" };
+  }
+
+  // 3) Pre-claim before any outbound call.
+  await db.from("vfd_transaction_events").insert({
+    user_id: params.userId,
+    reference: reversalRef,
+    event_type: "bill_settlement_reversal_claim",
+    actor: "system",
+    payload: {
+      origin: params.origin, bill_reference: params.reference, amount: params.amount,
+      from: VFD_BILLS_SETTLEMENT_NUBAN, to: customerNuban, claimed_at: new Date().toISOString(),
+    },
+  }).then(undefined, (e: unknown) => console.error("[bills][reverse] pre-claim persist failed", e));
+
+  // 4) Identities: pool is the SENDER now, customer the beneficiary.
+  const firstNonEmpty = (...vals: unknown[]): string => {
+    for (const v of vals) {
+      const s = v === undefined || v === null ? "" : String(v).trim();
+      if (s) return s;
+    }
+    return "";
+  };
+
+  let { data: poolEnq, status: poolStatus } = await walletRequest(
+    "/account/enquiry", "GET", undefined, { accountNumber: VFD_BILLS_SETTLEMENT_NUBAN },
+  );
+  if (poolStatus !== 200 || poolEnq?.status !== "00") {
+    const self = await walletRequest("/account/enquiry", "GET", undefined, {});
+    const selfEnv = (self.data?.data as Record<string, unknown>) || {};
+    const selfAcct = (selfEnv?.account as Record<string, unknown>) || selfEnv;
+    const selfNuban = String(selfEnv?.accountNo ?? selfAcct?.accountNo ?? "");
+    if (self.status === 200 && self.data?.status === "00" && (!selfNuban || selfNuban === VFD_BILLS_SETTLEMENT_NUBAN)) {
+      poolEnq = self.data; poolStatus = self.status;
+    }
+  }
+  if (poolStatus !== 200 || poolEnq?.status !== "00") {
+    return { confirmed: false, reference: reversalRef, code: "REVERSAL_SOURCE_ENQUIRY_FAILED", error: "Settlement account unreachable for refund", evidence: poolEnq };
+  }
+
+  const { data: custEnq, status: custStatus } = await walletRequest(
+    "/account/enquiry", "GET", undefined, { accountNumber: customerNuban },
+  );
+  if (custStatus !== 200 || custEnq?.status !== "00") {
+    return { confirmed: false, reference: reversalRef, code: "REVERSAL_DEST_ENQUIRY_FAILED", error: "Customer account unreachable for refund", evidence: custEnq };
+  }
+
+  const pEnv = (poolEnq?.data as Record<string, unknown>) || {};
+  const pAcct = (pEnv?.account as Record<string, unknown>) || pEnv;
+  const cEnv = (custEnq?.data as Record<string, unknown>) || {};
+  const cAcct = (cEnv?.account as Record<string, unknown>) || cEnv;
+
+  const fromClient = firstNonEmpty(Deno.env.get("VFD_POOL_CLIENT_NAME"), pEnv?.client, pAcct?.client, pEnv?.name, pAcct?.name);
+  const fromClientId = firstNonEmpty(Deno.env.get("VFD_POOL_CLIENT_ID"), pEnv?.clientId, pAcct?.clientId);
+  const fromSavingsId = firstNonEmpty(Deno.env.get("VFD_POOL_SAVINGS_ID"), pAcct?.id, pEnv?.accountId, pEnv?.id);
+  const toSavingsId = firstNonEmpty(cAcct?.id, cEnv?.accountId, cEnv?.id);
+  const toClientId = firstNonEmpty(cEnv?.clientId, cAcct?.clientId);
+  const toClient = firstNonEmpty(cEnv?.client, cAcct?.client, client?.full_name);
+  if (!fromClientId || !fromSavingsId || !toSavingsId || !toClientId) {
+    console.error(`[bills][reverse] identity incomplete ref=${reversalRef}`);
+    return { confirmed: false, reference: reversalRef, code: "REVERSAL_IDENTITY_MISSING", error: "Refund identities incomplete", evidence: { poolEnq, custEnq } };
+  }
+
+  const payload = {
+    fromAccount: VFD_BILLS_SETTLEMENT_NUBAN,
+    fromClientId,
+    fromClient,
+    fromSavingsId,
+    fromBvn: String(pEnv?.bvn ?? ""),
+    toAccount: customerNuban,
+    toBank: "999999",
+    toClient,
+    toClientId,
+    toSavingsId,
+    toSession: "",
+    toBvn: String(cEnv?.bvn ?? ""),
+    signature: await transferSignature(VFD_BILLS_SETTLEMENT_NUBAN, customerNuban),
+    amount: String(params.amount),
+    remark: `Bill refund ${params.reference}`.slice(0, 60),
+    transferType: "intra",
+    reference: reversalRef,
+    uniqueSenderAccountId: fromSavingsId,
+  };
+
+  console.log(`[bills][reverse][request] ${JSON.stringify(payload)}`);
+  const { data: transferResp } = await walletRequest("/transfer", "POST", payload);
+  const vfdStatus = String(transferResp?.status ?? "");
+  const vfdMessage = String(transferResp?.message ?? "");
+  const duplicate = vfdStatus === "98" || /reference exist/i.test(vfdMessage);
+
+  // Verification is the ONLY source of truth.
+  const verified = await verifyVfdTransfer(reversalRef);
+
+  await db.from("vfd_transaction_events").insert({
+    user_id: params.userId,
+    reference: reversalRef,
+    event_type: "bill_settlement_reversal_result",
+    actor: "system",
+    payload: {
+      origin: params.origin, bill_reference: params.reference,
+      from: VFD_BILLS_SETTLEMENT_NUBAN, to: customerNuban, amount: params.amount,
+      transfer_status: vfdStatus, transfer_message: vfdMessage, duplicate,
+      verified: verified.confirmed, transfer_response: transferResp, tsq: verified.evidence,
+    },
+  }).then(undefined, (e: unknown) => console.error("[bills][reverse] result persist failed", e));
+
+  if (!verified.confirmed) {
+    return {
+      confirmed: false, reference: reversalRef, code: "REVERSAL_UNCONFIRMED",
+      error: vfdMessage || "Refund transfer not confirmed",
+      evidence: { transfer: transferResp, tsq: verified.evidence },
+    };
+  }
+  return { confirmed: true, reference: reversalRef, evidence: verified.evidence, replayed: duplicate };
+}
+
+/**
+ * Single funnel for "the bill failed — give the customer their money back".
+ * Real bank reversal FIRST; the internal ledger hold is released ONLY once the
+ * reversal is confirmed (or there was no real funding leg to reverse). If the
+ * bank leg cannot be confirmed the hold deliberately stays in place and the
+ * reconciler sweep retries — books and bank can never diverge.
+ */
+async function refundBillFunding(params: {
+  reference: string;
+  amount: number;
+  userId: string | null;
+  origin: string;
+}): Promise<{ ok: boolean; reversal: SettlementFunding & { nothingToReverse?: boolean } }> {
+  const reversal = await reverseBillsSettlementFunding(params);
+  if (!reversal.confirmed) {
+    console.error(
+      `[bills][refund] ref=${params.reference} BANK REVERSAL NOT CONFIRMED code=${reversal.code} — ` +
+      `internal hold intentionally NOT released; reconciler will retry`,
+    );
+  }
+  return { ok: reversal.confirmed, reversal };
+}
+
+
+
 async function safeJson(resp: Response): Promise<Record<string, unknown>> {
   try {
     const raw = await resp.text();
