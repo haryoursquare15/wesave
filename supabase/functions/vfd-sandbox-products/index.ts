@@ -3916,11 +3916,34 @@ async function reverseBillsSettlementFunding(params: {
     return { confirmed: true, reference: reversalRef, code: "NO_FUNDING_TO_REVERSE", nothingToReverse: true };
   }
 
-  // 2) Replay guard — never send the same reversal twice.
-  const prior = await verifyVfdTransfer(reversalRef);
-  if (prior.confirmed) {
-    return { confirmed: true, reference: reversalRef, evidence: prior.evidence, replayed: true };
+  // 2) Replay guard — never send the same reversal twice. A reference VFD has
+  //    already rejected is burnt (a retry comes back "reference exists" without
+  //    moving money), so each new attempt gets the next -REVn suffix while every
+  //    earlier attempt is re-verified first.
+  const { data: priorAttempts } = await db
+    .from("vfd_transaction_events")
+    .select("reference")
+    .eq("event_type", "bill_settlement_reversal_claim")
+    .like("reference", `${params.reference}-FUND-REV%`);
+  const attemptedRefs = Array.from(
+    new Set([reversalRef, ...((priorAttempts || []) as any[]).map((r) => String(r.reference))]),
+  );
+  for (const ref of attemptedRefs) {
+    const prior = await verifyVfdTransfer(ref);
+    if (prior.confirmed) {
+      return { confirmed: true, reference: ref, evidence: prior.evidence, replayed: true };
+    }
   }
+  if (attemptedRefs.length > 1) reversalRef = `${params.reference}-FUND-REV${attemptedRefs.length + 1}`;
+  if (attemptedRefs.length > 6) {
+    return {
+      confirmed: false,
+      reference: reversalRef,
+      code: "REVERSAL_ATTEMPTS_EXHAUSTED",
+      error: "Automatic refund attempts exhausted — manual settlement required",
+    };
+  }
+
 
   const { data: client } = await db
     .from("vfd_sandbox_clients")
