@@ -220,12 +220,13 @@ Deno.serve(async (req) => {
       const vapidSubject = Deno.env.get("VAPID_SUBJECT") || "mailto:support@vestara.app";
 
       const payload = JSON.stringify({
-        title: title || "Vestara",
-        body: body || "",
-        url: url || "/dashboard",
-        tag: tag || "wesave-notification",
+        title: String(title || "Vestara").slice(0, 120),
+        body: String(body || "").slice(0, 500),
+        url: sanitizeUrl(url),
+        tag: String(tag || "vestara-notification").slice(0, 60),
         notification_id,
       });
+
 
       let sent = 0;
       const expired: string[] = [];
