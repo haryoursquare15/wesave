@@ -4050,6 +4050,70 @@ async function refundBillFunding(params: {
   return { ok: reversal.confirmed, reversal };
 }
 
+/**
+ * Durable catch-up sweep: any bill that ended failed/refunded but whose REAL
+ * funding leg (customer NUBAN -> pool) was verified and never reversed still
+ * has the customer's cash sitting in the corporate pool. Every reconciler run
+ * retries the real reversal and, once confirmed, releases any hold that is
+ * still outstanding. Idempotent: confirmed reversals are skipped.
+ */
+async function reconcileOutstandingBillFundingReversals(limit = 50): Promise<{
+  scanned: number; reversed: number; already_ok: number; failed: number;
+}> {
+  const db = getSupabaseAdmin();
+  const result = { scanned: 0, reversed: 0, already_ok: 0, failed: 0 };
+  const { data: rows } = await db
+    .from("vfd_sandbox_bill_receipts")
+    .select("id, reference, user_id, amount, status, hold_state, biller_name, customer_id")
+    .in("status", ["failed", "refunded"])
+    .order("paid_at", { ascending: false })
+    .limit(limit);
+
+  const candidates = (rows || []) as Record<string, any>[];
+  if (candidates.length === 0) return result;
+
+  // Bulk-skip anything already reversed.
+  const revRefs = candidates.map((r) => `${r.reference}-FUND-REV`);
+  const { data: revEvents } = await db
+    .from("vfd_transaction_events")
+    .select("reference, payload")
+    .eq("event_type", "bill_settlement_reversal_result")
+    .in("reference", revRefs);
+  const done = new Set(
+    (revEvents || []).filter((e: any) => e?.payload?.verified === true).map((e: any) => e.reference as string),
+  );
+
+  for (const r of candidates) {
+    if (done.has(`${r.reference}-FUND-REV`)) { result.already_ok++; continue; }
+    result.scanned++;
+    const refund = await refundBillFunding({
+      reference: r.reference, amount: Number(r.amount), userId: r.user_id, origin: "bills_reversal_sweep",
+    });
+    if (!refund.ok) { result.failed++; continue; }
+    if (refund.reversal.nothingToReverse) { result.already_ok++; continue; }
+
+    result.reversed++;
+    if (r.hold_state === "held") {
+      await db.rpc("vestara_bill_release", {
+        _reference: r.reference,
+        _metadata: {
+          reason: "bank_reversal_confirmed",
+          bank_reversal_reference: refund.reversal.reference,
+        },
+      });
+      await db.from("vfd_sandbox_bill_receipts")
+        .update({ hold_state: "refunded", refunded_at: new Date().toISOString() })
+        .eq("id", r.id);
+    }
+    await sendNotification(
+      r.user_id,
+      "Bill refund returned to your account",
+      `₦${Number(r.amount).toLocaleString()} for the failed ${r.biller_name || "bill"} payment (${r.customer_id || ""}) has been returned to your bank account. Ref: ${r.reference}`,
+      "bill_payment",
+    );
+  }
+  return result;
+}
 
 
 async function safeJson(resp: Response): Promise<Record<string, unknown>> {
