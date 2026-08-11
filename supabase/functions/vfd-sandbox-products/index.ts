@@ -8160,6 +8160,13 @@ Deno.serve(async (req) => {
     if (action === "recover_stuck_split_settlements" && await assertCronToken(req, "bills_reconciler")) {
       return await handleRecoverStuckSplitSettlements();
     }
+    // Ops-only: force the bank-level reversal sweep for failed bills whose real
+    // funding leg is still sitting in the corporate pool.
+    if (action === "reverse_stranded_bill_funding" && await assertCronToken(req, "bills_reconciler")) {
+      const limit = Math.min(Number(body.limit ?? 50) || 50, 200);
+      return jsonResponse({ data: await reconcileOutstandingBillFundingReversals(limit) });
+    }
+
     if (action === "sweep_split_fee_cron" && assertCronCaller(req)) {
       return await handleAdminSweepSplitFee("system", body);
     }
