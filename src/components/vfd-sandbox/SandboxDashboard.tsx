@@ -116,15 +116,17 @@ const productBanners = [
 
 /* ─── Product Grid Items ─── */
 const productGrid = [
+  // Live products
+  { key: "bills", label: "Pay Bills", icon: CreditCard, color: "bg-cyan-500/10 text-cyan-600", desc: "Airtime & more" },
+  { key: "split", label: "Split Bills", icon: Receipt, color: "bg-violet-500/10 text-violet-600", desc: "Share costs" },
+  { key: "transfer", label: "Transfer", icon: Send, color: "bg-purple-500/10 text-purple-600", desc: "Send money" },
+  // Coming soon
   { key: "lock", label: "Active Savings", icon: Lock, color: "bg-emerald-500/10 text-emerald-600", desc: "Coming soon", comingSoon: true },
   { key: "target", label: "Target Save", icon: Target, color: "bg-blue-500/10 text-blue-600", desc: "Coming soon", comingSoon: true },
   { key: "ajo", label: "Ajo Groups", icon: Users, color: "bg-orange-500/10 text-orange-600", desc: "Coming soon", comingSoon: true },
   { key: "association", label: "Associations", icon: Building2, color: "bg-indigo-500/10 text-indigo-600", desc: "Coming soon", comingSoon: true },
   { key: "goal", label: "Goal Fund", icon: Heart, color: "bg-rose-500/10 text-rose-600", desc: "Coming soon", comingSoon: true },
-  { key: "split", label: "Split Bills", icon: Receipt, color: "bg-violet-500/10 text-violet-600", desc: "Share costs" },
-  { key: "bills", label: "Pay Bills", icon: CreditCard, color: "bg-cyan-500/10 text-cyan-600", desc: "Airtime & more" },
   { key: "card", label: "Virtual Card", icon: CreditCard, color: "bg-slate-500/10 text-slate-600", desc: "Coming soon", comingSoon: true },
-  { key: "transfer", label: "Transfer", icon: Send, color: "bg-purple-500/10 text-purple-600", desc: "Send money" },
 ];
 
 /* ─── Transaction Icon Helper ─── */
