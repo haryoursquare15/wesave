@@ -6539,6 +6539,17 @@ export type Database = {
       }
       gen_random_bytes: { Args: { n: number }; Returns: string }
       gen_random_uuid: { Args: never; Returns: string }
+      get_own_card_tokens: {
+        Args: never
+        Returns: {
+          card_last4: string
+          card_status: string
+          card_type: string
+          created_at: string
+          id: string
+          last_tokenized_at: string
+        }[]
+      }
       get_own_group_mandate: {
         Args: { _group_id: string }
         Returns: {
