@@ -4010,8 +4010,12 @@ async function reverseBillsSettlementFunding(params: {
     remark: `Bill refund ${params.reference}`.slice(0, 60),
     transferType: "intra",
     reference: reversalRef,
-    uniqueSenderAccountId: fromSavingsId,
+    // NOTE: no uniqueSenderAccountId here. That field identifies the POOL
+    // SUB-ACCOUNT originating a transfer; the corporate pool itself is the
+    // sender on a refund, and VFD rejects the call ("Invalid
+    // uniqueSenderAccountId") when it is supplied.
   };
+
 
   console.log(`[bills][reverse][request] ${JSON.stringify(payload)}`);
   const { data: transferResp } = await walletRequest("/transfer", "POST", payload);
