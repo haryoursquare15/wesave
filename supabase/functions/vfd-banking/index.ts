@@ -671,6 +671,58 @@ async function handleBvnLookup(userId: string, bvn: string) {
   return jsonResponse({ data, vfd_status: status });
 }
 
+// User-facing message for any attempt to bind an identity (BVN) or bank
+// account (NUBAN) that already belongs to a different Vestara user.
+const DUPLICATE_IDENTITY_MESSAGE =
+  "This BVN is already registered to another Vestara account. Please sign in to that account or contact support.";
+
+// Postgres unique-violation (23505) on either partial unique index guarding
+// one-NUBAN-per-user and one-BVN-per-user.
+function isDuplicateIdentityViolation(err: { code?: string; message?: string } | null): boolean {
+  if (!err) return false;
+  if (err.code === "23505") return true;
+  const m = (err.message || "").toLowerCase();
+  return (
+    m.includes("vfd_sandbox_clients_account_number_uniq") ||
+    m.includes("vfd_sandbox_clients_bvn_uniq") ||
+    (m.includes("duplicate key") && m.includes("vfd_sandbox_clients"))
+  );
+}
+
+// Returns the conflicting field + current owner when `nuban` or `bvn` is
+// already bound to a DIFFERENT user_id. Returns null when free, or when the
+// only match is the caller's own row (re-running KYC is allowed).
+async function findClientIdentityConflict(
+  supabaseAdmin: ReturnType<typeof getSupabaseAdmin>,
+  userId: string,
+  nuban: string | null,
+  bvn: string | null,
+): Promise<{ field: "vfd_account_number" | "bvn"; ownerUserId: string } | null> {
+  if (nuban) {
+    const { data } = await supabaseAdmin
+      .from("vfd_sandbox_clients")
+      .select("user_id")
+      .eq("vfd_account_number", nuban)
+      .neq("user_id", userId)
+      .limit(1);
+    const owner = (data?.[0] as { user_id?: string } | undefined)?.user_id;
+    if (owner) return { field: "vfd_account_number", ownerUserId: owner };
+  }
+
+  if (bvn) {
+    const { data } = await supabaseAdmin
+      .from("vfd_sandbox_clients")
+      .select("user_id")
+      .eq("bvn", bvn)
+      .neq("user_id", userId)
+      .limit(1);
+    const owner = (data?.[0] as { user_id?: string } | undefined)?.user_id;
+    if (owner) return { field: "bvn", ownerUserId: owner };
+  }
+
+  return null;
+}
+
 // Create Tiered Account - /client/tiers/individual
 // Tier 1: BVN+DOB or NIN+DOB (₦30k daily limit)
 // Tier 2: BVN+NIN+DOB (₦100k daily limit)
