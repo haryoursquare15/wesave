@@ -1354,7 +1354,7 @@ async function handleTransfer(
     const adminClientT = getSupabaseAdmin();
     const { data: clientRowT } = await adminClientT
       .from("vfd_sandbox_clients")
-      .select("tier")
+      .select("tier, vfd_account_number")
       .eq("user_id", userId)
       .maybeSingle();
 
@@ -1380,17 +1380,11 @@ async function handleTransfer(
           403,
         );
       }
-      const sinceT = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      const { data: todaysT } = await adminClientT
-        .from("vfd_sandbox_transactions")
-        .select("amount")
-        .eq("user_id", userId)
-        .in("transaction_type", ["transfer", "debit"])
-        .eq("status", "completed")
-        .gte("created_at", sinceT);
-      const spentTodayT = (todaysT ?? []).reduce(
-        (s, r) => s + Number((r as { amount?: number }).amount || 0),
-        0,
+      const spentTodayT = await sumDailyDebits(
+        adminClientT,
+        userId,
+        (clientRowT?.vfd_account_number as string | null | undefined) ?? null,
+        ["transfer", "debit"],
       );
       if (spentTodayT + _amt > dailyCapT) {
         const remainingT = Math.max(0, dailyCapT - spentTodayT);
