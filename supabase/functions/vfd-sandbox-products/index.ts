@@ -3896,7 +3896,7 @@ async function reverseBillsSettlementFunding(params: {
 }): Promise<SettlementFunding & { nothingToReverse?: boolean }> {
   const db = getSupabaseAdmin();
   const fundingRef = `${params.reference}-FUND`;
-  const reversalRef = `${params.reference}-FUND-REV`;
+  let reversalRef = `${params.reference}-FUND-REV`;
 
   if (!params.userId) {
     return { confirmed: false, reference: reversalRef, code: "REVERSAL_PAYEE_UNKNOWN", error: "Refund recipient unknown" };
