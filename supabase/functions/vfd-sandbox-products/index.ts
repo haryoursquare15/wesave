@@ -3925,17 +3925,19 @@ async function reverseBillsSettlementFunding(params: {
     .select("reference")
     .eq("event_type", "bill_settlement_reversal_claim")
     .like("reference", `${params.reference}-FUND-REV%`);
-  const attemptedRefs = Array.from(
-    new Set([reversalRef, ...((priorAttempts || []) as any[]).map((r) => String(r.reference))]),
+  const claimedRefs = Array.from(
+    new Set(((priorAttempts || []) as any[]).map((r) => String(r.reference))),
   );
-  for (const ref of attemptedRefs) {
+  for (const ref of Array.from(new Set([reversalRef, ...claimedRefs]))) {
     const prior = await verifyVfdTransfer(ref);
     if (prior.confirmed) {
       return { confirmed: true, reference: ref, evidence: prior.evidence, replayed: true };
     }
   }
-  if (attemptedRefs.length > 1) reversalRef = `${params.reference}-FUND-REV${attemptedRefs.length + 1}`;
-  if (attemptedRefs.length > 6) {
+  if (claimedRefs.length > 0) {
+    reversalRef = `${params.reference}-FUND-REV${claimedRefs.length + 1}`;
+  }
+  if (claimedRefs.length >= 6) {
     return {
       confirmed: false,
       reference: reversalRef,
@@ -3943,6 +3945,7 @@ async function reverseBillsSettlementFunding(params: {
       error: "Automatic refund attempts exhausted — manual settlement required",
     };
   }
+
 
 
   const { data: client } = await db
