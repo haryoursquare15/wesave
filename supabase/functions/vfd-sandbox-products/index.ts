@@ -5074,13 +5074,28 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
     `amount=${numAmount} msisdn_sent=${resolvedPhone ? "yes" : "no"} http=${resp.status} ` +
     `status=${String(effStatus ?? "")} outcome=${payOutcome} message=${String(data?.message ?? "").slice(0, 200)}`,
   );
-  // The wallet hold was placed before /pay — release it so the customer is
-  // made whole on a declined purchase.
-  const { error: relErr } = await dbHold.rpc("vestara_bill_release", {
-    _reference: reference,
-    _metadata: { reason: "biller_declined", biller_id: billerId, customer_id: customerId },
+  // The customer's REAL money already moved into the pool (funding leg) and an
+  // internal hold was placed. On a decline both must be undone — bank first.
+  // The internal hold is released ONLY after the real pool -> customer reversal
+  // is verified, so a failed bill can never leave cash in the pool while the
+  // books show the customer refunded.
+  const bankRefund = await refundBillFunding({
+    reference, amount: numAmount, userId, origin: "bills_pay_decline",
   });
-  if (relErr) console.error("[bills] vestara_bill_release failed after decline:", relErr);
+  let declineHoldState: string = "held";
+  if (bankRefund.ok) {
+    const { error: relErr } = await dbHold.rpc("vestara_bill_release", {
+      _reference: reference,
+      _metadata: {
+        reason: "biller_declined", biller_id: billerId, customer_id: customerId,
+        bank_reversal_reference: bankRefund.reversal.reference,
+        bank_reversal: bankRefund.reversal.nothingToReverse ? "not_required" : "confirmed",
+      },
+    });
+    if (relErr) console.error("[bills] vestara_bill_release failed after decline:", relErr);
+    else declineHoldState = "released";
+  }
+
 
   // Persist a failed receipt so every /pay attempt — including declines — has a
   // durable record of the exact request and VFD's raw response.
