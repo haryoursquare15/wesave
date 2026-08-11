@@ -671,6 +671,100 @@ async function handleBvnLookup(userId: string, bvn: string) {
   return jsonResponse({ data, vfd_status: status });
 }
 
+// User-facing message for any attempt to bind an identity (BVN) or bank
+// account (NUBAN) that already belongs to a different Vestara user.
+const DUPLICATE_IDENTITY_MESSAGE =
+  "This BVN is already registered to another Vestara account. Please sign in to that account or contact support.";
+
+// Postgres unique-violation (23505) on either partial unique index guarding
+// one-NUBAN-per-user and one-BVN-per-user.
+function isDuplicateIdentityViolation(err: { code?: string; message?: string } | null): boolean {
+  if (!err) return false;
+  if (err.code === "23505") return true;
+  const m = (err.message || "").toLowerCase();
+  return (
+    m.includes("vfd_sandbox_clients_account_number_uniq") ||
+    m.includes("vfd_sandbox_clients_bvn_uniq") ||
+    (m.includes("duplicate key") && m.includes("vfd_sandbox_clients"))
+  );
+}
+
+// Returns the conflicting field + current owner when `nuban` or `bvn` is
+// already bound to a DIFFERENT user_id. Returns null when free, or when the
+// only match is the caller's own row (re-running KYC is allowed).
+async function findClientIdentityConflict(
+  supabaseAdmin: ReturnType<typeof getSupabaseAdmin>,
+  userId: string,
+  nuban: string | null,
+  bvn: string | null,
+): Promise<{ field: "vfd_account_number" | "bvn"; ownerUserId: string } | null> {
+  if (nuban) {
+    const { data } = await supabaseAdmin
+      .from("vfd_sandbox_clients")
+      .select("user_id")
+      .eq("vfd_account_number", nuban)
+      .neq("user_id", userId)
+      .limit(1);
+    const owner = (data?.[0] as { user_id?: string } | undefined)?.user_id;
+    if (owner) return { field: "vfd_account_number", ownerUserId: owner };
+  }
+
+  if (bvn) {
+    const { data } = await supabaseAdmin
+      .from("vfd_sandbox_clients")
+      .select("user_id")
+      .eq("bvn", bvn)
+      .neq("user_id", userId)
+      .limit(1);
+    const owner = (data?.[0] as { user_id?: string } | undefined)?.user_id;
+    if (owner) return { field: "bvn", ownerUserId: owner };
+  }
+
+  return null;
+}
+
+// Cumulative completed debits in the trailing 24h for KYC tier enforcement.
+//
+// Aggregation is by the underlying BANK ACCOUNT (vfd_account_number), not by
+// user_id. If two Vestara identities ever end up bound to one NUBAN, a
+// user_id-scoped counter would give each of them a full independent daily
+// allowance against the same real money. Rows are matched on the NUBAN OR the
+// caller's user_id, so legacy rows written before vfd_account_number was
+// populated still count.
+async function sumDailyDebits(
+  supabaseAdmin: ReturnType<typeof getSupabaseAdmin>,
+  userId: string,
+  nuban: string | null,
+  transactionTypes: string[],
+): Promise<number> {
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+  let query = supabaseAdmin
+    .from("vfd_sandbox_transactions")
+    .select("amount")
+    .in("transaction_type", transactionTypes)
+    .eq("status", "completed")
+    .gte("created_at", since);
+
+  query = nuban
+    ? query.or(`vfd_account_number.eq.${nuban},user_id.eq.${userId}`)
+    : query.eq("user_id", userId);
+
+  const { data, error } = await query;
+  if (error) {
+    // Fail closed on the counter: treat an unreadable history as "cap used"
+    // rather than silently granting a full allowance.
+    console.error("[VFD tier limit] daily spend query failed:", error.message);
+    return Number.POSITIVE_INFINITY;
+  }
+
+  return (data ?? []).reduce(
+    (s, r) => s + Number((r as { amount?: number }).amount || 0),
+    0,
+  );
+}
+
+
 // Create Tiered Account - /client/tiers/individual
 // Tier 1: BVN+DOB or NIN+DOB (₦30k daily limit)
 // Tier 2: BVN+NIN+DOB (₦100k daily limit)
@@ -727,24 +821,81 @@ async function handleCreateTiered(userId: string, body: Record<string, unknown>)
       virtualIssued = true;
     }
 
-    await supabaseAdmin.from("vfd_sandbox_clients").upsert({
-      user_id: userId,
-      bvn: bvn || null,
-      nin: nin || null,
-      address: address || null,
-      date_of_birth: dateOfBirth,
-      vfd_client_id: innerData?.clientId?.toString() || null,
-      vfd_account_number: returnedNuban,
-      full_name: innerData?.firstname ? `${innerData?.firstname || ""} ${innerData?.middlename ? innerData.middlename + " " : ""}${innerData?.lastname || ""}`.trim() : null,
-      phone: innerData?.phone?.toString() || null,
-      gender: innerData?.gender?.toString() || null,
-      tier: `tier${actualTier}`,
-      kyc_method: "tiered",
-      consent_status: "not_required",
-      account_status: "active",
-      metadata: { ...vfdData, virtual_nuban: virtualIssued || undefined, settlement_nuban: virtualIssued ? PLATFORM_POOL_NUBAN : undefined },
-      source: "vfd_sandbox",
-    }, { onConflict: "user_id" });
+    // ─── DUPLICATE IDENTITY GUARD (shared-NUBAN defect) ───
+    // VFD keys accounts by BVN, not by our user_id. When a second Vestara
+    // user submits a BVN that already has a VFD account, VFD replies
+    // status "01 — Client Account Exists" and echoes the EXISTING NUBAN.
+    // Writing that NUBAN onto the second user would give two distinct
+    // Vestara identities control of one real bank account. Refuse instead.
+    const conflict = await findClientIdentityConflict(
+      supabaseAdmin,
+      userId,
+      returnedNuban,
+      bvn || null,
+    );
+    if (conflict) {
+      console.warn(
+        `[VFD create_tiered] BLOCKED duplicate provisioning for user ${userId}: ` +
+          `${conflict.field} already owned by ${conflict.ownerUserId}`,
+      );
+      await supabaseAdmin.from("vfd_sandbox_webhook_logs").insert({
+        event_type: "duplicate_provisioning_blocked",
+        payload: {
+          user_id: userId,
+          conflicting_field: conflict.field,
+          existing_owner_user_id: conflict.ownerUserId,
+          vfd_status: vfdData?.status ?? null,
+          at: new Date().toISOString(),
+        },
+        processed: true,
+      });
+      return jsonResponse(
+        { error: DUPLICATE_IDENTITY_MESSAGE, code: "BVN_ALREADY_REGISTERED" },
+        409,
+      );
+    }
+
+    const { error: upsertError } = await supabaseAdmin
+      .from("vfd_sandbox_clients")
+      .upsert({
+        user_id: userId,
+        bvn: bvn || null,
+        nin: nin || null,
+        address: address || null,
+        date_of_birth: dateOfBirth,
+        vfd_client_id: innerData?.clientId?.toString() || null,
+        vfd_account_number: returnedNuban,
+        full_name: innerData?.firstname ? `${innerData?.firstname || ""} ${innerData?.middlename ? innerData.middlename + " " : ""}${innerData?.lastname || ""}`.trim() : null,
+        phone: innerData?.phone?.toString() || null,
+        gender: innerData?.gender?.toString() || null,
+        tier: `tier${actualTier}`,
+        kyc_method: "tiered",
+        consent_status: "not_required",
+        account_status: "active",
+        metadata: { ...vfdData, virtual_nuban: virtualIssued || undefined, settlement_nuban: virtualIssued ? PLATFORM_POOL_NUBAN : undefined },
+        source: "vfd_sandbox",
+      }, { onConflict: "user_id" });
+
+    if (upsertError) {
+      // Last line of defence: the partial unique indexes
+      // vfd_sandbox_clients_account_number_uniq / _bvn_uniq reject the write
+      // if another user grabbed the same NUBAN/BVN between our check above
+      // and this insert. Surface the same clean 409, never a raw 500.
+      if (isDuplicateIdentityViolation(upsertError)) {
+        console.warn(
+          `[VFD create_tiered] unique-index rejection for user ${userId}: ${upsertError.message}`,
+        );
+        return jsonResponse(
+          { error: DUPLICATE_IDENTITY_MESSAGE, code: "BVN_ALREADY_REGISTERED" },
+          409,
+        );
+      }
+      console.error("[VFD create_tiered] client upsert failed:", upsertError.message);
+      return jsonResponse(
+        { error: "We couldn't finish setting up your account. Please try again shortly." },
+        500,
+      );
+    }
   }
 
   return jsonResponse({ data, vfd_status: status });
@@ -1245,7 +1396,7 @@ async function handleTransfer(
     const adminClientT = getSupabaseAdmin();
     const { data: clientRowT } = await adminClientT
       .from("vfd_sandbox_clients")
-      .select("tier")
+      .select("tier, vfd_account_number")
       .eq("user_id", userId)
       .maybeSingle();
 
@@ -1271,17 +1422,11 @@ async function handleTransfer(
           403,
         );
       }
-      const sinceT = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      const { data: todaysT } = await adminClientT
-        .from("vfd_sandbox_transactions")
-        .select("amount")
-        .eq("user_id", userId)
-        .in("transaction_type", ["transfer", "debit"])
-        .eq("status", "completed")
-        .gte("created_at", sinceT);
-      const spentTodayT = (todaysT ?? []).reduce(
-        (s, r) => s + Number((r as { amount?: number }).amount || 0),
-        0,
+      const spentTodayT = await sumDailyDebits(
+        adminClientT,
+        userId,
+        (clientRowT?.vfd_account_number as string | null | undefined) ?? null,
+        ["transfer", "debit"],
       );
       if (spentTodayT + _amt > dailyCapT) {
         const remainingT = Math.max(0, dailyCapT - spentTodayT);
@@ -1559,7 +1704,7 @@ async function handleTransfer(
     const adminClient = getSupabaseAdmin();
     const { data: clientRow } = await adminClient
       .from("vfd_sandbox_clients")
-      .select("tier")
+      .select("tier, vfd_account_number")
       .eq("user_id", userId)
       .maybeSingle();
 
@@ -1585,19 +1730,13 @@ async function handleTransfer(
         );
       }
 
-      // Cumulative daily debit (transfers only, completed) in the last 24h
-      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      const { data: todays } = await adminClient
-        .from("vfd_sandbox_transactions")
-        .select("amount")
-        .eq("user_id", userId)
-        .eq("transaction_type", "transfer")
-        .eq("status", "completed")
-        .gte("created_at", since);
-
-      const spentToday = (todays ?? []).reduce(
-        (s, r) => s + Number((r as { amount?: number }).amount || 0),
-        0
+      // Cumulative daily debit in the last 24h, aggregated by the underlying
+      // bank account (see sumDailyDebits) so the cap can't be doubled.
+      const spentToday = await sumDailyDebits(
+        adminClient,
+        userId,
+        (clientRow?.vfd_account_number as string | null | undefined) ?? null,
+        ["transfer"],
       );
       if (spentToday + amountNum > dailyCap) {
         const remaining = Math.max(0, dailyCap - spentToday);
