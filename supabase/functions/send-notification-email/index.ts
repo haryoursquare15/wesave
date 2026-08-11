@@ -298,8 +298,19 @@ serve(async (req) => {
       });
     }
 
-    const subject = getEmailSubject(record.notification_type, record.title);
-    const html = buildEmailHtml(record.title, record.message, record.notification_type, profile.full_name);
+    // Escape + length-cap caller-supplied content before it enters the email body
+    const escapeHtml = (s: string) =>
+      String(s).slice(0, 2000)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+    const safeTitle = escapeHtml(record.title).slice(0, 200);
+    const safeMessage = escapeHtml(record.message);
+    const safeType = String(record.notification_type || 'notification').replace(/[^a-z0-9_]/gi, '').slice(0, 60);
+
+    const subject = getEmailSubject(safeType, safeTitle);
+    const html = buildEmailHtml(safeTitle, safeMessage, safeType, profile.full_name);
+
 
     console.log(`Sending email to ${profile.email}: ${subject}`);
 
