@@ -299,10 +299,8 @@ Deno.serve(async (req) => {
     // and re-sends; on success the entry is marked resolved, on failure
     // attempts is incremented.
     if (action === "retry_dlq") {
-      const supabaseAdmin = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-      );
+      if (!internal) return unauthorized();
+
 
       const vapidPublicKey = Deno.env.get("VAPID_PUBLIC_KEY")!;
       const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY")!;
