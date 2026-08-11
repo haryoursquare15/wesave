@@ -727,24 +727,81 @@ async function handleCreateTiered(userId: string, body: Record<string, unknown>)
       virtualIssued = true;
     }
 
-    await supabaseAdmin.from("vfd_sandbox_clients").upsert({
-      user_id: userId,
-      bvn: bvn || null,
-      nin: nin || null,
-      address: address || null,
-      date_of_birth: dateOfBirth,
-      vfd_client_id: innerData?.clientId?.toString() || null,
-      vfd_account_number: returnedNuban,
-      full_name: innerData?.firstname ? `${innerData?.firstname || ""} ${innerData?.middlename ? innerData.middlename + " " : ""}${innerData?.lastname || ""}`.trim() : null,
-      phone: innerData?.phone?.toString() || null,
-      gender: innerData?.gender?.toString() || null,
-      tier: `tier${actualTier}`,
-      kyc_method: "tiered",
-      consent_status: "not_required",
-      account_status: "active",
-      metadata: { ...vfdData, virtual_nuban: virtualIssued || undefined, settlement_nuban: virtualIssued ? PLATFORM_POOL_NUBAN : undefined },
-      source: "vfd_sandbox",
-    }, { onConflict: "user_id" });
+    // ─── DUPLICATE IDENTITY GUARD (shared-NUBAN defect) ───
+    // VFD keys accounts by BVN, not by our user_id. When a second Vestara
+    // user submits a BVN that already has a VFD account, VFD replies
+    // status "01 — Client Account Exists" and echoes the EXISTING NUBAN.
+    // Writing that NUBAN onto the second user would give two distinct
+    // Vestara identities control of one real bank account. Refuse instead.
+    const conflict = await findClientIdentityConflict(
+      supabaseAdmin,
+      userId,
+      returnedNuban,
+      bvn || null,
+    );
+    if (conflict) {
+      console.warn(
+        `[VFD create_tiered] BLOCKED duplicate provisioning for user ${userId}: ` +
+          `${conflict.field} already owned by ${conflict.ownerUserId}`,
+      );
+      await supabaseAdmin.from("vfd_sandbox_webhook_logs").insert({
+        event_type: "duplicate_provisioning_blocked",
+        payload: {
+          user_id: userId,
+          conflicting_field: conflict.field,
+          existing_owner_user_id: conflict.ownerUserId,
+          vfd_status: vfdData?.status ?? null,
+          at: new Date().toISOString(),
+        },
+        processed: true,
+      });
+      return jsonResponse(
+        { error: DUPLICATE_IDENTITY_MESSAGE, code: "BVN_ALREADY_REGISTERED" },
+        409,
+      );
+    }
+
+    const { error: upsertError } = await supabaseAdmin
+      .from("vfd_sandbox_clients")
+      .upsert({
+        user_id: userId,
+        bvn: bvn || null,
+        nin: nin || null,
+        address: address || null,
+        date_of_birth: dateOfBirth,
+        vfd_client_id: innerData?.clientId?.toString() || null,
+        vfd_account_number: returnedNuban,
+        full_name: innerData?.firstname ? `${innerData?.firstname || ""} ${innerData?.middlename ? innerData.middlename + " " : ""}${innerData?.lastname || ""}`.trim() : null,
+        phone: innerData?.phone?.toString() || null,
+        gender: innerData?.gender?.toString() || null,
+        tier: `tier${actualTier}`,
+        kyc_method: "tiered",
+        consent_status: "not_required",
+        account_status: "active",
+        metadata: { ...vfdData, virtual_nuban: virtualIssued || undefined, settlement_nuban: virtualIssued ? PLATFORM_POOL_NUBAN : undefined },
+        source: "vfd_sandbox",
+      }, { onConflict: "user_id" });
+
+    if (upsertError) {
+      // Last line of defence: the partial unique indexes
+      // vfd_sandbox_clients_account_number_uniq / _bvn_uniq reject the write
+      // if another user grabbed the same NUBAN/BVN between our check above
+      // and this insert. Surface the same clean 409, never a raw 500.
+      if (isDuplicateIdentityViolation(upsertError)) {
+        console.warn(
+          `[VFD create_tiered] unique-index rejection for user ${userId}: ${upsertError.message}`,
+        );
+        return jsonResponse(
+          { error: DUPLICATE_IDENTITY_MESSAGE, code: "BVN_ALREADY_REGISTERED" },
+          409,
+        );
+      }
+      console.error("[VFD create_tiered] client upsert failed:", upsertError.message);
+      return jsonResponse(
+        { error: "We couldn't finish setting up your account. Please try again shortly." },
+        500,
+      );
+    }
   }
 
   return jsonResponse({ data, vfd_status: status });
