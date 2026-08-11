@@ -213,6 +213,40 @@ function buildEmailHtml(title: string, message: string, type: string, userName?:
 </html>`;
 }
 
+/** Constant-time comparison. */
+function safeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+/**
+ * Only trusted internal callers may send notification emails:
+ *  - the database trigger, which presents `x-cron-token` matching the
+ *    `internal_notifications` row in `internal_cron_tokens` (or CRON_SECRET), or
+ *  - another edge function presenting the service role key.
+ */
+async function isTrustedCaller(req: Request, supabase: ReturnType<typeof createClient>): Promise<boolean> {
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+  const bearer = (req.headers.get('Authorization') || '').replace('Bearer ', '');
+  if (serviceKey && bearer && safeEqual(bearer, serviceKey)) return true;
+
+  const provided = req.headers.get('x-cron-token') || '';
+  if (!provided) return false;
+
+  const envSecret = Deno.env.get('CRON_SECRET');
+  if (envSecret && safeEqual(provided, envSecret)) return true;
+
+  const { data } = await supabase
+    .from('internal_cron_tokens')
+    .select('token')
+    .eq('name', 'internal_notifications')
+    .maybeSingle();
+
+  return !!data?.token && safeEqual(provided, data.token as string);
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -232,8 +266,16 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    if (!(await isTrustedCaller(req, supabase))) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const payload: NotificationPayload = await req.json();
     const { record } = payload;
+
 
     if (!record?.user_id || !record?.title || !record?.message) {
       console.log('Missing required notification fields, skipping email');
@@ -256,8 +298,19 @@ serve(async (req) => {
       });
     }
 
-    const subject = getEmailSubject(record.notification_type, record.title);
-    const html = buildEmailHtml(record.title, record.message, record.notification_type, profile.full_name);
+    // Escape + length-cap caller-supplied content before it enters the email body
+    const escapeHtml = (s: string) =>
+      String(s).slice(0, 2000)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+    const safeTitle = escapeHtml(record.title).slice(0, 200);
+    const safeMessage = escapeHtml(record.message);
+    const safeType = String(record.notification_type || 'notification').replace(/[^a-z0-9_]/gi, '').slice(0, 60);
+
+    const subject = getEmailSubject(safeType, safeTitle);
+    const html = buildEmailHtml(safeTitle, safeMessage, safeType, profile.full_name);
+
 
     console.log(`Sending email to ${profile.email}: ${subject}`);
 

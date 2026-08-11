@@ -94,6 +94,72 @@ function base64UrlDecode(str: string): ArrayBuffer {
   return bytes.buffer;
 }
 
+/** Constant-time comparison. */
+function safeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+function adminClient() {
+  return createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  );
+}
+
+/** Trusted internal caller: DB trigger token, CRON_SECRET, or service role key. */
+async function isInternalCaller(
+  req: Request,
+  supabase: ReturnType<typeof createClient>,
+): Promise<boolean> {
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  const bearer = (req.headers.get("Authorization") || "").replace("Bearer ", "");
+  if (serviceKey && bearer && safeEqual(bearer, serviceKey)) return true;
+
+  const provided = req.headers.get("x-cron-token") || "";
+  if (!provided) return false;
+
+  const envSecret = Deno.env.get("CRON_SECRET");
+  if (envSecret && safeEqual(provided, envSecret)) return true;
+
+  const { data } = await supabase
+    .from("internal_cron_tokens")
+    .select("token")
+    .eq("name", "internal_notifications")
+    .maybeSingle();
+
+  return !!data?.token && safeEqual(provided, data.token as string);
+}
+
+/** Resolve the authenticated user id from the caller's JWT, if any. */
+async function callerUserId(
+  req: Request,
+  supabase: ReturnType<typeof createClient>,
+): Promise<string | null> {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) return null;
+  const token = authHeader.replace("Bearer ", "");
+  const { data, error } = await supabase.auth.getClaims(token);
+  if (error) return null;
+  return (data?.claims?.sub as string) ?? null;
+}
+
+/** Only allow relative in-app paths as the notification target. */
+function sanitizeUrl(url: unknown): string {
+  if (typeof url !== "string") return "/dashboard";
+  if (!/^\/[A-Za-z0-9\-_/?=&.]*$/.test(url)) return "/dashboard";
+  return url.slice(0, 300);
+}
+
+function unauthorized() {
+  return new Response(JSON.stringify({ error: "Unauthorized" }), {
+    status: 401,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -101,9 +167,12 @@ Deno.serve(async (req) => {
 
   try {
     const { action, user_id, title, body, url, tag, notification_id } = await req.json();
+    const supabaseAdmin = adminClient();
+    const internal = await isInternalCaller(req, supabaseAdmin);
 
-    // Return VAPID public key for client subscription
+    // Return VAPID public key for client subscription (requires a signed-in user)
     if (action === "get_vapid_key") {
+      if (!internal && !(await callerUserId(req, supabaseAdmin))) return unauthorized();
       const vapidPublicKey = Deno.env.get("VAPID_PUBLIC_KEY");
       if (!vapidPublicKey) {
         return new Response(
@@ -126,10 +195,12 @@ Deno.serve(async (req) => {
         );
       }
 
-      const supabaseAdmin = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-      );
+      // Only the platform itself, or the target user (test push to own devices)
+      if (!internal) {
+        const caller = await callerUserId(req, supabaseAdmin);
+        if (!caller || caller !== user_id) return unauthorized();
+      }
+
 
       // Get user's push subscriptions
       const { data: subscriptions, error } = await supabaseAdmin
@@ -149,12 +220,13 @@ Deno.serve(async (req) => {
       const vapidSubject = Deno.env.get("VAPID_SUBJECT") || "mailto:support@vestara.app";
 
       const payload = JSON.stringify({
-        title: title || "Vestara",
-        body: body || "",
-        url: url || "/dashboard",
-        tag: tag || "wesave-notification",
+        title: String(title || "Vestara").slice(0, 120),
+        body: String(body || "").slice(0, 500),
+        url: sanitizeUrl(url),
+        tag: String(tag || "vestara-notification").slice(0, 60),
         notification_id,
       });
+
 
       let sent = 0;
       const expired: string[] = [];
@@ -227,10 +299,8 @@ Deno.serve(async (req) => {
     // and re-sends; on success the entry is marked resolved, on failure
     // attempts is incremented.
     if (action === "retry_dlq") {
-      const supabaseAdmin = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-      );
+      if (!internal) return unauthorized();
+
 
       const vapidPublicKey = Deno.env.get("VAPID_PUBLIC_KEY")!;
       const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY")!;

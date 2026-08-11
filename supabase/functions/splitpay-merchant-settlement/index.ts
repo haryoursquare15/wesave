@@ -35,6 +35,35 @@ async function resolveFlutterwaveBankCode(flutterwaveKey: string, bankName: stri
   return contains?.code || null;
 }
 
+/** Constant-time comparison. */
+function safeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+/** Only the DB trigger (shared token) or the service role may initiate a payout. */
+async function isInternalCaller(req: Request, supabase: ReturnType<typeof createClient>): Promise<boolean> {
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+  const bearer = (req.headers.get('Authorization') || '').replace('Bearer ', '');
+  if (serviceKey && bearer && safeEqual(bearer, serviceKey)) return true;
+
+  const provided = req.headers.get('x-cron-token') || '';
+  if (!provided) return false;
+
+  const envSecret = Deno.env.get('CRON_SECRET');
+  if (envSecret && safeEqual(provided, envSecret)) return true;
+
+  const { data } = await supabase
+    .from('internal_cron_tokens')
+    .select('token')
+    .eq('name', 'splitpay_settlement')
+    .maybeSingle();
+
+  return !!data?.token && safeEqual(provided, data.token as string);
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -50,15 +79,63 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const {
-      split_request_id,
-      merchant_amount,
-      merchant_name,
-      merchant_bank,
-      merchant_account,
-      purpose,
-      creator_id,
-    } = await req.json();
+    if (!(await isInternalCaller(req, supabase))) {
+      return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // ONLY the split id is trusted from the request body. Every payout detail
+    // (merchant bank, account, amount, creator) is read from the authoritative
+    // split_requests row so a caller can never redirect funds.
+    const { split_request_id } = await req.json();
+
+    if (!split_request_id || typeof split_request_id !== 'string') {
+      return new Response(JSON.stringify({ success: false, error: 'split_request_id is required' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const { data: splitRow, error: splitErr } = await supabase
+      .from('split_requests')
+      .select('id, purpose, creator_user_id, merchant_account_name, merchant_bank_name, merchant_account_number')
+      .eq('id', split_request_id)
+      .maybeSingle();
+
+    if (splitErr || !splitRow) {
+      return new Response(JSON.stringify({ success: false, error: 'Split request not found' }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Amount is derived from the verified, completed participant transactions.
+    const { data: txRows } = await supabase
+      .from('split_transactions')
+      .select('amount')
+      .eq('split_request_id', split_request_id)
+      .eq('status', 'completed');
+
+    const merchant_amount = (txRows ?? []).reduce(
+      (sum: number, t: { amount: number | string }) => sum + Number(t.amount || 0),
+      0,
+    );
+
+    const merchant_name = splitRow.merchant_account_name as string;
+    const merchant_bank = splitRow.merchant_bank_name as string;
+    const merchant_account = splitRow.merchant_account_number as string;
+    const purpose = splitRow.purpose as string;
+    const creator_id = splitRow.creator_user_id as string;
+
+    if (!merchant_bank || !merchant_account || merchant_amount <= 0) {
+      return new Response(JSON.stringify({ success: false, error: 'Split has no valid merchant payout details' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
 
     console.log(`[SPLIT SETTLEMENT] Processing for split ${split_request_id}: ₦${merchant_amount} to ${merchant_name} (${merchant_bank} - ${merchant_account})`);
 
