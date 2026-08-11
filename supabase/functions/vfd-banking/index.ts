@@ -720,6 +720,9 @@ async function findClientIdentityConflict(
     if (owner) return { field: "bvn", ownerUserId: owner };
   }
 
+  return null;
+}
+
 // Cumulative completed debits in the trailing 24h for KYC tier enforcement.
 //
 // Aggregation is by the underlying BANK ACCOUNT (vfd_account_number), not by
@@ -761,8 +764,6 @@ async function sumDailyDebits(
   );
 }
 
-  return null;
-}
 
 // Create Tiered Account - /client/tiers/individual
 // Tier 1: BVN+DOB or NIN+DOB (₦30k daily limit)
