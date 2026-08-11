@@ -183,9 +183,12 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
   })();
 
   const firstName = (() => {
-    const raw = balance.fullName?.trim();
+    let raw = balance.fullName?.trim();
     if (!raw || raw === "—") return "there";
-    // Take first non-empty word, capitalize first letter
+    // VFD returns the NUBAN's registered name with the corporate prefix
+    // baked into `firstname` (e.g. "WeSave Ng Ltd-SAMIR ADEBAYO ALAMUKII").
+    // Strip anything before the last hyphen so we greet the human, not the org.
+    if (raw.includes("-")) raw = raw.slice(raw.lastIndexOf("-") + 1).trim();
     const first = raw.split(/\s+/)[0];
     if (!first) return "there";
     return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
