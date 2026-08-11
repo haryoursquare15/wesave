@@ -2240,11 +2240,29 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
   }).eq("id", split.id);
 
   if (!vfdOk) {
-    await sendNotification(split.creator_id, "SplitPay collected — bill delivery pending",
-      `Funds for "${split.title}" were collected but the bill could not be delivered to ${customerId}. Our team will retry.`,
+    // Same gap as the direct path: real cash was already collected into the
+    // pool. Reverse every confirmed collection leg at the bank first, then
+    // return each payer's share from split_holding to their wallet.
+    const reversal = await reverseSplitCollections(split.id, reference);
+    console.error(
+      `[settleSplitBill] ref=${reference} DELIVERY FAILED — bank reversals ` +
+      `${reversal.reversed}/${reversal.attempted} confirmed, failed=${reversal.failed}`,
+    );
+    const fullyReversed = reversal.failed === 0;
+    await db.from("vfd_sandbox_splits").update({
+      settlement_failure_reason:
+        (vfdData?.message || "VFD bill payment did not confirm") +
+        (fullyReversed ? " — collected funds refunded" : " — refund pending, retrying"),
+    }).eq("id", split.id);
+    await sendNotification(split.creator_id,
+      fullyReversed ? "Split bill failed — everyone refunded" : "SplitPay collected — bill delivery pending",
+      fullyReversed
+        ? `"${split.title}" could not be delivered to ${customerId}, so every contributor has been refunded in full.`
+        : `Funds for "${split.title}" were collected but the bill could not be delivered to ${customerId}. Refunds are being completed now.`,
       "split_completed");
     return { delivered: false, reference, biller_name: displayBillerName, customer_id: customerId, amount, message: vfdData?.message || "Bill delivery pending" };
   }
+
 
   // Fix A: reconcile VFD's real pool debit for the split bill too.
   scheduleBillPoolReconciliation(reference, amount, "split_bill_pay");
