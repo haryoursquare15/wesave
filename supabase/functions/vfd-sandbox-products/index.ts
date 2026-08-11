@@ -2240,11 +2240,29 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
   }).eq("id", split.id);
 
   if (!vfdOk) {
-    await sendNotification(split.creator_id, "SplitPay collected — bill delivery pending",
-      `Funds for "${split.title}" were collected but the bill could not be delivered to ${customerId}. Our team will retry.`,
+    // Same gap as the direct path: real cash was already collected into the
+    // pool. Reverse every confirmed collection leg at the bank first, then
+    // return each payer's share from split_holding to their wallet.
+    const reversal = await reverseSplitCollections(split.id, reference);
+    console.error(
+      `[settleSplitBill] ref=${reference} DELIVERY FAILED — bank reversals ` +
+      `${reversal.reversed}/${reversal.attempted} confirmed, failed=${reversal.failed}`,
+    );
+    const fullyReversed = reversal.failed === 0;
+    await db.from("vfd_sandbox_splits").update({
+      settlement_failure_reason:
+        (vfdData?.message || "VFD bill payment did not confirm") +
+        (fullyReversed ? " — collected funds refunded" : " — refund pending, retrying"),
+    }).eq("id", split.id);
+    await sendNotification(split.creator_id,
+      fullyReversed ? "Split bill failed — everyone refunded" : "SplitPay collected — bill delivery pending",
+      fullyReversed
+        ? `"${split.title}" could not be delivered to ${customerId}, so every contributor has been refunded in full.`
+        : `Funds for "${split.title}" were collected but the bill could not be delivered to ${customerId}. Refunds are being completed now.`,
       "split_completed");
     return { delivered: false, reference, biller_name: displayBillerName, customer_id: customerId, amount, message: vfdData?.message || "Bill delivery pending" };
   }
+
 
   // Fix A: reconcile VFD's real pool debit for the split bill too.
   scheduleBillPoolReconciliation(reference, amount, "split_bill_pay");
@@ -3856,6 +3874,371 @@ async function fundBillsSettlement(params: {
   return { confirmed: true, reference: fundingRef, evidence: verified.evidence, replayed: duplicate };
 }
 
+/**
+ * REAL reversal of a settlement funding leg: corporate pool -> customer NUBAN.
+ *
+ * Mandatory counterpart of fundBillsSettlement. When /pay fails AFTER the
+ * customer's real money has already moved into the pool, releasing only the
+ * internal ledger hold would leave real cash stranded in the pool while the
+ * books show the customer refunded. This moves the bank money back, using the
+ * same idempotent + independently-verified pattern:
+ *   - deterministic reference `${billRef}-FUND-REV`
+ *   - pre-claim event before any outbound call
+ *   - replay-safe: an already-confirmed reversal is never sent twice
+ *   - success is ONLY ever decided by /transactions?reference=, never by the
+ *     /transfer response status (98 duplicate / ambiguous codes included)
+ */
+async function reverseBillsSettlementFunding(params: {
+  reference: string;
+  amount: number;
+  userId: string | null;
+  origin: string;
+}): Promise<SettlementFunding & { nothingToReverse?: boolean }> {
+  const db = getSupabaseAdmin();
+  const fundingRef = `${params.reference}-FUND`;
+  let reversalRef = `${params.reference}-FUND-REV`;
+
+  if (!params.userId) {
+    return { confirmed: false, reference: reversalRef, code: "REVERSAL_PAYEE_UNKNOWN", error: "Refund recipient unknown" };
+  }
+
+  // 1) Was real money actually moved into the pool for this bill? If not,
+  //    there is nothing at the bank to reverse and the caller may safely
+  //    release the internal hold on its own.
+  const { data: fundEvents } = await db
+    .from("vfd_transaction_events")
+    .select("payload")
+    .eq("reference", fundingRef)
+    .eq("event_type", "bill_settlement_funding_result");
+  let funded = (fundEvents || []).some((e: any) => e?.payload?.verified === true);
+  if (!funded) funded = (await verifyVfdTransfer(fundingRef)).confirmed;
+  if (!funded) {
+    return { confirmed: true, reference: reversalRef, code: "NO_FUNDING_TO_REVERSE", nothingToReverse: true };
+  }
+
+  // 2) Replay guard — never send the same reversal twice. A reference VFD has
+  //    already rejected is burnt (a retry comes back "reference exists" without
+  //    moving money), so each new attempt gets the next -REVn suffix while every
+  //    earlier attempt is re-verified first.
+  const { data: priorAttempts } = await db
+    .from("vfd_transaction_events")
+    .select("reference")
+    .eq("event_type", "bill_settlement_reversal_claim")
+    .like("reference", `${params.reference}-FUND-REV%`);
+  const claimedRefs = Array.from(
+    new Set(((priorAttempts || []) as any[]).map((r) => String(r.reference))),
+  );
+  for (const ref of Array.from(new Set([reversalRef, ...claimedRefs]))) {
+    const prior = await verifyVfdTransfer(ref);
+    if (prior.confirmed) {
+      return { confirmed: true, reference: ref, evidence: prior.evidence, replayed: true };
+    }
+  }
+  if (claimedRefs.length > 0) {
+    reversalRef = `${params.reference}-FUND-REV${claimedRefs.length + 1}`;
+  }
+  if (claimedRefs.length >= 6) {
+    return {
+      confirmed: false,
+      reference: reversalRef,
+      code: "REVERSAL_ATTEMPTS_EXHAUSTED",
+      error: "Automatic refund attempts exhausted — manual settlement required",
+    };
+  }
+
+
+
+  const { data: client } = await db
+    .from("vfd_sandbox_clients")
+    .select("vfd_account_number, metadata, full_name")
+    .eq("user_id", params.userId)
+    .maybeSingle();
+  const customerNuban = (client?.vfd_account_number as string | null) || null;
+  if (!customerNuban || customerNuban === VFD_BILLS_SETTLEMENT_NUBAN) {
+    return { confirmed: false, reference: reversalRef, code: "REVERSAL_DEST_UNAVAILABLE", error: "Customer bank account unavailable for refund" };
+  }
+
+  // 3) Pre-claim before any outbound call.
+  await db.from("vfd_transaction_events").insert({
+    user_id: params.userId,
+    reference: reversalRef,
+    event_type: "bill_settlement_reversal_claim",
+    actor: "system",
+    payload: {
+      origin: params.origin, bill_reference: params.reference, amount: params.amount,
+      from: VFD_BILLS_SETTLEMENT_NUBAN, to: customerNuban, claimed_at: new Date().toISOString(),
+    },
+  }).then(undefined, (e: unknown) => console.error("[bills][reverse] pre-claim persist failed", e));
+
+  // 4) Identities: pool is the SENDER now, customer the beneficiary.
+  const firstNonEmpty = (...vals: unknown[]): string => {
+    for (const v of vals) {
+      const s = v === undefined || v === null ? "" : String(v).trim();
+      if (s) return s;
+    }
+    return "";
+  };
+
+  let { data: poolEnq, status: poolStatus } = await walletRequest(
+    "/account/enquiry", "GET", undefined, { accountNumber: VFD_BILLS_SETTLEMENT_NUBAN },
+  );
+  if (poolStatus !== 200 || poolEnq?.status !== "00") {
+    const self = await walletRequest("/account/enquiry", "GET", undefined, {});
+    const selfEnv = (self.data?.data as Record<string, unknown>) || {};
+    const selfAcct = (selfEnv?.account as Record<string, unknown>) || selfEnv;
+    const selfNuban = String(selfEnv?.accountNo ?? selfAcct?.accountNo ?? "");
+    if (self.status === 200 && self.data?.status === "00" && (!selfNuban || selfNuban === VFD_BILLS_SETTLEMENT_NUBAN)) {
+      poolEnq = self.data; poolStatus = self.status;
+    }
+  }
+  if (poolStatus !== 200 || poolEnq?.status !== "00") {
+    return { confirmed: false, reference: reversalRef, code: "REVERSAL_SOURCE_ENQUIRY_FAILED", error: "Settlement account unreachable for refund", evidence: poolEnq };
+  }
+
+  const { data: custEnq, status: custStatus } = await walletRequest(
+    "/account/enquiry", "GET", undefined, { accountNumber: customerNuban },
+  );
+  if (custStatus !== 200 || custEnq?.status !== "00") {
+    return { confirmed: false, reference: reversalRef, code: "REVERSAL_DEST_ENQUIRY_FAILED", error: "Customer account unreachable for refund", evidence: custEnq };
+  }
+
+  const pEnv = (poolEnq?.data as Record<string, unknown>) || {};
+  const pAcct = (pEnv?.account as Record<string, unknown>) || pEnv;
+  const cEnv = (custEnq?.data as Record<string, unknown>) || {};
+  const cAcct = (cEnv?.account as Record<string, unknown>) || cEnv;
+
+  const fromClient = firstNonEmpty(Deno.env.get("VFD_POOL_CLIENT_NAME"), pEnv?.client, pAcct?.client, pEnv?.name, pAcct?.name);
+  const fromClientId = firstNonEmpty(Deno.env.get("VFD_POOL_CLIENT_ID"), pEnv?.clientId, pAcct?.clientId);
+  const fromSavingsId = firstNonEmpty(Deno.env.get("VFD_POOL_SAVINGS_ID"), pAcct?.id, pEnv?.accountId, pEnv?.id);
+  const toSavingsId = firstNonEmpty(cAcct?.id, cEnv?.accountId, cEnv?.id);
+  const toClientId = firstNonEmpty(cEnv?.clientId, cAcct?.clientId);
+  const toClient = firstNonEmpty(cEnv?.client, cAcct?.client, client?.full_name);
+  if (!fromClientId || !fromSavingsId || !toSavingsId || !toClientId) {
+    console.error(`[bills][reverse] identity incomplete ref=${reversalRef}`);
+    return { confirmed: false, reference: reversalRef, code: "REVERSAL_IDENTITY_MISSING", error: "Refund identities incomplete", evidence: { poolEnq, custEnq } };
+  }
+
+  const payload = {
+    fromAccount: VFD_BILLS_SETTLEMENT_NUBAN,
+    fromClientId,
+    fromClient,
+    fromSavingsId,
+    fromBvn: String(pEnv?.bvn ?? ""),
+    toAccount: customerNuban,
+    toBank: "999999",
+    toClient,
+    toClientId,
+    toSavingsId,
+    toSession: "",
+    toBvn: String(cEnv?.bvn ?? ""),
+    signature: await transferSignature(VFD_BILLS_SETTLEMENT_NUBAN, customerNuban),
+    amount: String(params.amount),
+    remark: `Bill refund ${params.reference}`.slice(0, 60),
+    transferType: "intra",
+    reference: reversalRef,
+    // NOTE: no uniqueSenderAccountId here. That field identifies the POOL
+    // SUB-ACCOUNT originating a transfer; the corporate pool itself is the
+    // sender on a refund, and VFD rejects the call ("Invalid
+    // uniqueSenderAccountId") when it is supplied.
+  };
+
+
+  console.log(`[bills][reverse][request] ${JSON.stringify(payload)}`);
+  const { data: transferResp } = await walletRequest("/transfer", "POST", payload);
+  const vfdStatus = String(transferResp?.status ?? "");
+  const vfdMessage = String(transferResp?.message ?? "");
+  const duplicate = vfdStatus === "98" || /reference exist/i.test(vfdMessage);
+
+  // Verification is the ONLY source of truth.
+  const verified = await verifyVfdTransfer(reversalRef);
+
+  await db.from("vfd_transaction_events").insert({
+    user_id: params.userId,
+    reference: reversalRef,
+    event_type: "bill_settlement_reversal_result",
+    actor: "system",
+    payload: {
+      origin: params.origin, bill_reference: params.reference,
+      from: VFD_BILLS_SETTLEMENT_NUBAN, to: customerNuban, amount: params.amount,
+      transfer_status: vfdStatus, transfer_message: vfdMessage, duplicate,
+      verified: verified.confirmed, transfer_response: transferResp, tsq: verified.evidence,
+    },
+  }).then(undefined, (e: unknown) => console.error("[bills][reverse] result persist failed", e));
+
+  if (!verified.confirmed) {
+    return {
+      confirmed: false, reference: reversalRef, code: "REVERSAL_UNCONFIRMED",
+      error: vfdMessage || "Refund transfer not confirmed",
+      evidence: { transfer: transferResp, tsq: verified.evidence },
+    };
+  }
+  return { confirmed: true, reference: reversalRef, evidence: verified.evidence, replayed: duplicate };
+}
+
+/**
+ * Single funnel for "the bill failed — give the customer their money back".
+ * Real bank reversal FIRST; the internal ledger hold is released ONLY once the
+ * reversal is confirmed (or there was no real funding leg to reverse). If the
+ * bank leg cannot be confirmed the hold deliberately stays in place and the
+ * reconciler sweep retries — books and bank can never diverge.
+ */
+async function refundBillFunding(params: {
+  reference: string;
+  amount: number;
+  userId: string | null;
+  origin: string;
+}): Promise<{ ok: boolean; reversal: SettlementFunding & { nothingToReverse?: boolean } }> {
+  const reversal = await reverseBillsSettlementFunding(params);
+  if (!reversal.confirmed) {
+    console.error(
+      `[bills][refund] ref=${params.reference} BANK REVERSAL NOT CONFIRMED code=${reversal.code} — ` +
+      `internal hold intentionally NOT released; reconciler will retry`,
+    );
+  }
+  return { ok: reversal.confirmed, reversal };
+}
+
+/**
+ * Split-bill parity for refundBillFunding.
+ *
+ * A split settlement can be pre-funded two ways: each participant's own real
+ * transfer into the pool (`splitpay-<split>-<user>-FUND` / cover variant), or a
+ * single creator-funded transfer (`<settlementRef>-FUND`). When /pay then fails,
+ * that real cash is stranded in the pool exactly like the direct path. Reverse
+ * every verified collection leg back to the NUBAN it came from, and only then
+ * release each payer's internal split_holding share back to their wallet.
+ */
+async function reverseSplitCollections(
+  splitId: string,
+  settlementReference: string,
+): Promise<{ attempted: number; reversed: number; failed: number; refs: string[] }> {
+  const db = getSupabaseAdmin();
+  const out = { attempted: 0, reversed: 0, failed: 0, refs: [] as string[] };
+
+  const { data: paid } = await db
+    .from("vfd_sandbox_split_participants")
+    .select("id, user_id")
+    .eq("split_id", splitId)
+    .eq("status", "paid");
+
+  const baseRefs = new Set<string>([settlementReference]);
+  for (const p of (paid || []) as Record<string, any>[]) {
+    baseRefs.add(`splitpay-${splitId}-${p.user_id}`);
+    baseRefs.add(`splitpay-cover-${splitId}-${p.id}`);
+  }
+
+  // Only legs VFD actually confirmed are reversible.
+  const { data: events } = await db
+    .from("vfd_transaction_events")
+    .select("reference, user_id, payload")
+    .eq("event_type", "bill_settlement_funding_result")
+    .in("reference", Array.from(baseRefs).map((r) => `${r}-FUND`));
+
+  for (const e of (events || []) as Record<string, any>[]) {
+    if (e?.payload?.verified !== true) continue;
+    const base = String(e.reference).replace(/-FUND$/, "");
+    const payer = (e.user_id as string) || null;
+    const amount = Number(e.payload?.amount || 0);
+    if (!payer || !(amount > 0)) continue;
+    out.attempted++;
+    const refund = await refundBillFunding({
+      reference: base, amount, userId: payer, origin: "split_bill_reversal",
+    });
+    if (!refund.ok) { out.failed++; continue; }
+    out.reversed++;
+    out.refs.push(refund.reversal.reference);
+    // Bank leg confirmed → now make the books match by returning this payer's
+    // share from split_holding to their wallet.
+    const { error: refErr } = await db.rpc("vestara_split_refund", {
+      _user_id: payer,
+      _split_id: splitId,
+      _amount: amount,
+      _reference: `${base}-SPLIT-REFUND`,
+      _metadata: {
+        reason: "split_bill_delivery_failed",
+        bank_reversal_reference: refund.reversal.reference,
+        settlement_reference: settlementReference,
+      },
+    });
+    if (refErr) console.error(`[settleSplitBill] ledger refund failed base=${base}`, refErr);
+    await sendNotification(
+      payer,
+      "Split bill failed — refunded",
+      `The biller could not complete this split bill, so ₦${amount.toLocaleString()} has been returned to your account. Ref: ${base}`,
+      "split_completed",
+    );
+  }
+  return out;
+}
+
+
+
+/**
+ * Durable catch-up sweep: any bill that ended failed/refunded but whose REAL
+ * funding leg (customer NUBAN -> pool) was verified and never reversed still
+ * has the customer's cash sitting in the corporate pool. Every reconciler run
+ * retries the real reversal and, once confirmed, releases any hold that is
+ * still outstanding. Idempotent: confirmed reversals are skipped.
+ */
+async function reconcileOutstandingBillFundingReversals(limit = 50): Promise<{
+  scanned: number; reversed: number; already_ok: number; failed: number;
+}> {
+  const db = getSupabaseAdmin();
+  const result = { scanned: 0, reversed: 0, already_ok: 0, failed: 0 };
+  const { data: rows } = await db
+    .from("vfd_sandbox_bill_receipts")
+    .select("id, reference, user_id, amount, status, hold_state, biller_name, customer_id")
+    .in("status", ["failed", "refunded"])
+    .order("paid_at", { ascending: false })
+    .limit(limit);
+
+  const candidates = (rows || []) as Record<string, any>[];
+  if (candidates.length === 0) return result;
+
+  // Bulk-skip anything already reversed.
+  const revRefs = candidates.map((r) => `${r.reference}-FUND-REV`);
+  const { data: revEvents } = await db
+    .from("vfd_transaction_events")
+    .select("reference, payload")
+    .eq("event_type", "bill_settlement_reversal_result")
+    .in("reference", revRefs);
+  const done = new Set(
+    (revEvents || []).filter((e: any) => e?.payload?.verified === true).map((e: any) => e.reference as string),
+  );
+
+  for (const r of candidates) {
+    if (done.has(`${r.reference}-FUND-REV`)) { result.already_ok++; continue; }
+    result.scanned++;
+    const refund = await refundBillFunding({
+      reference: r.reference, amount: Number(r.amount), userId: r.user_id, origin: "bills_reversal_sweep",
+    });
+    if (!refund.ok) { result.failed++; continue; }
+    if (refund.reversal.nothingToReverse) { result.already_ok++; continue; }
+
+    result.reversed++;
+    if (r.hold_state === "held") {
+      await db.rpc("vestara_bill_release", {
+        _reference: r.reference,
+        _metadata: {
+          reason: "bank_reversal_confirmed",
+          bank_reversal_reference: refund.reversal.reference,
+        },
+      });
+      await db.from("vfd_sandbox_bill_receipts")
+        .update({ hold_state: "refunded", refunded_at: new Date().toISOString() })
+        .eq("id", r.id);
+    }
+    await sendNotification(
+      r.user_id,
+      "Bill refund returned to your account",
+      `₦${Number(r.amount).toLocaleString()} for the failed ${r.biller_name || "bill"} payment (${r.customer_id || ""}) has been returned to your bank account. Ref: ${r.reference}`,
+      "bill_payment",
+    );
+  }
+  return result;
+}
+
+
 async function safeJson(resp: Response): Promise<Record<string, unknown>> {
   try {
     const raw = await resp.text();
@@ -4878,13 +5261,28 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
     `amount=${numAmount} msisdn_sent=${resolvedPhone ? "yes" : "no"} http=${resp.status} ` +
     `status=${String(effStatus ?? "")} outcome=${payOutcome} message=${String(data?.message ?? "").slice(0, 200)}`,
   );
-  // The wallet hold was placed before /pay — release it so the customer is
-  // made whole on a declined purchase.
-  const { error: relErr } = await dbHold.rpc("vestara_bill_release", {
-    _reference: reference,
-    _metadata: { reason: "biller_declined", biller_id: billerId, customer_id: customerId },
+  // The customer's REAL money already moved into the pool (funding leg) and an
+  // internal hold was placed. On a decline both must be undone — bank first.
+  // The internal hold is released ONLY after the real pool -> customer reversal
+  // is verified, so a failed bill can never leave cash in the pool while the
+  // books show the customer refunded.
+  const bankRefund = await refundBillFunding({
+    reference, amount: numAmount, userId, origin: "bills_pay_decline",
   });
-  if (relErr) console.error("[bills] vestara_bill_release failed after decline:", relErr);
+  let declineHoldState: string = "held";
+  if (bankRefund.ok) {
+    const { error: relErr } = await dbHold.rpc("vestara_bill_release", {
+      _reference: reference,
+      _metadata: {
+        reason: "biller_declined", biller_id: billerId, customer_id: customerId,
+        bank_reversal_reference: bankRefund.reversal.reference,
+        bank_reversal: bankRefund.reversal.nothingToReverse ? "not_required" : "confirmed",
+      },
+    });
+    if (relErr) console.error("[bills] vestara_bill_release failed after decline:", relErr);
+    else declineHoldState = "released";
+  }
+
 
   // Persist a failed receipt so every /pay attempt — including declines — has a
   // durable record of the exact request and VFD's raw response.
@@ -4903,7 +5301,7 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
       convenience_fee: convenienceFee,
       status: "failed",
       delivery_status: "failed",
-      hold_state: "released",
+      hold_state: declineHoldState === "released" ? "released" : "held",
       held_at: new Date().toISOString(),
       raw_response: {
         ...(data || {}),
@@ -5290,17 +5688,33 @@ async function handleReconcilePendingBills(userId: string, body: Record<string, 
   // customer is never left hanging on money the biller never delivered.
   const STALE_PENDING_MINUTES = 45;
 
-  // Releases the hold back to the wallet. Falls back to a plain deposit for
-  // legacy receipts that were debited straight to settlement (pre hold-and-settle).
+  // Real bank reversal FIRST (pool -> customer NUBAN), then the internal hold.
+  // Falls back to a plain deposit for legacy receipts that were debited straight
+  // to settlement (pre hold-and-settle).
   const refundReceipt = async (r: Record<string, any>, owner: string, reason: string, statusResp: unknown) => {
     const refundRef = `${r.reference}-REFUND`;
+    const bankRefund = await refundBillFunding({
+      reference: r.reference, amount: Number(r.amount), userId: owner, origin: "bills_reconciler",
+    });
+    if (!bankRefund.ok) {
+      console.error(
+        `[bills][reconcile] ref=${r.reference} bank reversal unconfirmed (${bankRefund.reversal.code}) — ` +
+        `hold left in place, will retry next sweep`,
+      );
+      return false;
+    }
     let ok = false;
     const { data: rel, error: relErr } = await db.rpc("vestara_bill_release", {
       _reference: r.reference,
-      _metadata: { reason, vfd_status: reason },
+      _metadata: {
+        reason, vfd_status: reason,
+        bank_reversal_reference: bankRefund.reversal.reference,
+        bank_reversal: bankRefund.reversal.nothingToReverse ? "not_required" : "confirmed",
+      },
     });
     const relResult = rel as { success?: boolean; error?: string } | null;
     ok = !relErr && !!relResult?.success;
+
     if (!ok) {
       const { data: dep, error: depErr } = await db.rpc("vestara_deposit", {
         _user_id: owner,
@@ -5424,6 +5838,17 @@ async function handleReconcilePendingBills(userId: string, body: Record<string, 
   } catch (e) {
     console.error("[bills][recon] sweep failed", e instanceof Error ? e.message : String(e));
   }
+
+  // Durable catch-up: failed bills whose real funding leg was never reversed
+  // (customer cash stranded in the corporate pool) are refunded at the bank.
+  try {
+    const revRecon = await reconcileOutstandingBillFundingReversals(isSystem ? 50 : 20);
+    (result as Record<string, unknown>).funding_reversals = revRecon;
+  } catch (e) {
+    console.error("[bills][recon] reversal sweep failed", e instanceof Error ? e.message : String(e));
+  }
+
+
 
   return jsonResponse({ data: result });
 
@@ -7765,6 +8190,13 @@ Deno.serve(async (req) => {
     if (action === "recover_stuck_split_settlements" && await assertCronToken(req, "bills_reconciler")) {
       return await handleRecoverStuckSplitSettlements();
     }
+    // Ops-only: force the bank-level reversal sweep for failed bills whose real
+    // funding leg is still sitting in the corporate pool.
+    if (action === "reverse_stranded_bill_funding" && await assertCronToken(req, "bills_reconciler")) {
+      const limit = Math.min(Number(body.limit ?? 50) || 50, 200);
+      return jsonResponse({ data: await reconcileOutstandingBillFundingReversals(limit) });
+    }
+
     if (action === "sweep_split_fee_cron" && assertCronCaller(req)) {
       return await handleAdminSweepSplitFee("system", body);
     }
