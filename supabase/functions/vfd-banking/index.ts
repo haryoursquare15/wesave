@@ -720,6 +720,47 @@ async function findClientIdentityConflict(
     if (owner) return { field: "bvn", ownerUserId: owner };
   }
 
+// Cumulative completed debits in the trailing 24h for KYC tier enforcement.
+//
+// Aggregation is by the underlying BANK ACCOUNT (vfd_account_number), not by
+// user_id. If two Vestara identities ever end up bound to one NUBAN, a
+// user_id-scoped counter would give each of them a full independent daily
+// allowance against the same real money. Rows are matched on the NUBAN OR the
+// caller's user_id, so legacy rows written before vfd_account_number was
+// populated still count.
+async function sumDailyDebits(
+  supabaseAdmin: ReturnType<typeof getSupabaseAdmin>,
+  userId: string,
+  nuban: string | null,
+  transactionTypes: string[],
+): Promise<number> {
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+  let query = supabaseAdmin
+    .from("vfd_sandbox_transactions")
+    .select("amount")
+    .in("transaction_type", transactionTypes)
+    .eq("status", "completed")
+    .gte("created_at", since);
+
+  query = nuban
+    ? query.or(`vfd_account_number.eq.${nuban},user_id.eq.${userId}`)
+    : query.eq("user_id", userId);
+
+  const { data, error } = await query;
+  if (error) {
+    // Fail closed on the counter: treat an unreadable history as "cap used"
+    // rather than silently granting a full allowance.
+    console.error("[VFD tier limit] daily spend query failed:", error.message);
+    return Number.POSITIVE_INFINITY;
+  }
+
+  return (data ?? []).reduce(
+    (s, r) => s + Number((r as { amount?: number }).amount || 0),
+    0,
+  );
+}
+
   return null;
 }
 
