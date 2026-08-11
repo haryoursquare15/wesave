@@ -5501,17 +5501,33 @@ async function handleReconcilePendingBills(userId: string, body: Record<string, 
   // customer is never left hanging on money the biller never delivered.
   const STALE_PENDING_MINUTES = 45;
 
-  // Releases the hold back to the wallet. Falls back to a plain deposit for
-  // legacy receipts that were debited straight to settlement (pre hold-and-settle).
+  // Real bank reversal FIRST (pool -> customer NUBAN), then the internal hold.
+  // Falls back to a plain deposit for legacy receipts that were debited straight
+  // to settlement (pre hold-and-settle).
   const refundReceipt = async (r: Record<string, any>, owner: string, reason: string, statusResp: unknown) => {
     const refundRef = `${r.reference}-REFUND`;
+    const bankRefund = await refundBillFunding({
+      reference: r.reference, amount: Number(r.amount), userId: owner, origin: "bills_reconciler",
+    });
+    if (!bankRefund.ok) {
+      console.error(
+        `[bills][reconcile] ref=${r.reference} bank reversal unconfirmed (${bankRefund.reversal.code}) — ` +
+        `hold left in place, will retry next sweep`,
+      );
+      return false;
+    }
     let ok = false;
     const { data: rel, error: relErr } = await db.rpc("vestara_bill_release", {
       _reference: r.reference,
-      _metadata: { reason, vfd_status: reason },
+      _metadata: {
+        reason, vfd_status: reason,
+        bank_reversal_reference: bankRefund.reversal.reference,
+        bank_reversal: bankRefund.reversal.nothingToReverse ? "not_required" : "confirmed",
+      },
     });
     const relResult = rel as { success?: boolean; error?: string } | null;
     ok = !relErr && !!relResult?.success;
+
     if (!ok) {
       const { data: dep, error: depErr } = await db.rpc("vestara_deposit", {
         _user_id: owner,
