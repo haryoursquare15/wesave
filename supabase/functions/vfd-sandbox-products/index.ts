@@ -5716,6 +5716,17 @@ async function handleReconcilePendingBills(userId: string, body: Record<string, 
     console.error("[bills][recon] sweep failed", e instanceof Error ? e.message : String(e));
   }
 
+  // Durable catch-up: failed bills whose real funding leg was never reversed
+  // (customer cash stranded in the corporate pool) are refunded at the bank.
+  try {
+    const revRecon = await reconcileOutstandingBillFundingReversals(isSystem ? 50 : 20);
+    (result as Record<string, unknown>).funding_reversals = revRecon;
+  } catch (e) {
+    console.error("[bills][recon] reversal sweep failed", e instanceof Error ? e.message : String(e));
+  }
+
+
+
   return jsonResponse({ data: result });
 
 }
