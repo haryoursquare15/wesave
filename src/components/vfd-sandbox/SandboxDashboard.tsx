@@ -194,6 +194,14 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
     return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
   })();
 
+  // Interim cosmetic mask: VFD registers sub-accounts as "<Corporate>-<NAME>".
+  // Until VFD updates the merchant name, hide the legacy corporate prefix.
+  const displayAccountName = (() => {
+    const raw = balance.fullName?.trim();
+    if (!raw || raw === "—") return raw || "—";
+    return raw.includes("-") ? raw.slice(raw.lastIndexOf("-") + 1).trim() : raw;
+  })();
+
   return (
     <div className="space-y-6">
       {/* Greeting */}
@@ -308,7 +316,7 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
                     <Copy className="h-3 w-3" />
                   )}
                 </span>
-                <span className="truncate max-w-[220px] opacity-60">{balance.fullName} • VFD MFB</span>
+                <span className="truncate max-w-[220px] opacity-60">{displayAccountName} • VFD MFB</span>
               </button>
             );
           })()}
