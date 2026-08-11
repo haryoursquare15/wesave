@@ -140,20 +140,41 @@ serve(async (req) => {
       .select()
       .single();
 
-    // Admin notification on discrepancy or error
+    // Admin notification on discrepancy or error.
+    // Recipients are resolved from the super_admin role (never a hardcoded
+    // user_id). Alerts are throttled: if the same admin already has an
+    // unread alert of this kind from the last 12h, skip re-notifying —
+    // the reconciler runs hourly and would otherwise spam the inbox.
     if (status !== "matched") {
+      const alertTitle =
+        status === "discrepancy" ? "⚠️ Pool variance detected" : "Pool reconciler error";
+      const alertMessage =
+        status === "discrepancy"
+          ? `Corporate pool ₦${enquiry.balance?.toLocaleString()} vs ledger ₦${ledgerSum.toLocaleString()} — variance ₦${variance?.toLocaleString()}`
+          : notes;
+      const throttleSince = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
+
       const { data: admins } = await supabase
         .from("user_roles")
         .select("user_id")
         .eq("role", "super_admin");
+
       for (const a of admins ?? []) {
+        const { count: recent } = await supabase
+          .from("user_notifications")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", a.user_id)
+          .eq("notification_type", "reconciliation_alert")
+          .eq("title", alertTitle)
+          .eq("is_read", false)
+          .gte("created_at", throttleSince);
+
+        if ((recent ?? 0) > 0) continue;
+
         await supabase.from("user_notifications").insert({
           user_id: a.user_id,
-          title: status === "discrepancy" ? "⚠️ Pool variance detected" : "Pool reconciler error",
-          message:
-            status === "discrepancy"
-              ? `Corporate pool ₦${enquiry.balance?.toLocaleString()} vs ledger ₦${ledgerSum.toLocaleString()} — variance ₦${variance?.toLocaleString()}`
-              : notes,
+          title: alertTitle,
+          message: alertMessage,
           notification_type: "reconciliation_alert",
         });
       }
