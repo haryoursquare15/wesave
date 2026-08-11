@@ -5114,7 +5114,7 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
       convenience_fee: convenienceFee,
       status: "failed",
       delivery_status: "failed",
-      hold_state: "released",
+      hold_state: declineHoldState === "released" ? "released" : "held",
       held_at: new Date().toISOString(),
       raw_response: {
         ...(data || {}),
