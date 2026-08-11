@@ -308,7 +308,7 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
                     <Copy className="h-3 w-3" />
                   )}
                 </span>
-                <span className="truncate max-w-[220px] opacity-60">{balance.fullName} • VFD MFB</span>
+                <span className="truncate max-w-[220px] opacity-60">{displayAccountName} • VFD MFB</span>
               </button>
             );
           })()}
