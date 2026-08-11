@@ -4051,6 +4051,81 @@ async function refundBillFunding(params: {
 }
 
 /**
+ * Split-bill parity for refundBillFunding.
+ *
+ * A split settlement can be pre-funded two ways: each participant's own real
+ * transfer into the pool (`splitpay-<split>-<user>-FUND` / cover variant), or a
+ * single creator-funded transfer (`<settlementRef>-FUND`). When /pay then fails,
+ * that real cash is stranded in the pool exactly like the direct path. Reverse
+ * every verified collection leg back to the NUBAN it came from, and only then
+ * release each payer's internal split_holding share back to their wallet.
+ */
+async function reverseSplitCollections(
+  splitId: string,
+  settlementReference: string,
+): Promise<{ attempted: number; reversed: number; failed: number; refs: string[] }> {
+  const db = getSupabaseAdmin();
+  const out = { attempted: 0, reversed: 0, failed: 0, refs: [] as string[] };
+
+  const { data: paid } = await db
+    .from("vfd_sandbox_split_participants")
+    .select("id, user_id")
+    .eq("split_id", splitId)
+    .eq("status", "paid");
+
+  const baseRefs = new Set<string>([settlementReference]);
+  for (const p of (paid || []) as Record<string, any>[]) {
+    baseRefs.add(`splitpay-${splitId}-${p.user_id}`);
+    baseRefs.add(`splitpay-cover-${splitId}-${p.id}`);
+  }
+
+  // Only legs VFD actually confirmed are reversible.
+  const { data: events } = await db
+    .from("vfd_transaction_events")
+    .select("reference, user_id, payload")
+    .eq("event_type", "bill_settlement_funding_result")
+    .in("reference", Array.from(baseRefs).map((r) => `${r}-FUND`));
+
+  for (const e of (events || []) as Record<string, any>[]) {
+    if (e?.payload?.verified !== true) continue;
+    const base = String(e.reference).replace(/-FUND$/, "");
+    const payer = (e.user_id as string) || null;
+    const amount = Number(e.payload?.amount || 0);
+    if (!payer || !(amount > 0)) continue;
+    out.attempted++;
+    const refund = await refundBillFunding({
+      reference: base, amount, userId: payer, origin: "split_bill_reversal",
+    });
+    if (!refund.ok) { out.failed++; continue; }
+    out.reversed++;
+    out.refs.push(refund.reversal.reference);
+    // Bank leg confirmed → now make the books match by returning this payer's
+    // share from split_holding to their wallet.
+    const { error: refErr } = await db.rpc("vestara_split_refund", {
+      _user_id: payer,
+      _split_id: splitId,
+      _amount: amount,
+      _reference: `${base}-SPLIT-REFUND`,
+      _metadata: {
+        reason: "split_bill_delivery_failed",
+        bank_reversal_reference: refund.reversal.reference,
+        settlement_reference: settlementReference,
+      },
+    });
+    if (refErr) console.error(`[settleSplitBill] ledger refund failed base=${base}`, refErr);
+    await sendNotification(
+      payer,
+      "Split bill failed — refunded",
+      `The biller could not complete this split bill, so ₦${amount.toLocaleString()} has been returned to your account. Ref: ${base}`,
+      "split_completed",
+    );
+  }
+  return out;
+}
+
+
+
+/**
  * Durable catch-up sweep: any bill that ended failed/refunded but whose REAL
  * funding leg (customer NUBAN -> pool) was verified and never reversed still
  * has the customer's cash sitting in the corporate pool. Every reconciler run
