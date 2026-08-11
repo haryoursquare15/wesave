@@ -116,11 +116,11 @@ const productBanners = [
 
 /* ─── Product Grid Items ─── */
 const productGrid = [
-  { key: "lock", label: "Active Savings", icon: Lock, color: "bg-emerald-500/10 text-emerald-600", desc: "All investments" },
+  { key: "lock", label: "Active Savings", icon: Lock, color: "bg-emerald-500/10 text-emerald-600", desc: "Coming soon", comingSoon: true },
   { key: "target", label: "Target Save", icon: Target, color: "bg-blue-500/10 text-blue-600", desc: "Goal savings" },
-  { key: "ajo", label: "Ajo Groups", icon: Users, color: "bg-orange-500/10 text-orange-600", desc: "Group savings" },
+  { key: "ajo", label: "Ajo Groups", icon: Users, color: "bg-orange-500/10 text-orange-600", desc: "Coming soon", comingSoon: true },
   { key: "association", label: "Associations", icon: Building2, color: "bg-indigo-500/10 text-indigo-600", desc: "Coming soon", comingSoon: true },
-  { key: "goal", label: "Goal Fund", icon: Heart, color: "bg-rose-500/10 text-rose-600", desc: "Crowdfund" },
+  { key: "goal", label: "Goal Fund", icon: Heart, color: "bg-rose-500/10 text-rose-600", desc: "Coming soon", comingSoon: true },
   { key: "split", label: "Split Bills", icon: Receipt, color: "bg-violet-500/10 text-violet-600", desc: "Share costs" },
   { key: "bills", label: "Pay Bills", icon: CreditCard, color: "bg-cyan-500/10 text-cyan-600", desc: "Airtime & more" },
   { key: "card", label: "Virtual Card", icon: CreditCard, color: "bg-slate-500/10 text-slate-600", desc: "Coming soon", comingSoon: true },
@@ -401,22 +401,14 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
       >
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-bold text-foreground">Lock Funds & Earn</h3>
-          <div className="flex gap-1">
-            {productBanners.map((_, i) => (
-              <button
-                key={i}
-                onClick={() => setActiveBanner(i)}
-                className={`h-1.5 rounded-full transition-all duration-300 ${
-                  i === activeBanner ? "w-5 bg-primary" : "w-1.5 bg-border"
-                }`}
-              />
-            ))}
-          </div>
+          <span className="text-[10px] font-semibold uppercase tracking-wide bg-muted text-muted-foreground px-2 py-0.5 rounded-full">
+            Coming soon
+          </span>
         </div>
 
         <div
           ref={bannerRef}
-          className="flex gap-3 overflow-x-auto snap-x snap-mandatory scrollbar-hide pb-1"
+          className="flex gap-3 overflow-x-auto snap-x snap-mandatory scrollbar-hide pb-1 opacity-60"
           style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
           onScroll={(e) => {
             const el = e.currentTarget;
@@ -428,11 +420,10 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
           }}
         >
           {productBanners.map((banner) => (
-            <motion.div
+            <div
               key={banner.key}
-              whileTap={{ scale: 0.97 }}
-              onClick={() => onNavigate(banner.routeKey)}
-              className={`flex-none w-[80%] min-w-[260px] snap-center rounded-2xl bg-gradient-to-br ${banner.gradient} p-5 cursor-pointer relative overflow-hidden`}
+              aria-disabled
+              className={`flex-none w-[80%] min-w-[260px] snap-center rounded-2xl bg-gradient-to-br ${banner.gradient} p-5 cursor-not-allowed relative overflow-hidden grayscale`}
             >
               <div className={`absolute top-3 right-3 w-16 h-16 rounded-2xl ${banner.accent} flex items-center justify-center`}>
                 <banner.icon className="h-8 w-8 text-white/40" />
@@ -441,12 +432,13 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
                 <h4 className="text-base font-bold text-white mb-1">{banner.title}</h4>
                 <p className="text-xs text-white/70 mb-4 max-w-[75%] leading-relaxed">{banner.subtitle}</p>
                 <span className="inline-block text-xs font-semibold text-white bg-white/20 px-3 py-1.5 rounded-full backdrop-blur-sm">
-                  {banner.cta} →
+                  Coming soon
                 </span>
               </div>
-            </motion.div>
+            </div>
           ))}
         </div>
+
       </motion.div>
 
       {/* ═══ PRODUCT GRID ═══ */}
