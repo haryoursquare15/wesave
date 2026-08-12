@@ -3721,7 +3721,67 @@ async function handleDeleteTransferBeneficiary(userId: string, body: Record<stri
 // This is intentionally a BANK-LEVEL move only — Vestara's internal ledger
 // already reflects the customer's balance state (pending → locked_savings via
 // the RPC). We do NOT re-debit the customer's Vestara wallet here.
+// Resolve a NUBAN's transfer identity (savings id, client id, name, bvn).
+//
+// IMPORTANT: `/account/enquiry?accountNumber=` is scoped to accounts that sit
+// under OUR wallet credentials' client. Vestara's four product sub-accounts
+// (Vault, Lock Max, Upfront Yield, Goal Savings) are separate VFD clients, so
+// that endpoint returns "01 Account Not Found" for them even though they are
+// live and active — the corporate pool itself behaves the same way and only
+// resolves via the credential-scoped self enquiry. The intra-bank name enquiry
+// (`/transfer/recipient`) resolves ANY VFD account and returns the same fields
+// the /transfer payload needs, so it is the correct lookup for beneficiaries.
+async function resolveVfdAccount(nuban: string): Promise<{
+  ok: boolean;
+  savingsId: string;
+  clientId: string;
+  clientName: string;
+  bvn: string;
+  raw: unknown;
+}> {
+  const empty = { savingsId: "", clientId: "", clientName: "", bvn: "" };
+
+  const { data: rec, status: recStatus } = await vfdRequest(
+    "/transfer/recipient", "GET", undefined,
+    { accountNo: nuban, bank: "999999", transfer_type: "intra" },
+  );
+  const recEnv = rec as Record<string, unknown> | null;
+  if (recStatus === 200 && recEnv?.status === "00") {
+    const d = (recEnv.data as Record<string, unknown>) || {};
+    const acct = (d.account as Record<string, unknown>) || {};
+    return {
+      ok: true,
+      savingsId: acct?.id?.toString?.() || "",
+      clientId: d?.clientId?.toString?.() || "",
+      clientName: d?.name?.toString?.() || "",
+      bvn: d?.bvn?.toString?.() || "",
+      raw: rec,
+    };
+  }
+
+  // Fallback: credential-scoped enquiry (works for our own wallet accounts).
+  const { data: enq, status: enqStatus } = await vfdRequest(
+    "/account/enquiry", "GET", undefined, { accountNumber: nuban },
+  );
+  const enqEnv = enq as Record<string, unknown> | null;
+  if (enqStatus === 200 && enqEnv?.status === "00") {
+    const env = (enqEnv.data as Record<string, unknown>) || {};
+    const acct = (env.account as Record<string, unknown>) || env;
+    return {
+      ok: true,
+      savingsId: acct?.id?.toString?.() || env?.accountId?.toString?.() || "",
+      clientId: env?.clientId?.toString?.() || acct?.clientId?.toString?.() || "",
+      clientName: env?.client?.toString?.() || acct?.client?.toString?.() || "",
+      bvn: env?.bvn?.toString?.() || "",
+      raw: enq,
+    };
+  }
+
+  return { ok: false, ...empty, raw: { recipient: rec, enquiry: enq } };
+}
+
 async function handleAdminMoveSavingsToSubaccount(
+
   callerUserId: string,
   body: Record<string, unknown>
 ) {
@@ -3807,46 +3867,30 @@ async function handleAdminMoveSavingsToSubaccount(
     return jsonResponse({ error: "Invalid principal amount on savings row" }, 400);
   }
 
-  // 4) sender enquiry (customer sub-account)
-  const { data: senderEnquiry, status: senderStatus } = await vfdRequest(
-    "/account/enquiry",
-    "GET",
-    undefined,
-    { accountNumber: customerNuban }
-  );
-  if (senderStatus !== 200 || (senderEnquiry as Record<string, unknown>)?.status !== "00") {
+  // 4) sender resolution (customer sub-account)
+  const sender = await resolveVfdAccount(customerNuban);
+  if (!sender.ok || !sender.savingsId) {
     return jsonResponse({
       error: "Could not retrieve customer VFD account details.",
-      data: senderEnquiry,
+      data: sender.raw,
     }, 400);
   }
-  const senderEnv = (senderEnquiry as Record<string, unknown>)?.data as Record<string, unknown>;
-  const senderAcct = (senderEnv?.account as Record<string, unknown> | undefined) || senderEnv;
-  const senderSavingsId =
-    (senderAcct?.id?.toString?.() || senderEnv?.accountId?.toString?.() || "");
-  if (!senderSavingsId) {
-    return jsonResponse({ error: "VFD enquiry returned no id for customer sub-account.", data: senderEnquiry }, 400);
-  }
+  const senderSavingsId = sender.savingsId;
 
-  // 5) beneficiary enquiry (product sub-account)
-  const { data: benEnquiry, status: benStatus } = await vfdRequest(
-    "/account/enquiry",
-    "GET",
-    undefined,
-    { accountNumber: subAccountNuban }
-  );
-  if (benStatus !== 200 || (benEnquiry as Record<string, unknown>)?.status !== "00") {
+  // 5) beneficiary resolution (product sub-account — separate VFD client, so
+  // this must go through name enquiry, not the credential-scoped enquiry)
+  const beneficiary = await resolveVfdAccount(subAccountNuban);
+  if (!beneficiary.ok || !beneficiary.savingsId) {
     return jsonResponse({
       error: `Could not retrieve product sub-account (${subAccountNuban}) at VFD.`,
-      data: benEnquiry,
+      data: beneficiary.raw,
     }, 400);
   }
-  const benEnv = (benEnquiry as Record<string, unknown>)?.data as Record<string, unknown>;
-  const benAcct = (benEnv?.account as Record<string, unknown> | undefined) || benEnv;
-  const toSavingsId = benAcct?.id?.toString?.() || benEnv?.accountId?.toString?.() || "";
-  const toClientId = benEnv?.clientId?.toString?.() || benAcct?.clientId?.toString?.() || "";
-  const toClient = benEnv?.client?.toString?.() || benAcct?.client?.toString?.() || product?.name || "Product Pool";
-  const toBvn = benEnv?.bvn?.toString?.() || "";
+  const toSavingsId = beneficiary.savingsId;
+  const toClientId = beneficiary.clientId;
+  const toClient = beneficiary.clientName || product?.name || "Product Pool";
+  const toBvn = beneficiary.bvn;
+
 
   // 6) signature + /transfer intra
   const signature = await generateTransferSignature(customerNuban, subAccountNuban);
@@ -3865,10 +3909,11 @@ async function handleAdminMoveSavingsToSubaccount(
 
   const payload = {
     fromAccount: customerNuban,
-    fromClientId: senderEnv?.clientId?.toString?.() || "",
-    fromClient: senderEnv?.client?.toString?.() || "",
+    fromClientId: sender.clientId,
+    fromClient: sender.clientName,
     fromSavingsId: senderSavingsId,
-    fromBvn: senderEnv?.bvn?.toString?.() || "",
+    fromBvn: sender.bvn,
+
     toAccount: subAccountNuban,
     toBank: "999999",
     toClient,
@@ -4039,29 +4084,19 @@ async function handleReverseSavingsSubaccount(
     return jsonResponse({ error: "Invalid principal amount on savings row" }, 400);
   }
 
-  // sender = product sub-account
-  const { data: senderEnquiry, status: senderStatus } = await vfdRequest(
-    "/account/enquiry", "GET", undefined, { accountNumber: subAccountNuban },
-  );
-  if (senderStatus !== 200 || (senderEnquiry as Record<string, unknown>)?.status !== "00") {
-    return jsonResponse({ error: `Could not retrieve product sub-account (${subAccountNuban}) at VFD.`, data: senderEnquiry }, 400);
+  // sender = product sub-account (separate VFD client → name enquiry)
+  const revSender = await resolveVfdAccount(subAccountNuban);
+  if (!revSender.ok || !revSender.savingsId) {
+    return jsonResponse({ error: `Could not retrieve product sub-account (${subAccountNuban}) at VFD.`, data: revSender.raw }, 400);
   }
-  const sEnv = (senderEnquiry as Record<string, unknown>)?.data as Record<string, unknown>;
-  const sAcct = (sEnv?.account as Record<string, unknown> | undefined) || sEnv;
-  const fromSavingsId = sAcct?.id?.toString?.() || sEnv?.accountId?.toString?.() || "";
-  if (!fromSavingsId) {
-    return jsonResponse({ error: "VFD enquiry returned no id for the product sub-account.", data: senderEnquiry }, 400);
-  }
+  const fromSavingsId = revSender.savingsId;
 
   // beneficiary = customer
-  const { data: benEnquiry, status: benStatus } = await vfdRequest(
-    "/account/enquiry", "GET", undefined, { accountNumber: customerNuban },
-  );
-  if (benStatus !== 200 || (benEnquiry as Record<string, unknown>)?.status !== "00") {
-    return jsonResponse({ error: "Could not retrieve customer VFD account details.", data: benEnquiry }, 400);
+  const revBen = await resolveVfdAccount(customerNuban);
+  if (!revBen.ok || !revBen.savingsId) {
+    return jsonResponse({ error: "Could not retrieve customer VFD account details.", data: revBen.raw }, 400);
   }
-  const bEnv = (benEnquiry as Record<string, unknown>)?.data as Record<string, unknown>;
-  const bAcct = (bEnv?.account as Record<string, unknown> | undefined) || bEnv;
+
 
   const signature = await generateTransferSignature(subAccountNuban, customerNuban);
   const reference = `INVREV-${String(savings.product_code).toUpperCase()}-${savingsId.replace(/-/g, "").slice(0, 16)}`;
@@ -4071,17 +4106,18 @@ async function handleReverseSavingsSubaccount(
 
   const payload = {
     fromAccount: subAccountNuban,
-    fromClientId: sEnv?.clientId?.toString?.() || "",
-    fromClient: sEnv?.client?.toString?.() || "",
+    fromClientId: revSender.clientId,
+    fromClient: revSender.clientName,
     fromSavingsId,
-    fromBvn: sEnv?.bvn?.toString?.() || "",
+    fromBvn: revSender.bvn,
     toAccount: customerNuban,
     toBank: "999999",
-    toClient: bEnv?.client?.toString?.() || bAcct?.client?.toString?.() || "Customer",
-    toClientId: bEnv?.clientId?.toString?.() || bAcct?.clientId?.toString?.() || "",
-    toSavingsId: bAcct?.id?.toString?.() || bEnv?.accountId?.toString?.() || "",
+    toClient: revBen.clientName || "Customer",
+    toClientId: revBen.clientId,
+    toSavingsId: revBen.savingsId,
     toSession: "",
-    toBvn: bEnv?.bvn?.toString?.() || "",
+    toBvn: revBen.bvn,
+
     signature,
     amount: String(amount),
     remark: `${savings.product_code} investment reversal`,

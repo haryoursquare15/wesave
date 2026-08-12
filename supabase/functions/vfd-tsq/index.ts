@@ -126,6 +126,36 @@ Deno.serve(async (req) => {
     }
   }
 
+  // Ops probe: read-only intra-bank name enquiry (/transfer/recipient). Tells
+  // us whether a NUBAN exists at VFD at all, independent of whether it sits
+  // under our wallet credentials.
+  const recipient = url.searchParams.get("recipient") || "";
+  if (recipient) {
+    try {
+      const accessToken = await getAccessToken();
+      const target = new URL(`${WALLET_BASE}/transfer/recipient`);
+      target.searchParams.set("accountNo", recipient);
+      target.searchParams.set("bank", "999999");
+      target.searchParams.set("transfer_type", "intra");
+      const res = await vfdFetch(target.toString(), {
+        method: "GET",
+        headers: { "Content-Type": "application/json", AccessToken: accessToken },
+      });
+      const text = await res.text();
+      let parsed: unknown = text;
+      try { parsed = JSON.parse(text); } catch { /* keep raw */ }
+      return new Response(JSON.stringify({ vfd_mode: VFD_MODE, probe: "recipient", queried: recipient, http_status: res.status, response: parsed }, null, 2), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (err) {
+      return new Response(JSON.stringify({ error: String(err) }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }
+
+
+
   // Ops probe: post a raw payload straight to VFD /pay (no wallet movement,
   // no receipt) so we can compare our request against VFD's own sample.
   if (billPay) {
