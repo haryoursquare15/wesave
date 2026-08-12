@@ -3909,10 +3909,11 @@ async function handleAdminMoveSavingsToSubaccount(
 
   const payload = {
     fromAccount: customerNuban,
-    fromClientId: senderEnv?.clientId?.toString?.() || "",
-    fromClient: senderEnv?.client?.toString?.() || "",
+    fromClientId: sender.clientId,
+    fromClient: sender.clientName,
     fromSavingsId: senderSavingsId,
-    fromBvn: senderEnv?.bvn?.toString?.() || "",
+    fromBvn: sender.bvn,
+
     toAccount: subAccountNuban,
     toBank: "999999",
     toClient,
