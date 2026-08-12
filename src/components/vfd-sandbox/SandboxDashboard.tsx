@@ -300,7 +300,7 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-2">
               <Wallet className="h-4 w-4 opacity-70" />
-              <span className="text-xs font-medium opacity-70 tracking-wide uppercase">Available Balance</span>
+              <span className="text-xs font-medium opacity-70 tracking-wide uppercase">Total Balance</span>
             </div>
             <button
               onClick={() => setShowBalance(!showBalance)}
@@ -311,18 +311,27 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
             </button>
           </div>
 
-          {/* Main balance */}
+          {/* Primary figure — Total */}
           <AnimatePresence mode="wait">
             <motion.h2
               key={showBalance ? "shown" : "hidden"}
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -4 }}
-              className="text-[2rem] font-extrabold tracking-tight mb-2 leading-none"
+              className="text-[2.5rem] font-extrabold tracking-tight mb-1 leading-none"
             >
-              {showBalance ? <AnimatedNumber value={balance.availableBalance} /> : "₦ ••••••"}
+              {showBalance ? <AnimatedNumber value={balance.totalBalance} /> : "₦ ••••••"}
             </motion.h2>
           </AnimatePresence>
+
+          {/* Secondary detail — Available, Locked, Savings */}
+          <p className="text-[11px] opacity-70 mb-2 leading-snug">
+            Available{" "}
+            <span className="font-semibold opacity-100">
+              {showBalance ? `₦${balance.availableBalance.toLocaleString()}` : "••••"}
+            </span>
+          </p>
+
 
           {balance.noVfdAccount && (
             <p className="text-[11px] opacity-80 mb-3 leading-snug">
