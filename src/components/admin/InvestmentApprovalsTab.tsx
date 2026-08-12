@@ -233,6 +233,13 @@ export function InvestmentApprovalsTab() {
                     Approval is blocked until VFD's placement confirmation reference is entered.
                   </p>
                 )}
+                {s.sub_account_transferred_at && !s.sub_account_reversed_at && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Rejecting will first move the principal back from the product sub-account to the
+                    customer's account at the bank, then refund their wallet.
+                  </p>
+                )}
+
               </div>
             );
           })
