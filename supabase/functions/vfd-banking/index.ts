@@ -4084,29 +4084,19 @@ async function handleReverseSavingsSubaccount(
     return jsonResponse({ error: "Invalid principal amount on savings row" }, 400);
   }
 
-  // sender = product sub-account
-  const { data: senderEnquiry, status: senderStatus } = await vfdRequest(
-    "/account/enquiry", "GET", undefined, { accountNumber: subAccountNuban },
-  );
-  if (senderStatus !== 200 || (senderEnquiry as Record<string, unknown>)?.status !== "00") {
-    return jsonResponse({ error: `Could not retrieve product sub-account (${subAccountNuban}) at VFD.`, data: senderEnquiry }, 400);
+  // sender = product sub-account (separate VFD client → name enquiry)
+  const revSender = await resolveVfdAccount(subAccountNuban);
+  if (!revSender.ok || !revSender.savingsId) {
+    return jsonResponse({ error: `Could not retrieve product sub-account (${subAccountNuban}) at VFD.`, data: revSender.raw }, 400);
   }
-  const sEnv = (senderEnquiry as Record<string, unknown>)?.data as Record<string, unknown>;
-  const sAcct = (sEnv?.account as Record<string, unknown> | undefined) || sEnv;
-  const fromSavingsId = sAcct?.id?.toString?.() || sEnv?.accountId?.toString?.() || "";
-  if (!fromSavingsId) {
-    return jsonResponse({ error: "VFD enquiry returned no id for the product sub-account.", data: senderEnquiry }, 400);
-  }
+  const fromSavingsId = revSender.savingsId;
 
   // beneficiary = customer
-  const { data: benEnquiry, status: benStatus } = await vfdRequest(
-    "/account/enquiry", "GET", undefined, { accountNumber: customerNuban },
-  );
-  if (benStatus !== 200 || (benEnquiry as Record<string, unknown>)?.status !== "00") {
-    return jsonResponse({ error: "Could not retrieve customer VFD account details.", data: benEnquiry }, 400);
+  const revBen = await resolveVfdAccount(customerNuban);
+  if (!revBen.ok || !revBen.savingsId) {
+    return jsonResponse({ error: "Could not retrieve customer VFD account details.", data: revBen.raw }, 400);
   }
-  const bEnv = (benEnquiry as Record<string, unknown>)?.data as Record<string, unknown>;
-  const bAcct = (bEnv?.account as Record<string, unknown> | undefined) || bEnv;
+
 
   const signature = await generateTransferSignature(subAccountNuban, customerNuban);
   const reference = `INVREV-${String(savings.product_code).toUpperCase()}-${savingsId.replace(/-/g, "").slice(0, 16)}`;
