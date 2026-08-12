@@ -27,8 +27,10 @@ async function authorized(req: Request): Promise<boolean> {
   return !!data?.token && data.token === provided;
 }
 
+// Email clients frequently lack a glyph for "₦" and render it struck through,
+// so money in outbound email/notification copy uses the "NGN" ISO code instead.
 function money(n: number) {
-  return `₦${Number(n).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `NGN ${Number(n).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 async function alertAdmins(findings: Array<Record<string, unknown>>) {
