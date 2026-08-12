@@ -3963,7 +3963,8 @@ async function handleAdminMoveSavingsToSubaccount(
       sub_account_nuban: subAccountNuban,
       reference,
       moved_at: nowIso,
-      replayed: duplicateConfirmed,
+      replayed: duplicate,
+      tsq_confirmed: true,
       vfd: respData?.data ?? null,
     },
   });
