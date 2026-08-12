@@ -203,6 +203,7 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
   const [showBalance, setShowBalance] = useState(true);
   const [copied, setCopied] = useState(false);
   const [activeBanner, setActiveBanner] = useState(0);
+  const [openCategory, setOpenCategory] = useState<string | null>(null);
   const bannerRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
