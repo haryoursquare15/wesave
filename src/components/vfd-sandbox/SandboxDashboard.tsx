@@ -117,17 +117,76 @@ const productBanners = [
 /* ─── Product Grid Items ─── */
 const productGrid = [
   // Live products
-  { key: "bills", label: "Pay Bills", icon: CreditCard, color: "bg-cyan-500/10 text-cyan-600", desc: "Airtime & more" },
-  { key: "split", label: "Split Bills", icon: Receipt, color: "bg-violet-500/10 text-violet-600", desc: "Share costs" },
-  { key: "transfer", label: "Transfer", icon: Send, color: "bg-purple-500/10 text-purple-600", desc: "Send money" },
-  // Coming soon
-  { key: "lock", label: "Active Savings", icon: Lock, color: "bg-emerald-500/10 text-emerald-600", desc: "Coming soon", comingSoon: true },
-  { key: "target", label: "Target Save", icon: Target, color: "bg-blue-500/10 text-blue-600", desc: "Coming soon", comingSoon: true },
-  { key: "ajo", label: "Ajo Groups", icon: Users, color: "bg-orange-500/10 text-orange-600", desc: "Coming soon", comingSoon: true },
-  { key: "association", label: "Associations", icon: Building2, color: "bg-indigo-500/10 text-indigo-600", desc: "Coming soon", comingSoon: true },
-  { key: "goal", label: "Goal Fund", icon: Heart, color: "bg-rose-500/10 text-rose-600", desc: "Coming soon", comingSoon: true },
-  { key: "card", label: "Virtual Card", icon: CreditCard, color: "bg-slate-500/10 text-slate-600", desc: "Coming soon", comingSoon: true },
+/* ─── Services: grouped categories ───
+   Primary categories only at the top level. Lower-frequency destinations
+   (Associations, crowdfunding, Virtual Card) live one level deeper inside
+   their category. Products that are not live yet keep their disabled state. */
+type ServiceChild = {
+  key: string;
+  label: string;
+  icon: typeof CreditCard;
+  desc: string;
+  comingSoon?: boolean;
+};
+type ServiceCategory = {
+  key: string;
+  label: string;
+  icon: typeof CreditCard;
+  color: string;
+  desc: string;
+  comingSoon?: boolean;
+  navKey?: string;          // direct-action category (no children)
+  children?: ServiceChild[];
+};
+
+const serviceCategories: ServiceCategory[] = [
+  {
+    key: "bills-payments",
+    label: "Bills & Payments",
+    icon: CreditCard,
+    color: "bg-cyan-500/10 text-cyan-600",
+    desc: "Airtime, utilities, split",
+    children: [
+      { key: "bills", label: "Pay Bills", icon: CreditCard, desc: "Airtime, data & utilities" },
+      { key: "split", label: "Split Bills", icon: Receipt, desc: "Share costs with others" },
+      { key: "card", label: "Virtual Card", icon: CreditCard, desc: "Coming soon", comingSoon: true },
+    ],
+  },
+  {
+    key: "transfer",
+    label: "Transfer",
+    icon: Send,
+    color: "bg-purple-500/10 text-purple-600",
+    desc: "Send money",
+    navKey: "transfer",
+  },
+  {
+    key: "save-invest",
+    label: "Save & Invest",
+    icon: PiggyBank,
+    color: "bg-emerald-500/10 text-emerald-600",
+    desc: "Coming soon",
+    comingSoon: true,
+    children: [
+      { key: "lock", label: "Active Savings", icon: Lock, desc: "View all your holdings", comingSoon: true },
+      { key: "lock:goalsave", label: "Goal Save", icon: Target, desc: "Installment savings", comingSoon: true },
+      { key: "goal", label: "Crowdfunding", icon: Heart, desc: "Coming soon", comingSoon: true },
+    ],
+  },
+  {
+    key: "ajo-groups",
+    label: "Ajo Groups",
+    icon: Users,
+    color: "bg-orange-500/10 text-orange-600",
+    desc: "Coming soon",
+    comingSoon: true,
+    children: [
+      { key: "ajo", label: "My Ajo Groups", icon: Users, desc: "Rotating savings", comingSoon: true },
+      { key: "association", label: "Associations", icon: Building2, desc: "Coming soon", comingSoon: true },
+    ],
+  },
 ];
+
 
 /* ─── Transaction Icon Helper ─── */
 function getTxMeta(type: string) {
