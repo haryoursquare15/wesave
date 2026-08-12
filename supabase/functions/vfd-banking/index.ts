@@ -4139,18 +4139,27 @@ async function handleReverseSavingsSubaccount(
   // the correct (and credential-owned) source for the refund leg.
   if (/invalid source/i.test(msg)) {
     const poolNuban = Deno.env.get("VFD_CORPORATE_POOL_NUBAN") || "1047279595";
-    const poolSender = await resolveVfdAccount(poolNuban);
-    if (poolSender.ok && poolSender.savingsId) {
+    // The corporate pool is credential-owned. It must be resolved through the
+    // credential-scoped self enquiry: /transfer/recipient can return an ID that
+    // is valid for a beneficiary but invalid as uniqueSenderAccountId.
+    const { data: poolEnquiry, status: poolEnquiryStatus } = await vfdRequest(
+      "/account/enquiry", "GET", undefined, { accountNumber: poolNuban },
+    );
+    const poolEnv = poolEnquiry as Record<string, unknown> | null;
+    const poolData = (poolEnv?.data as Record<string, unknown>) || {};
+    const poolAccount = (poolData?.account as Record<string, unknown>) || poolData;
+    const poolSenderId = poolAccount?.id?.toString?.() || poolData?.accountId?.toString?.() || "";
+    if (poolEnquiryStatus === 200 && poolEnv?.status === "00" && poolSenderId) {
       const poolSignature = await generateTransferSignature(poolNuban, customerNuban);
       const poolPayload = {
         ...payload,
         fromAccount: poolNuban,
-        fromClientId: poolSender.clientId,
-        fromClient: poolSender.clientName,
-        fromSavingsId: poolSender.savingsId,
-        fromBvn: poolSender.bvn,
+        fromClientId: poolData?.clientId?.toString?.() || poolAccount?.clientId?.toString?.() || "",
+        fromClient: poolData?.client?.toString?.() || poolAccount?.client?.toString?.() || "",
+        fromSavingsId: poolSenderId,
+        fromBvn: poolData?.bvn?.toString?.() || "",
         signature: poolSignature,
-        uniqueSenderAccountId: poolSender.savingsId,
+        uniqueSenderAccountId: poolSenderId,
       };
       activePayload = poolPayload;
       console.log("[reverse_savings_subaccount] retrying from corporate pool", poolNuban);
@@ -4161,7 +4170,7 @@ async function handleReverseSavingsSubaccount(
       code = String(respData?.status ?? "");
       msg = String(respData?.message ?? "");
     } else {
-      console.error("[reverse_savings_subaccount] pool sender resolve failed", poolSender.raw);
+      console.error("[reverse_savings_subaccount] pool sender self-enquiry failed", poolEnquiry);
     }
   }
 
