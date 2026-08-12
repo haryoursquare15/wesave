@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Wallet, Lock, Users, Target, Heart, Receipt, Send,
   CreditCard, Eye, EyeOff, TrendingUp, Plus, ArrowDownLeft, ArrowUpRight,
-  Shield, ChevronRight, ChevronLeft, PiggyBank, Banknote,
+  Shield, ChevronRight, ChevronLeft, PiggyBank,
   Clock, Copy, Check, Building2, Vault as VaultIcon, Zap, Gift,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -114,20 +114,76 @@ const productBanners = [
   },
 ];
 
-/* ─── Product Grid Items ─── */
-const productGrid = [
-  // Live products
-  { key: "bills", label: "Pay Bills", icon: CreditCard, color: "bg-cyan-500/10 text-cyan-600", desc: "Airtime & more" },
-  { key: "split", label: "Split Bills", icon: Receipt, color: "bg-violet-500/10 text-violet-600", desc: "Share costs" },
-  { key: "transfer", label: "Transfer", icon: Send, color: "bg-purple-500/10 text-purple-600", desc: "Send money" },
-  // Coming soon
-  { key: "lock", label: "Active Savings", icon: Lock, color: "bg-emerald-500/10 text-emerald-600", desc: "Coming soon", comingSoon: true },
-  { key: "target", label: "Target Save", icon: Target, color: "bg-blue-500/10 text-blue-600", desc: "Coming soon", comingSoon: true },
-  { key: "ajo", label: "Ajo Groups", icon: Users, color: "bg-orange-500/10 text-orange-600", desc: "Coming soon", comingSoon: true },
-  { key: "association", label: "Associations", icon: Building2, color: "bg-indigo-500/10 text-indigo-600", desc: "Coming soon", comingSoon: true },
-  { key: "goal", label: "Goal Fund", icon: Heart, color: "bg-rose-500/10 text-rose-600", desc: "Coming soon", comingSoon: true },
-  { key: "card", label: "Virtual Card", icon: CreditCard, color: "bg-slate-500/10 text-slate-600", desc: "Coming soon", comingSoon: true },
+/* ─── Services: grouped categories ───
+   Primary categories only at the top level. Lower-frequency destinations
+   (Associations, crowdfunding, Virtual Card) live one level deeper inside
+   their category. Products that are not live yet keep their disabled state. */
+type ServiceChild = {
+  key: string;
+  label: string;
+  icon: typeof CreditCard;
+  desc: string;
+  comingSoon?: boolean;
+};
+type ServiceCategory = {
+  key: string;
+  label: string;
+  icon: typeof CreditCard;
+  color: string;
+  desc: string;
+  comingSoon?: boolean;
+  navKey?: string;          // direct-action category (no children)
+  children?: ServiceChild[];
+};
+
+const serviceCategories: ServiceCategory[] = [
+  {
+    key: "bills-payments",
+    label: "Bills & Payments",
+    icon: CreditCard,
+    color: "bg-cyan-500/10 text-cyan-600",
+    desc: "Airtime, utilities, split",
+    children: [
+      { key: "bills", label: "Pay Bills", icon: CreditCard, desc: "Airtime, data & utilities" },
+      { key: "split", label: "Split Bills", icon: Receipt, desc: "Share costs with others" },
+      { key: "card", label: "Virtual Card", icon: CreditCard, desc: "Coming soon", comingSoon: true },
+    ],
+  },
+  {
+    key: "transfer",
+    label: "Transfer",
+    icon: Send,
+    color: "bg-purple-500/10 text-purple-600",
+    desc: "Send money",
+    navKey: "transfer",
+  },
+  {
+    key: "save-invest",
+    label: "Save & Invest",
+    icon: PiggyBank,
+    color: "bg-emerald-500/10 text-emerald-600",
+    desc: "Coming soon",
+    comingSoon: true,
+    children: [
+      { key: "lock", label: "Active Savings", icon: Lock, desc: "View all your holdings", comingSoon: true },
+      { key: "lock:goalsave", label: "Goal Save", icon: Target, desc: "Installment savings", comingSoon: true },
+      { key: "goal", label: "Crowdfunding", icon: Heart, desc: "Coming soon", comingSoon: true },
+    ],
+  },
+  {
+    key: "ajo-groups",
+    label: "Ajo Groups",
+    icon: Users,
+    color: "bg-orange-500/10 text-orange-600",
+    desc: "Coming soon",
+    comingSoon: true,
+    children: [
+      { key: "ajo", label: "My Ajo Groups", icon: Users, desc: "Rotating savings", comingSoon: true },
+      { key: "association", label: "Associations", icon: Building2, desc: "Coming soon", comingSoon: true },
+    ],
+  },
 ];
+
 
 /* ─── Transaction Icon Helper ─── */
 function getTxMeta(type: string) {
@@ -147,6 +203,7 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
   const [showBalance, setShowBalance] = useState(true);
   const [copied, setCopied] = useState(false);
   const [activeBanner, setActiveBanner] = useState(0);
+  const [openCategory, setOpenCategory] = useState<string | null>(null);
   const bannerRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -243,7 +300,7 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-2">
               <Wallet className="h-4 w-4 opacity-70" />
-              <span className="text-xs font-medium opacity-70 tracking-wide uppercase">Available Balance</span>
+              <span className="text-xs font-medium opacity-70 tracking-wide uppercase">Total Balance</span>
             </div>
             <button
               onClick={() => setShowBalance(!showBalance)}
@@ -254,18 +311,27 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
             </button>
           </div>
 
-          {/* Main balance */}
+          {/* Primary figure — Total */}
           <AnimatePresence mode="wait">
             <motion.h2
               key={showBalance ? "shown" : "hidden"}
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -4 }}
-              className="text-[2rem] font-extrabold tracking-tight mb-2 leading-none"
+              className="text-[2.5rem] font-extrabold tracking-tight mb-1 leading-none"
             >
-              {showBalance ? <AnimatedNumber value={balance.availableBalance} /> : "₦ ••••••"}
+              {showBalance ? <AnimatedNumber value={balance.totalBalance} /> : "₦ ••••••"}
             </motion.h2>
           </AnimatePresence>
+
+          {/* Secondary detail — Available, Locked, Savings */}
+          <p className="text-[11px] opacity-70 mb-2 leading-snug">
+            Available{" "}
+            <span className="font-semibold opacity-100">
+              {showBalance ? `₦${balance.availableBalance.toLocaleString()}` : "••••"}
+            </span>
+          </p>
+
 
           {balance.noVfdAccount && (
             <p className="text-[11px] opacity-80 mb-3 leading-snug">
@@ -325,22 +391,18 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
 
 
 
-          {/* Sub-balances */}
-          <div className="grid grid-cols-3 gap-2">
+          {/* Secondary detail row — clearly subordinate to Total */}
+          <div className="flex items-center gap-4 border-t border-white/[0.12] pt-2.5">
             {[
-              { label: "Total", value: balance.totalBalance, icon: Banknote },
               { label: "Locked", value: balance.lockedBalance, icon: Lock },
               { label: "Savings", value: balance.savingsBalance, icon: PiggyBank },
             ].map((item) => (
-              <div
-                key={item.label}
-                className="bg-white/[0.08] backdrop-blur-sm rounded-xl px-2.5 py-2.5 text-center border border-white/[0.06]"
-              >
-                <item.icon className="h-3.5 w-3.5 mx-auto mb-1 opacity-50" />
-                <p className="text-[10px] opacity-60 mb-0.5">{item.label}</p>
-                <p className="text-xs font-bold">
+              <div key={item.label} className="flex items-center gap-1.5">
+                <item.icon className="h-3 w-3 opacity-40" />
+                <span className="text-[10px] opacity-55">{item.label}</span>
+                <span className="text-[11px] font-semibold opacity-90">
                   {showBalance ? `₦${item.value.toLocaleString()}` : "••••"}
-                </p>
+                </span>
               </div>
             ))}
           </div>
@@ -413,7 +475,12 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
         transition={{ delay: 0.2 }}
       >
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-bold text-foreground">Lock Funds & Earn</h3>
+          <div>
+            <h3 className="text-sm font-bold text-foreground">Start a new savings plan</h3>
+            <p className="text-[10px] text-muted-foreground mt-0.5">
+              Existing holdings live in Active Savings
+            </p>
+          </div>
           <span className="text-[10px] font-semibold uppercase tracking-wide bg-muted text-muted-foreground px-2 py-0.5 rounded-full">
             Coming soon
           </span>
@@ -454,44 +521,98 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
 
       </motion.div>
 
-      {/* ═══ PRODUCT GRID ═══ */}
+      {/* ═══ SERVICES (grouped categories) ═══ */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.25 }}
       >
         <h3 className="text-sm font-bold text-foreground mb-3">Services</h3>
-        <div className="grid grid-cols-3 gap-2.5">
-          {productGrid.map((product) => {
-            const disabled = !!(product as { comingSoon?: boolean }).comingSoon;
+        <div className="grid grid-cols-2 gap-2.5">
+          {serviceCategories.map((cat) => {
+            const dimmed = !!cat.comingSoon;
+            const isOpen = openCategory === cat.key;
             return (
               <motion.button
-                key={product.key}
-                whileTap={disabled ? undefined : { scale: 0.95 }}
-                onClick={() => { if (!disabled) onNavigate(product.key); }}
-                disabled={disabled}
-                aria-disabled={disabled}
-                className={`relative flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border border-border/60 transition-all ${
-                  disabled ? "opacity-60 cursor-not-allowed" : "hover:border-primary/30 hover:shadow-sm"
-                }`}
+                key={cat.key}
+                whileTap={{ scale: 0.97 }}
+                onClick={() => {
+                  if (cat.navKey) return onNavigate(cat.navKey);
+                  setOpenCategory(isOpen ? null : cat.key);
+                }}
+                aria-expanded={cat.children ? isOpen : undefined}
+                className={`relative flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border transition-all ${
+                  isOpen ? "border-primary/40 shadow-sm" : "border-border/60 hover:border-primary/30"
+                } ${dimmed ? "opacity-70" : ""}`}
               >
-                {disabled && (
+                {dimmed && (
                   <span className="absolute top-1 right-1 text-[8px] font-semibold uppercase tracking-wide bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">
                     Soon
                   </span>
                 )}
-                <div className={`w-11 h-11 rounded-xl ${product.color} flex items-center justify-center`}>
-                  <product.icon className="h-5 w-5" />
+                <div className={`w-11 h-11 rounded-xl ${cat.color} flex items-center justify-center`}>
+                  <cat.icon className="h-5 w-5" />
                 </div>
                 <div className="text-center">
-                  <p className="text-xs font-semibold text-foreground leading-tight">{product.label}</p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">{product.desc}</p>
+                  <p className="text-xs font-semibold text-foreground leading-tight">{cat.label}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">{cat.desc}</p>
                 </div>
+                {cat.children && (
+                  <ChevronRight
+                    className={`h-3 w-3 text-muted-foreground transition-transform ${isOpen ? "rotate-90" : ""}`}
+                  />
+                )}
               </motion.button>
             );
           })}
         </div>
+
+        {/* Second level — revealed for the open category only */}
+        <AnimatePresence initial={false}>
+          {openCategory && (
+            <motion.div
+              key={openCategory}
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="mt-2.5 rounded-2xl border border-border/60 bg-card divide-y divide-border/50">
+                {(serviceCategories.find((c) => c.key === openCategory)?.children || []).map((child) => {
+                  const disabled = !!child.comingSoon;
+                  return (
+                    <button
+                      key={child.key}
+                      onClick={() => { if (!disabled) onNavigate(child.key); }}
+                      disabled={disabled}
+                      aria-disabled={disabled}
+                      className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                        disabled ? "opacity-60 cursor-not-allowed" : "hover:bg-muted/50"
+                      }`}
+                    >
+                      <div className="w-9 h-9 rounded-xl bg-muted flex items-center justify-center shrink-0">
+                        <child.icon className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold text-foreground leading-tight">{child.label}</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{child.desc}</p>
+                      </div>
+                      {disabled ? (
+                        <span className="text-[9px] font-semibold uppercase tracking-wide bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">
+                          Soon
+                        </span>
+                      ) : (
+                        <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
+
 
       {/* ═══ TRUST BANNER ═══ */}
       <motion.div

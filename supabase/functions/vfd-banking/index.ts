@@ -3892,50 +3892,18 @@ async function handleAdminMoveSavingsToSubaccount(
   const vfdMessage = String(respData?.message ?? "");
   const duplicate = vfdStatusCode === "98" || /reference exist/i.test(vfdMessage);
 
-  // "98 / Reference Exist" only tells us VFD has SEEN this reference before —
-  // it does NOT tell us the original attempt settled. The prior attempt may
-  // have failed or still be pending (VFD returns 09 for pending transfers and
-  // keeps the reference reserved either way). Treating 98 as success would
-  // stamp the contract as funded while no money actually reached the product
-  // sub-account. So on a duplicate we MUST resolve the real outcome via TSQ.
-  let duplicateConfirmed = false;
-  let tsqEvidence: unknown = null;
-  if (duplicate) {
-    try {
-      const { data: tsq } = await vfdRequest("/transactions", "GET", undefined, { reference });
-      tsqEvidence = tsq;
-      const tsqEnv = tsq as Record<string, unknown>;
-      const tsqInner = (tsqEnv?.data as Record<string, unknown>) ?? {};
-      const txStatus = String(
-        tsqInner?.transactionStatus ?? tsqInner?.status ?? tsqEnv?.status ?? ""
-      ).trim();
-      const txMessage = String(tsqInner?.transactionStatusMessage ?? tsqEnv?.message ?? "");
-      // VFD settles successful transactions as "00". Anything else — 09
-      // (pending), 99/failed, or an empty/unknown TSQ envelope — is NOT proof.
-      duplicateConfirmed =
-        txStatus === "00" && !/pending|fail|revers/i.test(txMessage);
-    } catch (e) {
-      console.warn("[move_savings_to_subaccount] TSQ after duplicate failed:",
-        e instanceof Error ? e.message : String(e));
-    }
-
-    if (!duplicateConfirmed) {
-      // Leave the row UNSTAMPED: sub_account_transfer_ref is already pre-claimed
-      // so a later retry replays the same reference and can never double-debit.
-      console.error("[move_savings_to_subaccount] duplicate reference unconfirmed by TSQ:", reference, tsqEvidence);
-      return jsonResponse({
-        error: "This funding transfer was already submitted to the bank but has not settled yet. It is being tracked and will be confirmed automatically — no funds have been debited twice.",
-        code: "VFD_TRANSFER_UNCONFIRMED",
-        reference,
-        vfd_status: transferStatus,
-        data: { transfer: respData, tsq: tsqEvidence },
-      }, 409);
-    }
-  }
-
-  const ok = vfdStatusCode === "00" || duplicateConfirmed;
-
-  if (!ok) {
+  // A bare "00" from /transfer is NOT proof of settlement — VFD has a confirmed
+  // pattern of accepting a transfer and later resolving it as 09 (pending) or
+  // failing it outright. "98 / Reference Exist" only tells us VFD has SEEN the
+  // reference before, not that the original attempt settled. So on EVERY path
+  // we independently resolve the real outcome via TSQ (/transactions?reference=)
+  // before stamping the contract as funded.
+  //
+  // Idempotency is unchanged: the deterministic INV-<PRODUCT>-<id> reference is
+  // still pre-claimed on the row before the VFD call, so any retry replays the
+  // same reference and VFD rejects it as a duplicate rather than double-debiting.
+  const hardReject = !duplicate && vfdStatusCode !== "00";
+  if (hardReject) {
     console.error("[move_savings_to_subaccount] VFD rejected:", respData);
     return jsonResponse({
       error: vfdMessage || "VFD refused the sub-account transfer.",
@@ -3943,6 +3911,38 @@ async function handleAdminMoveSavingsToSubaccount(
       vfd_status: transferStatus,
       data: respData,
     }, 400);
+  }
+
+  let settlementConfirmed = false;
+  let tsqEvidence: unknown = null;
+  try {
+    const { data: tsq } = await vfdRequest("/transactions", "GET", undefined, { reference });
+    tsqEvidence = tsq;
+    const tsqEnv = tsq as Record<string, unknown>;
+    const tsqInner = (tsqEnv?.data as Record<string, unknown>) ?? {};
+    const txStatus = String(
+      tsqInner?.transactionStatus ?? tsqInner?.status ?? tsqEnv?.status ?? ""
+    ).trim();
+    const txMessage = String(tsqInner?.transactionStatusMessage ?? tsqEnv?.message ?? "");
+    // VFD settles successful transactions as "00". Anything else — 09
+    // (pending), 99/failed, or an empty/unknown TSQ envelope — is NOT proof.
+    settlementConfirmed = txStatus === "00" && !/pending|fail|revers/i.test(txMessage);
+  } catch (e) {
+    console.warn("[move_savings_to_subaccount] TSQ verification failed:",
+      e instanceof Error ? e.message : String(e));
+  }
+
+  if (!settlementConfirmed) {
+    // Leave the row UNSTAMPED: sub_account_transfer_ref is already pre-claimed
+    // so a later retry replays the same reference and can never double-debit.
+    console.error("[move_savings_to_subaccount] transfer unconfirmed by TSQ:", reference, tsqEvidence);
+    return jsonResponse({
+      error: "This funding transfer has been submitted to the bank but has not settled yet. It is being tracked and will be confirmed automatically — no funds have been debited twice.",
+      code: "VFD_TRANSFER_UNCONFIRMED",
+      reference,
+      vfd_status: transferStatus,
+      data: { transfer: respData, tsq: tsqEvidence, duplicate },
+    }, 409);
   }
 
 
@@ -3963,7 +3963,8 @@ async function handleAdminMoveSavingsToSubaccount(
       sub_account_nuban: subAccountNuban,
       reference,
       moved_at: nowIso,
-      replayed: duplicateConfirmed,
+      replayed: duplicate,
+      tsq_confirmed: true,
       vfd: respData?.data ?? null,
     },
   });
