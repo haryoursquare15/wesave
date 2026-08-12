@@ -98,7 +98,7 @@ serve(async (req) => {
         await supabase.from('chat_messages').insert({
           group_id: group.id,
           user_id: member.user_id,
-          message: `⏰ ${displayName} has not yet contributed ₦${group.contribution_amount.toLocaleString()} for Cycle ${activeCycle.cycle_number}. Please ensure your wallet is funded for auto-debit.`,
+          message: `⏰ ${displayName} has not yet contributed NGN ${group.contribution_amount.toLocaleString()} for Cycle ${activeCycle.cycle_number}. Please ensure your wallet is funded for auto-debit.`,
           message_type: 'contribution_reminder',
         });
 
@@ -106,7 +106,7 @@ serve(async (req) => {
         await supabase.from('user_notifications').insert({
           user_id: member.user_id,
           title: 'Fund Your Wallet',
-          message: `Your auto-contribution of ₦${group.contribution_amount.toLocaleString()} for ${group.name} is upcoming. Please ensure your wallet is funded.`,
+          message: `Your auto-contribution of NGN ${group.contribution_amount.toLocaleString()} for ${group.name} is upcoming. Please ensure your wallet is funded.`,
           notification_type: 'wallet_funding_reminder',
           group_id: group.id,
         });

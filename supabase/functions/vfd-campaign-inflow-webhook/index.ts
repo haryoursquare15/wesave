@@ -181,7 +181,7 @@ Deno.serve(async (req) => {
   await db.from("vfd_sandbox_notifications").insert({
     user_id: campaign.creator_id,
     title: "New campaign contribution",
-    body: `Your campaign "${campaign.title}" received ₦${amount.toLocaleString()} via bank transfer. Escrow: ₦${newEscrow.toLocaleString()}.`,
+    body: `Your campaign "${campaign.title}" received NGN ${amount.toLocaleString()} via bank transfer. Escrow: NGN ${newEscrow.toLocaleString()}.`,
     type: "campaign_contribution",
     read: false,
   });

@@ -100,7 +100,7 @@ export const template = {
   previewData: {
     recipientName: 'Ada',
     title: 'New contribution received',
-    message: 'Your group "Lagos Savers" just received ₦5,000. Great teamwork!',
+    message: 'Your group "Lagos Savers" just received NGN 5,000. Great teamwork!',
     actionUrl: 'https://vestara.ng/dashboard',
     actionLabel: 'View in Vestara',
   },

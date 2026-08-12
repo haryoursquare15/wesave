@@ -37,7 +37,7 @@ function buildReceiptHtml(
       (p) =>
         `<tr>
           <td style="padding:8px 12px;font-size:14px;color:${BRAND.textBody};border-bottom:1px solid ${BRAND.border};">${p.name}</td>
-          <td style="padding:8px 12px;font-size:14px;color:${BRAND.textDark};font-weight:600;border-bottom:1px solid ${BRAND.border};text-align:right;">₦${p.amount.toLocaleString()}</td>
+          <td style="padding:8px 12px;font-size:14px;color:${BRAND.textDark};font-weight:600;border-bottom:1px solid ${BRAND.border};text-align:right;">NGN ${p.amount.toLocaleString()}</td>
           <td style="padding:8px 12px;font-size:12px;color:${BRAND.textMuted};border-bottom:1px solid ${BRAND.border};text-align:right;">${new Date(p.paid_at).toLocaleDateString('en-NG', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
         </tr>`,
     )
@@ -104,11 +104,11 @@ function buildReceiptHtml(
                     <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                       <tr>
                         <td style="font-size:13px;color:${BRAND.textMuted};padding:0 0 4px;">Total Bill</td>
-                        <td style="font-size:20px;font-weight:bold;color:${BRAND.textDark};text-align:right;padding:0 0 4px;">₦${totalAmount.toLocaleString()}</td>
+                        <td style="font-size:20px;font-weight:bold;color:${BRAND.textDark};text-align:right;padding:0 0 4px;">NGN ${totalAmount.toLocaleString()}</td>
                       </tr>
                       <tr>
                         <td style="font-size:13px;color:${BRAND.textMuted};padding:4px 0;">Per Person</td>
-                        <td style="font-size:15px;font-weight:600;color:${BRAND.orange};text-align:right;padding:4px 0;">₦${amountPerPerson.toLocaleString()}</td>
+                        <td style="font-size:15px;font-weight:600;color:${BRAND.orange};text-align:right;padding:4px 0;">NGN ${amountPerPerson.toLocaleString()}</td>
                       </tr>
                       <tr>
                         <td style="font-size:13px;color:${BRAND.textMuted};padding:4px 0;">Participants</td>
