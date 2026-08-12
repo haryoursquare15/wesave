@@ -162,11 +162,10 @@ const serviceCategories: ServiceCategory[] = [
     label: "Save & Invest",
     icon: PiggyBank,
     color: "bg-emerald-500/10 text-emerald-600",
-    desc: "Coming soon",
-    comingSoon: true,
+    desc: "Savings & goals",
     children: [
-      { key: "lock", label: "Active Savings", icon: Lock, desc: "View all your holdings", comingSoon: true },
-      { key: "lock:goalsave", label: "Goal Save", icon: Target, desc: "Installment savings", comingSoon: true },
+      { key: "lock", label: "Active Savings", icon: Lock, desc: "View all your holdings" },
+      { key: "lock:goalsave", label: "Goal Save", icon: Target, desc: "Installment savings" },
       { key: "goal", label: "Crowdfunding", icon: Heart, desc: "Coming soon", comingSoon: true },
     ],
   },
@@ -175,14 +174,14 @@ const serviceCategories: ServiceCategory[] = [
     label: "Ajo Groups",
     icon: Users,
     color: "bg-orange-500/10 text-orange-600",
-    desc: "Coming soon",
-    comingSoon: true,
+    desc: "Rotating savings",
     children: [
-      { key: "ajo", label: "My Ajo Groups", icon: Users, desc: "Rotating savings", comingSoon: true },
+      { key: "ajo", label: "My Ajo Groups", icon: Users, desc: "Rotating savings" },
       { key: "association", label: "Associations", icon: Building2, desc: "Coming soon", comingSoon: true },
     ],
   },
 ];
+
 
 
 /* ─── Transaction Icon Helper ─── */
