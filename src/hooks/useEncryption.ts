@@ -81,6 +81,10 @@ export function useEncryption() {
    */
   const getMaskedProfile = async (): Promise<{ success: boolean; data?: MaskedPII; error?: string }> => {
     try {
+      // Don't call the function before the auth session is hydrated
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return { success: false, error: 'Not authenticated' };
+
       const { data: result, error } = await supabase.functions.invoke('encryption-utils', {
         body: {
           action: 'get_masked_profile',
