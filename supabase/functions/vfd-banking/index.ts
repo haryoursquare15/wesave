@@ -3867,46 +3867,30 @@ async function handleAdminMoveSavingsToSubaccount(
     return jsonResponse({ error: "Invalid principal amount on savings row" }, 400);
   }
 
-  // 4) sender enquiry (customer sub-account)
-  const { data: senderEnquiry, status: senderStatus } = await vfdRequest(
-    "/account/enquiry",
-    "GET",
-    undefined,
-    { accountNumber: customerNuban }
-  );
-  if (senderStatus !== 200 || (senderEnquiry as Record<string, unknown>)?.status !== "00") {
+  // 4) sender resolution (customer sub-account)
+  const sender = await resolveVfdAccount(customerNuban);
+  if (!sender.ok || !sender.savingsId) {
     return jsonResponse({
       error: "Could not retrieve customer VFD account details.",
-      data: senderEnquiry,
+      data: sender.raw,
     }, 400);
   }
-  const senderEnv = (senderEnquiry as Record<string, unknown>)?.data as Record<string, unknown>;
-  const senderAcct = (senderEnv?.account as Record<string, unknown> | undefined) || senderEnv;
-  const senderSavingsId =
-    (senderAcct?.id?.toString?.() || senderEnv?.accountId?.toString?.() || "");
-  if (!senderSavingsId) {
-    return jsonResponse({ error: "VFD enquiry returned no id for customer sub-account.", data: senderEnquiry }, 400);
-  }
+  const senderSavingsId = sender.savingsId;
 
-  // 5) beneficiary enquiry (product sub-account)
-  const { data: benEnquiry, status: benStatus } = await vfdRequest(
-    "/account/enquiry",
-    "GET",
-    undefined,
-    { accountNumber: subAccountNuban }
-  );
-  if (benStatus !== 200 || (benEnquiry as Record<string, unknown>)?.status !== "00") {
+  // 5) beneficiary resolution (product sub-account — separate VFD client, so
+  // this must go through name enquiry, not the credential-scoped enquiry)
+  const beneficiary = await resolveVfdAccount(subAccountNuban);
+  if (!beneficiary.ok || !beneficiary.savingsId) {
     return jsonResponse({
       error: `Could not retrieve product sub-account (${subAccountNuban}) at VFD.`,
-      data: benEnquiry,
+      data: beneficiary.raw,
     }, 400);
   }
-  const benEnv = (benEnquiry as Record<string, unknown>)?.data as Record<string, unknown>;
-  const benAcct = (benEnv?.account as Record<string, unknown> | undefined) || benEnv;
-  const toSavingsId = benAcct?.id?.toString?.() || benEnv?.accountId?.toString?.() || "";
-  const toClientId = benEnv?.clientId?.toString?.() || benAcct?.clientId?.toString?.() || "";
-  const toClient = benEnv?.client?.toString?.() || benAcct?.client?.toString?.() || product?.name || "Product Pool";
-  const toBvn = benEnv?.bvn?.toString?.() || "";
+  const toSavingsId = beneficiary.savingsId;
+  const toClientId = beneficiary.clientId;
+  const toClient = beneficiary.clientName || product?.name || "Product Pool";
+  const toBvn = beneficiary.bvn;
+
 
   // 6) signature + /transfer intra
   const signature = await generateTransferSignature(customerNuban, subAccountNuban);
