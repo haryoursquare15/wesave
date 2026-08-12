@@ -4142,25 +4142,40 @@ async function handleReverseSavingsSubaccount(
     // The corporate pool is credential-owned. It must be resolved through the
     // credential-scoped self enquiry: /transfer/recipient can return an ID that
     // is valid for a beneficiary but invalid as uniqueSenderAccountId.
-    const { data: poolEnquiry, status: poolEnquiryStatus } = await vfdRequest(
+    let { data: poolEnquiry, status: poolEnquiryStatus } = await vfdRequest(
       "/account/enquiry", "GET", undefined, { accountNumber: poolNuban },
     );
-    const poolEnv = poolEnquiry as Record<string, unknown> | null;
+    let poolEnv = poolEnquiry as Record<string, unknown> | null;
+    if (poolEnquiryStatus !== 200 || poolEnv?.status !== "00") {
+      const selfEnquiry = await vfdRequest("/account/enquiry", "GET", undefined, {});
+      const selfEnv = selfEnquiry.data as Record<string, unknown> | null;
+      const selfData = (selfEnv?.data as Record<string, unknown>) || {};
+      const selfAccount = (selfData?.account as Record<string, unknown>) || selfData;
+      const selfNuban = String(selfData?.accountNo ?? selfAccount?.accountNo ?? "");
+      if (selfEnquiry.status === 200 && selfEnv?.status === "00" && (!selfNuban || selfNuban === poolNuban)) {
+        poolEnquiry = selfEnquiry.data;
+        poolEnquiryStatus = selfEnquiry.status;
+        poolEnv = selfEnv;
+      }
+    }
     const poolData = (poolEnv?.data as Record<string, unknown>) || {};
     const poolAccount = (poolData?.account as Record<string, unknown>) || poolData;
-    const poolSenderId = poolAccount?.id?.toString?.() || poolData?.accountId?.toString?.() || "";
+    const poolSenderId = Deno.env.get("VFD_POOL_SAVINGS_ID") ||
+      poolAccount?.id?.toString?.() || poolData?.accountId?.toString?.() || "";
     if (poolEnquiryStatus === 200 && poolEnv?.status === "00" && poolSenderId) {
       const poolSignature = await generateTransferSignature(poolNuban, customerNuban);
       const poolPayload = {
         ...payload,
         fromAccount: poolNuban,
-        fromClientId: poolData?.clientId?.toString?.() || poolAccount?.clientId?.toString?.() || "",
-        fromClient: poolData?.client?.toString?.() || poolAccount?.client?.toString?.() || "",
+        fromClientId: Deno.env.get("VFD_POOL_CLIENT_ID") || poolData?.clientId?.toString?.() || poolAccount?.clientId?.toString?.() || "",
+        fromClient: Deno.env.get("VFD_POOL_CLIENT_NAME") || poolData?.client?.toString?.() || poolAccount?.client?.toString?.() || "",
         fromSavingsId: poolSenderId,
         fromBvn: poolData?.bvn?.toString?.() || "",
         signature: poolSignature,
-        uniqueSenderAccountId: poolSenderId,
       };
+      // VFD rejects uniqueSenderAccountId when the corporate pool itself is the
+      // source; that field is only valid for a pool sub-account sender.
+      delete (poolPayload as Record<string, unknown>).uniqueSenderAccountId;
       activePayload = poolPayload;
       console.log("[reverse_savings_subaccount] retrying from corporate pool", poolNuban);
       const poolTry = await vfdRequest("/transfer", "POST", activePayload);
