@@ -3721,7 +3721,67 @@ async function handleDeleteTransferBeneficiary(userId: string, body: Record<stri
 // This is intentionally a BANK-LEVEL move only — Vestara's internal ledger
 // already reflects the customer's balance state (pending → locked_savings via
 // the RPC). We do NOT re-debit the customer's Vestara wallet here.
+// Resolve a NUBAN's transfer identity (savings id, client id, name, bvn).
+//
+// IMPORTANT: `/account/enquiry?accountNumber=` is scoped to accounts that sit
+// under OUR wallet credentials' client. Vestara's four product sub-accounts
+// (Vault, Lock Max, Upfront Yield, Goal Savings) are separate VFD clients, so
+// that endpoint returns "01 Account Not Found" for them even though they are
+// live and active — the corporate pool itself behaves the same way and only
+// resolves via the credential-scoped self enquiry. The intra-bank name enquiry
+// (`/transfer/recipient`) resolves ANY VFD account and returns the same fields
+// the /transfer payload needs, so it is the correct lookup for beneficiaries.
+async function resolveVfdAccount(nuban: string): Promise<{
+  ok: boolean;
+  savingsId: string;
+  clientId: string;
+  clientName: string;
+  bvn: string;
+  raw: unknown;
+}> {
+  const empty = { savingsId: "", clientId: "", clientName: "", bvn: "" };
+
+  const { data: rec, status: recStatus } = await vfdRequest(
+    "/transfer/recipient", "GET", undefined,
+    { accountNo: nuban, bank: "999999", transfer_type: "intra" },
+  );
+  const recEnv = rec as Record<string, unknown> | null;
+  if (recStatus === 200 && recEnv?.status === "00") {
+    const d = (recEnv.data as Record<string, unknown>) || {};
+    const acct = (d.account as Record<string, unknown>) || {};
+    return {
+      ok: true,
+      savingsId: acct?.id?.toString?.() || "",
+      clientId: d?.clientId?.toString?.() || "",
+      clientName: d?.name?.toString?.() || "",
+      bvn: d?.bvn?.toString?.() || "",
+      raw: rec,
+    };
+  }
+
+  // Fallback: credential-scoped enquiry (works for our own wallet accounts).
+  const { data: enq, status: enqStatus } = await vfdRequest(
+    "/account/enquiry", "GET", undefined, { accountNumber: nuban },
+  );
+  const enqEnv = enq as Record<string, unknown> | null;
+  if (enqStatus === 200 && enqEnv?.status === "00") {
+    const env = (enqEnv.data as Record<string, unknown>) || {};
+    const acct = (env.account as Record<string, unknown>) || env;
+    return {
+      ok: true,
+      savingsId: acct?.id?.toString?.() || env?.accountId?.toString?.() || "",
+      clientId: env?.clientId?.toString?.() || acct?.clientId?.toString?.() || "",
+      clientName: env?.client?.toString?.() || acct?.client?.toString?.() || "",
+      bvn: env?.bvn?.toString?.() || "",
+      raw: enq,
+    };
+  }
+
+  return { ok: false, ...empty, raw: { recipient: rec, enquiry: enq } };
+}
+
 async function handleAdminMoveSavingsToSubaccount(
+
   callerUserId: string,
   body: Record<string, unknown>
 ) {
