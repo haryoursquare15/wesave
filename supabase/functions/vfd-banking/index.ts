@@ -4131,7 +4131,40 @@ async function handleReverseSavingsSubaccount(
   let respData = transferResp as Record<string, unknown>;
   let code = String(respData?.status ?? "");
   let msg = String(respData?.message ?? "");
+
+  // The product sub-accounts belong to a DIFFERENT VFD client, so our wallet
+  // credentials cannot debit them directly — VFD answers "Invalid Source".
+  // The funds physically sweep into the Vestara corporate pool, so the pool is
+  // the correct (and credential-owned) source for the refund leg.
+  if (/invalid source/i.test(msg)) {
+    const poolNuban = Deno.env.get("VFD_CORPORATE_POOL_NUBAN") || "1047279595";
+    const poolSender = await resolveVfdAccount(poolNuban);
+    if (poolSender.ok && poolSender.savingsId) {
+      const poolSignature = await generateTransferSignature(poolNuban, customerNuban);
+      const poolPayload = {
+        ...payload,
+        fromAccount: poolNuban,
+        fromClientId: poolSender.clientId,
+        fromClient: poolSender.clientName,
+        fromSavingsId: poolSender.savingsId,
+        fromBvn: poolSender.bvn,
+        signature: poolSignature,
+        uniqueSenderAccountId: poolSender.savingsId,
+      };
+      console.log("[reverse_savings_subaccount] retrying from corporate pool", poolNuban);
+      const poolTry = await vfdRequest("/transfer", "POST", poolPayload);
+      transferResp = poolTry.data;
+      transferStatus = poolTry.status;
+      respData = transferResp as Record<string, unknown>;
+      code = String(respData?.status ?? "");
+      msg = String(respData?.message ?? "");
+    } else {
+      console.error("[reverse_savings_subaccount] pool sender resolve failed", poolSender.raw);
+    }
+  }
+
   const isDuplicate = (c: string, m: string) => c === "98" || /reference exist/i.test(m);
+
 
   // Same rule as the funding leg: "Reference Exist" is not proof the earlier
   // reversal settled. Confirm via TSQ before marking the funds as returned,
