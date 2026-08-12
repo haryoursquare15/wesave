@@ -475,7 +475,12 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
         transition={{ delay: 0.2 }}
       >
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-bold text-foreground">Lock Funds & Earn</h3>
+          <div>
+            <h3 className="text-sm font-bold text-foreground">Start a new savings plan</h3>
+            <p className="text-[10px] text-muted-foreground mt-0.5">
+              Existing holdings live in Active Savings
+            </p>
+          </div>
           <span className="text-[10px] font-semibold uppercase tracking-wide bg-muted text-muted-foreground px-2 py-0.5 rounded-full">
             Coming soon
           </span>
