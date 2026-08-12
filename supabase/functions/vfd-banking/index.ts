@@ -4127,7 +4127,8 @@ async function handleReverseSavingsSubaccount(
   };
 
   let sentReference = reference;
-  let { data: transferResp, status: transferStatus } = await vfdRequest("/transfer", "POST", payload);
+  let activePayload = payload;
+  let { data: transferResp, status: transferStatus } = await vfdRequest("/transfer", "POST", activePayload);
   let respData = transferResp as Record<string, unknown>;
   let code = String(respData?.status ?? "");
   let msg = String(respData?.message ?? "");
@@ -4138,28 +4139,53 @@ async function handleReverseSavingsSubaccount(
   // the correct (and credential-owned) source for the refund leg.
   if (/invalid source/i.test(msg)) {
     const poolNuban = Deno.env.get("VFD_CORPORATE_POOL_NUBAN") || "1047279595";
-    const poolSender = await resolveVfdAccount(poolNuban);
-    if (poolSender.ok && poolSender.savingsId) {
+    // The corporate pool is credential-owned. It must be resolved through the
+    // credential-scoped self enquiry: /transfer/recipient can return an ID that
+    // is valid for a beneficiary but invalid as uniqueSenderAccountId.
+    let { data: poolEnquiry, status: poolEnquiryStatus } = await vfdRequest(
+      "/account/enquiry", "GET", undefined, { accountNumber: poolNuban },
+    );
+    let poolEnv = poolEnquiry as Record<string, unknown> | null;
+    if (poolEnquiryStatus !== 200 || poolEnv?.status !== "00") {
+      const selfEnquiry = await vfdRequest("/account/enquiry", "GET", undefined, {});
+      const selfEnv = selfEnquiry.data as Record<string, unknown> | null;
+      const selfData = (selfEnv?.data as Record<string, unknown>) || {};
+      const selfAccount = (selfData?.account as Record<string, unknown>) || selfData;
+      const selfNuban = String(selfData?.accountNo ?? selfAccount?.accountNo ?? "");
+      if (selfEnquiry.status === 200 && selfEnv?.status === "00" && (!selfNuban || selfNuban === poolNuban)) {
+        poolEnquiry = selfEnquiry.data;
+        poolEnquiryStatus = selfEnquiry.status;
+        poolEnv = selfEnv;
+      }
+    }
+    const poolData = (poolEnv?.data as Record<string, unknown>) || {};
+    const poolAccount = (poolData?.account as Record<string, unknown>) || poolData;
+    const poolSenderId = Deno.env.get("VFD_POOL_SAVINGS_ID") ||
+      poolAccount?.id?.toString?.() || poolData?.accountId?.toString?.() || "";
+    if (poolEnquiryStatus === 200 && poolEnv?.status === "00" && poolSenderId) {
       const poolSignature = await generateTransferSignature(poolNuban, customerNuban);
       const poolPayload = {
         ...payload,
         fromAccount: poolNuban,
-        fromClientId: poolSender.clientId,
-        fromClient: poolSender.clientName,
-        fromSavingsId: poolSender.savingsId,
-        fromBvn: poolSender.bvn,
+        fromClientId: Deno.env.get("VFD_POOL_CLIENT_ID") || poolData?.clientId?.toString?.() || poolAccount?.clientId?.toString?.() || "",
+        fromClient: Deno.env.get("VFD_POOL_CLIENT_NAME") || poolData?.client?.toString?.() || poolAccount?.client?.toString?.() || "",
+        fromSavingsId: poolSenderId,
+        fromBvn: poolData?.bvn?.toString?.() || "",
         signature: poolSignature,
-        uniqueSenderAccountId: poolSender.savingsId,
       };
+      // VFD rejects uniqueSenderAccountId when the corporate pool itself is the
+      // source; that field is only valid for a pool sub-account sender.
+      delete (poolPayload as Record<string, unknown>).uniqueSenderAccountId;
+      activePayload = poolPayload;
       console.log("[reverse_savings_subaccount] retrying from corporate pool", poolNuban);
-      const poolTry = await vfdRequest("/transfer", "POST", poolPayload);
+      const poolTry = await vfdRequest("/transfer", "POST", activePayload);
       transferResp = poolTry.data;
       transferStatus = poolTry.status;
       respData = transferResp as Record<string, unknown>;
       code = String(respData?.status ?? "");
       msg = String(respData?.message ?? "");
     } else {
-      console.error("[reverse_savings_subaccount] pool sender resolve failed", poolSender.raw);
+      console.error("[reverse_savings_subaccount] pool sender self-enquiry failed", poolEnquiry);
     }
   }
 
@@ -4198,14 +4224,14 @@ async function handleReverseSavingsSubaccount(
     // fresh unique reference — no double-spend risk because the first leg never
     // moved money.
     const deadAtBank = tsqReachable && !duplicateConfirmed &&
-      (/fail|revers|not found|no record|does not exist|invalid/i.test(txMessage) ||
-        ["03", "06", "07", "25", "96"].includes(txStatus));
+      (/fail|revers|not found|no record|no transaction|does not exist|invalid/i.test(txMessage) ||
+        ["03", "06", "07", "25", "96", "108"].includes(txStatus));
 
     if (!duplicateConfirmed && deadAtBank) {
       sentReference = `${reference}-R${Date.now().toString(36).slice(-4).toUpperCase()}`;
       await db.from("vestara_savings").update({ sub_account_reversal_ref: sentReference })
         .eq("id", savingsId).is("sub_account_reversed_at", null);
-      const retry = await vfdRequest("/transfer", "POST", { ...payload, reference: sentReference });
+      const retry = await vfdRequest("/transfer", "POST", { ...activePayload, reference: sentReference });
       transferResp = retry.data;
       transferStatus = retry.status;
       respData = transferResp as Record<string, unknown>;
