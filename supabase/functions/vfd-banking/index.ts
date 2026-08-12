@@ -4205,7 +4205,7 @@ async function handleReverseSavingsSubaccount(
 
   const nowIso = new Date().toISOString();
   await db.from("vestara_savings").update({
-    sub_account_reversal_ref: reference,
+    sub_account_reversal_ref: sentReference,
     sub_account_reversed_at: nowIso,
   }).eq("id", savingsId).is("sub_account_reversed_at", null);
 
@@ -4213,11 +4213,12 @@ async function handleReverseSavingsSubaccount(
     data: {
       success: true,
       savings_id: savingsId,
-      reference,
+      reference: sentReference,
       reversed_at: nowIso,
       replayed: duplicateConfirmed,
       vfd: respData?.data ?? null,
     },
   });
+
 }
 
