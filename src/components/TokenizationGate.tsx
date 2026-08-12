@@ -33,6 +33,11 @@ export function TokenizationGate({
   useEffect(() => {
     const checkExistingToken = async () => {
       try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          setStep("terms");
+          return;
+        }
         const { data, error } = await supabase.functions.invoke("card-tokenization", {
           body: { action: "get_card" },
         });
