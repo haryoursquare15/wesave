@@ -4127,7 +4127,8 @@ async function handleReverseSavingsSubaccount(
   };
 
   let sentReference = reference;
-  let { data: transferResp, status: transferStatus } = await vfdRequest("/transfer", "POST", payload);
+  let activePayload = payload;
+  let { data: transferResp, status: transferStatus } = await vfdRequest("/transfer", "POST", activePayload);
   let respData = transferResp as Record<string, unknown>;
   let code = String(respData?.status ?? "");
   let msg = String(respData?.message ?? "");
@@ -4151,8 +4152,9 @@ async function handleReverseSavingsSubaccount(
         signature: poolSignature,
         uniqueSenderAccountId: poolSender.savingsId,
       };
+      activePayload = poolPayload;
       console.log("[reverse_savings_subaccount] retrying from corporate pool", poolNuban);
-      const poolTry = await vfdRequest("/transfer", "POST", poolPayload);
+      const poolTry = await vfdRequest("/transfer", "POST", activePayload);
       transferResp = poolTry.data;
       transferStatus = poolTry.status;
       respData = transferResp as Record<string, unknown>;
@@ -4198,14 +4200,14 @@ async function handleReverseSavingsSubaccount(
     // fresh unique reference — no double-spend risk because the first leg never
     // moved money.
     const deadAtBank = tsqReachable && !duplicateConfirmed &&
-      (/fail|revers|not found|no record|does not exist|invalid/i.test(txMessage) ||
-        ["03", "06", "07", "25", "96"].includes(txStatus));
+      (/fail|revers|not found|no record|no transaction|does not exist|invalid/i.test(txMessage) ||
+        ["03", "06", "07", "25", "96", "108"].includes(txStatus));
 
     if (!duplicateConfirmed && deadAtBank) {
       sentReference = `${reference}-R${Date.now().toString(36).slice(-4).toUpperCase()}`;
       await db.from("vestara_savings").update({ sub_account_reversal_ref: sentReference })
         .eq("id", savingsId).is("sub_account_reversed_at", null);
-      const retry = await vfdRequest("/transfer", "POST", { ...payload, reference: sentReference });
+      const retry = await vfdRequest("/transfer", "POST", { ...activePayload, reference: sentReference });
       transferResp = retry.data;
       transferStatus = retry.status;
       respData = transferResp as Record<string, unknown>;
