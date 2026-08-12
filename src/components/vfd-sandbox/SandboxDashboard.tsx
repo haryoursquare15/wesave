@@ -114,9 +114,6 @@ const productBanners = [
   },
 ];
 
-/* ─── Product Grid Items ─── */
-const productGrid = [
-  // Live products
 /* ─── Services: grouped categories ───
    Primary categories only at the top level. Lower-frequency destinations
    (Associations, crowdfunding, Virtual Card) live one level deeper inside
