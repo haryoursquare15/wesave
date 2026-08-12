@@ -4126,11 +4126,12 @@ async function handleReverseSavingsSubaccount(
     uniqueSenderAccountId: fromSavingsId,
   };
 
-  const { data: transferResp, status: transferStatus } = await vfdRequest("/transfer", "POST", payload);
-  const respData = transferResp as Record<string, unknown>;
-  const code = String(respData?.status ?? "");
-  const msg = String(respData?.message ?? "");
-  const duplicate = code === "98" || /reference exist/i.test(msg);
+  let sentReference = reference;
+  let { data: transferResp, status: transferStatus } = await vfdRequest("/transfer", "POST", payload);
+  let respData = transferResp as Record<string, unknown>;
+  let code = String(respData?.status ?? "");
+  let msg = String(respData?.message ?? "");
+  const isDuplicate = (c: string, m: string) => c === "98" || /reference exist/i.test(m);
 
   // Same rule as the funding leg: "Reference Exist" is not proof the earlier
   // reversal settled. Confirm via TSQ before marking the funds as returned,
@@ -4138,22 +4139,47 @@ async function handleReverseSavingsSubaccount(
   // still sitting in the product sub-account.
   let duplicateConfirmed = false;
   let tsqEvidence: unknown = null;
-  if (duplicate) {
+  if (isDuplicate(code, msg)) {
+    let txStatus = "";
+    let txMessage = "";
+    let tsqReachable = false;
     try {
       const { data: tsq } = await vfdRequest("/transactions", "GET", undefined, { reference });
       tsqEvidence = tsq;
+      tsqReachable = true;
       const tsqEnv = tsq as Record<string, unknown>;
       const tsqInner = (tsqEnv?.data as Record<string, unknown>) ?? {};
-      const txStatus = String(
+      txStatus = String(
         tsqInner?.transactionStatus ?? tsqInner?.status ?? tsqEnv?.status ?? ""
       ).trim();
-      const txMessage = String(tsqInner?.transactionStatusMessage ?? tsqEnv?.message ?? "");
+      txMessage = String(tsqInner?.transactionStatusMessage ?? tsqEnv?.message ?? "");
       duplicateConfirmed = txStatus === "00" && !/pending|fail|revers/i.test(txMessage);
     } catch (e) {
       console.warn("[reverse_savings_subaccount] TSQ after duplicate failed:",
         e instanceof Error ? e.message : String(e));
     }
-    if (!duplicateConfirmed) {
+
+    // The original attempt is definitively dead at the bank (failed / reversed /
+    // never found). Retrying the same deterministic reference would loop on
+    // "Reference Exist" forever and permanently block the rejection, so send a
+    // fresh unique reference — no double-spend risk because the first leg never
+    // moved money.
+    const deadAtBank = tsqReachable && !duplicateConfirmed &&
+      (/fail|revers|not found|no record|does not exist|invalid/i.test(txMessage) ||
+        ["03", "06", "07", "25", "96"].includes(txStatus));
+
+    if (!duplicateConfirmed && deadAtBank) {
+      sentReference = `${reference}-R${Date.now().toString(36).slice(-4).toUpperCase()}`;
+      await db.from("vestara_savings").update({ sub_account_reversal_ref: sentReference })
+        .eq("id", savingsId).is("sub_account_reversed_at", null);
+      const retry = await vfdRequest("/transfer", "POST", { ...payload, reference: sentReference });
+      transferResp = retry.data;
+      transferStatus = retry.status;
+      respData = transferResp as Record<string, unknown>;
+      code = String(respData?.status ?? "");
+      msg = String(respData?.message ?? "");
+      console.log("[reverse_savings_subaccount] retried with fresh reference", sentReference, code, msg);
+    } else if (!duplicateConfirmed) {
       console.error("[reverse_savings_subaccount] duplicate reference unconfirmed by TSQ:", reference, tsqEvidence);
       return jsonResponse({
         error: "A reversal for this investment was already sent to the bank but has not settled yet. Please retry shortly — the funds have not been sent twice.",
@@ -4164,6 +4190,7 @@ async function handleReverseSavingsSubaccount(
       }, 409);
     }
   }
+
 
   if (!(code === "00" || duplicateConfirmed)) {
     console.error("[reverse_savings_subaccount] VFD rejected:", respData);
@@ -4178,7 +4205,7 @@ async function handleReverseSavingsSubaccount(
 
   const nowIso = new Date().toISOString();
   await db.from("vestara_savings").update({
-    sub_account_reversal_ref: reference,
+    sub_account_reversal_ref: sentReference,
     sub_account_reversed_at: nowIso,
   }).eq("id", savingsId).is("sub_account_reversed_at", null);
 
@@ -4186,11 +4213,12 @@ async function handleReverseSavingsSubaccount(
     data: {
       success: true,
       savings_id: savingsId,
-      reference,
+      reference: sentReference,
       reversed_at: nowIso,
       replayed: duplicateConfirmed,
       vfd: respData?.data ?? null,
     },
   });
+
 }
 
