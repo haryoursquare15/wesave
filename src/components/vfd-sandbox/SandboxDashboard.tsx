@@ -510,44 +510,98 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
 
       </motion.div>
 
-      {/* ═══ PRODUCT GRID ═══ */}
+      {/* ═══ SERVICES (grouped categories) ═══ */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.25 }}
       >
         <h3 className="text-sm font-bold text-foreground mb-3">Services</h3>
-        <div className="grid grid-cols-3 gap-2.5">
-          {productGrid.map((product) => {
-            const disabled = !!(product as { comingSoon?: boolean }).comingSoon;
+        <div className="grid grid-cols-2 gap-2.5">
+          {serviceCategories.map((cat) => {
+            const dimmed = !!cat.comingSoon;
+            const isOpen = openCategory === cat.key;
             return (
               <motion.button
-                key={product.key}
-                whileTap={disabled ? undefined : { scale: 0.95 }}
-                onClick={() => { if (!disabled) onNavigate(product.key); }}
-                disabled={disabled}
-                aria-disabled={disabled}
-                className={`relative flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border border-border/60 transition-all ${
-                  disabled ? "opacity-60 cursor-not-allowed" : "hover:border-primary/30 hover:shadow-sm"
-                }`}
+                key={cat.key}
+                whileTap={{ scale: 0.97 }}
+                onClick={() => {
+                  if (cat.navKey) return onNavigate(cat.navKey);
+                  setOpenCategory(isOpen ? null : cat.key);
+                }}
+                aria-expanded={cat.children ? isOpen : undefined}
+                className={`relative flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border transition-all ${
+                  isOpen ? "border-primary/40 shadow-sm" : "border-border/60 hover:border-primary/30"
+                } ${dimmed ? "opacity-70" : ""}`}
               >
-                {disabled && (
+                {dimmed && (
                   <span className="absolute top-1 right-1 text-[8px] font-semibold uppercase tracking-wide bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">
                     Soon
                   </span>
                 )}
-                <div className={`w-11 h-11 rounded-xl ${product.color} flex items-center justify-center`}>
-                  <product.icon className="h-5 w-5" />
+                <div className={`w-11 h-11 rounded-xl ${cat.color} flex items-center justify-center`}>
+                  <cat.icon className="h-5 w-5" />
                 </div>
                 <div className="text-center">
-                  <p className="text-xs font-semibold text-foreground leading-tight">{product.label}</p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">{product.desc}</p>
+                  <p className="text-xs font-semibold text-foreground leading-tight">{cat.label}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">{cat.desc}</p>
                 </div>
+                {cat.children && (
+                  <ChevronRight
+                    className={`h-3 w-3 text-muted-foreground transition-transform ${isOpen ? "rotate-90" : ""}`}
+                  />
+                )}
               </motion.button>
             );
           })}
         </div>
+
+        {/* Second level — revealed for the open category only */}
+        <AnimatePresence initial={false}>
+          {openCategory && (
+            <motion.div
+              key={openCategory}
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="mt-2.5 rounded-2xl border border-border/60 bg-card divide-y divide-border/50">
+                {(serviceCategories.find((c) => c.key === openCategory)?.children || []).map((child) => {
+                  const disabled = !!child.comingSoon;
+                  return (
+                    <button
+                      key={child.key}
+                      onClick={() => { if (!disabled) onNavigate(child.key); }}
+                      disabled={disabled}
+                      aria-disabled={disabled}
+                      className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                        disabled ? "opacity-60 cursor-not-allowed" : "hover:bg-muted/50"
+                      }`}
+                    >
+                      <div className="w-9 h-9 rounded-xl bg-muted flex items-center justify-center shrink-0">
+                        <child.icon className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold text-foreground leading-tight">{child.label}</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{child.desc}</p>
+                      </div>
+                      {disabled ? (
+                        <span className="text-[9px] font-semibold uppercase tracking-wide bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">
+                          Soon
+                        </span>
+                      ) : (
+                        <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
+
 
       {/* ═══ TRUST BANNER ═══ */}
       <motion.div
