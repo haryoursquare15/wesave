@@ -391,22 +391,18 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
 
 
 
-          {/* Sub-balances */}
-          <div className="grid grid-cols-3 gap-2">
+          {/* Secondary detail row — clearly subordinate to Total */}
+          <div className="flex items-center gap-4 border-t border-white/[0.12] pt-2.5">
             {[
-              { label: "Total", value: balance.totalBalance, icon: Banknote },
               { label: "Locked", value: balance.lockedBalance, icon: Lock },
               { label: "Savings", value: balance.savingsBalance, icon: PiggyBank },
             ].map((item) => (
-              <div
-                key={item.label}
-                className="bg-white/[0.08] backdrop-blur-sm rounded-xl px-2.5 py-2.5 text-center border border-white/[0.06]"
-              >
-                <item.icon className="h-3.5 w-3.5 mx-auto mb-1 opacity-50" />
-                <p className="text-[10px] opacity-60 mb-0.5">{item.label}</p>
-                <p className="text-xs font-bold">
+              <div key={item.label} className="flex items-center gap-1.5">
+                <item.icon className="h-3 w-3 opacity-40" />
+                <span className="text-[10px] opacity-55">{item.label}</span>
+                <span className="text-[11px] font-semibold opacity-90">
                   {showBalance ? `₦${item.value.toLocaleString()}` : "••••"}
-                </p>
+                </span>
               </div>
             ))}
           </div>
