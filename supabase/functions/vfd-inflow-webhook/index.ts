@@ -189,6 +189,28 @@ Deno.serve(async (req) => {
     return null;
   };
 
+  // Pool-originated guard: money leaving the corporate pool towards a customer
+  // NUBAN is ALWAYS ledger-initiated (bill refund/reversal, savings payout,
+  // withdrawal settlement). The ledger already credited the wallet at that
+  // moment, so crediting again here double-pays the customer.
+  const payerAccount = String(
+    get("originator_account_number") || get("originatorAccountNumber") || get("sourceAccount") || "",
+  );
+  if (payerAccount && payerAccount === PLATFORM_POOL_NUBAN) {
+    if (auditId) {
+      await db.from("vfd_sandbox_webhook_logs")
+        .update({ processed: true, processed_at: new Date().toISOString() })
+        .eq("id", auditId);
+    }
+    return ok({
+      deduped: true,
+      reason: "pool_originated_settlement_already_ledgered",
+      accountNo,
+      amount,
+      narration,
+    });
+  }
+
   const dupRef = await dedupe();
   if (dupRef) {
     if (auditId) {
@@ -198,6 +220,7 @@ Deno.serve(async (req) => {
     }
     return ok({ deduped: true, reason: "already_credited_by_intra_transfer_mirror", reference: dupRef });
   }
+
 
 
 
