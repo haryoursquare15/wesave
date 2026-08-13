@@ -37,7 +37,7 @@ interface BillerItem {
   productId: string;
   paymentitemid: string;
   currencySymbol: string;
-  isAmountFixed: string;
+  isAmountFixed: string | boolean;
   itemFee: string;
   paymentCode: string;
   billerType: string;
@@ -55,6 +55,19 @@ const categoryConfig: Record<string, { icon: typeof Smartphone; color: string; b
 };
 
 type Step = "categories" | "billers" | "items" | "payment" | "success";
+
+/**
+ * VFD returns `isAmountFixed` inconsistently (boolean true, "true", 1, "1").
+ * Any item that publishes a price > 0 is treated as fixed so the amount is
+ * auto-populated and never typed by the user (e.g. data bundles).
+ */
+const isFixedPriceItem = (item?: BillerItem | null) => {
+  if (!item) return false;
+  const price = Number(item.amount);
+  if (!Number.isFinite(price) || price <= 0) return false;
+  const flag = String(item.isAmountFixed ?? "").toLowerCase();
+  return flag === "false" ? false : true;
+};
 
 export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = {}) {
   const { toast } = useToast();
