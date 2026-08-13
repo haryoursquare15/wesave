@@ -491,6 +491,84 @@ export type Database = {
         }
         Relationships: []
       }
+      credit_guard_config: {
+        Row: {
+          dupe_window_minutes: number
+          id: boolean
+          large_credit_threshold: number
+          updated_at: string
+          velocity_max_credits: number
+          velocity_window_minutes: number
+        }
+        Insert: {
+          dupe_window_minutes?: number
+          id?: boolean
+          large_credit_threshold?: number
+          updated_at?: string
+          velocity_max_credits?: number
+          velocity_window_minutes?: number
+        }
+        Update: {
+          dupe_window_minutes?: number
+          id?: boolean
+          large_credit_threshold?: number
+          updated_at?: string
+          velocity_max_credits?: number
+          velocity_window_minutes?: number
+        }
+        Relationships: []
+      }
+      credit_guard_events: {
+        Row: {
+          amount: number
+          created_at: string
+          details: Json
+          flagged_for_review: boolean
+          id: string
+          idempotency_key: string | null
+          matched_transaction_id: string | null
+          narration: string | null
+          outcome: string
+          reason: string | null
+          review_reason: string | null
+          source: string
+          trigger_event: string | null
+          user_id: string | null
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          details?: Json
+          flagged_for_review?: boolean
+          id?: string
+          idempotency_key?: string | null
+          matched_transaction_id?: string | null
+          narration?: string | null
+          outcome: string
+          reason?: string | null
+          review_reason?: string | null
+          source: string
+          trigger_event?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          details?: Json
+          flagged_for_review?: boolean
+          id?: string
+          idempotency_key?: string | null
+          matched_transaction_id?: string | null
+          narration?: string | null
+          outcome?: string
+          reason?: string | null
+          review_reason?: string | null
+          source?: string
+          trigger_event?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       credit_score_history: {
         Row: {
           change_amount: number
@@ -6748,6 +6826,18 @@ export type Database = {
           vfd_client_id: string
         }[]
       }
+      guard_credit: {
+        Args: {
+          _amount: number
+          _details?: Json
+          _narration?: string
+          _reference: string
+          _source: string
+          _trigger_event?: string
+          _user_id: string
+        }
+        Returns: Json
+      }
       has_permission: {
         Args: { _permission: string; _user_id: string }
         Returns: boolean
@@ -7241,6 +7331,10 @@ export type Database = {
           _user_id: string
         }
         Returns: Json
+      }
+      vestara_user_ledger_wallet_balance: {
+        Args: { _user_id: string }
+        Returns: number
       }
       vestara_withdraw: {
         Args: {
