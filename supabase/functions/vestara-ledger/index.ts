@@ -1077,7 +1077,25 @@ serve(async (req) => {
         // at the bank FIRST (sub-account NUBAN -> customer NUBAN). The DB
         // function refuses to reject until that reversal is stamped.
         const { data: pre } = await supabase.from("vestara_savings")
-          .select("sub_account_transferred_at, sub_account_reversed_at").eq("id", savings_id).maybeSingle();
+          .select("sub_account_transferred_at, sub_account_reversed_at, approval_status, user_id, principal")
+          .eq("id", savings_id).maybeSingle();
+
+        // Explicit prior-refund check: a contract that is no longer pending has
+        // already been settled once — refusing here stops a second refund.
+        if (pre && pre.approval_status && pre.approval_status !== "pending") {
+          return err("This investment has already been decided — no further refund will be posted.", 409);
+        }
+        const rejectGuard = await guardCredit(supabase, {
+          user_id: pre?.user_id ?? null,
+          amount: Number(pre?.principal ?? 0),
+          reference: `savings-reject-refund-${String(savings_id)}`,
+          source: "vestara-ledger.reject_savings",
+          trigger_event: `savings:${savings_id}`,
+        });
+        if (!rejectGuard.allowed) {
+          return err(`Refund blocked by duplicate guard (${rejectGuard.reason})`, 409);
+        }
+
         let reversal: Record<string, unknown> | null = null;
         if (pre?.sub_account_transferred_at && !pre?.sub_account_reversed_at) {
           const authHeader = req.headers.get("Authorization") || "";
