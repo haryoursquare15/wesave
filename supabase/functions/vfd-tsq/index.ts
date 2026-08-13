@@ -154,6 +154,29 @@ Deno.serve(async (req) => {
     }
   }
 
+  // Ops probe: read-only bills catalog / customer validation passthrough.
+  // `billsGet=<path>?<query>` e.g. billsGet=billerItems?billerId=IKEDC&...
+  const billsGet = url.searchParams.get("billsGet") || "";
+  if (billsGet) {
+    try {
+      const accessToken = await getAccessToken();
+      const billsBase = `${HOST}/vtech-bills/api/v2/billspaymentstore`;
+      const res = await vfdFetch(`${billsBase}/${billsGet.replace(/^\//, "")}`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json", AccessToken: accessToken },
+      });
+      const text = await res.text();
+      let parsed: unknown = text;
+      try { parsed = JSON.parse(text); } catch { /* keep raw */ }
+      return new Response(JSON.stringify({ vfd_mode: VFD_MODE, probe: "bills_get", queried: billsGet, http_status: res.status, response: parsed }, null, 2), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (err) {
+      return new Response(JSON.stringify({ error: String(err) }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }
 
 
   // Ops probe: post a raw payload straight to VFD /pay (no wallet movement,
