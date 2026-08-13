@@ -288,5 +288,67 @@ serve(async (req) => {
     results.per_nuban = { flagged: findings.length };
   }
 
+  // ============================================================
+  // 3. Targeted live VFD-vs-ledger verification.
+  //    Run this immediately after ANY bulk operation, migration or
+  //    manual correcting entry — never trust an internal-only recheck.
+  //    body: { mode: "verify_users", user_ids: [...] }  (or account_numbers)
+  // ============================================================
+  if (mode === "verify_users") {
+    const userIds = Array.isArray(body.user_ids) ? (body.user_ids as string[]) : [];
+    const accountNumbers = Array.isArray(body.account_numbers) ? (body.account_numbers as string[]) : [];
+    let query = supabase.from("vfd_sandbox_clients").select("user_id, vfd_account_number");
+    if (userIds.length) query = query.in("user_id", userIds);
+    else if (accountNumbers.length) query = query.in("vfd_account_number", accountNumbers);
+    else return json({ success: false, error: "user_ids or account_numbers required" }, 400);
+
+    const { data: targets } = await query;
+    const checks: Array<Record<string, unknown>> = [];
+    for (const t of targets ?? []) {
+      const acctNo = t.vfd_account_number as string | null;
+      if (!acctNo) continue;
+      const enquiry = await vfdAccountEnquiry(acctNo);
+      const { data: led } = await supabase.rpc("vestara_user_ledger_wallet_balance", { _user_id: t.user_id });
+      const ledgerBal = Math.round(Number(led ?? 0) * 100) / 100;
+      const live = enquiry.ok && enquiry.balance !== null ? enquiry.balance : null;
+      const variance = live === null ? null : Math.round((live - ledgerBal) * 100) / 100;
+      const matched = variance !== null && Math.abs(variance) < 0.01;
+      checks.push({
+        user_id: t.user_id,
+        account_number: acctNo,
+        vfd_live_balance: live,
+        ledger_balance: ledgerBal,
+        variance,
+        status: live === null ? "error" : matched ? "matched" : "mismatch",
+      });
+      if (live !== null && !matched) {
+        await supabase.from("vfd_balance_drift_findings").insert({
+          user_id: t.user_id,
+          vfd_account_number: acctNo,
+          vfd_live_balance: live,
+          recorded_balance: ledgerBal,
+          drift: variance,
+          threshold: 0.01,
+          is_healthy: false,
+          details: { mode: "post_operation_verify" },
+          resolved: false,
+          checked_at: new Date().toISOString(),
+        });
+      }
+    }
+
+    await supabase.from("reconciliation_runs").insert({
+      run_type: "post_operation_verify",
+      vfd_corporate_balance: null,
+      ledger_sum: null,
+      variance: checks.filter((c) => c.status === "mismatch").length,
+      status: checks.some((c) => c.status !== "matched") ? "discrepancy" : "matched",
+      notes: `Live VFD vs ledger verification for ${checks.length} account(s)`,
+      details: { checks },
+    });
+
+    results.verify_users = checks;
+  }
+
   return json({ success: true, results });
 });
