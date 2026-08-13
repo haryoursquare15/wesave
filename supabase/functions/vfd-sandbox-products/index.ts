@@ -4492,6 +4492,7 @@ type FreshBillerItem = {
   fixedAmount: number | null;
   minimumAmount: number | null;
   maximumAmount: number | null;
+  itemFee: number;
   raw: Record<string, unknown> | null;
 };
 
