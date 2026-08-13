@@ -4901,10 +4901,17 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   const convenienceFee = await resolveConvenienceFee((body.category as string) || null, billerId) + itemFee;
   const totalDebit = numAmount + convenienceFee;
 
-  // Biller-specific rules published by VFD: IBEDC (Band A) will not process a
-  // vend below ₦5,000, so reject it up-front instead of losing the money to a
-  // failed purchase at the biller.
+  // Biller-specific minimums are enforced before any real money moves. VFD's
+  // IKEDC catalogue does not publish a minimumAmount, but the live vending host
+  // rejects sub-₦500 prepaid vends with its opaque status 99 response.
   const billerHay = `${billerId} ${(body.billerName as string) || ""} ${(body.paymentItemName as string) || ""}`.toLowerCase();
+  if (/ikedc|ikeja/.test(billerHay) && /prepaid/.test(billerHay) && numAmount < 500) {
+    return jsonResponse({
+      error: "Ikeja Electric prepaid purchases require at least ₦500. Please enter ₦500 or more.",
+      code: "BILLER_MINIMUM_AMOUNT",
+      minimum: 500,
+    }, 400);
+  }
   if (/ibedc|ibadan/.test(billerHay) && numAmount < 5000) {
     return jsonResponse({
       error: "IBEDC requires a minimum purchase of ₦5,000. Please enter ₦5,000 or more.",
@@ -5330,16 +5337,19 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   // "Transaction failed", empty). Never surface those — show an actionable message.
   const rawBillerMsg = String(data?.message ?? "").trim();
   const billerLabel = (body.billerName as string) || billerId.toUpperCase();
-  // "Not in the recent documentation" is the biller's way of saying the
-  // customer/meter number is not in its current customer file — the vend can
-  // never succeed for that number, at any amount.
-  const unknownCustomer = /not in the recent documentation|not found|invalid (meter|customer|account)/i.test(rawBillerMsg);
+  // Only explicit customer/meter errors justify telling the user their number
+  // is invalid. VFD's "Not in the recent documentation" is an opaque vending
+  // decline and must not override a successful customer-validation result.
+  const unknownCustomer = /customer not found|meter not found|invalid (meter|customer|account)/i.test(rawBillerMsg);
+  const undocumentedDecline = /not in the recent documentation/i.test(rawBillerMsg);
   const opaqueBillerMsg =
     !rawBillerMsg ||
     /unknown|undefined|null|^error$|^failed$/i.test(rawBillerMsg);
   return jsonResponse({
     error: unknownCustomer
       ? `${billerLabel} does not recognise ${customerId}. This meter/account number is not in their records, so the payment cannot go through at any amount. Your money was not taken — please confirm the number on a recent bill or with ${billerLabel} and try again.`
+      : undocumentedDecline
+        ? `${billerLabel} validated this customer but declined the vend without a specific reason. Your money has been returned. For prepaid electricity, use at least ₦500 and try again; if it still fails, contact support with reference ${reference}.`
       : opaqueBillerMsg
         ? `${billerLabel} declined this payment. Your money was not taken — check the customer/meter number and amount (some billers have a minimum), then try again.`
         : rawBillerMsg,
