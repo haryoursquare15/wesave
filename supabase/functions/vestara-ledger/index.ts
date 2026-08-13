@@ -21,6 +21,38 @@ function err(message: string, status = 400) {
   });
 }
 
+/**
+ * Real-time duplicate-credit guard. MUST be called before any code path that
+ * increases a customer balance. Writes a structured audit record (source,
+ * trigger event, idempotency key, pass/fail) on every call via `guard_credit`.
+ */
+// deno-lint-ignore no-explicit-any
+async function guardCredit(supabase: any, input: {
+  user_id: string | null;
+  amount: number;
+  reference: string;
+  source: string;
+  narration?: string;
+  trigger_event?: string;
+  details?: Record<string, unknown>;
+}): Promise<{ allowed: boolean; reason: string | null; flagged: boolean }> {
+  const { data, error } = await supabase.rpc("guard_credit", {
+    _user_id: input.user_id,
+    _amount: input.amount,
+    _reference: input.reference,
+    _source: input.source,
+    _narration: input.narration ?? null,
+    _trigger_event: input.trigger_event ?? null,
+    _details: input.details ?? {},
+  });
+  if (error) {
+    console.error("[credit-guard] guard_credit failed — refusing credit:", error.message);
+    return { allowed: false, reason: "guard_unavailable", flagged: true };
+  }
+  const r = (data ?? {}) as { allowed?: boolean; reason?: string; flagged?: boolean };
+  return { allowed: !!r.allowed, reason: r.reason ?? null, flagged: !!r.flagged };
+}
+
 // ── Webhook signature verification (HMAC-SHA256) ──
 async function verifyWebhookSignature(req: Request, body: string): Promise<boolean> {
   const webhookSecret = Deno.env.get("VFD_WEBHOOK_SECRET");
@@ -243,30 +275,37 @@ serve(async (req) => {
         const { account_number, amount, reference, metadata } = params;
         if (!amount || !reference) return err("amount and reference are required");
 
-        // If __self__, this is a sandbox self-credit — use the authenticated user
-        let targetUserId: string;
-        if (account_number === "__self__") {
-          const authHeader = req.headers.get("Authorization");
-          if (!authHeader) return err("Unauthorized for self-deposit", 401);
-          const { data: { user }, error: authErr } = await supabase.auth.getUser(
-            authHeader.replace("Bearer ", "")
-          );
-          if (authErr || !user) return err("Unauthorized for self-deposit", 401);
-          targetUserId = user.id;
-        } else {
-          // External webhook — verify signature
-          if (!(await verifyWebhookSignature(req, rawBody))) {
-            return err("Invalid webhook signature", 403);
-          }
+        // HARD RULE: a wallet credit here may only ever originate from a
+        // signed, VFD-originated webhook naming a real NUBAN. The former
+        // "__self__" self-credit path (any authenticated user could mint
+        // balance with a client-supplied reference) has been removed.
+        if (!account_number || account_number === "__self__") {
+          return err("account_number (a real NUBAN) is required — self-credit is not permitted", 403);
+        }
+        if (!(await verifyWebhookSignature(req, rawBody))) {
+          return err("Invalid webhook signature", 403);
+        }
 
-          // Look up user by VFD virtual account (NUBAN)
-          const { data: client } = await supabase
-            .from("vfd_sandbox_clients")
-            .select("user_id")
-            .eq("vfd_account_number", account_number)
-            .single();
-          if (!client) return err("Unknown account number");
-          targetUserId = client.user_id;
+        // Look up user by VFD virtual account (NUBAN)
+        const { data: client } = await supabase
+          .from("vfd_sandbox_clients")
+          .select("user_id")
+          .eq("vfd_account_number", account_number)
+          .single();
+        if (!client) return err("Unknown account number");
+        const targetUserId: string = client.user_id;
+
+        // Real-time duplicate-credit guard (blocks before any money moves).
+        const guard = await guardCredit(supabase, {
+          user_id: targetUserId,
+          amount: Number(amount),
+          reference,
+          source: "vestara-ledger.deposit_webhook",
+          narration: String((metadata as Record<string, unknown> | undefined)?.narration ?? ""),
+          trigger_event: `vfd_webhook:${account_number}`,
+        });
+        if (!guard.allowed) {
+          return err(`Credit blocked by duplicate guard (${guard.reason})`, 409);
         }
 
         // Ensure wallet exists
@@ -285,7 +324,7 @@ serve(async (req) => {
           await syncBalanceCachesFromVestara(supabase, targetUserId);
           await logSettlementAudit(supabase, {
             user_id: targetUserId,
-            account_number: account_number === "__self__" ? null : account_number,
+            account_number,
             event_type: "deposit_settlement_credit",
             reference,
             vestara_transaction_id: depositResult.transaction_id ?? null,
@@ -476,7 +515,7 @@ serve(async (req) => {
 
       // ── Thrift payout ──
       case "thrift_payout": {
-        const { beneficiary_id, group_id, gross_amount, fee, reference, metadata } = params;
+        const { beneficiary_id, group_id, gross_amount, fee, cycle_number, metadata } = params;
         if (!beneficiary_id || !group_id || !gross_amount)
           return err("beneficiary_id, group_id, and gross_amount are required");
 
@@ -492,12 +531,29 @@ serve(async (req) => {
           return err("Only the group admin or a platform admin can run thrift payouts", 403);
         }
 
+        // Deterministic, server-generated reference: one payout per
+        // (group, beneficiary, cycle). Client references are ignored.
+        const cycleKey = cycle_number != null
+          ? `c${cycle_number}`
+          : new Date().toISOString().slice(0, 10);
+        const payoutRef = `thrift-payout-${String(group_id)}-${String(beneficiary_id)}-${cycleKey}`;
+        const payoutGuard = await guardCredit(supabase, {
+          user_id: beneficiary_id,
+          amount: Number(gross_amount) - Number(fee || 0),
+          reference: payoutRef,
+          source: "vestara-ledger.thrift_payout",
+          trigger_event: `group:${group_id}:${cycleKey}`,
+        });
+        if (!payoutGuard.allowed) {
+          return err(`Payout blocked by duplicate guard (${payoutGuard.reason})`, 409);
+        }
+
         const { data } = await supabase.rpc("vestara_thrift_payout", {
           _beneficiary_id: beneficiary_id,
           _group_id: group_id,
           _gross_amount: gross_amount,
           _fee: fee || 0,
-          _reference: reference || `payout-${crypto.randomUUID().slice(0, 8)}`,
+          _reference: payoutRef,
           _metadata: metadata || {},
         });
         result = data;
@@ -524,14 +580,31 @@ serve(async (req) => {
 
       // ── Split distribute ──
       case "split_distribute": {
-        const { split_id, recipients, reference, metadata } = params;
-        if (!split_id || !recipients || !reference)
-          return err("split_id, recipients, and reference are required");
+        const { split_id, recipients, metadata } = params;
+        if (!split_id || !recipients)
+          return err("split_id and recipients are required");
+
+        // Deterministic, server-generated reference (one distribution per
+        // split) + explicit prior-credit check on every recipient leg.
+        const splitRef = `split-dist-${String(split_id)}`;
+        const legs = Array.isArray(recipients) ? recipients as Array<{ user_id: string; amount: number }> : [];
+        for (const leg of legs) {
+          const g = await guardCredit(supabase, {
+            user_id: leg.user_id,
+            amount: Number(leg.amount),
+            reference: `${splitRef}-${leg.user_id}`,
+            source: "vestara-ledger.split_distribute",
+            trigger_event: `split:${split_id}`,
+          });
+          if (!g.allowed) {
+            return err(`Split distribution blocked by duplicate guard (${g.reason})`, 409);
+          }
+        }
 
         const { data } = await supabase.rpc("vestara_split_distribute", {
           _split_id: split_id,
           _recipients: recipients,
-          _reference: reference,
+          _reference: splitRef,
           _initiated_by: userId,
           _metadata: metadata || {},
         });
@@ -574,11 +647,25 @@ serve(async (req) => {
           return err("Only the campaign creator or a platform admin can disburse this campaign", 403);
         }
 
+        // Deterministic, server-generated reference — client-supplied
+        // references are ignored so a retry can never mint a second credit.
+        const cfRef = `cf-disburse-${String(campaign_id)}-${String(beneficiary_id)}`;
+        const cfGuard = await guardCredit(supabase, {
+          user_id: beneficiary_id,
+          amount: Number(amount),
+          reference: cfRef,
+          source: "vestara-ledger.crowdfund_disburse",
+          trigger_event: `campaign:${campaign_id}`,
+        });
+        if (!cfGuard.allowed) {
+          return err(`Disbursement blocked by duplicate guard (${cfGuard.reason})`, 409);
+        }
+
         const { data } = await supabase.rpc("vestara_crowdfund_disburse", {
           _beneficiary_id: beneficiary_id,
           _campaign_id: campaign_id,
           _amount: amount,
-          _reference: reference || `cf-disburse-${crypto.randomUUID()}`,
+          _reference: cfRef,
           _metadata: metadata || {},
         });
         result = data;
@@ -990,7 +1077,25 @@ serve(async (req) => {
         // at the bank FIRST (sub-account NUBAN -> customer NUBAN). The DB
         // function refuses to reject until that reversal is stamped.
         const { data: pre } = await supabase.from("vestara_savings")
-          .select("sub_account_transferred_at, sub_account_reversed_at").eq("id", savings_id).maybeSingle();
+          .select("sub_account_transferred_at, sub_account_reversed_at, approval_status, user_id, principal")
+          .eq("id", savings_id).maybeSingle();
+
+        // Explicit prior-refund check: a contract that is no longer pending has
+        // already been settled once — refusing here stops a second refund.
+        if (pre && pre.approval_status && pre.approval_status !== "pending") {
+          return err("This investment has already been decided — no further refund will be posted.", 409);
+        }
+        const rejectGuard = await guardCredit(supabase, {
+          user_id: pre?.user_id ?? null,
+          amount: Number(pre?.principal ?? 0),
+          reference: `savings-reject-refund-${String(savings_id)}`,
+          source: "vestara-ledger.reject_savings",
+          trigger_event: `savings:${savings_id}`,
+        });
+        if (!rejectGuard.allowed) {
+          return err(`Refund blocked by duplicate guard (${rejectGuard.reason})`, 409);
+        }
+
         let reversal: Record<string, unknown> | null = null;
         if (pre?.sub_account_transferred_at && !pre?.sub_account_reversed_at) {
           const authHeader = req.headers.get("Authorization") || "";

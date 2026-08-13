@@ -220,11 +220,23 @@ Deno.serve(async (req) => {
     }
     return ok({ deduped: true, reason: "already_credited_by_intra_transfer_mirror", reference: dupRef });
   }
-
-
-
-
-
+  // Real-time duplicate-credit guard: fuzzy (amount + source + narration +
+  // window) as well as exact reference, and it writes the structured audit
+  // record for this credit attempt.
+  const { data: guardRes } = await db.rpc("guard_credit", {
+    _user_id: client.user_id,
+    _amount: amount,
+    _reference: reference,
+    _source: "vfd_inflow_webhook",
+    _narration: narration || null,
+    _trigger_event: `vfd_session:${sessionId}`,
+    _details: { account_no: accountNo, vfd_reference: vfdRef },
+  });
+  const guard = (guardRes ?? {}) as { allowed?: boolean; reason?: string; flagged?: boolean };
+  if (guard.allowed === false) {
+    console.error("[vfd-inflow] credit BLOCKED by guard", guard.reason, reference);
+    return ok({ blocked: true, reason: guard.reason, reference });
+  }
 
   const { data: dep, error: depErr } = await db.rpc("vestara_deposit", {
     _user_id: client.user_id,

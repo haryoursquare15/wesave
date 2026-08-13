@@ -95,6 +95,20 @@ Deno.serve(async (req) => {
   if (!accountNo || accountNo !== PLATFORM_POOL_NUBAN) {
     return ok({ ignored: true, reason: "Not the platform pool account" });
   }
+  // Pool-originator guard (same rule as vfd-inflow-webhook): a credit whose
+  // ORIGINATOR is one of our own settlement/pool NUBANs is an internal,
+  // ledger-initiated movement (reversal, sweep, disbursement). Crediting it
+  // here would double-count it.
+  const INTERNAL_NUBANS = new Set(
+    [
+      PLATFORM_POOL_NUBAN,
+      Deno.env.get("VFD_CORPORATE_POOL_NUBAN") || "1047279595",
+      Deno.env.get("VFD_BILLS_SETTLEMENT_NUBAN") || "",
+    ].filter(Boolean) as string[],
+  );
+  if (payerAccount && INTERNAL_NUBANS.has(payerAccount)) {
+    return ok({ ignored: true, reason: "Internal pool-originated movement — already ledgered" });
+  }
   if (!amount || amount <= 0) {
     return ok({ ignored: true, reason: "Invalid amount" });
   }
@@ -125,6 +139,20 @@ Deno.serve(async (req) => {
   const campaign = campaigns[0];
   if (campaign.status !== "active" && campaign.status !== "completed") {
     return ok({ ignored: true, reason: "Campaign not active" });
+  }
+
+  // 4b. Real-time duplicate-credit guard + structured audit record.
+  const { data: guardRes } = await db.rpc("guard_credit", {
+    _user_id: null,
+    _amount: amount,
+    _reference: `campaign-inflow-${sessionId}`,
+    _source: "vfd_campaign_inflow_webhook",
+    _narration: narration || null,
+    _trigger_event: `campaign:${campaign.id}`,
+    _details: { payer_account: payerAccount, vfd_reference: vfdRef },
+  });
+  if ((guardRes as { allowed?: boolean } | null)?.allowed === false) {
+    return ok({ blocked: true, reason: (guardRes as { reason?: string }).reason, sessionId });
   }
 
   // 5. Idempotent insert into inflow ledger. UNIQUE(vfd_session_id) protects
