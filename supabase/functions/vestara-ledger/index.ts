@@ -243,30 +243,37 @@ serve(async (req) => {
         const { account_number, amount, reference, metadata } = params;
         if (!amount || !reference) return err("amount and reference are required");
 
-        // If __self__, this is a sandbox self-credit — use the authenticated user
-        let targetUserId: string;
-        if (account_number === "__self__") {
-          const authHeader = req.headers.get("Authorization");
-          if (!authHeader) return err("Unauthorized for self-deposit", 401);
-          const { data: { user }, error: authErr } = await supabase.auth.getUser(
-            authHeader.replace("Bearer ", "")
-          );
-          if (authErr || !user) return err("Unauthorized for self-deposit", 401);
-          targetUserId = user.id;
-        } else {
-          // External webhook — verify signature
-          if (!(await verifyWebhookSignature(req, rawBody))) {
-            return err("Invalid webhook signature", 403);
-          }
+        // HARD RULE: a wallet credit here may only ever originate from a
+        // signed, VFD-originated webhook naming a real NUBAN. The former
+        // "__self__" self-credit path (any authenticated user could mint
+        // balance with a client-supplied reference) has been removed.
+        if (!account_number || account_number === "__self__") {
+          return err("account_number (a real NUBAN) is required — self-credit is not permitted", 403);
+        }
+        if (!(await verifyWebhookSignature(req, rawBody))) {
+          return err("Invalid webhook signature", 403);
+        }
 
-          // Look up user by VFD virtual account (NUBAN)
-          const { data: client } = await supabase
-            .from("vfd_sandbox_clients")
-            .select("user_id")
-            .eq("vfd_account_number", account_number)
-            .single();
-          if (!client) return err("Unknown account number");
-          targetUserId = client.user_id;
+        // Look up user by VFD virtual account (NUBAN)
+        const { data: client } = await supabase
+          .from("vfd_sandbox_clients")
+          .select("user_id")
+          .eq("vfd_account_number", account_number)
+          .single();
+        if (!client) return err("Unknown account number");
+        const targetUserId: string = client.user_id;
+
+        // Real-time duplicate-credit guard (blocks before any money moves).
+        const guard = await guardCredit(supabase, {
+          user_id: targetUserId,
+          amount: Number(amount),
+          reference,
+          source: "vestara-ledger.deposit_webhook",
+          narration: String((metadata as Record<string, unknown> | undefined)?.narration ?? ""),
+          trigger_event: `vfd_webhook:${account_number}`,
+        });
+        if (!guard.allowed) {
+          return err(`Credit blocked by duplicate guard (${guard.reason})`, 409);
         }
 
         // Ensure wallet exists
@@ -285,7 +292,7 @@ serve(async (req) => {
           await syncBalanceCachesFromVestara(supabase, targetUserId);
           await logSettlementAudit(supabase, {
             user_id: targetUserId,
-            account_number: account_number === "__self__" ? null : account_number,
+            account_number,
             event_type: "deposit_settlement_credit",
             reference,
             vestara_transaction_id: depositResult.transaction_id ?? null,
