@@ -17,6 +17,7 @@ import { SandboxBillReceipts } from "./SandboxBillReceipts";
 import { SandboxBillBeneficiaries } from "./SandboxBillBeneficiaries";
 import { SandboxRecurringBills } from "./SandboxRecurringBills";
 import { BillBeneficiaryRename } from "./BillBeneficiaryRename";
+import { TransactionPinGate } from "@/components/security/TransactionPinGate";
 
 /* ─── Types ─── */
 interface Biller {
@@ -37,7 +38,7 @@ interface BillerItem {
   productId: string;
   paymentitemid: string;
   currencySymbol: string;
-  isAmountFixed: string;
+  isAmountFixed: string | boolean;
   itemFee: string;
   paymentCode: string;
   billerType: string;
@@ -55,6 +56,19 @@ const categoryConfig: Record<string, { icon: typeof Smartphone; color: string; b
 };
 
 type Step = "categories" | "billers" | "items" | "payment" | "success";
+
+/**
+ * VFD returns `isAmountFixed` inconsistently (boolean true, "true", 1, "1").
+ * Any item that publishes a price > 0 is treated as fixed so the amount is
+ * auto-populated and never typed by the user (e.g. data bundles).
+ */
+const isFixedPriceItem = (item?: BillerItem | null) => {
+  if (!item) return false;
+  const price = Number(item.amount);
+  if (!Number.isFinite(price) || price <= 0) return false;
+  const flag = String(item.isAmountFixed ?? "").toLowerCase();
+  return flag === "false" ? false : true;
+};
 
 export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = {}) {
   const { toast } = useToast();
@@ -78,6 +92,19 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
   const [splitInvited, setSplitInvited] = useState<Set<string>>(new Set());
   const [splitPaying, setSplitPaying] = useState(false);
   const [splitPaid, setSplitPaid] = useState(false);
+
+  // Transaction PIN gate — every money-moving bill action must be authorized
+  const [pinOpen, setPinOpen] = useState(false);
+  const [pinPurpose, setPinPurpose] = useState("Bill Payment");
+  const [pinDescription, setPinDescription] = useState<string | undefined>(undefined);
+  const [pendingAction, setPendingAction] = useState<null | (() => void | Promise<void>)>(null);
+
+  const requirePin = (purpose: string, description: string | undefined, action: () => void | Promise<void>) => {
+    setPinPurpose(purpose);
+    setPinDescription(description);
+    setPendingAction(() => action);
+    setPinOpen(true);
+  };
 
 
   // Data
@@ -250,8 +277,8 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
   /* ─── Select Item → Payment ─── */
   const selectItem = (item: BillerItem) => {
     setSelectedItem(item);
-    if (item.isAmountFixed === "true" && Number(item.amount) > 0) {
-      setAmount(item.amount);
+    if (isFixedPriceItem(item)) {
+      setAmount(String(Number(item.amount)));
     } else {
       setAmount("");
     }
@@ -544,7 +571,7 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
     loadCategories();
   }
 
-  const isAmountFixed = selectedItem?.isAmountFixed === "true" && Number(selectedItem.amount) > 0;
+  const isAmountFixed = isFixedPriceItem(selectedItem);
   const convenienceFee = selectedBiller?.convenienceFee ? Number(selectedBiller.convenienceFee) : 0;
 
   const filteredBillers = billerSearch
@@ -719,7 +746,7 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
             ) : (
               <div className="bg-card rounded-2xl border border-border/50 divide-y divide-border/30 overflow-hidden">
                 {items.map((item) => {
-                  const fixed = item.isAmountFixed === "true" && Number(item.amount) > 0;
+                  const fixed = isFixedPriceItem(item);
                   return (
                     <motion.button
                       key={item.id || item.paymentCode}
@@ -875,7 +902,13 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
             {/* Pay + Split Pay */}
             <div className="grid grid-cols-2 gap-3">
               <Button
-                onClick={handlePay}
+                onClick={() =>
+                  requirePin(
+                    "Bill Payment",
+                    `NGN ${(Number(amount || 0) + convenienceFee).toLocaleString()} to ${selectedBiller.name}`,
+                    handlePay
+                  )
+                }
                 disabled={paying || !customerId || !amount || Number(amount) <= 0 || (needsValidation && validationResult !== "valid")}
                 className="h-12 text-base font-bold"
               >
@@ -1138,7 +1171,13 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
 
               {/* Pay my share */}
               <Button
-                onClick={payMySplitShare}
+                onClick={() =>
+                  requirePin(
+                    "Split Pay Share",
+                    `NGN ${(createdSplit.my_share + createdSplit.service_fee).toLocaleString()} from your wallet`,
+                    payMySplitShare
+                  )
+                }
                 disabled={splitPaying || splitPaid}
                 className="w-full h-11 font-bold"
               >
@@ -1171,6 +1210,23 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <TransactionPinGate
+        open={pinOpen}
+        onOpenChange={setPinOpen}
+        purpose={pinPurpose}
+        description={pinDescription}
+        onVerified={() => {
+          setPinOpen(false);
+          const action = pendingAction;
+          setPendingAction(null);
+          void action?.();
+        }}
+        onCancel={() => {
+          setPinOpen(false);
+          setPendingAction(null);
+        }}
+      />
     </div>
   );
 }
