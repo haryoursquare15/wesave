@@ -613,11 +613,25 @@ serve(async (req) => {
           return err("Only the campaign creator or a platform admin can disburse this campaign", 403);
         }
 
+        // Deterministic, server-generated reference — client-supplied
+        // references are ignored so a retry can never mint a second credit.
+        const cfRef = `cf-disburse-${String(campaign_id)}-${String(beneficiary_id)}`;
+        const cfGuard = await guardCredit(supabase, {
+          user_id: beneficiary_id,
+          amount: Number(amount),
+          reference: cfRef,
+          source: "vestara-ledger.crowdfund_disburse",
+          trigger_event: `campaign:${campaign_id}`,
+        });
+        if (!cfGuard.allowed) {
+          return err(`Disbursement blocked by duplicate guard (${cfGuard.reason})`, 409);
+        }
+
         const { data } = await supabase.rpc("vestara_crowdfund_disburse", {
           _beneficiary_id: beneficiary_id,
           _campaign_id: campaign_id,
           _amount: amount,
-          _reference: reference || `cf-disburse-${crypto.randomUUID()}`,
+          _reference: cfRef,
           _metadata: metadata || {},
         });
         result = data;
