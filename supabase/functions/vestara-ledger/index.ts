@@ -515,7 +515,7 @@ serve(async (req) => {
 
       // ── Thrift payout ──
       case "thrift_payout": {
-        const { beneficiary_id, group_id, gross_amount, fee, reference, metadata } = params;
+        const { beneficiary_id, group_id, gross_amount, fee, cycle_number, metadata } = params;
         if (!beneficiary_id || !group_id || !gross_amount)
           return err("beneficiary_id, group_id, and gross_amount are required");
 
@@ -531,12 +531,29 @@ serve(async (req) => {
           return err("Only the group admin or a platform admin can run thrift payouts", 403);
         }
 
+        // Deterministic, server-generated reference: one payout per
+        // (group, beneficiary, cycle). Client references are ignored.
+        const cycleKey = cycle_number != null
+          ? `c${cycle_number}`
+          : new Date().toISOString().slice(0, 10);
+        const payoutRef = `thrift-payout-${String(group_id)}-${String(beneficiary_id)}-${cycleKey}`;
+        const payoutGuard = await guardCredit(supabase, {
+          user_id: beneficiary_id,
+          amount: Number(gross_amount) - Number(fee || 0),
+          reference: payoutRef,
+          source: "vestara-ledger.thrift_payout",
+          trigger_event: `group:${group_id}:${cycleKey}`,
+        });
+        if (!payoutGuard.allowed) {
+          return err(`Payout blocked by duplicate guard (${payoutGuard.reason})`, 409);
+        }
+
         const { data } = await supabase.rpc("vestara_thrift_payout", {
           _beneficiary_id: beneficiary_id,
           _group_id: group_id,
           _gross_amount: gross_amount,
           _fee: fee || 0,
-          _reference: reference || `payout-${crypto.randomUUID().slice(0, 8)}`,
+          _reference: payoutRef,
           _metadata: metadata || {},
         });
         result = data;
