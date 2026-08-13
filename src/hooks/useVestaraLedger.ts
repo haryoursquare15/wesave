@@ -247,17 +247,8 @@ export function useVestaraLedger() {
     return result;
   }, [invoke]);
 
-  /* ─── Deposit (sandbox credit → vestara deposit) ─── */
-  const deposit = useCallback(
-    (amount: number, reference?: string, metadata?: Record<string, unknown>) =>
-      invoke("deposit_webhook", {
-        account_number: "__self__",
-        amount,
-        reference: reference || `sandbox-${crypto.randomUUID().slice(0, 8)}`,
-        metadata: metadata || {},
-      }),
-    [invoke]
-  );
+  /* ─── Deposits are credited exclusively by verified VFD webhooks.
+       There is deliberately no client-callable deposit helper. ─── */
 
   /* ─── Withdraw (direct, non-external) ─── */
   const withdraw = useCallback(
