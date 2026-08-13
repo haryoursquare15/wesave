@@ -17,6 +17,7 @@ import { SandboxBillReceipts } from "./SandboxBillReceipts";
 import { SandboxBillBeneficiaries } from "./SandboxBillBeneficiaries";
 import { SandboxRecurringBills } from "./SandboxRecurringBills";
 import { BillBeneficiaryRename } from "./BillBeneficiaryRename";
+import { TransactionPinGate } from "@/components/security/TransactionPinGate";
 
 /* ─── Types ─── */
 interface Biller {
@@ -91,6 +92,19 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
   const [splitInvited, setSplitInvited] = useState<Set<string>>(new Set());
   const [splitPaying, setSplitPaying] = useState(false);
   const [splitPaid, setSplitPaid] = useState(false);
+
+  // Transaction PIN gate — every money-moving bill action must be authorized
+  const [pinOpen, setPinOpen] = useState(false);
+  const [pinPurpose, setPinPurpose] = useState("Bill Payment");
+  const [pinDescription, setPinDescription] = useState<string | undefined>(undefined);
+  const [pendingAction, setPendingAction] = useState<null | (() => void | Promise<void>)>(null);
+
+  const requirePin = (purpose: string, description: string | undefined, action: () => void | Promise<void>) => {
+    setPinPurpose(purpose);
+    setPinDescription(description);
+    setPendingAction(() => action);
+    setPinOpen(true);
+  };
 
 
   // Data
@@ -888,7 +902,13 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
             {/* Pay + Split Pay */}
             <div className="grid grid-cols-2 gap-3">
               <Button
-                onClick={handlePay}
+                onClick={() =>
+                  requirePin(
+                    "Bill Payment",
+                    `NGN ${(Number(amount || 0) + convenienceFee).toLocaleString()} to ${selectedBiller.name}`,
+                    handlePay
+                  )
+                }
                 disabled={paying || !customerId || !amount || Number(amount) <= 0 || (needsValidation && validationResult !== "valid")}
                 className="h-12 text-base font-bold"
               >
@@ -1151,7 +1171,13 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
 
               {/* Pay my share */}
               <Button
-                onClick={payMySplitShare}
+                onClick={() =>
+                  requirePin(
+                    "Split Pay Share",
+                    `NGN ${(createdSplit.my_share + createdSplit.service_fee).toLocaleString()} from your wallet`,
+                    payMySplitShare
+                  )
+                }
                 disabled={splitPaying || splitPaid}
                 className="w-full h-11 font-bold"
               >
@@ -1184,6 +1210,23 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <TransactionPinGate
+        open={pinOpen}
+        onOpenChange={setPinOpen}
+        purpose={pinPurpose}
+        description={pinDescription}
+        onVerified={() => {
+          setPinOpen(false);
+          const action = pendingAction;
+          setPendingAction(null);
+          void action?.();
+        }}
+        onCancel={() => {
+          setPinOpen(false);
+          setPendingAction(null);
+        }}
+      />
     </div>
   );
 }
