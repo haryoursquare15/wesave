@@ -436,7 +436,6 @@ export function useVestaraLedger() {
     // Transactions
     fetchTransactions,
     // Core operations
-    deposit,
     withdraw,
     transferInitiate,
     transferComplete,
