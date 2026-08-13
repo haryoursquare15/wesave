@@ -263,8 +263,8 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
   /* ─── Select Item → Payment ─── */
   const selectItem = (item: BillerItem) => {
     setSelectedItem(item);
-    if (item.isAmountFixed === "true" && Number(item.amount) > 0) {
-      setAmount(item.amount);
+    if (isFixedPriceItem(item)) {
+      setAmount(String(Number(item.amount)));
     } else {
       setAmount("");
     }
@@ -557,7 +557,7 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
     loadCategories();
   }
 
-  const isAmountFixed = selectedItem?.isAmountFixed === "true" && Number(selectedItem.amount) > 0;
+  const isAmountFixed = isFixedPriceItem(selectedItem);
   const convenienceFee = selectedBiller?.convenienceFee ? Number(selectedBiller.convenienceFee) : 0;
 
   const filteredBillers = billerSearch
@@ -732,7 +732,7 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
             ) : (
               <div className="bg-card rounded-2xl border border-border/50 divide-y divide-border/30 overflow-hidden">
                 {items.map((item) => {
-                  const fixed = item.isAmountFixed === "true" && Number(item.amount) > 0;
+                  const fixed = isFixedPriceItem(item);
                   return (
                     <motion.button
                       key={item.id || item.paymentCode}
