@@ -4893,25 +4893,15 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
     }
   }
   // Biller convenience fee is charged on top of the bill amount: the customer
-  // is debited (bill + fee) while VFD's /pay only carries the bill amount.
-  // Some billers (e.g. IKEDC Prepaid) also publish a mandatory per-item
-  // `itemFee` on /billerItems which MUST be echoed back on /pay, otherwise VFD
-  // rejects the vend with an opaque status 99.
+  // is debited (bill + fee) while VFD's /pay carries only the documented bill
+  // fields. `itemFee` comes from /billerItems for quoting/accounting; VFD's
+  // /pay contract does not accept it as a request field.
   const itemFee = fresh.found ? fresh.itemFee : 0;
   const convenienceFee = await resolveConvenienceFee((body.category as string) || null, billerId) + itemFee;
   const totalDebit = numAmount + convenienceFee;
 
-  // Biller-specific minimums are enforced before any real money moves. VFD's
-  // IKEDC catalogue does not publish a minimumAmount, but the live vending host
-  // rejects sub-₦500 prepaid vends with its opaque status 99 response.
+  // Biller-specific documented minimums are enforced before real money moves.
   const billerHay = `${billerId} ${(body.billerName as string) || ""} ${(body.paymentItemName as string) || ""}`.toLowerCase();
-  if (/ikedc|ikeja/.test(billerHay) && /prepaid/.test(billerHay) && numAmount < 500) {
-    return jsonResponse({
-      error: "Ikeja Electric prepaid purchases require at least ₦500. Please enter ₦500 or more.",
-      code: "BILLER_MINIMUM_AMOUNT",
-      minimum: 500,
-    }, 400);
-  }
   if (/ibedc|ibadan/.test(billerHay) && numAmount < 5000) {
     return jsonResponse({
       error: "IBEDC requires a minimum purchase of ₦5,000. Please enter ₦5,000 or more.",
@@ -5028,7 +5018,6 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   // amount uses the validated numeric value (never the raw client string), and
   // `reference` is freshly generated per attempt — VFD rejects reused refs.
   const payBody: Record<string, string> = { customerId, amount: numAmount.toString(), division, paymentItem, productId, billerId, reference };
-  if (itemFee > 0) payBody.itemFee = itemFee.toString();
   if (resolvedPhone) payBody.phoneNumber = resolvedPhone;
 
   // Durable forensic trace of the exact outbound /pay request, written BEFORE
@@ -5091,7 +5080,7 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   }
   const isSuccess = isProduction
     ? (payOutcome === "success" || isPending)
-    : (resp.ok || effStatus === "00" || effStatus === "99" || !!data);
+    : (effStatus === "00" || payOutcome === "success");
 
 
   if (isSuccess) {
@@ -5349,7 +5338,7 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
     error: unknownCustomer
       ? `${billerLabel} does not recognise ${customerId}. This meter/account number is not in their records, so the payment cannot go through at any amount. Your money was not taken — please confirm the number on a recent bill or with ${billerLabel} and try again.`
       : undocumentedDecline
-        ? `${billerLabel} validated this customer but declined the vend without a specific reason. Your money has been returned. For prepaid electricity, use at least ₦500 and try again; if it still fails, contact support with reference ${reference}.`
+        ? `${billerLabel} validated this customer but declined the vend without a specific reason. Your money has been returned. Please try again later or contact support with reference ${reference}.`
       : opaqueBillerMsg
         ? `${billerLabel} declined this payment. Your money was not taken — check the customer/meter number and amount (some billers have a minimum), then try again.`
         : rawBillerMsg,
