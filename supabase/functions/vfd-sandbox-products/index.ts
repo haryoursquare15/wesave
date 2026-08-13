@@ -4894,7 +4894,11 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   }
   // Biller convenience fee is charged on top of the bill amount: the customer
   // is debited (bill + fee) while VFD's /pay only carries the bill amount.
-  const convenienceFee = await resolveConvenienceFee((body.category as string) || null, billerId);
+  // Some billers (e.g. IKEDC Prepaid) also publish a mandatory per-item
+  // `itemFee` on /billerItems which MUST be echoed back on /pay, otherwise VFD
+  // rejects the vend with an opaque status 99.
+  const itemFee = fresh.found ? fresh.itemFee : 0;
+  const convenienceFee = await resolveConvenienceFee((body.category as string) || null, billerId) + itemFee;
   const totalDebit = numAmount + convenienceFee;
 
   // Biller-specific rules published by VFD: IBEDC (Band A) will not process a
