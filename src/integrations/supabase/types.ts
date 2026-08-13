@@ -6771,8 +6771,6 @@ export type Database = {
       is_admin: { Args: never; Returns: boolean }
       is_any_admin: { Args: { _user_id?: string }; Returns: boolean }
       is_backend_role: { Args: never; Returns: boolean }
-      is_group_admin: { Args: { _group_id: string }; Returns: boolean }
-      is_group_member: { Args: { _group_id: string }; Returns: boolean }
       is_split_participant:
         | {
             Args: { _split_request_id: string; _user_id: string }
@@ -6783,8 +6781,6 @@ export type Database = {
         Args: { _request_id: string }
         Returns: boolean
       }
-      is_target_ajo_admin: { Args: { p_group_id: string }; Returns: boolean }
-      is_target_ajo_member: { Args: { p_group_id: string }; Returns: boolean }
       is_vfd_sandbox_association_member: {
         Args: { _association_id: string; _user_id: string }
         Returns: boolean
