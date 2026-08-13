@@ -4547,6 +4547,10 @@ async function resolveFreshBillerItem(a: {
       fixedAmount: num(item.amount),
       minimumAmount: num(item.minimumAmount ?? item.minAmount),
       maximumAmount: num(item.maximumAmount ?? item.maxAmount),
+      itemFee: (() => {
+        const f = Number(String(item.itemFee ?? item.itemfee ?? "").replace(/[^\d.]/g, ""));
+        return Number.isFinite(f) && f > 0 ? f : 0;
+      })(),
       raw,
     };
   } catch (e) {
