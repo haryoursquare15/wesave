@@ -5329,13 +5329,21 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   // VFD sometimes returns opaque biller strings ("Not in the recent documentation",
   // "Transaction failed", empty). Never surface those — show an actionable message.
   const rawBillerMsg = String(data?.message ?? "").trim();
+  const billerLabel = (body.billerName as string) || billerId.toUpperCase();
+  // "Not in the recent documentation" is the biller's way of saying the
+  // customer/meter number is not in its current customer file — the vend can
+  // never succeed for that number, at any amount.
+  const unknownCustomer = /not in the recent documentation|not found|invalid (meter|customer|account)/i.test(rawBillerMsg);
   const opaqueBillerMsg =
     !rawBillerMsg ||
-    /not in the recent documentation|unknown|undefined|null|^error$|^failed$/i.test(rawBillerMsg);
+    /unknown|undefined|null|^error$|^failed$/i.test(rawBillerMsg);
   return jsonResponse({
-    error: opaqueBillerMsg
-      ? `${(body.billerName as string) || billerId.toUpperCase()} declined this payment. Your money was not taken — check the customer/meter number and amount (some billers have a minimum), then try again.`
-      : rawBillerMsg,
+    error: unknownCustomer
+      ? `${billerLabel} does not recognise ${customerId}. This meter/account number is not in their records, so the payment cannot go through at any amount. Your money was not taken — please confirm the number on a recent bill or with ${billerLabel} and try again.`
+      : opaqueBillerMsg
+        ? `${billerLabel} declined this payment. Your money was not taken — check the customer/meter number and amount (some billers have a minimum), then try again.`
+        : rawBillerMsg,
+
 
     code: "BILL_PAYMENT_FAILED",
     data: { ...data, reference, status: data?.status || "99", http_status: resp.status, effective_status: effStatus },
