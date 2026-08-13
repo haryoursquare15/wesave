@@ -21,6 +21,38 @@ function err(message: string, status = 400) {
   });
 }
 
+/**
+ * Real-time duplicate-credit guard. MUST be called before any code path that
+ * increases a customer balance. Writes a structured audit record (source,
+ * trigger event, idempotency key, pass/fail) on every call via `guard_credit`.
+ */
+// deno-lint-ignore no-explicit-any
+async function guardCredit(supabase: any, input: {
+  user_id: string | null;
+  amount: number;
+  reference: string;
+  source: string;
+  narration?: string;
+  trigger_event?: string;
+  details?: Record<string, unknown>;
+}): Promise<{ allowed: boolean; reason: string | null; flagged: boolean }> {
+  const { data, error } = await supabase.rpc("guard_credit", {
+    _user_id: input.user_id,
+    _amount: input.amount,
+    _reference: input.reference,
+    _source: input.source,
+    _narration: input.narration ?? null,
+    _trigger_event: input.trigger_event ?? null,
+    _details: input.details ?? {},
+  });
+  if (error) {
+    console.error("[credit-guard] guard_credit failed — refusing credit:", error.message);
+    return { allowed: false, reason: "guard_unavailable", flagged: true };
+  }
+  const r = (data ?? {}) as { allowed?: boolean; reason?: string; flagged?: boolean };
+  return { allowed: !!r.allowed, reason: r.reason ?? null, flagged: !!r.flagged };
+}
+
 // ── Webhook signature verification (HMAC-SHA256) ──
 async function verifyWebhookSignature(req: Request, body: string): Promise<boolean> {
   const webhookSecret = Deno.env.get("VFD_WEBHOOK_SECRET");
