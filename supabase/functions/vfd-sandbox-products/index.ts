@@ -4503,7 +4503,7 @@ async function resolveFreshBillerItem(a: {
     reachable: false, found: false,
     billerId: a.billerId, divisionId: a.divisionId, productId: a.productId,
     paymentItem: a.paymentItem, paymentItemName: null,
-    amountFixed: false, fixedAmount: null, minimumAmount: null, maximumAmount: null,
+    amountFixed: false, fixedAmount: null, minimumAmount: null, maximumAmount: null, itemFee: 0,
     raw: null,
   };
   try {
