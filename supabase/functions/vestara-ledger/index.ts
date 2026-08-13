@@ -563,14 +563,31 @@ serve(async (req) => {
 
       // ── Split distribute ──
       case "split_distribute": {
-        const { split_id, recipients, reference, metadata } = params;
-        if (!split_id || !recipients || !reference)
-          return err("split_id, recipients, and reference are required");
+        const { split_id, recipients, metadata } = params;
+        if (!split_id || !recipients)
+          return err("split_id and recipients are required");
+
+        // Deterministic, server-generated reference (one distribution per
+        // split) + explicit prior-credit check on every recipient leg.
+        const splitRef = `split-dist-${String(split_id)}`;
+        const legs = Array.isArray(recipients) ? recipients as Array<{ user_id: string; amount: number }> : [];
+        for (const leg of legs) {
+          const g = await guardCredit(supabase, {
+            user_id: leg.user_id,
+            amount: Number(leg.amount),
+            reference: `${splitRef}-${leg.user_id}`,
+            source: "vestara-ledger.split_distribute",
+            trigger_event: `split:${split_id}`,
+          });
+          if (!g.allowed) {
+            return err(`Split distribution blocked by duplicate guard (${g.reason})`, 409);
+          }
+        }
 
         const { data } = await supabase.rpc("vestara_split_distribute", {
           _split_id: split_id,
           _recipients: recipients,
-          _reference: reference,
+          _reference: splitRef,
           _initiated_by: userId,
           _metadata: metadata || {},
         });
