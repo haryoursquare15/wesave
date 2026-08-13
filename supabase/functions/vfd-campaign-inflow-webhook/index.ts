@@ -141,6 +141,20 @@ Deno.serve(async (req) => {
     return ok({ ignored: true, reason: "Campaign not active" });
   }
 
+  // 4b. Real-time duplicate-credit guard + structured audit record.
+  const { data: guardRes } = await db.rpc("guard_credit", {
+    _user_id: null,
+    _amount: amount,
+    _reference: `campaign-inflow-${sessionId}`,
+    _source: "vfd_campaign_inflow_webhook",
+    _narration: narration || null,
+    _trigger_event: `campaign:${campaign.id}`,
+    _details: { payer_account: payerAccount, vfd_reference: vfdRef },
+  });
+  if ((guardRes as { allowed?: boolean } | null)?.allowed === false) {
+    return ok({ blocked: true, reason: (guardRes as { reason?: string }).reason, sessionId });
+  }
+
   // 5. Idempotent insert into inflow ledger. UNIQUE(vfd_session_id) protects
   //    against double-credit on VFD retries.
   const { error: inflowErr } = await db
