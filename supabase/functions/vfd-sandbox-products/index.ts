@@ -4492,6 +4492,7 @@ type FreshBillerItem = {
   fixedAmount: number | null;
   minimumAmount: number | null;
   maximumAmount: number | null;
+  itemFee: number;
   raw: Record<string, unknown> | null;
 };
 
@@ -4502,7 +4503,7 @@ async function resolveFreshBillerItem(a: {
     reachable: false, found: false,
     billerId: a.billerId, divisionId: a.divisionId, productId: a.productId,
     paymentItem: a.paymentItem, paymentItemName: null,
-    amountFixed: false, fixedAmount: null, minimumAmount: null, maximumAmount: null,
+    amountFixed: false, fixedAmount: null, minimumAmount: null, maximumAmount: null, itemFee: 0,
     raw: null,
   };
   try {
@@ -4546,6 +4547,10 @@ async function resolveFreshBillerItem(a: {
       fixedAmount: num(item.amount),
       minimumAmount: num(item.minimumAmount ?? item.minAmount),
       maximumAmount: num(item.maximumAmount ?? item.maxAmount),
+      itemFee: (() => {
+        const f = Number(String(item.itemFee ?? item.itemfee ?? "").replace(/[^\d.]/g, ""));
+        return Number.isFinite(f) && f > 0 ? f : 0;
+      })(),
       raw,
     };
   } catch (e) {
@@ -4889,7 +4894,11 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   }
   // Biller convenience fee is charged on top of the bill amount: the customer
   // is debited (bill + fee) while VFD's /pay only carries the bill amount.
-  const convenienceFee = await resolveConvenienceFee((body.category as string) || null, billerId);
+  // Some billers (e.g. IKEDC Prepaid) also publish a mandatory per-item
+  // `itemFee` on /billerItems which MUST be echoed back on /pay, otherwise VFD
+  // rejects the vend with an opaque status 99.
+  const itemFee = fresh.found ? fresh.itemFee : 0;
+  const convenienceFee = await resolveConvenienceFee((body.category as string) || null, billerId) + itemFee;
   const totalDebit = numAmount + convenienceFee;
 
   // Biller-specific rules published by VFD: IBEDC (Band A) will not process a
@@ -5012,6 +5021,7 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   // amount uses the validated numeric value (never the raw client string), and
   // `reference` is freshly generated per attempt — VFD rejects reused refs.
   const payBody: Record<string, string> = { customerId, amount: numAmount.toString(), division, paymentItem, productId, billerId, reference };
+  if (itemFee > 0) payBody.itemFee = itemFee.toString();
   if (resolvedPhone) payBody.phoneNumber = resolvedPhone;
 
   // Durable forensic trace of the exact outbound /pay request, written BEFORE

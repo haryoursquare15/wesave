@@ -572,7 +572,9 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
   }
 
   const isAmountFixed = isFixedPriceItem(selectedItem);
-  const convenienceFee = selectedBiller?.convenienceFee ? Number(selectedBiller.convenienceFee) : 0;
+  const itemFee = selectedItem?.itemFee ? Number(selectedItem.itemFee) : 0;
+  const convenienceFee = (selectedBiller?.convenienceFee ? Number(selectedBiller.convenienceFee) : 0)
+    + (Number.isFinite(itemFee) && itemFee > 0 ? itemFee : 0);
 
   const filteredBillers = billerSearch
     ? billers.filter((b) => b.name.toLowerCase().includes(billerSearch.toLowerCase()))
