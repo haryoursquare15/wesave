@@ -148,22 +148,26 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
       accessToken = refreshed?.session?.access_token;
     }
     if (!accessToken) throw new Error("Not authenticated");
-    const resp = await client.functions.invoke("vfd-sandbox-products", {
-      body: { action, ...body },
-      headers: { Authorization: `Bearer ${accessToken}` },
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+    const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+    const response = await fetch(`${supabaseUrl}/functions/v1/vfd-sandbox-products`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: anonKey,
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ action, ...body }),
     });
-    if (resp.error) {
-      let message = resp.error.message;
-      try {
-        const context = (resp.error as { context?: Response }).context;
-        if (context && typeof context.clone === "function") {
-          const errorBody = await context.clone().json();
-          message = errorBody?.error || errorBody?.message || message;
-        }
-      } catch { /* use the SDK error */ }
-      throw new Error(message);
+    const text = await response.text();
+    let data: any = null;
+    if (text) {
+      try { data = JSON.parse(text); } catch { data = { error: text }; }
     }
-    return resp.data;
+    if (!response.ok) {
+      throw new Error(data?.error || data?.message || `Request failed (${response.status})`);
+    }
+    return data;
   }, [client]);
 
   /* ─── Validation requirement: ask the backend, never hardcode categories ─── */
