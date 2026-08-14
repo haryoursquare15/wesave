@@ -5339,7 +5339,13 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
 
   // VFD sometimes returns opaque biller strings ("Not in the recent documentation",
   // "Transaction failed", empty). Never surface those — show an actionable message.
-  const rawBillerMsg = String(data?.message ?? "").trim();
+  // The envelope message can belong to the TSQ wrapper ("Successful Transaction
+  // Retrieval") while the inner transaction actually failed — prefer the inner
+  // biller message and never surface a success-sounding string as an error.
+  const innerBillerMsg = String((data as any)?.data?.message ?? "").trim();
+  const envelopeMsg = String(data?.message ?? "").trim();
+  const successSounding = /success|retrieval|completed/i.test(envelopeMsg);
+  const rawBillerMsg = innerBillerMsg || (successSounding ? "" : envelopeMsg);
   const billerLabel = (body.billerName as string) || billerId.toUpperCase();
   // Only explicit customer/meter errors justify telling the user their number
   // is invalid. VFD's "Not in the recent documentation" is an opaque vending
@@ -5348,7 +5354,7 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   const undocumentedDecline = /not in the recent documentation/i.test(rawBillerMsg);
   const opaqueBillerMsg =
     !rawBillerMsg ||
-    /unknown|undefined|null|^error$|^failed$/i.test(rawBillerMsg);
+    /unknown|undefined|null|^error$|^failed$|success/i.test(rawBillerMsg);
   return jsonResponse({
     error: unknownCustomer
       ? `${billerLabel} does not recognise ${customerId}. This meter/account number is not in their records, so the payment cannot go through at any amount. Your money was not taken — please confirm the number on a recent bill or with ${billerLabel} and try again.`
