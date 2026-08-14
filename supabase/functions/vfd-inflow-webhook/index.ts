@@ -226,14 +226,22 @@ Deno.serve(async (req) => {
     return null;
   };
 
-  // Pool-originated guard: money leaving the corporate pool towards a customer
-  // NUBAN is ALWAYS ledger-initiated (bill refund/reversal, savings payout,
-  // withdrawal settlement). The ledger already credited the wallet at that
-  // moment, so crediting again here double-pays the customer.
+  // Internal-settlement guard: money leaving ANY Vestara-owned NUBAN towards a
+  // customer NUBAN is ALWAYS ledger-initiated (bill refund/reversal, savings
+  // payout or rejection refund, split reimbursement, withdrawal settlement).
+  // The ledger already credited the wallet at that moment, so crediting again
+  // here double-pays the customer. VFD often omits the originator account on
+  // intra-bank movements, so we also match the originator name and the
+  // settlement narration VFD stamps on these transfers.
   const payerAccount = String(
     get("originator_account_number") || get("originatorAccountNumber") || get("sourceAccount") || "",
   );
-  if (payerAccount && payerAccount === PLATFORM_POOL_NUBAN) {
+  const payerName = String(
+    get("originator_account_name") || get("originatorName") || get("sourceName") || "",
+  );
+  const internalReason = isInternalSettlement(payerAccount, payerName, narration);
+  if (internalReason) {
+    console.log("[vfd-inflow] internal settlement ignored", internalReason, accountNo, amount, narration);
     if (auditId) {
       await db.from("vfd_sandbox_webhook_logs")
         .update({ processed: true, processed_at: new Date().toISOString() })
@@ -241,12 +249,14 @@ Deno.serve(async (req) => {
     }
     return ok({
       deduped: true,
-      reason: "pool_originated_settlement_already_ledgered",
+      reason: "internal_settlement_already_ledgered",
+      detail: internalReason,
       accountNo,
       amount,
       narration,
     });
   }
+
 
   const dupRef = await dedupe();
   if (dupRef) {
