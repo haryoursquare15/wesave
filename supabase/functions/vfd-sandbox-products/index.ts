@@ -4910,6 +4910,21 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
     }, 400);
   }
 
+  // Nigerian discos reject prepaid/postpaid vends below ₦1,000 with an opaque
+  // decline (status 99, "Not in the recent documentation") AFTER money has
+  // already moved. Enforce the floor up-front so no funds leave the wallet.
+  const ELECTRICITY_MIN = 1000;
+  const isElectricity =
+    /electric|disco|power|prepaid|postpaid|aedc|ikedc|ekedc|ibedc|eedc|jedc|kedco|phed|kaedco|bedc|yedc|abuja electricity|ikeja/.test(billerHay);
+  if (isElectricity && numAmount < ELECTRICITY_MIN) {
+    return jsonResponse({
+      error: `${(body.billerName as string) || "This disco"} requires a minimum purchase of ₦${ELECTRICITY_MIN.toLocaleString()}. Please enter ₦${ELECTRICITY_MIN.toLocaleString()} or more.`,
+      code: "BILLER_MINIMUM_AMOUNT",
+      minimum: ELECTRICITY_MIN,
+    }, 400);
+  }
+
+
 
 
   const bal = await ensureBalanceRow(userId, true);
