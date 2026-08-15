@@ -251,20 +251,28 @@ serve(async (req) => {
         .maybeSingle();
       const ledgerBal = Number(walletAcct?.balance ?? 0);
 
-      const drift = Math.round((enquiry.balance - 0) * 100) / 100;
-      // Flag only when VFD has a non-zero balance NOT yet swept/ledgered.
-      // Under POOL model, VFD balance should be ~0 (swept). If positive,
-      // an inflow may have arrived without webhook → ledger.
-      if (enquiry.balance > 0.01) {
+      // TRUE drift = live bank balance vs ledger wallet balance.
+      // (Previously this recorded `enquiry.balance - 0`, so every funded
+      // account was flagged unhealthy every night with drift == balance —
+      // pure noise that buried real discrepancies and made alerting useless.)
+      const drift = Math.round((enquiry.balance - ledgerBal) * 100) / 100;
+      const threshold = 0.01;
+      if (Math.abs(drift) > threshold) {
         const finding = {
           user_id: c.user_id,
           vfd_account_number: acctNo,
           vfd_live_balance: enquiry.balance,
           recorded_balance: ledgerBal,
           drift,
-          threshold: 0.01,
+          threshold,
           is_healthy: false,
-          details: { mode: "per_nuban_pre_sweep", note: "VFD sub-account holds balance — possible missed sweep/webhook" },
+          details: {
+            mode: "per_nuban_live_vs_ledger",
+            direction: drift > 0 ? "bank_ahead_of_ledger" : "ledger_ahead_of_bank",
+            note: drift > 0
+              ? "Bank holds more than ledger — possible missed inflow webhook/sweep"
+              : "Ledger holds more than bank — possible phantom/duplicate credit",
+          },
           resolved: false,
           checked_at: new Date().toISOString(),
         };
@@ -272,6 +280,7 @@ serve(async (req) => {
         findings.push(finding);
       }
     }
+
 
     await supabase.from("reconciliation_runs").insert({
       run_type: "per_nuban",
