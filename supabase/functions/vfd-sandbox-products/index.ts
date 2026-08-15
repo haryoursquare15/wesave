@@ -5355,14 +5355,19 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   const opaqueBillerMsg =
     !rawBillerMsg ||
     /unknown|undefined|null|^error$|^failed$|success/i.test(rawBillerMsg);
+  // Only claim the money is back when the bank reversal actually confirmed.
+  const refundLine = bankRefund.ok
+    ? "Your money has been returned."
+    : "Your refund is being processed and will land back in your wallet shortly — it is tracked automatically.";
   return jsonResponse({
     error: unknownCustomer
       ? `${billerLabel} does not recognise ${customerId}. This meter/account number is not in their records, so the payment cannot go through at any amount. Your money was not taken — please confirm the number on a recent bill or with ${billerLabel} and try again.`
       : undocumentedDecline
-        ? `${billerLabel} validated this customer but declined the vend without a specific reason. Your money has been returned. Please try again later or contact support with reference ${reference}.`
+        ? `${billerLabel} validated this customer but declined the vend without a specific reason. ${refundLine} Please try again later or contact support with reference ${reference}.`
       : opaqueBillerMsg
-        ? `${billerLabel} declined this payment. Your money was not taken — check the customer/meter number and amount (some billers have a minimum), then try again.`
+        ? `${billerLabel} declined this payment. ${refundLine} Check the customer/meter number and amount (some billers have a minimum), then try again.`
         : rawBillerMsg,
+
 
 
     code: "BILL_PAYMENT_FAILED",
