@@ -7514,7 +7514,7 @@ async function handleCheckGroupMandateStatus(userId: string, body: Record<string
     return jsonResponse({ data: { success: true, mandate_status: "authorized", bank_approved: true, test_mode: true } });
   }
 
-  const accessToken = await getVfdAccessToken();
+  const accessToken = await getVfdMandateAccessToken();
   if (!accessToken) return jsonResponse({ error: "VFD credentials not configured" }, 500);
 
   const approval = await checkVfdMandateApproval(member.mandate_reference, accessToken);
@@ -7992,7 +7992,7 @@ async function handleCheckTargetMandateStatus(userId: string, body: Record<strin
     return jsonResponse({ data: { success: true, mandate_status: "authorized", bank_approved: true } });
   }
 
-  const accessToken = await getVfdAccessToken();
+  const accessToken = await getVfdMandateAccessToken();
   if (!accessToken) return jsonResponse({ error: "VFD credentials not configured" }, 500);
 
   const approval = await checkVfdMandateApproval(member.mandate_reference as string, accessToken);
@@ -8256,7 +8256,7 @@ async function handleGoalsaveCheckMandateStatus(userId: string, body: Record<str
     return jsonResponse({ data: { success: true, mandate_status: "authorized", bank_approved: true } });
   }
 
-  const accessToken = await getVfdAccessToken();
+  const accessToken = await getVfdMandateAccessToken();
   if (!accessToken) return jsonResponse({ error: "VFD credentials not configured" }, 500);
 
   const approval = await checkVfdMandateApproval(savings.mandate_reference as string, accessToken);
