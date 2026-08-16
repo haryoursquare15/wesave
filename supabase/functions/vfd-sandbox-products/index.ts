@@ -7900,12 +7900,15 @@ async function handleAcceptTargetMandate(userId: string, body: Record<string, un
 
   const nowIso = new Date().toISOString();
   if (!vfd.created) {
+    const refunded = await refundMandateSetupFee(userId, feeRef, feeResult.fee, { product_code: "target_ddm", target_id: targetId });
     await db.from("vfd_sandbox_target_members").update({
-      mandate_status: "failed", mandate_payload: vfd.raw,
-      mandate_fee_charged_at: nowIso, mandate_fee_amount: feeResult.fee,
+      mandate_status: "failed", mandate_payload: { ...vfd.raw, fee_refunded: refunded },
+      mandate_fee_charged_at: refunded ? null : nowIso, mandate_fee_amount: refunded ? 0 : feeResult.fee,
     }).eq("id", member.id);
-    await recordTargetMandateEvent(targetId, userId, reference, null, "failed", vfd.raw);
-    return jsonResponse({ error: "VFD did not create the mandate. The ₦100 setup fee has been charged; please try again.", code: "MANDATE_VFD_FAILED", details: vfd.raw }, 502);
+    await recordTargetMandateEvent(targetId, userId, reference, null, "failed", { ...vfd.raw, fee_refunded: refunded });
+    return jsonResponse({ error: refunded
+      ? "Your bank's mandate service didn't accept the request. The ₦100 setup fee has been refunded — please try again shortly."
+      : "Your bank's mandate service didn't accept the request. Please try again shortly or contact support.", code: "MANDATE_VFD_FAILED", details: vfd.raw }, 502);
   }
 
   const startObj = new Date();
