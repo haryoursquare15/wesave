@@ -1422,23 +1422,9 @@ serve(async (req) => {
             ? "https://api-devapps.vfdbank.systems"
             : "https://api-apps.vfdbank.systems";
           const VFD_MANDATE_URL = `${VFD_HOST}/vtech-mandate/api/v2/directdebit/mandate/setup?e-mandate=true`;
-          // Pull VFD access token via same creds used by vfd-banking
-          const consumerKey = Deno.env.get("VFD_CONSUMER_KEY");
-          const consumerSecret = Deno.env.get("VFD_CONSUMER_SECRET");
-          const staticToken = Deno.env.get("VFD_ACCESS_TOKEN");
-          let accessToken = (await getGatewayAccessToken()) || staticToken || "";
-          if (!accessToken && consumerKey && consumerSecret) {
-            const tokRes = await vfdFetch(
-              `${VFD_HOST}/vfd-tech/baas-portal/v1.1/baasauth/token`,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "-1" }),
-              },
-            );
-            const tokData = await tokRes.json().catch(() => ({}));
-            if (tokData?.data?.access_token) accessToken = tokData.data.access_token;
-          }
+          // Only the gateway-managed production wallet token is valid here.
+          // Locally minted BaaS/static tokens are rejected as invalid wallet tokens.
+          const accessToken = await getGatewayAccessToken();
           if (!accessToken) throw new Error("VFD credentials not configured");
 
           // Fetch the user's VFD account for the mandate (debtor side)
