@@ -7068,8 +7068,15 @@ const VFD_MANDATE_BASE = (() => {
 // Per-group wallets are internal ledger constructs only; they do not map to
 // separate VFD accounts. DDM funds always land in this pool first, then the
 // thrift ledger logic routes them to the group/member payout balance.
-const VFD_POOL_NUBAN =
-  Deno.env.get("VFD_CORPORATE_ACCOUNT_NUMBER") || Deno.env.get("VFD_POOL_NUBAN") || "1047279595";
+const VFD_POOL_NUBAN = (() => {
+  const configured =
+    Deno.env.get("VFD_MANDATE_RECEIVER_ACCOUNT") ||
+    Deno.env.get("VFD_CORPORATE_ACCOUNT_NUMBER") ||
+    Deno.env.get("VFD_POOL_NUBAN") ||
+    "1047279595";
+  // Legacy WeSave pool is decommissioned — never send mandates to it.
+  return configured.trim() === "1001695610" ? "1047279595" : configured.trim();
+})();
 const VFD_POOL_BANK_CODE =
   Deno.env.get("VFD_CORPORATE_BANK_CODE") || Deno.env.get("VFD_POOL_BANK_CODE") || "999999"; // VFD MFB
 const VFD_PAYER_BANK_CODE = Deno.env.get("VFD_PAYER_BANK_CODE") || "999999"; // user's VFD account
@@ -7131,7 +7138,7 @@ async function vfdDebitMandate(params: {
   narration: string;
   transactionReference: string;
 }) {
-  const accessToken = await getVfdAccessToken();
+  const accessToken = await getVfdMandateAccessToken();
   if (!accessToken) return { ok: false, raw: { error: "VFD credentials not configured" }, http_status: 0 };
   const payload = {
     amount: String(params.amount),
@@ -7181,6 +7188,30 @@ function readMandateCreateResponse(json: Record<string, unknown>) {
     data.nibssAccount || data.accountNumber || data.account || data.virtualAccountNumber || "",
   ) || extractNibssAccountFromMessage(nibssMessage);
   return { mandateCode, nibssAccount, nibssMessage };
+}
+
+// VFD issues SEPARATE credentials for the direct-debit / e-mandate product.
+// Using the wallet token there comes back as HTTP 401
+// { status: "99", message: "Unauthorized to use: Contact Admin" }.
+// If a mandate-specific token is provisioned, use it; otherwise fall back.
+async function getVfdMandateAccessToken(): Promise<string | null> {
+  const explicit = Deno.env.get("VFD_MANDATE_ACCESS_TOKEN");
+  if (explicit) return explicit;
+  return await getVfdAccessToken();
+}
+
+// Turn a raw mandate failure payload into an honest, actionable message.
+function mandateFailureMessage(raw: Record<string, unknown>, refunded: boolean): string {
+  const http = Number((raw as any)?.http_status || 0);
+  const msg = String((raw as any)?.response?.message || (raw as any)?.error || "");
+  const feeNote = refunded
+    ? " The ₦100 setup fee has been refunded to your wallet."
+    : " If the ₦100 setup fee was charged, support will refund it.";
+  if (http === 401 || http === 403 || /unauthori[sz]ed to use|contact admin/i.test(msg)) {
+    return "Direct debit isn't enabled on our banking profile yet, so the mandate couldn't be created." +
+      feeNote + " Our team has been notified — please try again later or fund this plan from your wallet.";
+  }
+  return "Your bank's mandate service didn't accept the request." + feeNote + " Please try again shortly.";
 }
 
 // Refund the ₦100 mandate setup fee when VFD never created the mandate. The
@@ -7334,7 +7365,7 @@ async function handleAcceptGroupMandate(userId: string, body: Record<string, unk
     frequency: frequencyCode,
   };
 
-  const accessToken = await getVfdAccessToken();
+  const accessToken = await getVfdMandateAccessToken();
   if (!accessToken) {
     await db.from("vfd_sandbox_group_members").update({
       mandate_status: "failed",
@@ -7389,9 +7420,7 @@ async function handleAcceptGroupMandate(userId: string, body: Record<string, unk
     }).eq("id", member.id);
     await recordMandateEvent(groupId, userId, reference, null, "failed", { ...vfdResponsePayload, fee_refunded: refunded });
     return jsonResponse({
-      error: refunded
-        ? "Your bank's mandate service didn't accept the request. The ₦100 setup fee has been refunded to your wallet — please try again shortly."
-        : "Your bank's mandate service didn't accept the request. Please try again shortly or contact support.",
+      error: mandateFailureMessage(vfdResponsePayload, refunded),
       code: "MANDATE_VFD_FAILED",
       details: vfdResponsePayload,
     }, 502);
@@ -7485,7 +7514,7 @@ async function handleCheckGroupMandateStatus(userId: string, body: Record<string
     return jsonResponse({ data: { success: true, mandate_status: "authorized", bank_approved: true, test_mode: true } });
   }
 
-  const accessToken = await getVfdAccessToken();
+  const accessToken = await getVfdMandateAccessToken();
   if (!accessToken) return jsonResponse({ error: "VFD credentials not configured" }, 500);
 
   const approval = await checkVfdMandateApproval(member.mandate_reference, accessToken);
@@ -7817,7 +7846,7 @@ async function createVfdMandate(opts: {
   reference: string; payer: VfdMandatePayer; amount: number; period: string;
   totalCycles: number; startDate?: Date;
 }): Promise<{ created: boolean; mandateCode: string; nibssAccount: string; nibssMessage: string; raw: Record<string, unknown> }> {
-  const accessToken = await getVfdAccessToken();
+  const accessToken = await getVfdMandateAccessToken();
   if (!accessToken) return { created: false, mandateCode: "", nibssAccount: "", nibssMessage: "", raw: { error: "VFD credentials not configured" } };
 
   const startObj = opts.startDate || new Date();
@@ -7911,9 +7940,7 @@ async function handleAcceptTargetMandate(userId: string, body: Record<string, un
       mandate_fee_charged_at: refunded ? null : nowIso, mandate_fee_amount: refunded ? 0 : feeResult.fee,
     }).eq("id", member.id);
     await recordTargetMandateEvent(targetId, userId, reference, null, "failed", { ...vfd.raw, fee_refunded: refunded });
-    return jsonResponse({ error: refunded
-      ? "Your bank's mandate service didn't accept the request. The ₦100 setup fee has been refunded — please try again shortly."
-      : "Your bank's mandate service didn't accept the request. Please try again shortly or contact support.", code: "MANDATE_VFD_FAILED", details: vfd.raw }, 502);
+    return jsonResponse({ error: mandateFailureMessage(vfd.raw, refunded), code: "MANDATE_VFD_FAILED", details: vfd.raw }, 502);
   }
 
   const startObj = new Date();
@@ -7965,7 +7992,7 @@ async function handleCheckTargetMandateStatus(userId: string, body: Record<strin
     return jsonResponse({ data: { success: true, mandate_status: "authorized", bank_approved: true } });
   }
 
-  const accessToken = await getVfdAccessToken();
+  const accessToken = await getVfdMandateAccessToken();
   if (!accessToken) return jsonResponse({ error: "VFD credentials not configured" }, 500);
 
   const approval = await checkVfdMandateApproval(member.mandate_reference as string, accessToken);
@@ -8174,9 +8201,7 @@ async function handleGoalsaveAuthorizeMandate(userId: string, body: Record<strin
     await db.from("vfd_savings_mandate_events").insert({
       savings_id: savingsId, user_id: userId, mandate_id: reference, event_type: "failed", payload: { ...vfd.raw, fee_refunded: refunded },
     }).then(() => {}, () => {});
-    return jsonResponse({ error: refunded
-      ? "Your bank's mandate service didn't accept the request. The ₦100 setup fee has been refunded — please try again shortly."
-      : "Your bank's mandate service didn't accept the request. Please try again shortly or contact support.", code: "MANDATE_VFD_FAILED", details: vfd.raw, success: false }, 502);
+    return jsonResponse({ error: mandateFailureMessage(vfd.raw, refunded), code: "MANDATE_VFD_FAILED", details: vfd.raw, success: false }, 502);
   }
 
   const endObj = computeMandateEndDate(savings.commitment_frequency as string, Number(savings.tenor_count) || 1);
@@ -8231,7 +8256,7 @@ async function handleGoalsaveCheckMandateStatus(userId: string, body: Record<str
     return jsonResponse({ data: { success: true, mandate_status: "authorized", bank_approved: true } });
   }
 
-  const accessToken = await getVfdAccessToken();
+  const accessToken = await getVfdMandateAccessToken();
   if (!accessToken) return jsonResponse({ error: "VFD credentials not configured" }, 500);
 
   const approval = await checkVfdMandateApproval(savings.mandate_reference as string, accessToken);
