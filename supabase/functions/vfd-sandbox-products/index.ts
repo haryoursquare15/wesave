@@ -7348,7 +7348,7 @@ async function handleAcceptGroupMandate(userId: string, body: Record<string, unk
   let mandateCreated = false;
 
   try {
-    const res = await vfdFetch(`${VFD_MANDATE_BASE}/emandate/create`, {
+    const res = await vfdFetch(`${VFD_MANDATE_BASE}${VFD_MANDATE_CREATE_PATH}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", AccessToken: accessToken },
       body: JSON.stringify(mandatePayload),
@@ -7356,15 +7356,15 @@ async function handleAcceptGroupMandate(userId: string, body: Record<string, unk
     const json = await res.json().catch(() => ({} as Record<string, unknown>));
     vfdResponsePayload = { step: "create", request: mandatePayload, response: json, http_status: res.status };
 
-    // VFD E-Mandate returns either status "00" (immediate) or HTTP 202 Accepted
-    // (NIBSS authorization pending). Both are success cases — we then poll
-    // mandate-status to surface the NIBSS account/message to the user.
+    // Only a real VFD acknowledgement counts. An empty/undocumented body (the
+    // old bug) must NEVER be treated as a created mandate.
     const vfdStatus = String((json as any)?.status || "");
-    if (vfdStatus === "00" || res.status === 202 || (res.ok && vfdStatus !== "199")) {
+    const parsed = readMandateCreateResponse(json as Record<string, unknown>);
+    if ((vfdStatus === "00" || res.status === 202) && (parsed.mandateCode || parsed.nibssAccount)) {
       mandateCreated = true;
-      mandateCode = String((json as any)?.data?.mandateCode || (json as any)?.data?.mandateId || "");
-      nibssMessage = String((json as any)?.message || "");
-      nibssAccount = extractNibssAccountFromMessage(nibssMessage);
+      mandateCode = parsed.mandateCode;
+      nibssAccount = parsed.nibssAccount;
+      nibssMessage = parsed.nibssMessage;
     }
   } catch (e) {
     vfdResponsePayload = { step: "create", request: mandatePayload, error: e instanceof Error ? e.message : String(e) };
@@ -7373,19 +7373,25 @@ async function handleAcceptGroupMandate(userId: string, body: Record<string, unk
   const nowIso = new Date().toISOString();
 
   if (!mandateCreated) {
+    const refunded = MANDATE_TEST_MODE
+      ? false
+      : await refundMandateSetupFee(userId, feeRef, fee, { product_code: "ajo_ddm", group_id: groupId });
     await db.from("vfd_sandbox_group_members").update({
       mandate_status: "failed",
-      mandate_payload: vfdResponsePayload,
-      mandate_fee_charged_at: nowIso,
-      mandate_fee_amount: fee,
+      mandate_payload: { ...vfdResponsePayload, fee_refunded: refunded },
+      mandate_fee_charged_at: refunded ? null : nowIso,
+      mandate_fee_amount: refunded ? 0 : fee,
     }).eq("id", member.id);
-    await recordMandateEvent(groupId, userId, reference, null, "failed", vfdResponsePayload);
+    await recordMandateEvent(groupId, userId, reference, null, "failed", { ...vfdResponsePayload, fee_refunded: refunded });
     return jsonResponse({
-      error: "VFD did not create the mandate. The ₦100 setup fee has been charged; please try again.",
+      error: refunded
+        ? "Your bank's mandate service didn't accept the request. The ₦100 setup fee has been refunded to your wallet — please try again shortly."
+        : "Your bank's mandate service didn't accept the request. Please try again shortly or contact support.",
       code: "MANDATE_VFD_FAILED",
       details: vfdResponsePayload,
     }, 502);
   }
+
 
   // 3) Persist mandate against the membership row. Status starts at
   //    "awaiting_approval" — flips to "authorized" once the customer funds
