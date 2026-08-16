@@ -7903,9 +7903,9 @@ async function chargeMandateSetupFee(userId: string, feeRef: string, ctx: Record
 // Build + POST the VFD /emandate/create payload. Returns normalised result.
 async function createVfdMandate(opts: {
   reference: string; payer: VfdMandatePayer; amount: number; period: string;
-  totalCycles: number; startDate?: Date;
+  totalCycles: number; startDate?: Date; accessToken?: string;
 }): Promise<{ created: boolean; mandateCode: string; nibssAccount: string; nibssMessage: string; raw: Record<string, unknown> }> {
-  const accessToken = await getVfdMandateAccessToken();
+  const accessToken = opts.accessToken || await getVfdMandateAccessToken();
   if (!accessToken) return { created: false, mandateCode: "", nibssAccount: "", nibssMessage: "", raw: { error: "VFD credentials not configured" } };
 
   const startObj = opts.startDate || new Date();
@@ -8234,6 +8234,17 @@ async function handleGoalsaveAuthorizeMandate(userId: string, body: Record<strin
     return jsonResponse({ success: true, already_authorized: true, mandate_reference: savings.mandate_reference, mandate_code: savings.mandate_code });
   }
 
+  // Authenticate with the mandate service before touching the customer's
+  // wallet. This prevents a debit/refund pair when VFD rejects every token.
+  const mandateAccessToken = await getVfdMandateAccessToken();
+  if (!mandateAccessToken) {
+    return jsonResponse({
+      error: "Direct debit is temporarily unavailable because the mandate provider rejected our credentials. No setup fee was charged. Please fund this plan from your Vestara wallet or try again later.",
+      code: "MANDATE_AUTH_FAILED",
+      success: false,
+    }, 503);
+  }
+
   const feeRef = `VES-GOAL-MND-${savingsId.slice(0, 8)}-${Date.now()}`;
   const feeResult = await chargeMandateSetupFee(userId, feeRef, { product_code: "goalsave", savings_id: savingsId });
   if (!feeResult.ok) {
@@ -8249,6 +8260,7 @@ async function handleGoalsaveAuthorizeMandate(userId: string, body: Record<strin
     amount: Number(savings.commitment_amount) || 0,
     period: savings.commitment_frequency as string,
     totalCycles: Number(savings.tenor_count) || 1,
+    accessToken: mandateAccessToken,
   });
 
   const nowIso = new Date().toISOString();
