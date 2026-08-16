@@ -7190,7 +7190,7 @@ function readMandateCreateResponse(json: Record<string, unknown>) {
   return { mandateCode, nibssAccount, nibssMessage };
 }
 
-let cachedMandateToken: string | null = null;
+let cachedMandateToken: { token: string; expiresAt: number } | null = null;
 
 async function mintMandateCredentialToken(): Promise<string | null> {
   const consumerKey = Deno.env.get("VFD_MANDATE_CONSUMER_KEY");
@@ -7206,10 +7206,14 @@ async function mintMandateCredentialToken(): Promise<string | null> {
     body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "-1" }),
   });
   const json = await response.json().catch(() => ({} as Record<string, unknown>));
-  return String((json as any)?.data?.access_token || (json as any)?.access_token || "") || null;
+  const data = ((json as any)?.data || {}) as Record<string, unknown>;
+  return String(
+    data.access_token || data.accessToken || data.token ||
+    (json as any)?.access_token || (json as any)?.accessToken || (json as any)?.token || "",
+  ) || null;
 }
 
-async function mandateTokenIsAccepted(accessToken: string): Promise<boolean> {
+async function mandateTokenIsAccepted(accessToken: string, source: string): Promise<boolean> {
   const reference = `vestara-token-check-${crypto.randomUUID()}`;
   const response = await vfdFetch(
     `${VFD_MANDATE_BASE}/mandate/status?reference=${encodeURIComponent(reference)}`,
@@ -7220,31 +7224,43 @@ async function mandateTokenIsAccepted(accessToken: string): Promise<boolean> {
   // A missing/invalid reference proves the mandate service authenticated the
   // token and proceeded to reference validation. These responses mean it did
   // not authenticate or the credential is not entitled to the product.
-  return !/invalid wallet token|unauthori[sz]ed to use|contact admin/i.test(message) &&
+  const accepted = !/invalid wallet token|invalid token|unauthori[sz]ed to use|contact admin/i.test(message) &&
     response.status !== 401 && response.status !== 403;
+  console.info(`[mandate-auth] source=${source} status=${response.status} accepted=${accepted} provider_status=${String((json as any)?.status || "unknown")}`);
+  return accepted;
 }
 
 // VFD can provision direct-debit entitlement on a different consumer profile
 // from the wallet profile. Test both tokens against the read-only mandate
 // status endpoint and retain only the token the mandate service accepts.
 async function getVfdMandateAccessToken(): Promise<string | null> {
-  if (cachedMandateToken) return cachedMandateToken;
+  if (cachedMandateToken && cachedMandateToken.expiresAt > Date.now()) return cachedMandateToken.token;
+  cachedMandateToken = null;
   try {
-    const candidates = [
-      await mintMandateCredentialToken().catch((error) => {
+    const candidates: Array<{ source: string; token: string | null }> = [
+      { source: "mandate_credentials", token: await mintMandateCredentialToken().catch((error) => {
         console.error("[mandate-auth] mandate token mint failed", error instanceof Error ? error.message : String(error));
         return null;
-      }),
-      await getGatewayAccessToken().catch((error) => {
+      }) },
+      { source: "gateway_wallet", token: await getGatewayAccessToken().catch((error) => {
         console.error("[mandate-auth] wallet token request failed", error instanceof Error ? error.message : String(error));
         return null;
-      }),
-    ].filter((token): token is string => Boolean(token));
+      }) },
+      // Some VFD profiles issue the mandate entitlement on the long-lived
+      // production token rather than the BaaS consumer profile. Keep this as a
+      // final candidate; never log or return the token itself.
+      { source: "configured_access_token", token: Deno.env.get("VFD_ACCESS_TOKEN") || null },
+    ];
 
-    for (const token of [...new Set(candidates)]) {
-      if (await mandateTokenIsAccepted(token)) {
-        cachedMandateToken = token;
-        return token;
+    const tested = new Set<string>();
+    for (const candidate of candidates) {
+      if (!candidate.token || tested.has(candidate.token)) continue;
+      tested.add(candidate.token);
+      if (await mandateTokenIsAccepted(candidate.token, candidate.source)) {
+        // Keep the selected token briefly. A permanent cache could retain an
+        // expired/revoked provider token until the function isolate restarts.
+        cachedMandateToken = { token: candidate.token, expiresAt: Date.now() + 4 * 60 * 1000 };
+        return candidate.token;
       }
     }
     console.error("[mandate-auth] VFD rejected every configured token on the mandate status endpoint");
