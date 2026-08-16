@@ -6478,6 +6478,17 @@ export type Database = {
           user_id: string
         }[]
       }
+      admin_list_test_payment_tokens: {
+        Args: { _limit?: number }
+        Returns: {
+          card_type: string
+          created_at: string
+          id: string
+          is_active: boolean
+          last_4digits: string
+          user_id: string
+        }[]
+      }
       admin_remove_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
