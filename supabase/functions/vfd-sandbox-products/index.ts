@@ -7190,6 +7190,30 @@ function readMandateCreateResponse(json: Record<string, unknown>) {
   return { mandateCode, nibssAccount, nibssMessage };
 }
 
+// VFD issues SEPARATE credentials for the direct-debit / e-mandate product.
+// Using the wallet token there comes back as HTTP 401
+// { status: "99", message: "Unauthorized to use: Contact Admin" }.
+// If a mandate-specific token is provisioned, use it; otherwise fall back.
+async function getVfdMandateAccessToken(): Promise<string | null> {
+  const explicit = Deno.env.get("VFD_MANDATE_ACCESS_TOKEN");
+  if (explicit) return explicit;
+  return await getVfdAccessToken();
+}
+
+// Turn a raw mandate failure payload into an honest, actionable message.
+function mandateFailureMessage(raw: Record<string, unknown>, refunded: boolean): string {
+  const http = Number((raw as any)?.http_status || 0);
+  const msg = String((raw as any)?.response?.message || (raw as any)?.error || "");
+  const feeNote = refunded
+    ? " The ₦100 setup fee has been refunded to your wallet."
+    : " If the ₦100 setup fee was charged, support will refund it.";
+  if (http === 401 || http === 403 || /unauthori[sz]ed to use|contact admin/i.test(msg)) {
+    return "Direct debit isn't enabled on our banking profile yet, so the mandate couldn't be created." +
+      feeNote + " Our team has been notified — please try again later or fund this plan from your wallet.";
+  }
+  return "Your bank's mandate service didn't accept the request." + feeNote + " Please try again shortly.";
+}
+
 // Refund the ₦100 mandate setup fee when VFD never created the mandate. The
 // fee was an internal wallet debit, so the reversal is internal too.
 async function refundMandateSetupFee(userId: string, feeRef: string, amount: number, ctx: Record<string, unknown>) {
