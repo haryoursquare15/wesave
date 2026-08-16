@@ -7201,26 +7201,34 @@ async function handleMandateAuthDiagnostic(): Promise<Response> {
     { source: "gateway_wallet", get: () => getGatewayAccessToken().catch(() => null) },
     { source: "configured_access_token", get: async () => Deno.env.get("VFD_ACCESS_TOKEN") || null },
   ];
+  const headerVariants: Array<{ name: string; build: (t: string) => Record<string, string> }> = [
+    { name: "AccessToken", build: (t) => ({ AccessToken: t }) },
+    { name: "Bearer", build: (t) => ({ Authorization: `Bearer ${t}` }) },
+    { name: "AccessToken+Bearer", build: (t) => ({ AccessToken: t, Authorization: `Bearer ${t}` }) },
+  ];
   for (const s of sources) {
     const token = await s.get();
     if (!token) { results.push({ source: s.source, has_token: false, accepted: false }); continue; }
-    const reference = `vestara-token-check-${crypto.randomUUID()}`;
-    const response = await vfdFetch(
-      `${VFD_MANDATE_BASE}/mandate/status?reference=${encodeURIComponent(reference)}`,
-      { method: "GET", headers: { AccessToken: token } },
-    );
-    const json = await response.json().catch(() => ({} as Record<string, unknown>));
-    const message = String((json as any)?.message || (json as any)?.error || "");
-    const accepted = !/invalid wallet token|invalid token|unauthori[sz]ed to use|contact admin/i.test(message) &&
-      response.status !== 401 && response.status !== 403;
-    results.push({
-      source: s.source,
-      has_token: true,
-      http_status: response.status,
-      provider_status: String((json as any)?.status || ""),
-      provider_message: message.slice(0, 200),
-      accepted,
-    });
+    for (const variant of headerVariants) {
+      const reference = `vestara-token-check-${crypto.randomUUID()}`;
+      const response = await vfdFetch(
+        `${VFD_MANDATE_BASE}/mandate/status?reference=${encodeURIComponent(reference)}`,
+        { method: "GET", headers: variant.build(token) },
+      );
+      const json = await response.json().catch(() => ({} as Record<string, unknown>));
+      const message = String((json as any)?.message || (json as any)?.error || "");
+      const accepted = !/invalid wallet token|invalid token|unauthori[sz]ed to use|contact admin/i.test(message) &&
+        response.status !== 401 && response.status !== 403;
+      results.push({
+        source: s.source,
+        header: variant.name,
+        has_token: true,
+        http_status: response.status,
+        provider_status: String((json as any)?.status || ""),
+        provider_message: message.slice(0, 200),
+        accepted,
+      });
+    }
   }
   const selected = await getVfdMandateAccessToken();
   return jsonResponse({
