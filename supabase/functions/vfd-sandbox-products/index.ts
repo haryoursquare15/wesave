@@ -7053,18 +7053,23 @@ async function handleUpdateGroupSettings(userId: string, body: Record<string, un
 // wallet name (we use "vestara-" so VFD can map debits back to our pool).
 // ---------------------------------------------------------------------------
 const AJO_DDM_MANDATE_FEE = 100;
-const VFD_MANDATE_BASE =
-  Deno.env.get("VFD_BASE_URL") ||
-  Deno.env.get("VFD_MANDATE_BASE") ||
-  ((Deno.env.get("VFD_MODE") || "sandbox").toLowerCase() === "production"
+const MANDATE_API_PATH = "/vtech-mandate/api/v2/directdebit";
+const VFD_MANDATE_BASE = (() => {
+  const configured = Deno.env.get("VFD_BASE_URL") || Deno.env.get("VFD_MANDATE_BASE");
+  const host = (Deno.env.get("VFD_MODE") || "sandbox").toLowerCase() === "production"
     ? "https://api-apps.vfdbank.systems"
-    : "https://api-devapps.vfdbank.systems") + "/vtech-mandate/api/v2/directdebit";
+    : "https://api-devapps.vfdbank.systems";
+  if (!configured) return host + MANDATE_API_PATH;
+  const trimmed = configured.replace(/\/+$/, "");
+  // Tolerate both a bare host and a fully-qualified mandate base in the env.
+  return trimmed.includes("/directdebit") ? trimmed : trimmed.replace(/\/vtech-[^/]+\/.*$/, "") + MANDATE_API_PATH;
+})();
 // Single Vestara corporate pool NUBAN — receiver of EVERY mandate debit.
 // Per-group wallets are internal ledger constructs only; they do not map to
 // separate VFD accounts. DDM funds always land in this pool first, then the
 // thrift ledger logic routes them to the group/member payout balance.
 const VFD_POOL_NUBAN =
-  Deno.env.get("VFD_CORPORATE_ACCOUNT_NUMBER") || Deno.env.get("VFD_POOL_NUBAN") || "1001695610";
+  Deno.env.get("VFD_CORPORATE_ACCOUNT_NUMBER") || Deno.env.get("VFD_POOL_NUBAN") || "1047279595";
 const VFD_POOL_BANK_CODE =
   Deno.env.get("VFD_CORPORATE_BANK_CODE") || Deno.env.get("VFD_POOL_BANK_CODE") || "999999"; // VFD MFB
 const VFD_PAYER_BANK_CODE = Deno.env.get("VFD_PAYER_BANK_CODE") || "999999"; // user's VFD account
@@ -7157,6 +7162,43 @@ function extractNibssAccountFromMessage(message: string): string {
   if (!message) return "";
   const m = message.match(/\b(\d{10})\b/);
   return m ? m[1] : "";
+}
+
+// VFD E-Mandate creation endpoint. NOTE: `/emandate/create` does NOT exist on
+// the VFD mandate API — it silently answers HTTP 202 with an empty body, which
+// we used to read as success (fee charged, no mandate, no NIBSS account, and a
+// later "Invalid Reference!" on status check). The documented endpoint is
+// `POST {base}/mandate/setup?e-mandate=true`.
+const VFD_MANDATE_CREATE_PATH = "/mandate/setup?e-mandate=true";
+
+// Normalise the create response: VFD returns the NIBSS ₦50 authorization
+// account either as a structured field or embedded in the human message.
+function readMandateCreateResponse(json: Record<string, unknown>) {
+  const data = ((json as any)?.data || {}) as Record<string, unknown>;
+  const mandateCode = String(data.mandateCode || data.mandateId || data.reference || "");
+  const nibssMessage = String(data.message || (json as any)?.message || "");
+  const nibssAccount = String(
+    data.nibssAccount || data.accountNumber || data.account || data.virtualAccountNumber || "",
+  ) || extractNibssAccountFromMessage(nibssMessage);
+  return { mandateCode, nibssAccount, nibssMessage };
+}
+
+// Refund the ₦100 mandate setup fee when VFD never created the mandate. The
+// fee was an internal wallet debit, so the reversal is internal too.
+async function refundMandateSetupFee(userId: string, feeRef: string, amount: number, ctx: Record<string, unknown>) {
+  try {
+    const db = getSupabaseAdmin();
+    const { data, error } = await db.rpc("vestara_deposit", {
+      _user_id: userId,
+      _amount: amount,
+      _reference: `${feeRef}-REFUND`,
+      _metadata: { source: "mandate_setup_fee_refund", original_reference: feeRef, ...ctx },
+    });
+    return !error && !!(data as { success?: boolean } | null)?.success;
+  } catch (e) {
+    console.error("[mandate] fee refund failed", feeRef, e);
+    return false;
+  }
 }
 
 async function recordMandateEvent(
@@ -7311,7 +7353,7 @@ async function handleAcceptGroupMandate(userId: string, body: Record<string, unk
   let mandateCreated = false;
 
   try {
-    const res = await vfdFetch(`${VFD_MANDATE_BASE}/emandate/create`, {
+    const res = await vfdFetch(`${VFD_MANDATE_BASE}${VFD_MANDATE_CREATE_PATH}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", AccessToken: accessToken },
       body: JSON.stringify(mandatePayload),
@@ -7319,15 +7361,15 @@ async function handleAcceptGroupMandate(userId: string, body: Record<string, unk
     const json = await res.json().catch(() => ({} as Record<string, unknown>));
     vfdResponsePayload = { step: "create", request: mandatePayload, response: json, http_status: res.status };
 
-    // VFD E-Mandate returns either status "00" (immediate) or HTTP 202 Accepted
-    // (NIBSS authorization pending). Both are success cases — we then poll
-    // mandate-status to surface the NIBSS account/message to the user.
+    // Only a real VFD acknowledgement counts. An empty/undocumented body (the
+    // old bug) must NEVER be treated as a created mandate.
     const vfdStatus = String((json as any)?.status || "");
-    if (vfdStatus === "00" || res.status === 202 || (res.ok && vfdStatus !== "199")) {
+    const parsed = readMandateCreateResponse(json as Record<string, unknown>);
+    if ((vfdStatus === "00" || res.status === 202) && (parsed.mandateCode || parsed.nibssAccount)) {
       mandateCreated = true;
-      mandateCode = String((json as any)?.data?.mandateCode || (json as any)?.data?.mandateId || "");
-      nibssMessage = String((json as any)?.message || "");
-      nibssAccount = extractNibssAccountFromMessage(nibssMessage);
+      mandateCode = parsed.mandateCode;
+      nibssAccount = parsed.nibssAccount;
+      nibssMessage = parsed.nibssMessage;
     }
   } catch (e) {
     vfdResponsePayload = { step: "create", request: mandatePayload, error: e instanceof Error ? e.message : String(e) };
@@ -7336,19 +7378,25 @@ async function handleAcceptGroupMandate(userId: string, body: Record<string, unk
   const nowIso = new Date().toISOString();
 
   if (!mandateCreated) {
+    const refunded = MANDATE_TEST_MODE
+      ? false
+      : await refundMandateSetupFee(userId, feeRef, fee, { product_code: "ajo_ddm", group_id: groupId });
     await db.from("vfd_sandbox_group_members").update({
       mandate_status: "failed",
-      mandate_payload: vfdResponsePayload,
-      mandate_fee_charged_at: nowIso,
-      mandate_fee_amount: fee,
+      mandate_payload: { ...vfdResponsePayload, fee_refunded: refunded },
+      mandate_fee_charged_at: refunded ? null : nowIso,
+      mandate_fee_amount: refunded ? 0 : fee,
     }).eq("id", member.id);
-    await recordMandateEvent(groupId, userId, reference, null, "failed", vfdResponsePayload);
+    await recordMandateEvent(groupId, userId, reference, null, "failed", { ...vfdResponsePayload, fee_refunded: refunded });
     return jsonResponse({
-      error: "VFD did not create the mandate. The ₦100 setup fee has been charged; please try again.",
+      error: refunded
+        ? "Your bank's mandate service didn't accept the request. The ₦100 setup fee has been refunded to your wallet — please try again shortly."
+        : "Your bank's mandate service didn't accept the request. Please try again shortly or contact support.",
       code: "MANDATE_VFD_FAILED",
       details: vfdResponsePayload,
     }, 502);
   }
+
 
   // 3) Persist mandate against the membership row. Status starts at
   //    "awaiting_approval" — flips to "authorized" once the customer funds
@@ -7790,18 +7838,16 @@ async function createVfdMandate(opts: {
   };
 
   try {
-    const res = await vfdFetch(`${VFD_MANDATE_BASE}/emandate/create`, {
+    const res = await vfdFetch(`${VFD_MANDATE_BASE}${VFD_MANDATE_CREATE_PATH}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", AccessToken: accessToken },
       body: JSON.stringify(payload),
     });
     const json = await res.json().catch(() => ({} as Record<string, unknown>));
     const vfdStatus = String((json as any)?.status || "");
-    const created = vfdStatus === "00" || res.status === 202 || (res.ok && vfdStatus !== "199");
-    const mandateCode = String((json as any)?.data?.mandateCode || (json as any)?.data?.mandateId || "");
-    const nibssMessage = String((json as any)?.message || "");
-    const nibssAccount = extractNibssAccountFromMessage(nibssMessage);
-    return { created, mandateCode, nibssAccount, nibssMessage, raw: { step: "create", request: payload, response: json, http_status: res.status } };
+    const parsed = readMandateCreateResponse(json as Record<string, unknown>);
+    const created = (vfdStatus === "00" || res.status === 202) && !!(parsed.mandateCode || parsed.nibssAccount);
+    return { created, ...parsed, raw: { step: "create", request: payload, response: json, http_status: res.status } };
   } catch (e) {
     return { created: false, mandateCode: "", nibssAccount: "", nibssMessage: "", raw: { step: "create", request: payload, error: e instanceof Error ? e.message : String(e) } };
   }
@@ -7859,12 +7905,15 @@ async function handleAcceptTargetMandate(userId: string, body: Record<string, un
 
   const nowIso = new Date().toISOString();
   if (!vfd.created) {
+    const refunded = await refundMandateSetupFee(userId, feeRef, feeResult.fee, { product_code: "target_ddm", target_id: targetId });
     await db.from("vfd_sandbox_target_members").update({
-      mandate_status: "failed", mandate_payload: vfd.raw,
-      mandate_fee_charged_at: nowIso, mandate_fee_amount: feeResult.fee,
+      mandate_status: "failed", mandate_payload: { ...vfd.raw, fee_refunded: refunded },
+      mandate_fee_charged_at: refunded ? null : nowIso, mandate_fee_amount: refunded ? 0 : feeResult.fee,
     }).eq("id", member.id);
-    await recordTargetMandateEvent(targetId, userId, reference, null, "failed", vfd.raw);
-    return jsonResponse({ error: "VFD did not create the mandate. The ₦100 setup fee has been charged; please try again.", code: "MANDATE_VFD_FAILED", details: vfd.raw }, 502);
+    await recordTargetMandateEvent(targetId, userId, reference, null, "failed", { ...vfd.raw, fee_refunded: refunded });
+    return jsonResponse({ error: refunded
+      ? "Your bank's mandate service didn't accept the request. The ₦100 setup fee has been refunded — please try again shortly."
+      : "Your bank's mandate service didn't accept the request. Please try again shortly or contact support.", code: "MANDATE_VFD_FAILED", details: vfd.raw }, 502);
   }
 
   const startObj = new Date();
@@ -8118,13 +8167,16 @@ async function handleGoalsaveAuthorizeMandate(userId: string, body: Record<strin
 
   const nowIso = new Date().toISOString();
   if (!vfd.created) {
+    const refunded = await refundMandateSetupFee(userId, feeRef, feeResult.fee, { product_code: "goalsave", savings_id: savingsId });
     await db.from("vestara_savings").update({
-      mandate_status: "failed", mandate_payload: vfd.raw,
+      mandate_status: "failed", mandate_payload: { ...vfd.raw, fee_refunded: refunded },
     }).eq("id", savingsId);
     await db.from("vfd_savings_mandate_events").insert({
-      savings_id: savingsId, user_id: userId, mandate_id: reference, event_type: "failed", payload: vfd.raw,
+      savings_id: savingsId, user_id: userId, mandate_id: reference, event_type: "failed", payload: { ...vfd.raw, fee_refunded: refunded },
     }).then(() => {}, () => {});
-    return jsonResponse({ error: "VFD did not create the mandate. The ₦100 setup fee has been charged; please try again.", code: "MANDATE_VFD_FAILED", details: vfd.raw, success: false }, 502);
+    return jsonResponse({ error: refunded
+      ? "Your bank's mandate service didn't accept the request. The ₦100 setup fee has been refunded — please try again shortly."
+      : "Your bank's mandate service didn't accept the request. Please try again shortly or contact support.", code: "MANDATE_VFD_FAILED", details: vfd.raw, success: false }, 502);
   }
 
   const endObj = computeMandateEndDate(savings.commitment_frequency as string, Number(savings.tenor_count) || 1);
