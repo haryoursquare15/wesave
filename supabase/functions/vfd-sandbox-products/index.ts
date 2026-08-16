@@ -7159,6 +7159,43 @@ function extractNibssAccountFromMessage(message: string): string {
   return m ? m[1] : "";
 }
 
+// VFD E-Mandate creation endpoint. NOTE: `/emandate/create` does NOT exist on
+// the VFD mandate API — it silently answers HTTP 202 with an empty body, which
+// we used to read as success (fee charged, no mandate, no NIBSS account, and a
+// later "Invalid Reference!" on status check). The documented endpoint is
+// `POST {base}/mandate/setup?e-mandate=true`.
+const VFD_MANDATE_CREATE_PATH = "/mandate/setup?e-mandate=true";
+
+// Normalise the create response: VFD returns the NIBSS ₦50 authorization
+// account either as a structured field or embedded in the human message.
+function readMandateCreateResponse(json: Record<string, unknown>) {
+  const data = ((json as any)?.data || {}) as Record<string, unknown>;
+  const mandateCode = String(data.mandateCode || data.mandateId || data.reference || "");
+  const nibssMessage = String(data.message || (json as any)?.message || "");
+  const nibssAccount = String(
+    data.nibssAccount || data.accountNumber || data.account || data.virtualAccountNumber || "",
+  ) || extractNibssAccountFromMessage(nibssMessage);
+  return { mandateCode, nibssAccount, nibssMessage };
+}
+
+// Refund the ₦100 mandate setup fee when VFD never created the mandate. The
+// fee was an internal wallet debit, so the reversal is internal too.
+async function refundMandateSetupFee(userId: string, feeRef: string, amount: number, ctx: Record<string, unknown>) {
+  try {
+    const db = getSupabaseAdmin();
+    const { data, error } = await db.rpc("vestara_deposit", {
+      _user_id: userId,
+      _amount: amount,
+      _reference: `${feeRef}-REFUND`,
+      _metadata: { source: "mandate_setup_fee_refund", original_reference: feeRef, ...ctx },
+    });
+    return !error && !!(data as { success?: boolean } | null)?.success;
+  } catch (e) {
+    console.error("[mandate] fee refund failed", feeRef, e);
+    return false;
+  }
+}
+
 async function recordMandateEvent(
   groupId: string,
   userId: string,
