@@ -7053,12 +7053,17 @@ async function handleUpdateGroupSettings(userId: string, body: Record<string, un
 // wallet name (we use "vestara-" so VFD can map debits back to our pool).
 // ---------------------------------------------------------------------------
 const AJO_DDM_MANDATE_FEE = 100;
-const VFD_MANDATE_BASE =
-  Deno.env.get("VFD_BASE_URL") ||
-  Deno.env.get("VFD_MANDATE_BASE") ||
-  ((Deno.env.get("VFD_MODE") || "sandbox").toLowerCase() === "production"
+const MANDATE_API_PATH = "/vtech-mandate/api/v2/directdebit";
+const VFD_MANDATE_BASE = (() => {
+  const configured = Deno.env.get("VFD_BASE_URL") || Deno.env.get("VFD_MANDATE_BASE");
+  const host = (Deno.env.get("VFD_MODE") || "sandbox").toLowerCase() === "production"
     ? "https://api-apps.vfdbank.systems"
-    : "https://api-devapps.vfdbank.systems") + "/vtech-mandate/api/v2/directdebit";
+    : "https://api-devapps.vfdbank.systems";
+  if (!configured) return host + MANDATE_API_PATH;
+  const trimmed = configured.replace(/\/+$/, "");
+  // Tolerate both a bare host and a fully-qualified mandate base in the env.
+  return trimmed.includes("/directdebit") ? trimmed : trimmed.replace(/\/vtech-[^/]+\/.*$/, "") + MANDATE_API_PATH;
+})();
 // Single Vestara corporate pool NUBAN — receiver of EVERY mandate debit.
 // Per-group wallets are internal ledger constructs only; they do not map to
 // separate VFD accounts. DDM funds always land in this pool first, then the
