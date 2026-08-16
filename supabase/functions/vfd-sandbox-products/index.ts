@@ -7833,18 +7833,16 @@ async function createVfdMandate(opts: {
   };
 
   try {
-    const res = await vfdFetch(`${VFD_MANDATE_BASE}/emandate/create`, {
+    const res = await vfdFetch(`${VFD_MANDATE_BASE}${VFD_MANDATE_CREATE_PATH}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", AccessToken: accessToken },
       body: JSON.stringify(payload),
     });
     const json = await res.json().catch(() => ({} as Record<string, unknown>));
     const vfdStatus = String((json as any)?.status || "");
-    const created = vfdStatus === "00" || res.status === 202 || (res.ok && vfdStatus !== "199");
-    const mandateCode = String((json as any)?.data?.mandateCode || (json as any)?.data?.mandateId || "");
-    const nibssMessage = String((json as any)?.message || "");
-    const nibssAccount = extractNibssAccountFromMessage(nibssMessage);
-    return { created, mandateCode, nibssAccount, nibssMessage, raw: { step: "create", request: payload, response: json, http_status: res.status } };
+    const parsed = readMandateCreateResponse(json as Record<string, unknown>);
+    const created = (vfdStatus === "00" || res.status === 202) && !!(parsed.mandateCode || parsed.nibssAccount);
+    return { created, ...parsed, raw: { step: "create", request: payload, response: json, http_status: res.status } };
   } catch (e) {
     return { created: false, mandateCode: "", nibssAccount: "", nibssMessage: "", raw: { step: "create", request: payload, error: e instanceof Error ? e.message : String(e) } };
   }
