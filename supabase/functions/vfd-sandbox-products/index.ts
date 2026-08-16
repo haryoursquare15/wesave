@@ -7068,8 +7068,15 @@ const VFD_MANDATE_BASE = (() => {
 // Per-group wallets are internal ledger constructs only; they do not map to
 // separate VFD accounts. DDM funds always land in this pool first, then the
 // thrift ledger logic routes them to the group/member payout balance.
-const VFD_POOL_NUBAN =
-  Deno.env.get("VFD_CORPORATE_ACCOUNT_NUMBER") || Deno.env.get("VFD_POOL_NUBAN") || "1047279595";
+const VFD_POOL_NUBAN = (() => {
+  const configured =
+    Deno.env.get("VFD_MANDATE_RECEIVER_ACCOUNT") ||
+    Deno.env.get("VFD_CORPORATE_ACCOUNT_NUMBER") ||
+    Deno.env.get("VFD_POOL_NUBAN") ||
+    "1047279595";
+  // Legacy WeSave pool is decommissioned — never send mandates to it.
+  return configured.trim() === "1001695610" ? "1047279595" : configured.trim();
+})();
 const VFD_POOL_BANK_CODE =
   Deno.env.get("VFD_CORPORATE_BANK_CODE") || Deno.env.get("VFD_POOL_BANK_CODE") || "999999"; // VFD MFB
 const VFD_PAYER_BANK_CODE = Deno.env.get("VFD_PAYER_BANK_CODE") || "999999"; // user's VFD account
