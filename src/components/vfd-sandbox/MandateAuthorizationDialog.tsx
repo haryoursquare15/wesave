@@ -145,19 +145,28 @@ export function MandateAuthorizationDialog({ subject, onClose, onAuthorized }: P
       return;
     }
     setBusy(true);
-    const res = await accept({
-      payer_bank_code: form.bankCode, payer_account_number: form.accountNumber,
-      payer_phone: form.phone, payer_email: form.email, payer_address: form.address,
-    });
-    setBusy(false);
-    const payload = res?.data?.success ? res.data : (res?.success ? res : null);
-    if (!payload) return;
-    setMandate({
-      reference: payload.mandate_reference, code: payload.mandate_code,
-      nibssAccount: payload.nibss_account || "", nibssMessage: payload.nibss_message || "",
-      payerAccount: payload.payer_account_number, bankCode: payload.payer_bank_code,
-    });
-    setStep("nibss");
+    try {
+      const res = await accept({
+        payer_bank_code: form.bankCode, payer_account_number: form.accountNumber,
+        payer_phone: form.phone, payer_email: form.email, payer_address: form.address,
+      });
+      const payload = res?.data?.success ? res.data : (res?.success ? res : null);
+      if (!payload) return;
+      setMandate({
+        reference: payload.mandate_reference, code: payload.mandate_code,
+        nibssAccount: payload.nibss_account || "", nibssMessage: payload.nibss_message || "",
+        payerAccount: payload.payer_account_number, bankCode: payload.payer_bank_code,
+      });
+      setStep("nibss");
+    } catch {
+      toast({
+        title: "Mandate setup unavailable",
+        description: "We couldn't connect to the mandate provider. Your setup fee will not be retained.",
+        variant: "destructive",
+      });
+    } finally {
+      setBusy(false);
+    }
   };
 
   const copy = (val: string) => {

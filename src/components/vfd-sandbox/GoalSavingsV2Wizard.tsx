@@ -112,6 +112,7 @@ export function GoalSavingsV2Wizard({ onClose, onCreated, walletAvailable }: Pro
     : frequency === "weekly" ? (n === 1 ? "week" : "weeks")
     : (n === 1 ? "month" : "months");
   const tenorLabel = (n: number) => `${n} ${unitLabel(n)}`;
+  const nextDebitAt = quote?.schedule?.[0]?.scheduled_at;
 
   /* ──────────── Step handlers ──────────── */
 
@@ -320,7 +321,7 @@ export function GoalSavingsV2Wizard({ onClose, onCreated, walletAvailable }: Pro
               <Row label="Maturity date" value={fmtDate(quote.maturity_date)} />
               <Separator className="my-2" />
               <Row label="Mandate setup fee" value={fmt(quote.mandate_fee)} />
-              <Row label="Next debit" value={fmtDate(quote.schedule[0].scheduled_at)} />
+              <Row label="Next debit" value={nextDebitAt ? fmtDate(nextDebitAt) : "To be scheduled"} />
             </div>
 
             <details className="bg-card rounded-2xl border border-border/50 p-4">
@@ -383,7 +384,7 @@ export function GoalSavingsV2Wizard({ onClose, onCreated, walletAvailable }: Pro
             </div>
 
             <div className="bg-card rounded-2xl border border-border/50 p-5 space-y-2">
-              <Row label="Next debit date" value={fmtDate(quote.schedule[0].scheduled_at)} highlight />
+              <Row label="Next debit date" value={nextDebitAt ? fmtDate(nextDebitAt) : "To be scheduled"} highlight />
               <Row label="Contribution amount" value={fmt(quote.contribution_amount)} />
               <Row label="Frequency" value={quote.frequency} className="capitalize" />
               <Row label="Maturity date" value={fmtDate(createdMaturity || quote.maturity_date)} />

@@ -1411,7 +1411,7 @@ serve(async (req) => {
         }
 
         // ─── Call VFD Direct Debit Mandate API ───
-        // Endpoint: <VFD host>/vtech-mandate/api/v2/directdebit (host follows VFD_MODE)
+        // Endpoint follows VFD's e-mandate setup route (host follows VFD_MODE).
         let mandateId = "";
         let mandateStatus: "authorized" | "pending" | "failed" = "pending";
         let activationStatus: "active" | "pending_mandate" | "failed" = "pending_mandate";
@@ -1421,24 +1421,10 @@ serve(async (req) => {
           const VFD_HOST = (Deno.env.get("VFD_MODE") || "sandbox") === "sandbox"
             ? "https://api-devapps.vfdbank.systems"
             : "https://api-apps.vfdbank.systems";
-          const VFD_MANDATE_URL = `${VFD_HOST}/vtech-mandate/api/v2/directdebit`;
-          // Pull VFD access token via same creds used by vfd-banking
-          const consumerKey = Deno.env.get("VFD_CONSUMER_KEY");
-          const consumerSecret = Deno.env.get("VFD_CONSUMER_SECRET");
-          const staticToken = Deno.env.get("VFD_ACCESS_TOKEN");
-          let accessToken = (await getGatewayAccessToken()) || staticToken || "";
-          if (!accessToken && consumerKey && consumerSecret) {
-            const tokRes = await vfdFetch(
-              `${VFD_HOST}/vfd-tech/baas-portal/v1.1/baasauth/token`,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "-1" }),
-              },
-            );
-            const tokData = await tokRes.json().catch(() => ({}));
-            if (tokData?.data?.access_token) accessToken = tokData.data.access_token;
-          }
+          const VFD_MANDATE_URL = `${VFD_HOST}/vtech-mandate/api/v2/directdebit/mandate/setup?e-mandate=true`;
+          // Only the gateway-managed production wallet token is valid here.
+          // Locally minted BaaS/static tokens are rejected as invalid wallet tokens.
+          const accessToken = await getGatewayAccessToken();
           if (!accessToken) throw new Error("VFD credentials not configured");
 
           // Fetch the user's VFD account for the mandate (debtor side)
