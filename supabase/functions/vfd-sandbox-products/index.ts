@@ -8162,13 +8162,16 @@ async function handleGoalsaveAuthorizeMandate(userId: string, body: Record<strin
 
   const nowIso = new Date().toISOString();
   if (!vfd.created) {
+    const refunded = await refundMandateSetupFee(userId, feeRef, feeResult.fee, { product_code: "goalsave", savings_id: savingsId });
     await db.from("vestara_savings").update({
-      mandate_status: "failed", mandate_payload: vfd.raw,
+      mandate_status: "failed", mandate_payload: { ...vfd.raw, fee_refunded: refunded },
     }).eq("id", savingsId);
     await db.from("vfd_savings_mandate_events").insert({
-      savings_id: savingsId, user_id: userId, mandate_id: reference, event_type: "failed", payload: vfd.raw,
+      savings_id: savingsId, user_id: userId, mandate_id: reference, event_type: "failed", payload: { ...vfd.raw, fee_refunded: refunded },
     }).then(() => {}, () => {});
-    return jsonResponse({ error: "VFD did not create the mandate. The ₦100 setup fee has been charged; please try again.", code: "MANDATE_VFD_FAILED", details: vfd.raw, success: false }, 502);
+    return jsonResponse({ error: refunded
+      ? "Your bank's mandate service didn't accept the request. The ₦100 setup fee has been refunded — please try again shortly."
+      : "Your bank's mandate service didn't accept the request. Please try again shortly or contact support.", code: "MANDATE_VFD_FAILED", details: vfd.raw, success: false }, 502);
   }
 
   const endObj = computeMandateEndDate(savings.commitment_frequency as string, Number(savings.tenor_count) || 1);
