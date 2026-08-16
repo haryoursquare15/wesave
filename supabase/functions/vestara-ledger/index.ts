@@ -1411,7 +1411,7 @@ serve(async (req) => {
         }
 
         // ─── Call VFD Direct Debit Mandate API ───
-        // Endpoint: <VFD host>/vtech-mandate/api/v2/directdebit (host follows VFD_MODE)
+        // Endpoint follows VFD's e-mandate setup route (host follows VFD_MODE).
         let mandateId = "";
         let mandateStatus: "authorized" | "pending" | "failed" = "pending";
         let activationStatus: "active" | "pending_mandate" | "failed" = "pending_mandate";
@@ -1421,7 +1421,7 @@ serve(async (req) => {
           const VFD_HOST = (Deno.env.get("VFD_MODE") || "sandbox") === "sandbox"
             ? "https://api-devapps.vfdbank.systems"
             : "https://api-apps.vfdbank.systems";
-          const VFD_MANDATE_URL = `${VFD_HOST}/vtech-mandate/api/v2/directdebit`;
+          const VFD_MANDATE_URL = `${VFD_HOST}/vtech-mandate/api/v2/directdebit/mandate/setup?e-mandate=true`;
           // Pull VFD access token via same creds used by vfd-banking
           const consumerKey = Deno.env.get("VFD_CONSUMER_KEY");
           const consumerSecret = Deno.env.get("VFD_CONSUMER_SECRET");

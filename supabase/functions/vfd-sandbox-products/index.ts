@@ -7190,16 +7190,67 @@ function readMandateCreateResponse(json: Record<string, unknown>) {
   return { mandateCode, nibssAccount, nibssMessage };
 }
 
-// The direct-debit API requires a VFD *wallet* token in the AccessToken
-// header. A token minted from separate mandate credentials can be a valid
-// BaaS token yet is rejected by this API as "Invalid wallet token". Obtain the
-// wallet token from our whitelisted gateway, where the production wallet
-// credentials are managed. Do not mint VFD tokens inside the edge function.
+let cachedMandateToken: string | null = null;
+
+async function mintMandateCredentialToken(): Promise<string | null> {
+  const consumerKey = Deno.env.get("VFD_MANDATE_CONSUMER_KEY");
+  const consumerSecret = Deno.env.get("VFD_MANDATE_CONSUMER_SECRET");
+  if (!consumerKey || !consumerSecret) return null;
+
+  const host = (Deno.env.get("VFD_MODE") || "sandbox").toLowerCase() === "production"
+    ? "https://api-apps.vfdbank.systems"
+    : "https://api-devapps.vfdbank.systems";
+  const response = await vfdFetch(`${host}/vfd-tech/baas-portal/v1.1/baasauth/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "-1" }),
+  });
+  const json = await response.json().catch(() => ({} as Record<string, unknown>));
+  return String((json as any)?.data?.access_token || (json as any)?.access_token || "") || null;
+}
+
+async function mandateTokenIsAccepted(accessToken: string): Promise<boolean> {
+  const reference = `vestara-token-check-${crypto.randomUUID()}`;
+  const response = await vfdFetch(
+    `${VFD_MANDATE_BASE}/mandate/status?reference=${encodeURIComponent(reference)}`,
+    { method: "GET", headers: { AccessToken: accessToken } },
+  );
+  const json = await response.json().catch(() => ({} as Record<string, unknown>));
+  const message = String((json as any)?.message || (json as any)?.error || "");
+  // A missing/invalid reference proves the mandate service authenticated the
+  // token and proceeded to reference validation. These responses mean it did
+  // not authenticate or the credential is not entitled to the product.
+  return !/invalid wallet token|unauthori[sz]ed to use|contact admin/i.test(message) &&
+    response.status !== 401 && response.status !== 403;
+}
+
+// VFD can provision direct-debit entitlement on a different consumer profile
+// from the wallet profile. Test both tokens against the read-only mandate
+// status endpoint and retain only the token the mandate service accepts.
 async function getVfdMandateAccessToken(): Promise<string | null> {
+  if (cachedMandateToken) return cachedMandateToken;
   try {
-    return await getGatewayAccessToken();
+    const candidates = [
+      await mintMandateCredentialToken().catch((error) => {
+        console.error("[mandate-auth] mandate token mint failed", error instanceof Error ? error.message : String(error));
+        return null;
+      }),
+      await getGatewayAccessToken().catch((error) => {
+        console.error("[mandate-auth] wallet token request failed", error instanceof Error ? error.message : String(error));
+        return null;
+      }),
+    ].filter((token): token is string => Boolean(token));
+
+    for (const token of [...new Set(candidates)]) {
+      if (await mandateTokenIsAccepted(token)) {
+        cachedMandateToken = token;
+        return token;
+      }
+    }
+    console.error("[mandate-auth] VFD rejected every configured token on the mandate status endpoint");
+    return null;
   } catch (e) {
-    console.error("[mandate-auth] wallet token request failed", e instanceof Error ? e.message : String(e));
+    console.error("[mandate-auth] token validation failed", e instanceof Error ? e.message : String(e));
     return null;
   }
 }
