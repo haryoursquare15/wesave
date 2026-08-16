@@ -7031,7 +7031,7 @@ async function handleUpdateGroupSettings(userId: string, body: Record<string, un
 // Each member of a DDM-funded thrift group must individually authorize their
 // Direct Debit Mandate at VFD. Flow:
 //   1. Charge ₦100 setup fee from member's Vestara wallet (one-time).
-//   2. Fetch a VFD BaaS access token via consumerKey/consumerSecret.
+//   2. Fetch the production VFD wallet token from the whitelisted gateway.
 //   3. POST mandate payload to
 //      https://api-devapps.vfdbank.systems/vtech-mandate/api/v2/directdebit
 //   4. On VFD success (status "00" or HTTP 2xx), mark the member's mandate
