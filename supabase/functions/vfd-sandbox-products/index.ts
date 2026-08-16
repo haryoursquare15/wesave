@@ -7194,9 +7194,38 @@ function readMandateCreateResponse(json: Record<string, unknown>) {
 // Using the wallet token there comes back as HTTP 401
 // { status: "99", message: "Unauthorized to use: Contact Admin" }.
 // If a mandate-specific token is provisioned, use it; otherwise fall back.
+let cachedMandateToken: string | null = null;
 async function getVfdMandateAccessToken(): Promise<string | null> {
   const explicit = Deno.env.get("VFD_MANDATE_ACCESS_TOKEN");
   if (explicit) return explicit;
+  if (cachedMandateToken) return cachedMandateToken;
+
+  // Mint directly from the VFD BaaS auth endpoint (routed through the
+  // whitelisted gateway) so the direct-debit product gets a token minted from
+  // the credentials that are entitled to it.
+  const consumerKey = Deno.env.get("VFD_MANDATE_CONSUMER_KEY") || Deno.env.get("VFD_CONSUMER_KEY");
+  const consumerSecret = Deno.env.get("VFD_MANDATE_CONSUMER_SECRET") || Deno.env.get("VFD_CONSUMER_SECRET");
+  if (consumerKey && consumerSecret) {
+    const host = (Deno.env.get("VFD_MODE") || "sandbox").toLowerCase() === "production"
+      ? "https://api-apps.vfdbank.systems"
+      : "https://api-devapps.vfdbank.systems";
+    try {
+      const res = await vfdFetch(`${host}/vfd-tech/baas-portal/v1.1/baasauth/token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "-1" }),
+      });
+      const json = await res.json().catch(() => ({} as any));
+      const token = (json as any)?.data?.access_token || (json as any)?.access_token || null;
+      if (token) {
+        cachedMandateToken = token;
+        return token;
+      }
+      console.error("[mandate-auth] token mint failed", res.status, JSON.stringify(json).slice(0, 300));
+    } catch (e) {
+      console.error("[mandate-auth] token mint error", e instanceof Error ? e.message : String(e));
+    }
+  }
   return await getVfdAccessToken();
 }
 
