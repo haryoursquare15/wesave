@@ -7031,7 +7031,7 @@ async function handleUpdateGroupSettings(userId: string, body: Record<string, un
 // Each member of a DDM-funded thrift group must individually authorize their
 // Direct Debit Mandate at VFD. Flow:
 //   1. Charge ₦100 setup fee from member's Vestara wallet (one-time).
-//   2. Fetch a VFD BaaS access token via consumerKey/consumerSecret.
+//   2. Fetch the production VFD wallet token from the whitelisted gateway.
 //   3. POST mandate payload to
 //      https://api-devapps.vfdbank.systems/vtech-mandate/api/v2/directdebit
 //   4. On VFD success (status "00" or HTTP 2xx), mark the member's mandate
@@ -7190,45 +7190,18 @@ function readMandateCreateResponse(json: Record<string, unknown>) {
   return { mandateCode, nibssAccount, nibssMessage };
 }
 
-// VFD issues SEPARATE credentials for the direct-debit / e-mandate product.
-// Using the wallet token there comes back as HTTP 401
-// { status: "99", message: "Unauthorized to use: Contact Admin" }.
-// Mandate calls must never fall back to the ordinary wallet token: VFD may
-// mint that token successfully but rejects it on direct-debit endpoints.
-let cachedMandateToken: string | null = null;
+// The direct-debit API requires a VFD *wallet* token in the AccessToken
+// header. A token minted from separate mandate credentials can be a valid
+// BaaS token yet is rejected by this API as "Invalid wallet token". Obtain the
+// wallet token from our whitelisted gateway, where the production wallet
+// credentials are managed. Do not mint VFD tokens inside the edge function.
 async function getVfdMandateAccessToken(): Promise<string | null> {
-  const explicit = Deno.env.get("VFD_MANDATE_ACCESS_TOKEN");
-  if (explicit) return explicit;
-  if (cachedMandateToken) return cachedMandateToken;
-
-  // Mint directly from the VFD BaaS auth endpoint (routed through the
-  // whitelisted gateway) so the direct-debit product gets a token minted from
-  // the credentials that are entitled to it.
-  const consumerKey = Deno.env.get("VFD_MANDATE_CONSUMER_KEY");
-  const consumerSecret = Deno.env.get("VFD_MANDATE_CONSUMER_SECRET");
-  if (consumerKey && consumerSecret) {
-    const host = (Deno.env.get("VFD_MODE") || "sandbox").toLowerCase() === "production"
-      ? "https://api-apps.vfdbank.systems"
-      : "https://api-devapps.vfdbank.systems";
-    try {
-      const res = await vfdFetch(`${host}/vfd-tech/baas-portal/v1.1/baasauth/token`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "-1" }),
-      });
-      const json = await res.json().catch(() => ({} as any));
-      const token = (json as any)?.data?.access_token || (json as any)?.access_token || null;
-      if (token) {
-        cachedMandateToken = token;
-        return token;
-      }
-      console.error("[mandate-auth] token mint failed", res.status, JSON.stringify(json).slice(0, 300));
-    } catch (e) {
-      console.error("[mandate-auth] token mint error", e instanceof Error ? e.message : String(e));
-    }
+  try {
+    return await getGatewayAccessToken();
+  } catch (e) {
+    console.error("[mandate-auth] wallet token request failed", e instanceof Error ? e.message : String(e));
+    return null;
   }
-  console.error("[mandate-auth] mandate-specific credentials are missing or invalid; refusing wallet-token fallback");
-  return null;
 }
 
 // Turn a raw mandate failure payload into an honest, actionable message.
@@ -7238,6 +7211,10 @@ function mandateFailureMessage(raw: Record<string, unknown>, refunded: boolean):
   const feeNote = refunded
     ? " The ₦100 setup fee has been refunded to your wallet."
     : " If the ₦100 setup fee was charged, support will refund it.";
+  if (/invalid wallet token/i.test(msg)) {
+    return "The mandate provider could not authenticate this request." +
+      feeNote + " Our team has been notified — please try again later or fund this plan from your wallet.";
+  }
   if (http === 401 || http === 403 || /unauthori[sz]ed to use|contact admin/i.test(msg)) {
     return "Direct debit isn't enabled on our banking profile yet, so the mandate couldn't be created." +
       feeNote + " Our team has been notified — please try again later or fund this plan from your wallet.";
