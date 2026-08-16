@@ -7193,7 +7193,8 @@ function readMandateCreateResponse(json: Record<string, unknown>) {
 // VFD issues SEPARATE credentials for the direct-debit / e-mandate product.
 // Using the wallet token there comes back as HTTP 401
 // { status: "99", message: "Unauthorized to use: Contact Admin" }.
-// If a mandate-specific token is provisioned, use it; otherwise fall back.
+// Mandate calls must never fall back to the ordinary wallet token: VFD may
+// mint that token successfully but rejects it on direct-debit endpoints.
 let cachedMandateToken: string | null = null;
 async function getVfdMandateAccessToken(): Promise<string | null> {
   const explicit = Deno.env.get("VFD_MANDATE_ACCESS_TOKEN");
@@ -7203,8 +7204,8 @@ async function getVfdMandateAccessToken(): Promise<string | null> {
   // Mint directly from the VFD BaaS auth endpoint (routed through the
   // whitelisted gateway) so the direct-debit product gets a token minted from
   // the credentials that are entitled to it.
-  const consumerKey = Deno.env.get("VFD_MANDATE_CONSUMER_KEY") || Deno.env.get("VFD_CONSUMER_KEY");
-  const consumerSecret = Deno.env.get("VFD_MANDATE_CONSUMER_SECRET") || Deno.env.get("VFD_CONSUMER_SECRET");
+  const consumerKey = Deno.env.get("VFD_MANDATE_CONSUMER_KEY");
+  const consumerSecret = Deno.env.get("VFD_MANDATE_CONSUMER_SECRET");
   if (consumerKey && consumerSecret) {
     const host = (Deno.env.get("VFD_MODE") || "sandbox").toLowerCase() === "production"
       ? "https://api-apps.vfdbank.systems"
@@ -7226,7 +7227,8 @@ async function getVfdMandateAccessToken(): Promise<string | null> {
       console.error("[mandate-auth] token mint error", e instanceof Error ? e.message : String(e));
     }
   }
-  return await getVfdAccessToken();
+  console.error("[mandate-auth] mandate-specific credentials are missing or invalid; refusing wallet-token fallback");
+  return null;
 }
 
 // Turn a raw mandate failure payload into an honest, actionable message.
