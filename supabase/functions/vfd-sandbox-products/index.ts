@@ -8531,6 +8531,10 @@ Deno.serve(async (req) => {
     if (action === "mandate_auth_diagnostic" && await assertCronToken(req, "bills_reconciler")) {
       return await handleMandateAuthDiagnostic();
     }
+    if (action === "mandate_endpoint_probe" && await assertCronToken(req, "bills_reconciler")) {
+      return await handleMandateEndpointProbe();
+    }
+
 
     if (action === "sweep_split_fee_cron" && assertCronCaller(req)) {
       return await handleAdminSweepSplitFee("system", body);
