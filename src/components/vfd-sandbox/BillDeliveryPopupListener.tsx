@@ -36,9 +36,21 @@ export function BillDeliveryPopupListener() {
           const n = row?.new || {};
           if (n.notification_type !== "bill_payment") return;
 
+          // Ignore back-dated rows (reconciler catch-ups) — only surface events
+          // that just happened while the user is looking at the app.
+          const createdAt = n.created_at ? new Date(n.created_at).getTime() : Date.now();
+          if (Number.isFinite(createdAt) && Date.now() - createdAt > 2 * 60 * 1000) return;
+
           // Try to pull a reference id out of the message (…Ref: <id>)
           const msg: string = String(n.message || "");
           const refMatch = msg.match(/Ref:\s*([\w-]+)/i);
+
+          // Never show the same transaction twice on this device.
+          const seenKey = refMatch?.[1] ? `bill-popup-seen:${refMatch[1]}` : null;
+          if (seenKey) {
+            if (localStorage.getItem(seenKey)) return;
+            localStorage.setItem(seenKey, "1");
+          }
 
           setPayload({
             title: n.title || "Bill delivered",
@@ -49,6 +61,7 @@ export function BillDeliveryPopupListener() {
           });
           setOpen(true);
         }
+
       )
       .subscribe();
 
