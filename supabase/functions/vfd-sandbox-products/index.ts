@@ -7229,26 +7229,38 @@ async function handleMandateEndpointProbe(): Promise<Response> {
     `${host}/vtech-mandate/api/v2/directdebit/mandate`,
   ];
 
+  const headerShapes: Array<{ name: string; build: (t: string) => Record<string, string> }> = [
+    { name: "AccessToken", build: (t) => ({ AccessToken: t }) },
+    { name: "AccessToken=Bearer", build: (t) => ({ AccessToken: `Bearer ${t}` }) },
+    { name: "AccessToken+walletId", build: (t) => ({ AccessToken: t, walletId: Deno.env.get("VFD_POOL_CLIENT_ID") || "" }) },
+    { name: "AccessToken+accountNo", build: (t) => ({ AccessToken: t, accountNo: VFD_POOL_NUBAN }) },
+  ];
+
   const results: Array<Record<string, unknown>> = [];
   for (const v of tokenVariants) {
     const token = await v.get();
     if (!token) { results.push({ source: v.source, has_token: false }); continue; }
     for (const base of bases) {
-      const reference = `vestara-probe-${crypto.randomUUID()}`;
-      try {
-        const res = await vfdFetch(`${base}/mandate/status?reference=${encodeURIComponent(reference)}`, {
-          method: "GET",
-          headers: { AccessToken: token },
-        });
-        const text = await res.text();
-        let msg = text.slice(0, 180);
-        try { const j = JSON.parse(text); msg = String((j as any)?.message || (j as any)?.error || text).slice(0, 180); } catch { /* html */ }
-        results.push({ source: v.source, base: base.replace(host, ""), http_status: res.status, provider_message: msg });
-      } catch (e) {
-        results.push({ source: v.source, base: base.replace(host, ""), error: e instanceof Error ? e.message : String(e) });
+      for (const shape of headerShapes) {
+        // Only exercise the header matrix against the documented base.
+        if (!base.endsWith("/v2/directdebit") && shape.name !== "AccessToken") continue;
+        const reference = `vestara-probe-${crypto.randomUUID()}`;
+        try {
+          const res = await vfdFetch(`${base}/mandate/status?reference=${encodeURIComponent(reference)}`, {
+            method: "GET",
+            headers: shape.build(token),
+          });
+          const text = await res.text();
+          let msg = text.slice(0, 180);
+          try { const j = JSON.parse(text); msg = String((j as any)?.message || (j as any)?.error || text).slice(0, 180); } catch { /* html */ }
+          results.push({ source: v.source, base: base.replace(host, ""), header: shape.name, http_status: res.status, provider_message: msg });
+        } catch (e) {
+          results.push({ source: v.source, base: base.replace(host, ""), header: shape.name, error: e instanceof Error ? e.message : String(e) });
+        }
       }
     }
   }
+
   return jsonResponse({ success: true, host, results });
 }
 
