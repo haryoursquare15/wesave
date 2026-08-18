@@ -7391,19 +7391,26 @@ async function mintMandateCredentialToken(): Promise<string | null> {
 }
 
 async function mandateTokenIsAccepted(accessToken: string, source: string): Promise<boolean> {
-  const reference = `vestara-token-check-${crypto.randomUUID()}`;
+  // Validate against the E-MANDATE setup endpoint — NOT the classic direct-debit
+  // status endpoint. VFD carries separate entitlements for the two: the status
+  // endpoint answers 403 "Invalid wallet token" on our profile while e-mandate
+  // setup authenticates fine and fails only on payload validation.
+  // The payload is deliberately incomplete, so no mandate can be created.
   const response = await vfdFetch(
-    `${VFD_MANDATE_BASE}/mandate/status?reference=${encodeURIComponent(reference)}`,
-    { method: "GET", headers: { AccessToken: accessToken } },
+    `${VFD_MANDATE_BASE}${VFD_MANDATE_CREATE_PATH}`,
+    {
+      method: "POST",
+      headers: { AccessToken: accessToken, "Content-Type": "application/json" },
+      body: JSON.stringify({ mandateReference: `vestara-token-check-${crypto.randomUUID()}` }),
+    },
   );
   const json = await response.json().catch(() => ({} as Record<string, unknown>));
   const message = String((json as any)?.message || (json as any)?.error || "");
-  // A missing/invalid reference proves the mandate service authenticated the
-  // token and proceeded to reference validation. These responses mean it did
-  // not authenticate or the credential is not entitled to the product.
-  const accepted = !/invalid wallet token|invalid token|unauthori[sz]ed to use|contact admin/i.test(message) &&
+  // A validation complaint (e.g. "payerAccountNumber is mandatory") proves the
+  // mandate service authenticated the token and moved on to payload checks.
+  const accepted = !/invalid wallet token|invalid token|unauthori[sz]ed|contact admin/i.test(message) &&
     response.status !== 401 && response.status !== 403;
-  console.info(`[mandate-auth] source=${source} status=${response.status} accepted=${accepted} provider_status=${String((json as any)?.status || "unknown")}`);
+  console.info(`[mandate-auth] source=${source} endpoint=e-mandate-setup status=${response.status} accepted=${accepted}`);
   return accepted;
 }
 
