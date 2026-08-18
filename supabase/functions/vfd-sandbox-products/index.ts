@@ -7192,6 +7192,64 @@ function readMandateCreateResponse(json: Record<string, unknown>) {
 
 let cachedMandateToken: { token: string; expiresAt: number } | null = null;
 
+// E-Mandate-specific probe. The older diagnostics only exercised the classic
+// direct-debit *status* endpoint, which can carry a different entitlement from
+// the e-mandate *setup* endpoint. This POSTs a deliberately incomplete payload
+// to `/mandate/setup?e-mandate=true` so we can separate:
+//   auth failure (401/403, "Invalid wallet token")  -> entitlement still missing
+//   validation failure (400/"required"/"invalid ...") -> auth OK, e-mandate live
+// No money moves and no mandate can be created from an incomplete payload.
+async function handleEmandateProbe(): Promise<Response> {
+  const results: Array<Record<string, unknown>> = [];
+  const sources: Array<{ source: string; get: () => Promise<string | null> }> = [
+    { source: "mandate_credentials", get: () => mintMandateCredentialToken().catch(() => null) },
+    { source: "gateway_wallet", get: () => getGatewayAccessToken().catch(() => null) },
+    { source: "configured_access_token", get: async () => Deno.env.get("VFD_ACCESS_TOKEN") || null },
+  ];
+
+  for (const s of sources) {
+    const token = await s.get();
+    if (!token) { results.push({ source: s.source, has_token: false }); continue; }
+    for (const header of ["AccessToken", "Bearer"] as const) {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (header === "AccessToken") headers.AccessToken = token;
+      else headers.Authorization = `Bearer ${token}`;
+      try {
+        const res = await vfdFetch(`${VFD_MANDATE_BASE}${VFD_MANDATE_CREATE_PATH}`, {
+          method: "POST",
+          headers,
+          // Intentionally incomplete: no payer account, no amount, no dates.
+          body: JSON.stringify({ mandateReference: `vestara-probe-${crypto.randomUUID()}` }),
+        });
+        const text = await res.text();
+        let message = text.slice(0, 200);
+        try { const j = JSON.parse(text); message = String((j as any)?.message || (j as any)?.error || text).slice(0, 200); } catch { /* html */ }
+        const authRejected = res.status === 401 || res.status === 403 ||
+          /invalid wallet token|invalid token|unauthori[sz]ed|contact admin/i.test(message);
+        results.push({
+          source: s.source,
+          header,
+          endpoint: `${VFD_MANDATE_CREATE_PATH}`,
+          http_status: res.status,
+          provider_message: message,
+          auth_rejected: authRejected,
+          entitlement_looks_live: !authRejected,
+        });
+      } catch (e) {
+        results.push({ source: s.source, header, error: e instanceof Error ? e.message : String(e) });
+      }
+    }
+  }
+
+  return jsonResponse({
+    success: true,
+    mandate_base: VFD_MANDATE_BASE,
+    probed: "e-mandate setup (not DDM status)",
+    any_entitlement_live: results.some((r) => r.entitlement_looks_live === true),
+    results,
+  });
+}
+
 // Ops-only read-only probe across mandate base variants + token mint variants.
 // Reports provider messages only — never tokens or credentials.
 async function handleMandateEndpointProbe(): Promise<Response> {
