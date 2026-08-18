@@ -7478,25 +7478,40 @@ async function mintMandateCredentialToken(): Promise<string | null> {
 }
 
 async function mandateTokenIsAccepted(accessToken: string, source: string): Promise<boolean> {
-  // Validate against the E-MANDATE setup endpoint — NOT the classic direct-debit
-  // status endpoint. VFD carries separate entitlements for the two: the status
-  // endpoint answers 403 "Invalid wallet token" on our profile while e-mandate
-  // setup authenticates fine and fails only on payload validation.
-  // The payload is deliberately incomplete, so no mandate can be created.
+  // IMPORTANT: VFD validates the payload FIRST and only checks the wallet
+  // entitlement once every mandatory field is present. An incomplete payload
+  // therefore answers 400 "<field> is mandatory" even when the token is NOT
+  // entitled — that made the old probe report a false "accepted". So we send a
+  // COMPLETE payload with a deliberately invalid payer account (0000000000):
+  // it reaches the entitlement check but can never create a real mandate.
+  const probe = {
+    reference: `vestara-token-check-${crypto.randomUUID()}`,
+    payerBank: VFD_PAYER_BANK_CODE,
+    payerAccountNumber: "0000000000",
+    payerPhone: "08000000000",
+    payerEmailAddress: "probe@vestara.ng",
+    payerAddress: "Lagos",
+    receiverBank: VFD_POOL_BANK_CODE,
+    receiverAccountNumber: VFD_POOL_NUBAN,
+    amount: "1000",
+    startDate: formatVfdMandateDate(new Date()),
+    endDate: formatVfdMandateDate(new Date(Date.now() + 30 * 86400000)),
+    frequency: "1",
+  };
   const response = await vfdFetch(
     `${VFD_MANDATE_BASE}${VFD_MANDATE_CREATE_PATH}`,
     {
       method: "POST",
       headers: { AccessToken: accessToken, "Content-Type": "application/json" },
-      body: JSON.stringify({ mandateReference: `vestara-token-check-${crypto.randomUUID()}` }),
+      body: JSON.stringify(probe),
     },
   );
   const json = await response.json().catch(() => ({} as Record<string, unknown>));
   const message = String((json as any)?.message || (json as any)?.error || "");
-  // A validation complaint (e.g. "payerAccountNumber is mandatory") proves the
-  // mandate service authenticated the token and moved on to payload checks.
   const accepted = !/invalid wallet token|invalid token|unauthori[sz]ed|contact admin/i.test(message) &&
     response.status !== 401 && response.status !== 403;
+  console.info(`[mandate-auth] source=${source} endpoint=e-mandate-setup status=${response.status} accepted=${accepted}`);
+
   console.info(`[mandate-auth] source=${source} endpoint=e-mandate-setup status=${response.status} accepted=${accepted}`);
   return accepted;
 }
