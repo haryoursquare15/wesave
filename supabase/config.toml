@@ -64,3 +64,5 @@ project_id = "sdwkqwmqgpsjrmijkdix"
 
 
 
+  [functions.vfd-mandate-engine]
+    verify_jwt = false

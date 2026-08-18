@@ -1267,6 +1267,217 @@ export type Database = {
         }
         Relationships: []
       }
+      mandate_debit_attempts: {
+        Row: {
+          amount: number
+          completed_at: string | null
+          created_at: string
+          failure_class: string | null
+          failure_reason: string | null
+          id: string
+          idempotency_key: string
+          ledger_posted: boolean
+          ledger_reference: string | null
+          mandate_id: string
+          needs_review: boolean
+          scheduled_date: string
+          status: string
+          transaction_reference: string
+          updated_at: string
+          user_id: string
+          vfd_response: Json
+        }
+        Insert: {
+          amount: number
+          completed_at?: string | null
+          created_at?: string
+          failure_class?: string | null
+          failure_reason?: string | null
+          id?: string
+          idempotency_key: string
+          ledger_posted?: boolean
+          ledger_reference?: string | null
+          mandate_id: string
+          needs_review?: boolean
+          scheduled_date: string
+          status?: string
+          transaction_reference: string
+          updated_at?: string
+          user_id: string
+          vfd_response?: Json
+        }
+        Update: {
+          amount?: number
+          completed_at?: string | null
+          created_at?: string
+          failure_class?: string | null
+          failure_reason?: string | null
+          id?: string
+          idempotency_key?: string
+          ledger_posted?: boolean
+          ledger_reference?: string | null
+          mandate_id?: string
+          needs_review?: boolean
+          scheduled_date?: string
+          status?: string
+          transaction_reference?: string
+          updated_at?: string
+          user_id?: string
+          vfd_response?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mandate_debit_attempts_mandate_id_fkey"
+            columns: ["mandate_id"]
+            isOneToOne: false
+            referencedRelation: "mandates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mandate_events: {
+        Row: {
+          created_at: string
+          event_type: string
+          id: string
+          mandate_id: string | null
+          mandate_reference: string | null
+          payload: Json
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          event_type: string
+          id?: string
+          mandate_id?: string | null
+          mandate_reference?: string | null
+          payload?: Json
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          event_type?: string
+          id?: string
+          mandate_id?: string | null
+          mandate_reference?: string | null
+          payload?: Json
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mandate_events_mandate_id_fkey"
+            columns: ["mandate_id"]
+            isOneToOne: false
+            referencedRelation: "mandates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mandates: {
+        Row: {
+          amount: number
+          bank_approved_at: string | null
+          created_at: string
+          end_date: string | null
+          expires_at: string
+          frequency: string
+          id: string
+          last_polled_at: string | null
+          mandate_code: string | null
+          mandate_reference: string
+          nibss_account: string | null
+          nibss_message: string | null
+          payer_account_number: string | null
+          payer_address: string | null
+          payer_bank_code: string | null
+          payer_email: string | null
+          payer_phone: string | null
+          poll_count: number
+          product_reference: string
+          product_type: string
+          rejection_reason: string | null
+          resolved_at: string | null
+          setup_fee: number
+          setup_fee_charged_at: string | null
+          setup_fee_internal_share: number
+          setup_fee_nibss_share: number
+          setup_fee_reference: string | null
+          start_date: string | null
+          status: string
+          updated_at: string
+          user_id: string
+          vfd_payload: Json
+        }
+        Insert: {
+          amount: number
+          bank_approved_at?: string | null
+          created_at?: string
+          end_date?: string | null
+          expires_at?: string
+          frequency?: string
+          id?: string
+          last_polled_at?: string | null
+          mandate_code?: string | null
+          mandate_reference: string
+          nibss_account?: string | null
+          nibss_message?: string | null
+          payer_account_number?: string | null
+          payer_address?: string | null
+          payer_bank_code?: string | null
+          payer_email?: string | null
+          payer_phone?: string | null
+          poll_count?: number
+          product_reference: string
+          product_type: string
+          rejection_reason?: string | null
+          resolved_at?: string | null
+          setup_fee?: number
+          setup_fee_charged_at?: string | null
+          setup_fee_internal_share?: number
+          setup_fee_nibss_share?: number
+          setup_fee_reference?: string | null
+          start_date?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+          vfd_payload?: Json
+        }
+        Update: {
+          amount?: number
+          bank_approved_at?: string | null
+          created_at?: string
+          end_date?: string | null
+          expires_at?: string
+          frequency?: string
+          id?: string
+          last_polled_at?: string | null
+          mandate_code?: string | null
+          mandate_reference?: string
+          nibss_account?: string | null
+          nibss_message?: string | null
+          payer_account_number?: string | null
+          payer_address?: string | null
+          payer_bank_code?: string | null
+          payer_email?: string | null
+          payer_phone?: string | null
+          poll_count?: number
+          product_reference?: string
+          product_type?: string
+          rejection_reason?: string | null
+          resolved_at?: string | null
+          setup_fee?: number
+          setup_fee_charged_at?: string | null
+          setup_fee_internal_share?: number
+          setup_fee_nibss_share?: number
+          setup_fee_reference?: string | null
+          start_date?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+          vfd_payload?: Json
+        }
+        Relationships: []
+      }
       member_invites: {
         Row: {
           created_at: string
@@ -6548,6 +6759,15 @@ export type Database = {
       }
       check_withdrawal_limits: {
         Args: { _amount: number; _user_id: string }
+        Returns: Json
+      }
+      claim_mandate_debit_attempt: {
+        Args: {
+          _amount: number
+          _mandate_id: string
+          _scheduled_date: string
+          _transaction_reference: string
+        }
         Returns: Json
       }
       claim_split_settlement: {
