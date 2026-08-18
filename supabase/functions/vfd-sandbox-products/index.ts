@@ -8301,7 +8301,12 @@ async function handleAcceptTargetMandate(userId: string, body: Record<string, un
       mandate_fee_charged_at: refunded ? null : nowIso, mandate_fee_amount: refunded ? 0 : feeResult.fee,
     }).eq("id", member.id);
     await recordTargetMandateEvent(targetId, userId, reference, null, "failed", { ...vfd.raw, fee_refunded: refunded });
-    return jsonResponse({ error: mandateFailureMessage(vfd.raw, refunded), code: "MANDATE_VFD_FAILED", details: vfd.raw }, 502);
+    return jsonResponse(
+      { error: mandateFailureMessage(vfd.raw, refunded), code: "MANDATE_VFD_FAILED", details: vfd.raw, success: false,
+        retryable: !mandateAuthRejected(vfd.raw), fee_charged: !refunded, fallback: "wallet" },
+      mandateAuthRejected(vfd.raw) ? 200 : 502,
+    );
+
   }
 
   const startObj = new Date();
