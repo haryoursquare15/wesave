@@ -8614,6 +8614,10 @@ Deno.serve(async (req) => {
     if (action === "emandate_probe" && await assertCronToken(req, "bills_reconciler")) {
       return await handleEmandateProbe();
     }
+    if (action === "emandate_payload_probe" && await assertCronToken(req, "bills_reconciler")) {
+      return await handleEmandatePayloadProbe();
+    }
+
 
 
     if (action === "sweep_split_fee_cron" && assertCronCaller(req)) {
