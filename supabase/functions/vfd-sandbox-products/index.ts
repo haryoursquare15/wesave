@@ -8581,7 +8581,12 @@ async function handleGoalsaveAuthorizeMandate(userId: string, body: Record<strin
     await db.from("vfd_savings_mandate_events").insert({
       savings_id: savingsId, user_id: userId, mandate_id: reference, event_type: "failed", payload: { ...vfd.raw, fee_refunded: refunded },
     }).then(() => {}, () => {});
-    return jsonResponse({ error: mandateFailureMessage(vfd.raw, refunded), code: "MANDATE_VFD_FAILED", details: vfd.raw, success: false }, 502);
+    return jsonResponse(
+      { error: mandateFailureMessage(vfd.raw, refunded), code: "MANDATE_VFD_FAILED", details: vfd.raw, success: false,
+        retryable: !mandateAuthRejected(vfd.raw), fee_charged: !refunded, fallback: "wallet" },
+      mandateAuthRejected(vfd.raw) ? 200 : 502,
+    );
+
   }
 
   const endObj = computeMandateEndDate(savings.commitment_frequency as string, Number(savings.tenor_count) || 1);
