@@ -7557,8 +7557,19 @@ async function getVfdMandateAccessToken(): Promise<string | null> {
   }
 }
 
+// True when VFD rejected the request at the wallet-entitlement gate rather
+// than for a payload/business reason. These are not transient: retrying the
+// same call returns the same answer, so the client must fall back to wallet
+// funding instead of surfacing a 5xx (which blanks the screen).
+function mandateAuthRejected(raw: Record<string, unknown>): boolean {
+  const http = Number((raw as any)?.http_status || 0);
+  const msg = String((raw as any)?.response?.message || (raw as any)?.error || "");
+  return http === 401 || http === 403 || /invalid wallet token|unauthori[sz]ed|contact admin/i.test(msg);
+}
+
 // Turn a raw mandate failure payload into an honest, actionable message.
 function mandateFailureMessage(raw: Record<string, unknown>, refunded: boolean): string {
+
   const http = Number((raw as any)?.http_status || 0);
   const msg = String((raw as any)?.response?.message || (raw as any)?.error || "");
   const feeNote = refunded
