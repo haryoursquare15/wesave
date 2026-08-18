@@ -7298,24 +7298,33 @@ async function handleEmandatePayloadProbe(): Promise<Response> {
     if (r.auth_rejected) break; // first field that flips auth — that's our culprit
   }
 
-  // 2. Full payload with alternate wallet-identifying headers / receiver banks.
+  // 2. Complete payload across EVERY token source + wallet-identifying header.
+  // The cumulative pass proves the 400s are pre-auth payload validation only —
+  // the wallet entitlement check runs after the payload is complete.
   const variants: Array<Record<string, unknown>> = [];
-  const headerShapes: Array<{ name: string; headers: Record<string, string> }> = [
-    { name: "AccessToken", headers: { AccessToken: token } },
-    { name: "AccessToken+walletId", headers: { AccessToken: token, walletId: Deno.env.get("VFD_POOL_CLIENT_ID") || "" } },
-    { name: "AccessToken+accountNo", headers: { AccessToken: token, accountNo: VFD_POOL_NUBAN } },
-    { name: "Bearer", headers: { Authorization: `Bearer ${token}` } },
+  const tokenSources: Array<{ source: string; get: () => Promise<string | null> }> = [
+    { source: "mandate_credentials", get: () => mintMandateCredentialToken().catch(() => null) },
+    { source: "gateway_wallet", get: () => getGatewayAccessToken().catch(() => null) },
+    { source: "configured_access_token", get: async () => Deno.env.get("VFD_ACCESS_TOKEN") || null },
   ];
-  const receiverBanks = [VFD_POOL_BANK_CODE, "999999", "566"];
-  for (const h of headerShapes) {
-    for (const rb of [...new Set(receiverBanks)]) {
+  for (const ts of tokenSources) {
+    const t = await ts.get();
+    if (!t) { variants.push({ source: ts.source, has_token: false }); continue; }
+    const headerShapes: Array<{ name: string; headers: Record<string, string> }> = [
+      { name: "AccessToken", headers: { AccessToken: t } },
+      { name: "AccessToken+walletId", headers: { AccessToken: t, walletId: Deno.env.get("VFD_POOL_CLIENT_ID") || "" } },
+      { name: "AccessToken+accountNo", headers: { AccessToken: t, accountNo: VFD_POOL_NUBAN } },
+      { name: "Bearer", headers: { Authorization: `Bearer ${t}` } },
+    ];
+    for (const h of headerShapes) {
       const r = await post(
-        { ...base, reference: `vestara-probe-${crypto.randomUUID()}`, receiverBank: rb },
+        { ...base, reference: `vestara-probe-${crypto.randomUUID()}` },
         h.headers,
       );
-      variants.push({ header: h.name, receiverBank: rb, ...r });
+      variants.push({ source: ts.source, header: h.name, ...r });
     }
   }
+
 
   return jsonResponse({
     success: true,
