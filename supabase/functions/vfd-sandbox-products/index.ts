@@ -7250,6 +7250,84 @@ async function handleEmandateProbe(): Promise<Response> {
   });
 }
 
+// Ops-only: bisect WHICH payload field flips the e-mandate setup endpoint from
+// a 400 validation answer (auth OK) to 403 "Invalid wallet token" (auth
+// rejected). Uses a deliberately invalid payer account so no real mandate can
+// be created and no money moves.
+async function handleEmandatePayloadProbe(): Promise<Response> {
+  const token = await getVfdMandateAccessToken();
+  if (!token) return jsonResponse({ success: false, error: "no mandate token could be minted" }, 200);
+
+  const base: Record<string, string> = {
+    reference: `vestara-probe-${crypto.randomUUID()}`,
+    payerBank: VFD_PAYER_BANK_CODE,
+    payerAccountNumber: "0000000000",
+    payerPhone: "08000000000",
+    payerEmailAddress: "probe@vestara.ng",
+    payerAddress: "Lagos",
+    receiverBank: VFD_POOL_BANK_CODE,
+    receiverAccountNumber: VFD_POOL_NUBAN,
+    amount: "1000",
+    startDate: formatVfdMandateDate(new Date()),
+    endDate: formatVfdMandateDate(new Date(Date.now() + 30 * 86400000)),
+    frequency: "1",
+  };
+  const order = Object.keys(base);
+
+  const post = async (payload: Record<string, string>, headers: Record<string, string>) => {
+    const res = await vfdFetch(`${VFD_MANDATE_BASE}${VFD_MANDATE_CREATE_PATH}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers },
+      body: JSON.stringify(payload),
+    });
+    const text = await res.text();
+    let message = text.slice(0, 200);
+    try { const j = JSON.parse(text); message = String((j as any)?.message || (j as any)?.error || text).slice(0, 200); } catch { /* html */ }
+    const authRejected = res.status === 401 || res.status === 403 || /invalid wallet token|unauthori[sz]ed/i.test(message);
+    return { http_status: res.status, provider_message: message, auth_rejected: authRejected };
+  };
+
+  // 1. Cumulative field bisect with the plain AccessToken header.
+  const cumulative: Array<Record<string, unknown>> = [];
+  const payload: Record<string, string> = {};
+  for (const key of order) {
+    payload[key] = base[key];
+    payload.reference = `vestara-probe-${crypto.randomUUID()}`;
+    const r = await post({ ...payload }, { AccessToken: token });
+    cumulative.push({ added_field: key, ...r });
+    if (r.auth_rejected) break; // first field that flips auth — that's our culprit
+  }
+
+  // 2. Full payload with alternate wallet-identifying headers / receiver banks.
+  const variants: Array<Record<string, unknown>> = [];
+  const headerShapes: Array<{ name: string; headers: Record<string, string> }> = [
+    { name: "AccessToken", headers: { AccessToken: token } },
+    { name: "AccessToken+walletId", headers: { AccessToken: token, walletId: Deno.env.get("VFD_POOL_CLIENT_ID") || "" } },
+    { name: "AccessToken+accountNo", headers: { AccessToken: token, accountNo: VFD_POOL_NUBAN } },
+    { name: "Bearer", headers: { Authorization: `Bearer ${token}` } },
+  ];
+  const receiverBanks = [VFD_POOL_BANK_CODE, "999999", "566"];
+  for (const h of headerShapes) {
+    for (const rb of [...new Set(receiverBanks)]) {
+      const r = await post(
+        { ...base, reference: `vestara-probe-${crypto.randomUUID()}`, receiverBank: rb },
+        h.headers,
+      );
+      variants.push({ header: h.name, receiverBank: rb, ...r });
+    }
+  }
+
+  return jsonResponse({
+    success: true,
+    mandate_base: VFD_MANDATE_BASE,
+    pool_nuban: VFD_POOL_NUBAN,
+    cumulative,
+    variants,
+    any_variant_authenticated: variants.some((v) => v.auth_rejected === false),
+  });
+}
+
+
 // Ops-only read-only probe across mandate base variants + token mint variants.
 // Reports provider messages only — never tokens or credentials.
 async function handleMandateEndpointProbe(): Promise<Response> {
