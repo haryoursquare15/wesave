@@ -8301,11 +8301,18 @@ async function handleGoalsaveAuthorizeMandate(userId: string, body: Record<strin
   // wallet. This prevents a debit/refund pair when VFD rejects every token.
   const mandateAccessToken = await getVfdMandateAccessToken();
   if (!mandateAccessToken) {
+    // This is an upstream product-entitlement state, not a function outage.
+    // Return a handled application result so the client can keep the mandate
+    // dialog open and offer wallet funding without the runtime treating the
+    // expected provider rejection as an unhandled 5xx/blank-screen failure.
     return jsonResponse({
       error: "Direct debit is temporarily unavailable because the mandate provider rejected our credentials. No setup fee was charged. Please fund this plan from your Vestara wallet or try again later.",
       code: "MANDATE_AUTH_FAILED",
       success: false,
-    }, 503);
+      retryable: false,
+      fee_charged: false,
+      fallback: "wallet",
+    });
   }
 
   const feeRef = `VES-GOAL-MND-${savingsId.slice(0, 8)}-${Date.now()}`;
