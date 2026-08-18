@@ -8655,6 +8655,7 @@ Deno.serve(async (req) => {
       case "trigger_mandate_debit": return await handleTriggerMandateDebit(userId, body);
       case "poll_pending_mandates": return (await isPlatformAdmin(userId)) ? await handlePollPendingMandates() : forbidden("Admin only");
       case "mandate_auth_diagnostic": return await handleMandateAuthDiagnostic();
+      case "emandate_probe": return await handleEmandateProbe();
       // E-Mandate flow extended to Target Ajo + Goal Savings 2.0
       case "accept_target_mandate": return await handleAcceptTargetMandate(userId, body);
       case "check_target_mandate_status": return await handleCheckTargetMandateStatus(userId, body);
