@@ -7250,6 +7250,93 @@ async function handleEmandateProbe(): Promise<Response> {
   });
 }
 
+// Ops-only: bisect WHICH payload field flips the e-mandate setup endpoint from
+// a 400 validation answer (auth OK) to 403 "Invalid wallet token" (auth
+// rejected). Uses a deliberately invalid payer account so no real mandate can
+// be created and no money moves.
+async function handleEmandatePayloadProbe(): Promise<Response> {
+  const token = await getVfdMandateAccessToken();
+  if (!token) return jsonResponse({ success: false, error: "no mandate token could be minted" }, 200);
+
+  const base: Record<string, string> = {
+    reference: `vestara-probe-${crypto.randomUUID()}`,
+    payerBank: VFD_PAYER_BANK_CODE,
+    payerAccountNumber: "0000000000",
+    payerPhone: "08000000000",
+    payerEmailAddress: "probe@vestara.ng",
+    payerAddress: "Lagos",
+    receiverBank: VFD_POOL_BANK_CODE,
+    receiverAccountNumber: VFD_POOL_NUBAN,
+    amount: "1000",
+    startDate: formatVfdMandateDate(new Date()),
+    endDate: formatVfdMandateDate(new Date(Date.now() + 30 * 86400000)),
+    frequency: "1",
+  };
+  const order = Object.keys(base);
+
+  const post = async (payload: Record<string, string>, headers: Record<string, string>) => {
+    const res = await vfdFetch(`${VFD_MANDATE_BASE}${VFD_MANDATE_CREATE_PATH}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers },
+      body: JSON.stringify(payload),
+    });
+    const text = await res.text();
+    let message = text.slice(0, 200);
+    try { const j = JSON.parse(text); message = String((j as any)?.message || (j as any)?.error || text).slice(0, 200); } catch { /* html */ }
+    const authRejected = res.status === 401 || res.status === 403 || /invalid wallet token|unauthori[sz]ed/i.test(message);
+    return { http_status: res.status, provider_message: message, auth_rejected: authRejected };
+  };
+
+  // 1. Cumulative field bisect with the plain AccessToken header.
+  const cumulative: Array<Record<string, unknown>> = [];
+  const payload: Record<string, string> = {};
+  for (const key of order) {
+    payload[key] = base[key];
+    payload.reference = `vestara-probe-${crypto.randomUUID()}`;
+    const r = await post({ ...payload }, { AccessToken: token });
+    cumulative.push({ added_field: key, ...r });
+    if (r.auth_rejected) break; // first field that flips auth — that's our culprit
+  }
+
+  // 2. Complete payload across EVERY token source + wallet-identifying header.
+  // The cumulative pass proves the 400s are pre-auth payload validation only —
+  // the wallet entitlement check runs after the payload is complete.
+  const variants: Array<Record<string, unknown>> = [];
+  const tokenSources: Array<{ source: string; get: () => Promise<string | null> }> = [
+    { source: "mandate_credentials", get: () => mintMandateCredentialToken().catch(() => null) },
+    { source: "gateway_wallet", get: () => getGatewayAccessToken().catch(() => null) },
+    { source: "configured_access_token", get: async () => Deno.env.get("VFD_ACCESS_TOKEN") || null },
+  ];
+  for (const ts of tokenSources) {
+    const t = await ts.get();
+    if (!t) { variants.push({ source: ts.source, has_token: false }); continue; }
+    const headerShapes: Array<{ name: string; headers: Record<string, string> }> = [
+      { name: "AccessToken", headers: { AccessToken: t } },
+      { name: "AccessToken+walletId", headers: { AccessToken: t, walletId: Deno.env.get("VFD_POOL_CLIENT_ID") || "" } },
+      { name: "AccessToken+accountNo", headers: { AccessToken: t, accountNo: VFD_POOL_NUBAN } },
+      { name: "Bearer", headers: { Authorization: `Bearer ${t}` } },
+    ];
+    for (const h of headerShapes) {
+      const r = await post(
+        { ...base, reference: `vestara-probe-${crypto.randomUUID()}` },
+        h.headers,
+      );
+      variants.push({ source: ts.source, header: h.name, ...r });
+    }
+  }
+
+
+  return jsonResponse({
+    success: true,
+    mandate_base: VFD_MANDATE_BASE,
+    pool_nuban: VFD_POOL_NUBAN,
+    cumulative,
+    variants,
+    any_variant_authenticated: variants.some((v) => v.auth_rejected === false),
+  });
+}
+
+
 // Ops-only read-only probe across mandate base variants + token mint variants.
 // Reports provider messages only — never tokens or credentials.
 async function handleMandateEndpointProbe(): Promise<Response> {
@@ -7391,25 +7478,40 @@ async function mintMandateCredentialToken(): Promise<string | null> {
 }
 
 async function mandateTokenIsAccepted(accessToken: string, source: string): Promise<boolean> {
-  // Validate against the E-MANDATE setup endpoint — NOT the classic direct-debit
-  // status endpoint. VFD carries separate entitlements for the two: the status
-  // endpoint answers 403 "Invalid wallet token" on our profile while e-mandate
-  // setup authenticates fine and fails only on payload validation.
-  // The payload is deliberately incomplete, so no mandate can be created.
+  // IMPORTANT: VFD validates the payload FIRST and only checks the wallet
+  // entitlement once every mandatory field is present. An incomplete payload
+  // therefore answers 400 "<field> is mandatory" even when the token is NOT
+  // entitled — that made the old probe report a false "accepted". So we send a
+  // COMPLETE payload with a deliberately invalid payer account (0000000000):
+  // it reaches the entitlement check but can never create a real mandate.
+  const probe = {
+    reference: `vestara-token-check-${crypto.randomUUID()}`,
+    payerBank: VFD_PAYER_BANK_CODE,
+    payerAccountNumber: "0000000000",
+    payerPhone: "08000000000",
+    payerEmailAddress: "probe@vestara.ng",
+    payerAddress: "Lagos",
+    receiverBank: VFD_POOL_BANK_CODE,
+    receiverAccountNumber: VFD_POOL_NUBAN,
+    amount: "1000",
+    startDate: formatVfdMandateDate(new Date()),
+    endDate: formatVfdMandateDate(new Date(Date.now() + 30 * 86400000)),
+    frequency: "1",
+  };
   const response = await vfdFetch(
     `${VFD_MANDATE_BASE}${VFD_MANDATE_CREATE_PATH}`,
     {
       method: "POST",
       headers: { AccessToken: accessToken, "Content-Type": "application/json" },
-      body: JSON.stringify({ mandateReference: `vestara-token-check-${crypto.randomUUID()}` }),
+      body: JSON.stringify(probe),
     },
   );
   const json = await response.json().catch(() => ({} as Record<string, unknown>));
   const message = String((json as any)?.message || (json as any)?.error || "");
-  // A validation complaint (e.g. "payerAccountNumber is mandatory") proves the
-  // mandate service authenticated the token and moved on to payload checks.
   const accepted = !/invalid wallet token|invalid token|unauthori[sz]ed|contact admin/i.test(message) &&
     response.status !== 401 && response.status !== 403;
+  console.info(`[mandate-auth] source=${source} endpoint=e-mandate-setup status=${response.status} accepted=${accepted}`);
+
   console.info(`[mandate-auth] source=${source} endpoint=e-mandate-setup status=${response.status} accepted=${accepted}`);
   return accepted;
 }
@@ -7455,8 +7557,19 @@ async function getVfdMandateAccessToken(): Promise<string | null> {
   }
 }
 
+// True when VFD rejected the request at the wallet-entitlement gate rather
+// than for a payload/business reason. These are not transient: retrying the
+// same call returns the same answer, so the client must fall back to wallet
+// funding instead of surfacing a 5xx (which blanks the screen).
+function mandateAuthRejected(raw: Record<string, unknown>): boolean {
+  const http = Number((raw as any)?.http_status || 0);
+  const msg = String((raw as any)?.response?.message || (raw as any)?.error || "");
+  return http === 401 || http === 403 || /invalid wallet token|unauthori[sz]ed|contact admin/i.test(msg);
+}
+
 // Turn a raw mandate failure payload into an honest, actionable message.
 function mandateFailureMessage(raw: Record<string, unknown>, refunded: boolean): string {
+
   const http = Number((raw as any)?.http_status || 0);
   const msg = String((raw as any)?.response?.message || (raw as any)?.error || "");
   const feeNote = refunded
@@ -8199,7 +8312,12 @@ async function handleAcceptTargetMandate(userId: string, body: Record<string, un
       mandate_fee_charged_at: refunded ? null : nowIso, mandate_fee_amount: refunded ? 0 : feeResult.fee,
     }).eq("id", member.id);
     await recordTargetMandateEvent(targetId, userId, reference, null, "failed", { ...vfd.raw, fee_refunded: refunded });
-    return jsonResponse({ error: mandateFailureMessage(vfd.raw, refunded), code: "MANDATE_VFD_FAILED", details: vfd.raw }, 502);
+    return jsonResponse(
+      { error: mandateFailureMessage(vfd.raw, refunded), code: "MANDATE_VFD_FAILED", details: vfd.raw, success: false,
+        retryable: !mandateAuthRejected(vfd.raw), fee_charged: !refunded, fallback: "wallet" },
+      mandateAuthRejected(vfd.raw) ? 200 : 502,
+    );
+
   }
 
   const startObj = new Date();
@@ -8479,7 +8597,12 @@ async function handleGoalsaveAuthorizeMandate(userId: string, body: Record<strin
     await db.from("vfd_savings_mandate_events").insert({
       savings_id: savingsId, user_id: userId, mandate_id: reference, event_type: "failed", payload: { ...vfd.raw, fee_refunded: refunded },
     }).then(() => {}, () => {});
-    return jsonResponse({ error: mandateFailureMessage(vfd.raw, refunded), code: "MANDATE_VFD_FAILED", details: vfd.raw, success: false }, 502);
+    return jsonResponse(
+      { error: mandateFailureMessage(vfd.raw, refunded), code: "MANDATE_VFD_FAILED", details: vfd.raw, success: false,
+        retryable: !mandateAuthRejected(vfd.raw), fee_charged: !refunded, fallback: "wallet" },
+      mandateAuthRejected(vfd.raw) ? 200 : 502,
+    );
+
   }
 
   const endObj = computeMandateEndDate(savings.commitment_frequency as string, Number(savings.tenor_count) || 1);
@@ -8614,6 +8737,10 @@ Deno.serve(async (req) => {
     if (action === "emandate_probe" && await assertCronToken(req, "bills_reconciler")) {
       return await handleEmandateProbe();
     }
+    if (action === "emandate_payload_probe" && await assertCronToken(req, "bills_reconciler")) {
+      return await handleEmandatePayloadProbe();
+    }
+
 
 
     if (action === "sweep_split_fee_cron" && assertCronCaller(req)) {
