@@ -4187,8 +4187,9 @@ async function reconcileOutstandingBillFundingReversals(limit = 50): Promise<{
   const result = { scanned: 0, reversed: 0, already_ok: 0, failed: 0 };
   const { data: rows } = await db
     .from("vfd_sandbox_bill_receipts")
-    .select("id, reference, user_id, amount, status, hold_state, biller_name, customer_id")
+    .select("id, reference, user_id, amount, status, hold_state, biller_name, customer_id, refunded_at")
     .in("status", ["failed", "refunded"])
+    .is("refunded_at", null)
     .order("paid_at", { ascending: false })
     .limit(limit);
 
@@ -4213,7 +4214,15 @@ async function reconcileOutstandingBillFundingReversals(limit = 50): Promise<{
       reference: r.reference, amount: Number(r.amount), userId: r.user_id, origin: "bills_reversal_sweep",
     });
     if (!refund.ok) { result.failed++; continue; }
-    if (refund.reversal.nothingToReverse) { result.already_ok++; continue; }
+    if (refund.reversal.nothingToReverse) {
+      // Nothing left at the bank to return — close the receipt so this row is
+      // never picked up (and re-notified) by a later sweep.
+      result.already_ok++;
+      await db.from("vfd_sandbox_bill_receipts")
+        .update({ refunded_at: new Date().toISOString() })
+        .eq("id", r.id);
+      continue;
+    }
 
     result.reversed++;
     if (r.hold_state === "held") {
@@ -4224,10 +4233,24 @@ async function reconcileOutstandingBillFundingReversals(limit = 50): Promise<{
           bank_reversal_reference: refund.reversal.reference,
         },
       });
-      await db.from("vfd_sandbox_bill_receipts")
-        .update({ hold_state: "refunded", refunded_at: new Date().toISOString() })
-        .eq("id", r.id);
     }
+    await db.from("vfd_sandbox_bill_receipts")
+      .update({
+        ...(r.hold_state === "held" ? { hold_state: "refunded" } : {}),
+        refunded_at: new Date().toISOString(),
+      })
+      .eq("id", r.id);
+
+    // Only ever notify once per reference, even if a future sweep re-touches it.
+    const { data: priorNote } = await db
+      .from("vfd_sandbox_notifications")
+      .select("id")
+      .eq("user_id", r.user_id)
+      .eq("notification_type", "bill_payment")
+      .ilike("message", `%Ref: ${r.reference}%`)
+      .limit(1);
+    if ((priorNote || []).length > 0) continue;
+
     await sendNotification(
       r.user_id,
       "Bill refund returned to your account",
@@ -4235,6 +4258,7 @@ async function reconcileOutstandingBillFundingReversals(limit = 50): Promise<{
       "bill_payment",
     );
   }
+
   return result;
 }
 
