@@ -7192,6 +7192,78 @@ function readMandateCreateResponse(json: Record<string, unknown>) {
 
 let cachedMandateToken: { token: string; expiresAt: number } | null = null;
 
+// Ops-only read-only probe across mandate base variants + token mint variants.
+// Reports provider messages only — never tokens or credentials.
+async function handleMandateEndpointProbe(): Promise<Response> {
+  const host = (Deno.env.get("VFD_MODE") || "sandbox").toLowerCase() === "production"
+    ? "https://api-apps.vfdbank.systems"
+    : "https://api-devapps.vfdbank.systems";
+
+  const tokenVariants: Array<{ source: string; get: () => Promise<string | null> }> = [
+    { source: "mandate_baas_token", get: () => mintMandateCredentialToken().catch(() => null) },
+    { source: "gateway_wallet", get: () => getGatewayAccessToken().catch(() => null) },
+    { source: "configured_access_token", get: async () => Deno.env.get("VFD_ACCESS_TOKEN") || null },
+    {
+      source: "wallet_baas_token",
+      get: async () => {
+        const consumerKey = Deno.env.get("VFD_CONSUMER_KEY");
+        const consumerSecret = Deno.env.get("VFD_CONSUMER_SECRET");
+        if (!consumerKey || !consumerSecret) return null;
+        const r = await vfdFetch(`${host}/vfd-tech/baas-portal/v1.1/baasauth/token`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "-1" }),
+        });
+        const j = await r.json().catch(() => ({} as Record<string, unknown>));
+        const d = ((j as any)?.data || {}) as Record<string, unknown>;
+        return String(d.access_token || d.accessToken || d.token || "") || null;
+      },
+    },
+  ];
+
+  const bases = [
+    `${host}/vtech-mandate/api/v2/directdebit`,
+    `${host}/vtech-mandate/api/v1/directdebit`,
+    `${host}/vtech-mandate/api/v2`,
+    `${host}/vtech-wallet/api/v2/directdebit`,
+    `${host}/vtech-mandate/api/v2/directdebit/mandate`,
+  ];
+
+  const headerShapes: Array<{ name: string; build: (t: string) => Record<string, string> }> = [
+    { name: "AccessToken", build: (t) => ({ AccessToken: t }) },
+    { name: "AccessToken=Bearer", build: (t) => ({ AccessToken: `Bearer ${t}` }) },
+    { name: "AccessToken+walletId", build: (t) => ({ AccessToken: t, walletId: Deno.env.get("VFD_POOL_CLIENT_ID") || "" }) },
+    { name: "AccessToken+accountNo", build: (t) => ({ AccessToken: t, accountNo: VFD_POOL_NUBAN }) },
+  ];
+
+  const results: Array<Record<string, unknown>> = [];
+  for (const v of tokenVariants) {
+    const token = await v.get();
+    if (!token) { results.push({ source: v.source, has_token: false }); continue; }
+    for (const base of bases) {
+      for (const shape of headerShapes) {
+        // Only exercise the header matrix against the documented base.
+        if (!base.endsWith("/v2/directdebit") && shape.name !== "AccessToken") continue;
+        const reference = `vestara-probe-${crypto.randomUUID()}`;
+        try {
+          const res = await vfdFetch(`${base}/mandate/status?reference=${encodeURIComponent(reference)}`, {
+            method: "GET",
+            headers: shape.build(token),
+          });
+          const text = await res.text();
+          let msg = text.slice(0, 180);
+          try { const j = JSON.parse(text); msg = String((j as any)?.message || (j as any)?.error || text).slice(0, 180); } catch { /* html */ }
+          results.push({ source: v.source, base: base.replace(host, ""), header: shape.name, http_status: res.status, provider_message: msg });
+        } catch (e) {
+          results.push({ source: v.source, base: base.replace(host, ""), header: shape.name, error: e instanceof Error ? e.message : String(e) });
+        }
+      }
+    }
+  }
+
+  return jsonResponse({ success: true, host, results });
+}
+
 // Read-only probe: reports whether the mandate provider authenticates each
 // configured credential source. Never returns or logs the tokens themselves.
 async function handleMandateAuthDiagnostic(): Promise<Response> {
@@ -8471,6 +8543,10 @@ Deno.serve(async (req) => {
     if (action === "mandate_auth_diagnostic" && await assertCronToken(req, "bills_reconciler")) {
       return await handleMandateAuthDiagnostic();
     }
+    if (action === "mandate_endpoint_probe" && await assertCronToken(req, "bills_reconciler")) {
+      return await handleMandateEndpointProbe();
+    }
+
 
     if (action === "sweep_split_fee_cron" && assertCronCaller(req)) {
       return await handleAdminSweepSplitFee("system", body);
