@@ -26,6 +26,8 @@ interface Transaction {
   description: string | null;
   created_at: string;
   source: "sandbox" | "legacy";
+  user_name?: string;
+  username?: string;
 }
 
 export function TransactionExplorerTab() {
@@ -64,6 +66,20 @@ export function TransactionExplorerTab() {
         status: r.status, reference: r.reference, description: r.description,
         created_at: r.created_at, source: "legacy",
       }));
+      const userIds = [...new Set(rows.map(r => r.user_id).filter(Boolean))];
+      if (userIds.length) {
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("id, full_name, username")
+          .in("id", userIds);
+        const profileMap = new Map((profiles || []).map(p => [p.id, p]));
+        rows.forEach(r => {
+          const p: any = profileMap.get(r.user_id);
+          r.user_name = p?.full_name || undefined;
+          r.username = p?.username || undefined;
+        });
+      }
+
       rows.sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at));
       setTransactions(rows);
     } catch (err) {
@@ -85,6 +101,8 @@ export function TransactionExplorerTab() {
       tx.vfd_reference?.toLowerCase().includes(s) ||
       tx.session_id?.toLowerCase().includes(s) ||
       tx.user_id.toLowerCase().includes(s) ||
+      tx.user_name?.toLowerCase().includes(s) ||
+      tx.username?.toLowerCase().includes(s) ||
       tx.description?.toLowerCase().includes(s) ||
       tx.id.toLowerCase().includes(s)
     );
@@ -117,6 +135,8 @@ export function TransactionExplorerTab() {
             </Button>
             <Button variant="outline" size="sm" disabled={!filteredTransactions.length} onClick={() => {
               exportToCSV(filteredTransactions.map(tx => ({
+                Customer: tx.user_name || "",
+                Username: tx.username || "",
                 Reference: tx.reference || tx.id,
                 "VFD Ref": tx.vfd_reference || "",
                 "NIBSS Session": tx.session_id || "",
@@ -179,6 +199,7 @@ export function TransactionExplorerTab() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Customer</TableHead>
                   <TableHead>Reference</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Amount</TableHead>
@@ -191,6 +212,10 @@ export function TransactionExplorerTab() {
               <TableBody>
                 {filteredTransactions.map((tx) => (
                   <TableRow key={`${tx.source}-${tx.id}`}>
+                    <TableCell className="text-sm">
+                      <div className="font-medium">{tx.user_name || tx.user_id.slice(0, 8) + "…"}</div>
+                      <div className="text-xs text-muted-foreground">{tx.username ? `@${tx.username}` : "—"}</div>
+                    </TableCell>
                     <TableCell className="font-mono text-xs max-w-[200px] truncate">
                       {tx.reference || tx.id}
                     </TableCell>

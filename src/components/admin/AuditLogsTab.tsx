@@ -16,6 +16,7 @@ interface ActivityLog {
   id: string;
   user_id: string;
   user_name?: string;
+  username?: string;
   action: string;
   resource_type: string;
   resource_id: string | null;
@@ -82,8 +83,15 @@ export function AuditLogsTab() {
           .from("profiles")
           .select("id, full_name, username")
           .in("id", userIds);
-        const profileMap = new Map((profiles || []).map(p => [p.id, p.full_name || p.username || p.id.slice(0, 8)]));
-        allLogs = allLogs.map(l => ({ ...l, user_name: profileMap.get(l.user_id) || l.user_id.slice(0, 8) }));
+        const profileMap = new Map((profiles || []).map(p => [p.id, p]));
+        allLogs = allLogs.map(l => {
+          const p: any = profileMap.get(l.user_id);
+          return {
+            ...l,
+            user_name: p?.full_name || p?.username || l.user_id.slice(0, 8),
+            username: p?.username || undefined,
+          };
+        });
       }
 
       setLogs(allLogs);
@@ -115,6 +123,7 @@ export function AuditLogsTab() {
         log.action.toLowerCase().includes(s) ||
         log.resource_type.toLowerCase().includes(s) ||
         log.user_name?.toLowerCase().includes(s) ||
+        log.username?.toLowerCase().includes(s) ||
         log.user_id.toLowerCase().includes(s)
       );
     }
@@ -146,6 +155,7 @@ export function AuditLogsTab() {
     exportToCSV(filteredLogs.map(log => ({
       Timestamp: format(new Date(log.created_at), "yyyy-MM-dd HH:mm:ss"),
       User: log.user_name || log.user_id,
+      Username: log.username || "",
       Action: log.action,
       "Resource Type": log.resource_type,
       "Resource ID": log.resource_id || "",
@@ -213,6 +223,7 @@ export function AuditLogsTab() {
                     </TableCell>
                     <TableCell>
                       <div className="text-sm font-medium">{log.user_name || log.user_id.slice(0, 8)}</div>
+                      {log.username && <div className="text-xs text-muted-foreground">@{log.username}</div>}
                     </TableCell>
                     <TableCell>{getActionBadge(log)}</TableCell>
                     <TableCell>

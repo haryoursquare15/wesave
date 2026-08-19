@@ -14,6 +14,7 @@ interface WithdrawalRow {
   id: string;
   user_id: string;
   user_name?: string;
+  username?: string;
   amount: number;
   entry_type: string;
   description: string | null;
@@ -80,9 +81,12 @@ export function WithdrawalsTab() {
       if (userIds.length) {
         const { data: profiles } = await supabase.from("profiles")
           .select("id, full_name, username").in("id", userIds);
-        const profileMap = new Map((profiles || []).map(p =>
-          [p.id, p.full_name || p.username || p.id.slice(0, 8)]));
-        filtered.forEach(e => { e.user_name = profileMap.get(e.user_id); });
+        const profileMap = new Map((profiles || []).map(p => [p.id, p]));
+        filtered.forEach(e => {
+          const p: any = profileMap.get(e.user_id);
+          e.user_name = p?.full_name || p?.username || undefined;
+          e.username = p?.username || undefined;
+        });
       }
 
       filtered.sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at));
@@ -111,6 +115,7 @@ export function WithdrawalsTab() {
   const handleExport = () => {
     exportToCSV(withdrawals.map(w => ({
       User: w.user_name || w.user_id,
+      Username: w.username || "",
       Amount: Math.abs(w.amount),
       Status: w.reference_type === "withdrawal_reversal" ? "Reversed" : w.entry_type === "debit" ? "Completed" : w.entry_type === "freeze" ? "Processing" : "Failed/Released",
       Source: w.source,
@@ -170,7 +175,10 @@ export function WithdrawalsTab() {
                 <TableBody>
                   {withdrawals.map(w => (
                     <TableRow key={`${w.source}-${w.id}`}>
-                      <TableCell className="font-medium text-sm">{w.user_name || w.user_id.slice(0, 8) + "..."}</TableCell>
+                      <TableCell className="text-sm">
+                        <div className="font-medium">{w.user_name || w.user_id.slice(0, 8) + "…"}</div>
+                        <div className="text-xs text-muted-foreground">{w.username ? `@${w.username}` : "—"}</div>
+                      </TableCell>
                       <TableCell className="font-medium">₦{Math.abs(w.amount).toLocaleString()}</TableCell>
                       <TableCell>{getEntryBadge(w.entry_type, w.reference_type)}</TableCell>
                       <TableCell><Badge variant="secondary" className="text-[10px]">{w.source}</Badge></TableCell>
