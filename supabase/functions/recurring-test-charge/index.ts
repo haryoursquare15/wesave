@@ -256,7 +256,7 @@ serve(async (req) => {
       const { email, amount, name } = body;
       const txRef = `recurring-test-${Date.now()}`;
       const flwPublicKey = Deno.env.get('FLUTTERWAVE_TEST_PUBLIC_KEY') || '';
-      const redirectUrl = 'https://wesave.lovable.app/admin/recurring-test';
+      const redirectUrl = 'https://app.vestara.ng/vst-ops-9f3c/console/recurring-test';
 
       return new Response(JSON.stringify({
         success: true,
