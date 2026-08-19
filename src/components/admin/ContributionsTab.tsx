@@ -93,6 +93,20 @@ export function ContributionsTab() {
         ? rows
         : rows.filter(r => r.status === statusFilter);
 
+      const userIds = [...new Set(filtered.map(r => r.user_id).filter(Boolean))];
+      if (userIds.length) {
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("id, full_name, username")
+          .in("id", userIds);
+        const profileMap = new Map((profiles || []).map(p => [p.id, p]));
+        filtered.forEach(r => {
+          const p: any = profileMap.get(r.user_id);
+          r.user_name = p?.full_name || undefined;
+          r.username = p?.username || undefined;
+        });
+      }
+
       setContributions(filtered);
       setPendingCharges(pendingRes.data || []);
     } catch (err) {
@@ -194,6 +208,8 @@ export function ContributionsTab() {
                <Button variant="outline" size="sm" onClick={fetchData}><RefreshCw className="h-4 w-4" /></Button>
                <Button variant="outline" size="sm" disabled={!contributions.length} onClick={() => {
                  exportToCSV(contributions.map(c => ({
+                   Customer: c.user_name || "",
+                   Username: c.username || "",
                    "User ID": c.user_id,
                    Amount: c.amount,
                    Status: c.status || "",
@@ -223,7 +239,10 @@ export function ContributionsTab() {
                 <TableBody>
                   {contributions.map(c => (
                     <TableRow key={`${c.source}-${c.id}`}>
-                      <TableCell className="font-mono text-xs">{c.user_id.slice(0,8)}...</TableCell>
+                      <TableCell className="text-sm">
+                        <div className="font-medium">{c.user_name || c.user_id.slice(0, 8) + "…"}</div>
+                        <div className="text-xs text-muted-foreground">{c.username ? `@${c.username}` : "—"}</div>
+                      </TableCell>
                       <TableCell className="font-medium">₦{c.amount.toLocaleString()}</TableCell>
                       <TableCell>{getStatusBadge(c.status)}</TableCell>
                       <TableCell><Badge variant="secondary" className="text-[10px]">{c.source}</Badge></TableCell>
