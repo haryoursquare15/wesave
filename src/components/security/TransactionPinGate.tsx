@@ -261,12 +261,12 @@ export function TransactionPinGate({
 
         {(phase === "setup_new" || phase === "verify") && (
           <div className="flex flex-col items-center gap-4 py-2">
-            <InputOTP maxLength={4} value={pin} onChange={setPin1} autoFocus>
+            <InputOTP maxLength={4} value={pin} onChange={setPin1} autoFocus inputMode="numeric" pattern="[0-9]*">
               <InputOTPGroup>
-                <InputOTPSlot index={0} className="h-14 w-14 text-xl" />
-                <InputOTPSlot index={1} className="h-14 w-14 text-xl" />
-                <InputOTPSlot index={2} className="h-14 w-14 text-xl" />
-                <InputOTPSlot index={3} className="h-14 w-14 text-xl" />
+                <InputOTPSlot index={0} mask className="h-14 w-14 text-xl" />
+                <InputOTPSlot index={1} mask className="h-14 w-14 text-xl" />
+                <InputOTPSlot index={2} mask className="h-14 w-14 text-xl" />
+                <InputOTPSlot index={3} mask className="h-14 w-14 text-xl" />
               </InputOTPGroup>
             </InputOTP>
             {phase === "setup_new" && (
@@ -280,12 +280,12 @@ export function TransactionPinGate({
 
         {phase === "setup_confirm" && (
           <div className="flex justify-center py-2">
-            <InputOTP maxLength={4} value={pinConfirm} onChange={setPinConfirm} autoFocus>
+            <InputOTP maxLength={4} value={pinConfirm} onChange={setPinConfirm} autoFocus inputMode="numeric" pattern="[0-9]*">
               <InputOTPGroup>
-                <InputOTPSlot index={0} className="h-14 w-14 text-xl" />
-                <InputOTPSlot index={1} className="h-14 w-14 text-xl" />
-                <InputOTPSlot index={2} className="h-14 w-14 text-xl" />
-                <InputOTPSlot index={3} className="h-14 w-14 text-xl" />
+                <InputOTPSlot index={0} mask className="h-14 w-14 text-xl" />
+                <InputOTPSlot index={1} mask className="h-14 w-14 text-xl" />
+                <InputOTPSlot index={2} mask className="h-14 w-14 text-xl" />
+                <InputOTPSlot index={3} mask className="h-14 w-14 text-xl" />
               </InputOTPGroup>
             </InputOTP>
           </div>
