@@ -2,7 +2,7 @@ User-agent: Googlebot
 Allow: /
 Disallow: /app
 Disallow: /dashboard
-Disallow: /admin
+Disallow: /vst-ops-9f3c
 Disallow: /settings
 Disallow: /wallet
 Disallow: /groups
@@ -13,7 +13,7 @@ User-agent: Bingbot
 Allow: /
 Disallow: /app
 Disallow: /dashboard
-Disallow: /admin
+Disallow: /vst-ops-9f3c
 Disallow: /settings
 Disallow: /wallet
 
@@ -49,7 +49,7 @@ User-agent: *
 Allow: /
 Disallow: /app
 Disallow: /dashboard
-Disallow: /admin
+Disallow: /vst-ops-9f3c
 Disallow: /settings
 Disallow: /wallet
 Disallow: /groups
