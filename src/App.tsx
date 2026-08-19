@@ -206,6 +206,9 @@ const App = () => {
                 <Route path="/vfd-sandbox/invite/:token" element={<LegacyRedirect to={JOIN} />} />
                 <Route path="/vfd-sandbox" element={<LegacyRedirect to={APP_HOME} />} />
                 <Route path="/sandbox-health" element={<LegacyRedirect to={`${ADMIN_BASE}/health`} />} />
+                <Route path="/admin" element={<LegacyRedirect to={ADMIN_CONSOLE_PATH} />} />
+                <Route path="/admin/recurring-test" element={<LegacyRedirect to={ADMIN_RECURRING_TEST_PATH} />} />
+                <Route path="/admin/login" element={<LegacyRedirect to={ADMIN_LOGIN_PATH} />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </OnboardingRedirect>
