@@ -25,9 +25,25 @@ function generateToken(): string {
     .join('')
 }
 
-// Auth note: this function uses verify_jwt = true in config.toml, so Supabase's
-// gateway validates the caller's JWT (anon or service_role) before the request
-// reaches this code. No in-function auth check is needed.
+// Auth note: verify_jwt = true in config.toml means Supabase's gateway validates
+// that *some* JWT is present. That is NOT sufficient here: this function renders a
+// caller-supplied title/message/actionUrl into a trusted, Vestara-branded email and
+// sends it to a caller-supplied address. Left open to any signed-in user, it is a
+// phishing relay. Therefore this function is restricted to internal, server-side
+// callers only: the request must carry the service-role key as its bearer token.
+function isServiceRoleCaller(req: Request, serviceKey: string): boolean {
+  const authHeader = req.headers.get('Authorization') || ''
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim()
+  if (!token) return false
+  if (token === serviceKey) return true
+  // Also accept any JWT whose role claim is service_role (e.g. rotated keys).
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+    return payload?.role === 'service_role'
+  } catch {
+    return false
+  }
+}
 
 Deno.serve(async (req) => {
   // Handle CORS preflight
@@ -48,6 +64,18 @@ Deno.serve(async (req) => {
       }
     )
   }
+
+  if (!isServiceRoleCaller(req, supabaseServiceKey)) {
+    console.warn('Rejected non-internal call to send-transactional-email')
+    return new Response(
+      JSON.stringify({ error: 'Forbidden' }),
+      {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    )
+  }
+
 
   // Parse request body
   let templateName: string
