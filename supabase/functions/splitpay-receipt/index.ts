@@ -228,6 +228,38 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // Caller must be authenticated (or an internal service-role caller).
+    const authHeader = req.headers.get('Authorization') || '';
+    const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+    if (!token) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    let isServiceRole = token === supabaseServiceKey;
+    if (!isServiceRole) {
+      try {
+        const payload = JSON.parse(
+          atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')),
+        );
+        isServiceRole = payload?.role === 'service_role';
+      } catch { /* not a service-role JWT */ }
+    }
+
+    let callerId: string | null = null;
+    if (!isServiceRole) {
+      const { data: authData, error: authErr } = await supabase.auth.getUser(token);
+      if (authErr || !authData?.user) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      callerId = authData.user.id;
+    }
+
     const { split_request_id } = await req.json();
 
     if (!split_request_id) {
@@ -251,6 +283,27 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
+    // Ownership check: only the split creator or a participant may (re-)send receipts.
+    if (callerId) {
+      let allowed = splitReq.creator_user_id === callerId;
+      if (!allowed) {
+        const { data: membership } = await supabase
+          .from('split_participants')
+          .select('id')
+          .eq('split_request_id', split_request_id)
+          .eq('user_id', callerId)
+          .maybeSingle();
+        allowed = !!membership;
+      }
+      if (!allowed) {
+        return new Response(JSON.stringify({ error: 'Forbidden' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
 
     // Fetch participants with paid status
     const { data: participants } = await supabase

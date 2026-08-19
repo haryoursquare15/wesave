@@ -483,6 +483,21 @@ serve(async (req) => {
       // validate_bank_account and test_withdraw_direct are handled before auth check above
 
       case 'reconcile_withdrawals': {
+        // Privileged, platform-wide batch job: admins (or the internal cron
+        // caller) only — it resolves every user's stale withdrawals.
+        const cronToken = req.headers.get('x-cron-token') || '';
+        const cronSecret = Deno.env.get('CRON_SECRET') || '';
+        const isCron = !!cronSecret && cronToken === cronSecret;
+        if (!isCron) {
+          const { data: isAdmin } = await supabase.rpc('is_any_admin', { _user_id: user.id });
+          if (isAdmin !== true) {
+            return new Response(JSON.stringify({ error: 'Forbidden' }), {
+              status: 403,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+        }
+
         // Backup reconciliation: check stale processing withdrawals against Flutterwave
         const { data: staleWithdrawals } = await supabase
           .from('transactions')
