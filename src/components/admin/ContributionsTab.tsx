@@ -27,6 +27,8 @@ interface ContributionRow {
   created_at: string;
   source: "legacy" | "sandbox";
   reference?: string | null;
+  user_name?: string;
+  username?: string;
 }
 
 interface PendingCharge {
