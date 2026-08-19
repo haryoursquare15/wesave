@@ -1,7 +1,21 @@
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors'
+import { requireAdminJwt, serviceClient, verifyCronToken } from '../_shared/cron-auth.ts'
 
-Deno.serve((req) => {
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+
+  // This endpoint leaks internal banking gateway configuration, so it is
+  // restricted to admins and internal ops/cron callers.
+  const db = serviceClient()
+  const isCron = await verifyCronToken(req, 'vfd_mode_check', db)
+  const admin = isCron ? null : await requireAdminJwt(req, db)
+  if (!isCron && !admin) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
+  }
+
   const raw = Deno.env.get('MANDATE_TEST_MODE') ?? null
   const active = (raw ?? '').toLowerCase() === 'true'
   const mode = (Deno.env.get('VFD_MODE') ?? 'sandbox').toLowerCase()
