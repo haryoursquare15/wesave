@@ -591,6 +591,59 @@ async function handleLiveProbe(body: Record<string, unknown>): Promise<Response>
 }
 
 
+/**
+ * Ops-only: replay the EXACT e-mandate creation payload using ONLY a caller
+ * supplied AccessToken, bypassing all stored credential discovery. Used to test
+ * a token minted manually in the VFD BaaS dashboard. Token is never persisted
+ * or logged.
+ */
+async function handleRawTokenProbe(body: Record<string, unknown>): Promise<Response> {
+  const token = String(body.access_token || "");
+  if (!token) return json({ error: "access_token required" }, 400);
+
+  const payer: MandatePayer = {
+    bankCode: String(body.payer_bank_code || "999999"),
+    accountNumber: String(body.payer_account_number || ""),
+    phone: String(body.payer_phone || ""),
+    email: String(body.payer_email || ""),
+    address: String(body.payer_address || "Lagos, Nigeria"),
+  };
+  if (!/^\d{10}$/.test(payer.accountNumber)) {
+    return json({ error: "payer_account_number must be 10 digits" }, 400);
+  }
+  const frequency = mapFrequencyToVfd(String(body.frequency || "monthly"));
+  const startDate = new Date();
+  const endDate = addCycles(startDate, frequency, 13);
+  const payload = {
+    reference: `vestara-rawtok-${Date.now()}`,
+    payerBank: payer.bankCode,
+    payerAccountNumber: payer.accountNumber,
+    payerPhone: payer.phone,
+    payerEmailAddress: payer.email,
+    payerAddress: payer.address,
+    receiverBank: "999999",
+    receiverAccountNumber: VFD_POOL_NUBAN,
+    amount: String(Math.max(MANDATE_MIN_AMOUNT, Number(body.amount) || MANDATE_MIN_AMOUNT)),
+    startDate: formatVfdMandateDate(startDate),
+    endDate: formatVfdMandateDate(endDate),
+    frequency,
+  };
+
+  const url = `${VFD_MANDATE_BASE}${VFD_MANDATE_CREATE_PATH}`;
+  const res = await vfdFetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", AccessToken: token },
+    body: JSON.stringify(payload),
+  });
+  const json_body = await res.json().catch(() => ({}));
+  return json({
+    endpoint: url,
+    request: payload,
+    http_status: res.status,
+    response: json_body,
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
