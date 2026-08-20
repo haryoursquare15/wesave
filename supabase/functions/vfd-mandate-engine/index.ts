@@ -647,6 +647,33 @@ async function handleRawTokenProbe(body: Record<string, unknown>): Promise<Respo
   });
 }
 
+// Diagnostic: compare wallet vs mandate consumer credentials WITHOUT revealing
+// them. Returns short SHA-256 fingerprints and equality flags only.
+async function fp(v: string | undefined): Promise<string | null> {
+  if (!v) return null;
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(v));
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 12);
+}
+
+async function handleCredentialFingerprint() {
+  const wk = Deno.env.get("VFD_CONSUMER_KEY");
+  const ws = Deno.env.get("VFD_CONSUMER_SECRET");
+  const mk = Deno.env.get("VFD_MANDATE_CONSUMER_KEY");
+  const ms = Deno.env.get("VFD_MANDATE_CONSUMER_SECRET");
+  const at = Deno.env.get("VFD_ACCESS_TOKEN");
+  return json({
+    wallet_key: { set: !!wk, len: wk?.length ?? 0, fp: await fp(wk) },
+    wallet_secret: { set: !!ws, len: ws?.length ?? 0, fp: await fp(ws) },
+    mandate_key: { set: !!mk, len: mk?.length ?? 0, fp: await fp(mk) },
+    mandate_secret: { set: !!ms, len: ms?.length ?? 0, fp: await fp(ms) },
+    static_access_token: { set: !!at, len: at?.length ?? 0, fp: await fp(at) },
+    key_pairs_identical: !!wk && !!mk && wk === mk,
+    secret_pairs_identical: !!ws && !!ms && ws === ms,
+    vfd_mode: Deno.env.get("VFD_MODE") || null,
+  });
+}
+
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -655,12 +682,13 @@ Deno.serve(async (req) => {
     const action = String(body.action || "");
 
     // Cron / service-to-service actions. Never client-triggered.
-    const CRON_ACTIONS = new Set(["poll_pending", "run_due_debits", "go_live_check", "live_probe", "raw_token_probe"]);
+    const CRON_ACTIONS = new Set(["poll_pending", "run_due_debits", "go_live_check", "live_probe", "raw_token_probe", "credential_fingerprint"]);
     if (CRON_ACTIONS.has(action)) {
       if (!(await verifyCronToken(req, CRON_TOKEN_NAME))) {
         return json({ error: "Unauthorized" }, 401);
       }
       const limit = Math.min(Number(body.limit ?? 200) || 200, 500);
+      if (action === "credential_fingerprint") return await handleCredentialFingerprint();
       if (action === "poll_pending") return await handlePollPending(limit);
       if (action === "run_due_debits") return await handleRunDueDebits(limit);
       if (action === "live_probe") return await handleLiveProbe(body);
