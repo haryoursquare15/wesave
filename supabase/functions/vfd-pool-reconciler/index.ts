@@ -286,6 +286,18 @@ serve(async (req) => {
       }
     }
 
+    // Fees that have ALREADY been physically swept into the corporate pool by
+    // `vfd-fee-sweep` are no longer sitting in the customer sub-account, so
+    // they must not keep masking drift. Subtract them from the float.
+    const { data: sweeps } = await supabase
+      .from("vfd_fee_sweeps")
+      .select("user_id, amount")
+      .eq("status", "completed");
+    for (const s of (sweeps ?? []) as Array<Record<string, unknown>>) {
+      const uid = String(s.user_id);
+      feeFloat.set(uid, (feeFloat.get(uid) ?? 0) - Number(s.amount ?? 0));
+    }
+
     const findings: Array<Record<string, unknown>> = [];
     for (const c of clients ?? []) {
       const acctNo = c.vfd_account_number as string;
