@@ -119,7 +119,11 @@ export function PlatformRevenueTab() {
 
   return (
     <div className="space-y-6">
+      {/* Revenue analytics: source breakdown, traceability, swept vs float */}
+      <RevenueAnalytics />
+
       {/* Platform Wallet Summary */}
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
