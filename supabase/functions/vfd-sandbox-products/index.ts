@@ -8766,6 +8766,11 @@ Deno.serve(async (req) => {
     if (action === "emandate_payload_probe" && await assertCronToken(req, "bills_reconciler")) {
       return await handleEmandatePayloadProbe();
     }
+    // Thrift mandate approval polling — pg_cron authenticates with the DB-held
+    // mandate_engine token (no CRON_SECRET needed inside pg_cron).
+    if (action === "poll_pending_mandates" && await assertCronToken(req, "mandate_engine")) {
+      return await handlePollPendingMandates();
+    }
 
 
 
