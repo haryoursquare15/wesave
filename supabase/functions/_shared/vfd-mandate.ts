@@ -107,6 +107,72 @@ async function mintMandateCredentialToken(): Promise<string | null> {
   ) || null;
 }
 
+async function mintTokenWithPair(consumerKey: string, consumerSecret: string): Promise<string | null> {
+  try {
+    const res = await vfdFetch(`${VFD_HOST}/vfd-tech/baas-portal/v1.1/baasauth/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "-1" }),
+    });
+    const json = await res.json().catch(() => ({} as Record<string, unknown>));
+    const data = ((json as Record<string, any>)?.data || {}) as Record<string, unknown>;
+    return String(
+      data.access_token || data.accessToken || data.token ||
+      (json as Record<string, any>)?.access_token || "",
+    ) || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Ops diagnostic: fire the SAME real e-mandate setup payload with every token
+ * source we can mint, and report VFD's verbatim answer for each. Reveals which
+ * credential pair (if any) is entitled for e-mandate. Never returns a token.
+ */
+export async function probeMandateTokenSources(
+  payload: Record<string, unknown>,
+): Promise<Array<Record<string, unknown>>> {
+  const sources: Array<{ source: string; token: string | null }> = [
+    {
+      source: "mandate_consumer_pair",
+      token: await mintTokenWithPair(
+        Deno.env.get("VFD_MANDATE_CONSUMER_KEY") || "",
+        Deno.env.get("VFD_MANDATE_CONSUMER_SECRET") || "",
+      ),
+    },
+    {
+      source: "primary_consumer_pair",
+      token: await mintTokenWithPair(
+        Deno.env.get("VFD_CONSUMER_KEY") || "",
+        Deno.env.get("VFD_CONSUMER_SECRET") || "",
+      ),
+    },
+    { source: "gateway_wallet", token: await getGatewayAccessToken().catch(() => null) },
+    { source: "configured_access_token", token: Deno.env.get("VFD_ACCESS_TOKEN") || null },
+  ];
+
+  const out: Array<Record<string, unknown>> = [];
+  for (const s of sources) {
+    if (!s.token) {
+      out.push({ source: s.source, minted: false });
+      continue;
+    }
+    try {
+      const res = await vfdFetch(`${VFD_MANDATE_BASE}${VFD_MANDATE_CREATE_PATH}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", AccessToken: s.token },
+        body: JSON.stringify({ ...payload, reference: `${payload.reference}-${s.source}` }),
+      });
+      const json = await res.json().catch(() => ({} as Record<string, unknown>));
+      out.push({ source: s.source, minted: true, http_status: res.status, response: json });
+    } catch (e) {
+      out.push({ source: s.source, minted: true, error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+  return out;
+}
+
 /**
  * Probe the e-mandate SETUP endpoint with a deliberately incomplete payload.
  * A validation complaint proves the token authenticated; 401/403 proves it did
