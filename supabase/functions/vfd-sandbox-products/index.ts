@@ -7684,6 +7684,12 @@ async function handleAcceptGroupMandate(userId: string, body: Record<string, unk
   }
 
   // Validate payer form input. VFD requires all five fields.
+  if (isVfdBankCode(payerBankCode)) {
+    return jsonResponse({
+      error: "Direct Debit mandates must be authorized on an external commercial bank account. Your Vestara (VFD) account cannot be the payer — please use your bank (e.g. GTBank, Access, Zenith).",
+      code: "PAYER_MUST_BE_EXTERNAL_BANK",
+    }, 400);
+  }
   if (!payerBankCode || !payerAccountNumber || !payerPhone || !payerEmail || !payerAddress) {
     return jsonResponse({
       error: "Bank, account number, phone, email and address are all required to authorize a Direct Debit Mandate.",
