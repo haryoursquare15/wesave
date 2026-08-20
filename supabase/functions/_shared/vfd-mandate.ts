@@ -89,8 +89,10 @@ export function addCycles(from: Date, frequency: string, cycles: number): Date {
 let cachedToken: { token: string; expiresAt: number } | null = null;
 
 async function mintMandateCredentialToken(): Promise<string | null> {
-  const consumerKey = Deno.env.get("VFD_MANDATE_CONSUMER_KEY");
-  const consumerSecret = Deno.env.get("VFD_MANDATE_CONSUMER_SECRET");
+  // VFD confirmed e-mandate is entitled on the SAME consumer key/secret pair as
+  // every other BaaS call — mandate-specific vars are only an override.
+  const consumerKey = Deno.env.get("VFD_MANDATE_CONSUMER_KEY") || Deno.env.get("VFD_CONSUMER_KEY");
+  const consumerSecret = Deno.env.get("VFD_MANDATE_CONSUMER_SECRET") || Deno.env.get("VFD_CONSUMER_SECRET");
   if (!consumerKey || !consumerSecret) return null;
   const res = await vfdFetch(`${VFD_HOST}/vfd-tech/baas-portal/v1.1/baasauth/token`, {
     method: "POST",
