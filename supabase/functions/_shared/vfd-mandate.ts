@@ -131,6 +131,12 @@ async function tokenIsAccepted(accessToken: string, source: string): Promise<boo
   }
 }
 
+/** Which candidate minted the token VFD accepted (diagnostics only, never the token). */
+let lastTokenSource = "none";
+export function getLastMandateTokenSource(): string {
+  return lastTokenSource;
+}
+
 export async function getMandateAccessToken(): Promise<string | null> {
   if (cachedToken && cachedToken.expiresAt > Date.now()) return cachedToken.token;
   cachedToken = null;
@@ -145,9 +151,11 @@ export async function getMandateAccessToken(): Promise<string | null> {
     tested.add(c.token);
     if (await tokenIsAccepted(c.token, c.source)) {
       cachedToken = { token: c.token, expiresAt: Date.now() + 4 * 60 * 1000 };
+      lastTokenSource = c.source;
       return c.token;
     }
   }
+  lastTokenSource = "none";
   console.error("[mandate-auth] VFD rejected every configured mandate token");
   return null;
 }
