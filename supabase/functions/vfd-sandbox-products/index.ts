@@ -7481,8 +7481,10 @@ async function handleMandateAuthDiagnostic(): Promise<Response> {
 }
 
 async function mintMandateCredentialToken(): Promise<string | null> {
-  const consumerKey = Deno.env.get("VFD_MANDATE_CONSUMER_KEY");
-  const consumerSecret = Deno.env.get("VFD_MANDATE_CONSUMER_SECRET");
+  // VFD confirmed e-mandate is entitled on the SAME consumer key/secret pair as
+  // every other BaaS call — mandate-specific vars are only an override.
+  const consumerKey = Deno.env.get("VFD_MANDATE_CONSUMER_KEY") || Deno.env.get("VFD_CONSUMER_KEY");
+  const consumerSecret = Deno.env.get("VFD_MANDATE_CONSUMER_SECRET") || Deno.env.get("VFD_CONSUMER_SECRET");
   if (!consumerKey || !consumerSecret) return null;
 
   const host = (Deno.env.get("VFD_MODE") || "sandbox").toLowerCase() === "production"
@@ -8763,6 +8765,11 @@ Deno.serve(async (req) => {
     }
     if (action === "emandate_payload_probe" && await assertCronToken(req, "bills_reconciler")) {
       return await handleEmandatePayloadProbe();
+    }
+    // Thrift mandate approval polling — pg_cron authenticates with the DB-held
+    // mandate_engine token (no CRON_SECRET needed inside pg_cron).
+    if (action === "poll_pending_mandates" && await assertCronToken(req, "mandate_engine")) {
+      return await handlePollPendingMandates();
     }
 
 

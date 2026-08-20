@@ -1,6 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { vfdFetch, getGatewayAccessToken } from "../_shared/vfd-gateway.ts";
+
+import {
+  createMandate,
+  mapFrequencyToVfd,
+  addCycles,
+  MANDATE_MIN_AMOUNT,
+  MANDATE_EXPIRY_DAYS,
+  VFD_POOL_BANK_CODE,
+} from "../_shared/vfd-mandate.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1410,93 +1418,116 @@ serve(async (req) => {
           });
         }
 
-        // ─── Call VFD Direct Debit Mandate API ───
-        // Endpoint follows VFD's e-mandate setup route (host follows VFD_MODE).
-        let mandateId = "";
-        let mandateStatus: "authorized" | "pending" | "failed" = "pending";
-        let activationStatus: "active" | "pending_mandate" | "failed" = "pending_mandate";
-        let vfdResponsePayload: Record<string, unknown> = {};
+        // ─── Create the VFD E-Mandate via the shared helper ───
+        // Single source of truth for the payload shape, "02 June 2023" date
+        // format, frequency mapping, receiver pool NUBAN and token discovery
+        // (mandate_credentials first). Never build this payload inline.
+        const p = params as Record<string, unknown>;
+        const { data: client } = await supabase
+          .from("vfd_sandbox_clients")
+          .select("vfd_account_number, first_name, last_name, phone_number, email")
+          .eq("user_id", userId!)
+          .maybeSingle();
 
-        try {
-          const VFD_HOST = (Deno.env.get("VFD_MODE") || "sandbox") === "sandbox"
-            ? "https://api-devapps.vfdbank.systems"
-            : "https://api-apps.vfdbank.systems";
-          const VFD_MANDATE_URL = `${VFD_HOST}/vtech-mandate/api/v2/directdebit/mandate/setup?e-mandate=true`;
-          // Only the gateway-managed production wallet token is valid here.
-          // Locally minted BaaS/static tokens are rejected as invalid wallet tokens.
-          const accessToken = await getGatewayAccessToken();
-          if (!accessToken) throw new Error("VFD credentials not configured");
+        const payer = {
+          bankCode: String(p.payer_bank_code || VFD_POOL_BANK_CODE).trim(),
+          accountNumber: String(p.payer_account_number || client?.vfd_account_number || "").trim(),
+          phone: String(p.payer_phone || client?.phone_number || "").trim(),
+          email: String(p.payer_email || client?.email || "").trim(),
+          address: String(p.payer_address || "Lagos, Nigeria").trim(),
+        };
 
-          // Fetch the user's VFD account for the mandate (debtor side)
-          const { data: client } = await supabase
-            .from("vfd_sandbox_clients")
-            .select("vfd_account_number, bvn, first_name, last_name, phone_number")
-            .eq("user_id", userId!)
-            .maybeSingle();
-
-          const startDate = new Date().toISOString().split("T")[0];
-          const endDate = String(s.maturity_date).split("T")[0];
-
-          const mandatePayload = {
-            accountNo: client?.vfd_account_number || "",
-            productCode: "GOALSAVE",
-            mandateCode: `VES-MND-${savings_id.slice(0, 12)}`,
-            amount: s.commitment_amount,
-            frequency: String(s.commitment_frequency || "").toUpperCase(),
-            startDate,
-            endDate,
-            narration: `Vestara Goal Savings mandate ${savings_id.slice(0, 8)}`,
-            payerName: [client?.first_name, client?.last_name].filter(Boolean).join(" ") || "Vestara Customer",
-            payerPhone: client?.phone_number || "",
-            reference: `VES-MND-${savings_id}`,
-          };
-
-          const ddmRes = await vfdFetch(VFD_MANDATE_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", AccessToken: accessToken },
-            body: JSON.stringify(mandatePayload),
-          });
-          const ddmJson = await ddmRes.json().catch(() => ({}));
-          vfdResponsePayload = { request: mandatePayload, response: ddmJson, http_status: ddmRes.status };
-
-          const okStatus = ddmJson?.status === "00" || ddmRes.ok;
-          if (okStatus) {
-            mandateId = String(
-              ddmJson?.data?.mandateId ||
-              ddmJson?.data?.mandateCode ||
-              ddmJson?.data?.reference ||
-              mandatePayload.mandateCode,
-            );
-            mandateStatus = "authorized";
-            activationStatus = "active";
-          } else {
-            mandateStatus = "failed";
-            activationStatus = "pending_mandate";
+        if (!/^\d{10}$/.test(payer.accountNumber) || !payer.phone || !payer.email) {
+          if (fee > 0) {
+            await supabase.rpc("vestara_deposit", {
+              _user_id: userId, _amount: fee, _reference: `${feeRef}-REFUND`,
+              _metadata: { source: "goalsave_mandate_setup_fee_refund", original_reference: feeRef, savings_id },
+            });
           }
-        } catch (e) {
-          vfdResponsePayload = { error: e instanceof Error ? e.message : String(e) };
-          mandateStatus = "failed";
-          activationStatus = "pending_mandate";
+          return err("Bank, 10-digit account number, phone and email are required to authorize the mandate.");
         }
 
+        const frequency = mapFrequencyToVfd(String(s.commitment_frequency || "monthly"));
+        const startDate = new Date();
+        const totalCycles = Math.max(1, Number(s.tenor_count) || 12);
+        const endDate = addCycles(startDate, frequency, totalCycles + 2);
+        const reference = `vestara-ddm-goal-${String(savings_id).slice(0, 8)}-${Date.now()}`;
+
+        const vfd = await createMandate({
+          reference,
+          payer,
+          amount: Math.max(MANDATE_MIN_AMOUNT, Number(s.commitment_amount) || 0),
+          frequency,
+          startDate,
+          endDate,
+        });
+
+        const nowIso = new Date().toISOString();
+
+        if (!vfd.created) {
+          let refunded = false;
+          if (fee > 0) {
+            const { data: rf } = await supabase.rpc("vestara_deposit", {
+              _user_id: userId, _amount: fee, _reference: `${feeRef}-REFUND`,
+              _metadata: { source: "goalsave_mandate_setup_fee_refund", original_reference: feeRef, savings_id },
+            });
+            refunded = !!(rf as { success?: boolean } | null)?.success;
+          }
+          await supabase.from("vestara_savings").update({
+            mandate_status: "failed",
+            activation_status: "pending_mandate",
+            mandate_payload: { ...vfd.raw, fee_refunded: refunded },
+          }).eq("id", savings_id);
+          await supabase.from("vfd_savings_mandate_events").insert({
+            savings_id, user_id: userId!, mandate_id: reference, event_type: "failed",
+            payload: { ...vfd.raw, charged_fee: fee, fee_reference: feeRef, fee_refunded: refunded },
+          });
+          return err(
+            refunded
+              ? "Your bank's mandate service didn't accept the request. The ₦100 setup fee has been returned to your wallet — please try again shortly."
+              : "Your bank's mandate service didn't accept the request. The ₦100 setup fee is being reviewed by our team.",
+          );
+        }
+
+        // Mandate exists at VFD but is NOT usable until the customer sends ₦50
+        // from the payer account to the NIBSS account and the bank approves.
         const { error: uErr } = await supabase.from("vestara_savings").update({
-          mandate_id: mandateId || null,
-          mandate_status: mandateStatus,
-          activation_status: activationStatus,
+          mandate_id: vfd.mandateCode || reference,
+          mandate_reference: reference,
+          mandate_code: vfd.mandateCode || null,
+          mandate_status: "awaiting_approval",
+          activation_status: "pending_mandate",
+          mandate_nibss_account: vfd.nibssAccount || null,
+          mandate_nibss_message: vfd.nibssMessage || null,
+          mandate_payer_bank_code: payer.bankCode,
+          mandate_payer_account_number: payer.accountNumber,
+          mandate_payer_phone: payer.phone,
+          mandate_payer_email: payer.email,
+          mandate_payer_address: payer.address,
+          mandate_start_date: startDate.toISOString().slice(0, 10),
+          mandate_end_date: endDate.toISOString().slice(0, 10),
+          mandate_frequency: frequency,
+          mandate_expires_at: new Date(Date.now() + MANDATE_EXPIRY_DAYS * 86400_000).toISOString(),
+          mandate_payload: vfd.raw,
         }).eq("id", savings_id);
         if (uErr) return err(uErr.message);
 
         await supabase.from("vfd_savings_mandate_events").insert({
-          savings_id, user_id: userId!, mandate_id: mandateId || null,
-          event_type: mandateStatus,
-          payload: { charged_fee: fee, fee_reference: feeRef, vfd: vfdResponsePayload },
+          savings_id, user_id: userId!, mandate_id: reference, event_type: "created",
+          payload: { charged_fee: fee, fee_reference: feeRef, created_at: nowIso, vfd: vfd.raw },
         });
 
-        if (mandateStatus !== "authorized") {
-          return err("Mandate authorization failed at VFD. Your fee was charged; please retry.");
-        }
-
-        result = { success: true, mandate_id: mandateId, mandate_status: mandateStatus, activation_status: activationStatus };
+        result = {
+          success: true,
+          mandate_status: "awaiting_approval",
+          mandate_reference: reference,
+          mandate_code: vfd.mandateCode,
+          nibss_account: vfd.nibssAccount,
+          nibss_message: vfd.nibssMessage,
+          payer_account_number: payer.accountNumber,
+          payer_bank_code: payer.bankCode,
+          activation_status: "pending_mandate",
+        };
         break;
       }
 

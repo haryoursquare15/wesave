@@ -89,8 +89,10 @@ export function addCycles(from: Date, frequency: string, cycles: number): Date {
 let cachedToken: { token: string; expiresAt: number } | null = null;
 
 async function mintMandateCredentialToken(): Promise<string | null> {
-  const consumerKey = Deno.env.get("VFD_MANDATE_CONSUMER_KEY");
-  const consumerSecret = Deno.env.get("VFD_MANDATE_CONSUMER_SECRET");
+  // VFD confirmed e-mandate is entitled on the SAME consumer key/secret pair as
+  // every other BaaS call — mandate-specific vars are only an override.
+  const consumerKey = Deno.env.get("VFD_MANDATE_CONSUMER_KEY") || Deno.env.get("VFD_CONSUMER_KEY");
+  const consumerSecret = Deno.env.get("VFD_MANDATE_CONSUMER_SECRET") || Deno.env.get("VFD_CONSUMER_SECRET");
   if (!consumerKey || !consumerSecret) return null;
   const res = await vfdFetch(`${VFD_HOST}/vfd-tech/baas-portal/v1.1/baasauth/token`, {
     method: "POST",
@@ -103,6 +105,72 @@ async function mintMandateCredentialToken(): Promise<string | null> {
     data.access_token || data.accessToken || data.token ||
     (json as Record<string, any>)?.access_token || "",
   ) || null;
+}
+
+async function mintTokenWithPair(consumerKey: string, consumerSecret: string): Promise<string | null> {
+  try {
+    const res = await vfdFetch(`${VFD_HOST}/vfd-tech/baas-portal/v1.1/baasauth/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "-1" }),
+    });
+    const json = await res.json().catch(() => ({} as Record<string, unknown>));
+    const data = ((json as Record<string, any>)?.data || {}) as Record<string, unknown>;
+    return String(
+      data.access_token || data.accessToken || data.token ||
+      (json as Record<string, any>)?.access_token || "",
+    ) || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Ops diagnostic: fire the SAME real e-mandate setup payload with every token
+ * source we can mint, and report VFD's verbatim answer for each. Reveals which
+ * credential pair (if any) is entitled for e-mandate. Never returns a token.
+ */
+export async function probeMandateTokenSources(
+  payload: Record<string, unknown>,
+): Promise<Array<Record<string, unknown>>> {
+  const sources: Array<{ source: string; token: string | null }> = [
+    {
+      source: "mandate_consumer_pair",
+      token: await mintTokenWithPair(
+        Deno.env.get("VFD_MANDATE_CONSUMER_KEY") || "",
+        Deno.env.get("VFD_MANDATE_CONSUMER_SECRET") || "",
+      ),
+    },
+    {
+      source: "primary_consumer_pair",
+      token: await mintTokenWithPair(
+        Deno.env.get("VFD_CONSUMER_KEY") || "",
+        Deno.env.get("VFD_CONSUMER_SECRET") || "",
+      ),
+    },
+    { source: "gateway_wallet", token: await getGatewayAccessToken().catch(() => null) },
+    { source: "configured_access_token", token: Deno.env.get("VFD_ACCESS_TOKEN") || null },
+  ];
+
+  const out: Array<Record<string, unknown>> = [];
+  for (const s of sources) {
+    if (!s.token) {
+      out.push({ source: s.source, minted: false });
+      continue;
+    }
+    try {
+      const res = await vfdFetch(`${VFD_MANDATE_BASE}${VFD_MANDATE_CREATE_PATH}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", AccessToken: s.token },
+        body: JSON.stringify({ ...payload, reference: `${payload.reference}-${s.source}` }),
+      });
+      const json = await res.json().catch(() => ({} as Record<string, unknown>));
+      out.push({ source: s.source, minted: true, http_status: res.status, response: json });
+    } catch (e) {
+      out.push({ source: s.source, minted: true, error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+  return out;
 }
 
 /**
@@ -129,6 +197,12 @@ async function tokenIsAccepted(accessToken: string, source: string): Promise<boo
   }
 }
 
+/** Which candidate minted the token VFD accepted (diagnostics only, never the token). */
+let lastTokenSource = "none";
+export function getLastMandateTokenSource(): string {
+  return lastTokenSource;
+}
+
 export async function getMandateAccessToken(): Promise<string | null> {
   if (cachedToken && cachedToken.expiresAt > Date.now()) return cachedToken.token;
   cachedToken = null;
@@ -143,9 +217,11 @@ export async function getMandateAccessToken(): Promise<string | null> {
     tested.add(c.token);
     if (await tokenIsAccepted(c.token, c.source)) {
       cachedToken = { token: c.token, expiresAt: Date.now() + 4 * 60 * 1000 };
+      lastTokenSource = c.source;
       return c.token;
     }
   }
+  lastTokenSource = "none";
   console.error("[mandate-auth] VFD rejected every configured mandate token");
   return null;
 }

@@ -28,6 +28,8 @@ import {
   checkMandateApproval,
   createMandate,
   debitMandate,
+  getLastMandateTokenSource,
+  probeMandateTokenSources,
   mapFrequencyToVfd,
   type MandatePayer,
 } from "../_shared/vfd-mandate.ts";
@@ -539,6 +541,56 @@ function handleGoLiveCheck() {
   });
 }
 
+/**
+ * Ops-only live probe: fires a REAL e-mandate creation at VFD for the given
+ * payer and returns VFD's raw answer plus the token source that authenticated.
+ * Creates no ledger rows and charges no fee — mandate creation itself moves no
+ * money (the payer only pays NIBSS ₦50 when they approve).
+ */
+async function handleLiveProbe(body: Record<string, unknown>): Promise<Response> {
+  const product = String(body.product || "goal_savings");
+  const payer: MandatePayer = {
+    bankCode: String(body.payer_bank_code || "999999"),
+    accountNumber: String(body.payer_account_number || ""),
+    phone: String(body.payer_phone || ""),
+    email: String(body.payer_email || ""),
+    address: String(body.payer_address || "Lagos, Nigeria"),
+  };
+  if (!/^\d{10}$/.test(payer.accountNumber)) {
+    return json({ error: "payer_account_number must be 10 digits" }, 400);
+  }
+  const frequency = mapFrequencyToVfd(String(body.frequency || "monthly"));
+  const startDate = new Date();
+  const endDate = addCycles(startDate, frequency, 13);
+  const reference = `vestara-probe-${product}-${Date.now()}`;
+  const amount = Math.max(MANDATE_MIN_AMOUNT, Number(body.amount) || MANDATE_MIN_AMOUNT);
+
+  const vfd = await createMandate({ reference, payer, amount, frequency, startDate, endDate });
+
+  // When VFD rejects the token, replay the identical payload with every
+  // credential pair so ops can see exactly which one is entitled.
+  let tokenSources: Array<Record<string, unknown>> | undefined;
+  if (!vfd.created && body.compare_tokens !== false) {
+    const req = (vfd.raw as Record<string, unknown>).request as Record<string, unknown> | undefined;
+    tokenSources = await probeMandateTokenSources(req ?? { reference });
+  }
+
+  return json({
+    product,
+    reference,
+    token_source: getLastMandateTokenSource(),
+    mandate_base: VFD_MANDATE_BASE,
+    receiver_account: VFD_POOL_NUBAN,
+    created: vfd.created,
+    mandate_code: vfd.mandateCode,
+    nibss_account: vfd.nibssAccount,
+    nibss_message: vfd.nibssMessage,
+    raw: vfd.raw,
+    token_sources: tokenSources,
+  });
+}
+
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -547,7 +599,7 @@ Deno.serve(async (req) => {
     const action = String(body.action || "");
 
     // Cron / service-to-service actions. Never client-triggered.
-    const CRON_ACTIONS = new Set(["poll_pending", "run_due_debits", "go_live_check"]);
+    const CRON_ACTIONS = new Set(["poll_pending", "run_due_debits", "go_live_check", "live_probe"]);
     if (CRON_ACTIONS.has(action)) {
       if (!(await verifyCronToken(req, CRON_TOKEN_NAME))) {
         return json({ error: "Unauthorized" }, 401);
@@ -555,6 +607,7 @@ Deno.serve(async (req) => {
       const limit = Math.min(Number(body.limit ?? 200) || 200, 500);
       if (action === "poll_pending") return await handlePollPending(limit);
       if (action === "run_due_debits") return await handleRunDueDebits(limit);
+      if (action === "live_probe") return await handleLiveProbe(body);
       return handleGoLiveCheck();
     }
 
