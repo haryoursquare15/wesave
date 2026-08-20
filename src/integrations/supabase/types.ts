@@ -1943,6 +1943,7 @@ export type Database = {
           id_document_url: string | null
           id_number_encrypted: string | null
           id_type: string | null
+          internal_account: boolean
           kyc_status: string | null
           last_security_review: string | null
           membership_tier: Database["public"]["Enums"]["membership_tier"]
@@ -1978,6 +1979,7 @@ export type Database = {
           id_document_url?: string | null
           id_number_encrypted?: string | null
           id_type?: string | null
+          internal_account?: boolean
           kyc_status?: string | null
           last_security_review?: string | null
           membership_tier?: Database["public"]["Enums"]["membership_tier"]
@@ -2013,6 +2015,7 @@ export type Database = {
           id_document_url?: string | null
           id_number_encrypted?: string | null
           id_type?: string | null
+          internal_account?: boolean
           kyc_status?: string | null
           last_security_review?: string | null
           membership_tier?: Database["public"]["Enums"]["membership_tier"]
@@ -6701,6 +6704,10 @@ export type Database = {
         Args: { _time_filter?: string }
         Returns: Json
       }
+      admin_get_revenue_breakdown: {
+        Args: { _end?: string; _include_internal?: boolean; _start?: string }
+        Returns: Json
+      }
       admin_get_stats: { Args: never; Returns: Json }
       admin_grant_permission: {
         Args: {
@@ -6719,6 +6726,27 @@ export type Database = {
           group_id: string
           id: string
           user_id: string
+        }[]
+      }
+      admin_list_revenue_entries: {
+        Args: {
+          _end?: string
+          _include_internal?: boolean
+          _limit?: number
+          _source?: string
+          _start?: string
+        }
+        Returns: {
+          amount: number
+          created_at: string
+          email: string
+          full_name: string
+          internal_account: boolean
+          reference: string
+          source: string
+          transaction_id: string
+          user_id: string
+          username: string
         }[]
       }
       admin_list_staff: {
@@ -6815,6 +6843,10 @@ export type Database = {
       claim_split_settlement: {
         Args: { _split_request_id: string }
         Returns: Json
+      }
+      classify_revenue_source: {
+        Args: { _meta: Json; _ref: string }
+        Returns: string
       }
       cleanup_orphan_card_tokens: { Args: never; Returns: Json }
       cleanup_rate_limits: { Args: never; Returns: undefined }
