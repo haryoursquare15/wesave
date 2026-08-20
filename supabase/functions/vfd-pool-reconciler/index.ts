@@ -35,13 +35,14 @@ function json(body: unknown, status = 200) {
   });
 }
 
-async function vfdAccountEnquiry(accountNumber: string): Promise<{
+async function enquiryOnce(accountNumber: string | null): Promise<{
   ok: boolean;
   balance: number | null;
+  accountNo: string | null;
   raw: unknown;
 }> {
   const url = new URL(`${VFD_BASE_URL}/account/enquiry`);
-  url.searchParams.set("accountNumber", accountNumber);
+  if (accountNumber) url.searchParams.set("accountNumber", accountNumber);
   if (VFD_WALLET_CREDENTIAL_ID) url.searchParams.set("wallet-credential-id", VFD_WALLET_CREDENTIAL_ID);
 
   const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -54,14 +55,35 @@ async function vfdAccountEnquiry(accountNumber: string): Promise<{
     const res = await vfdFetch(url.toString(), { method: "GET", headers });
     const data = await res.json().catch(() => null);
     const status = (data as { status?: string } | null)?.status;
-    const acctBal = (data as { data?: { accountBalance?: string | number } } | null)?.data?.accountBalance;
+    const d = (data as { data?: { accountBalance?: string | number; accountNo?: string } } | null)?.data;
+    const acctBal = d?.accountBalance;
     const balance = acctBal !== undefined && acctBal !== null ? Number(acctBal) : null;
-    return { ok: res.status === 200 && status === "00", balance, raw: data };
+    return { ok: res.status === 200 && status === "00", balance, accountNo: d?.accountNo ?? null, raw: data };
   } catch (err) {
     console.error("[reconciler] enquiry error", accountNumber, err);
-    return { ok: false, balance: null, raw: { error: String(err) } };
+    return { ok: false, balance: null, accountNo: null, raw: { error: String(err) } };
   }
 }
+
+// Corporate/pool accounts are not addressable via `?accountNumber=` on the
+// wallet credential (VFD answers "Account Not Found" — status 01). The
+// credential-scoped self enquiry (no accountNumber) returns the corporate
+// account itself, so fall back to that when the explicit lookup misses.
+async function vfdAccountEnquiry(accountNumber: string): Promise<{
+  ok: boolean;
+  balance: number | null;
+  raw: unknown;
+}> {
+  const direct = await enquiryOnce(accountNumber);
+  if (direct.ok && direct.balance !== null) return direct;
+
+  const self = await enquiryOnce(null);
+  if (self.ok && self.balance !== null && (!self.accountNo || self.accountNo === accountNumber)) {
+    return { ok: true, balance: self.balance, raw: { via: "credential_self_enquiry", direct: direct.raw, self: self.raw } };
+  }
+  return { ok: false, balance: null, raw: { direct: direct.raw, self: self.raw } };
+}
+
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
