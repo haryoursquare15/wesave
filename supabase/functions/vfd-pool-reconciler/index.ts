@@ -302,10 +302,14 @@ serve(async (req) => {
         .maybeSingle();
       const ledgerBal = Number(walletAcct?.balance ?? 0);
 
-      // TRUE drift = live bank balance vs (ledger wallet + unswept fee float).
+      // Drift = live bank balance vs ledger wallet balance. Fee float is
+      // reported alongside (not subtracted): a positive drift that is fully
+      // explained by fees collected from this user is retained platform
+      // revenue sitting in the sub-account, NOT a missing customer credit —
+      // never post a correcting credit for that portion.
       const fees = Math.round((feeFloat.get(c.user_id as string) ?? 0) * 100) / 100;
-      const rawDrift = Math.round((enquiry.balance - ledgerBal) * 100) / 100;
-      const drift = Math.round((rawDrift - fees) * 100) / 100;
+      const drift = Math.round((enquiry.balance - ledgerBal) * 100) / 100;
+      const unexplained = Math.round((drift - fees) * 100) / 100;
       const threshold = 0.01;
       if (Math.abs(drift) > threshold) {
         const finding = {
@@ -318,13 +322,19 @@ serve(async (req) => {
           is_healthy: false,
           details: {
             mode: "per_nuban_live_vs_ledger",
-            raw_drift: rawDrift,
             fee_float: fees,
+            unexplained_after_fees: unexplained,
+            likely_cause: drift > 0 && unexplained <= threshold
+              ? "retained_platform_fees"
+              : drift > 0
+                ? "missed_inflow_or_unswept"
+                : "ledger_ahead_of_bank",
             direction: drift > 0 ? "bank_ahead_of_ledger" : "ledger_ahead_of_bank",
             note: drift > 0
-              ? "Bank holds more than ledger + fee float — possible missed inflow webhook/sweep"
+              ? "Bank holds more than ledger — check fee float before crediting"
               : "Ledger holds more than bank — possible phantom/duplicate credit",
           },
+
           resolved: false,
           checked_at: new Date().toISOString(),
         };
