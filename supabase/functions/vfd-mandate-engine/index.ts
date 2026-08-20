@@ -539,6 +539,51 @@ function handleGoLiveCheck() {
   });
 }
 
+/**
+ * Ops-only live probe: fires a REAL e-mandate creation at VFD for the given
+ * payer and returns VFD's raw answer plus the token source that authenticated.
+ * Creates no ledger rows and charges no fee — mandate creation itself moves no
+ * money (the payer only pays NIBSS ₦50 when they approve).
+ */
+async function handleLiveProbe(body: Record<string, unknown>): Promise<Response> {
+  const product = String(body.product || "goal_savings");
+  const payer: MandatePayer = {
+    bankCode: String(body.payer_bank_code || "999999"),
+    accountNumber: String(body.payer_account_number || ""),
+    phone: String(body.payer_phone || ""),
+    email: String(body.payer_email || ""),
+    address: String(body.payer_address || "Lagos, Nigeria"),
+  };
+  if (!/^\d{10}$/.test(payer.accountNumber)) {
+    return json({ error: "payer_account_number must be 10 digits" }, 400);
+  }
+  const frequency = mapFrequencyToVfd(String(body.frequency || "monthly"));
+  const startDate = new Date();
+  const endDate = addCycles(startDate, frequency, 13);
+  const reference = `vestara-probe-${product}-${Date.now()}`;
+  const vfd = await createMandate({
+    reference,
+    payer,
+    amount: Math.max(MANDATE_MIN_AMOUNT, Number(body.amount) || MANDATE_MIN_AMOUNT),
+    frequency,
+    startDate,
+    endDate,
+  });
+  return json({
+    product,
+    reference,
+    token_source: getLastMandateTokenSource(),
+    mandate_base: VFD_MANDATE_BASE,
+    receiver_account: VFD_POOL_NUBAN,
+    created: vfd.created,
+    mandate_code: vfd.mandateCode,
+    nibss_account: vfd.nibssAccount,
+    nibss_message: vfd.nibssMessage,
+    raw: vfd.raw,
+  });
+}
+
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
