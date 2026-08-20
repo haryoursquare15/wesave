@@ -3672,6 +3672,48 @@ export type Database = {
         }
         Relationships: []
       }
+      vfd_fee_sweeps: {
+        Row: {
+          amount: number
+          completed_at: string | null
+          created_at: string
+          error: string | null
+          evidence: Json
+          id: string
+          reference: string
+          status: string
+          user_id: string
+          vfd_account_number: string
+          vfd_reference: string | null
+        }
+        Insert: {
+          amount: number
+          completed_at?: string | null
+          created_at?: string
+          error?: string | null
+          evidence?: Json
+          id?: string
+          reference: string
+          status?: string
+          user_id: string
+          vfd_account_number: string
+          vfd_reference?: string | null
+        }
+        Update: {
+          amount?: number
+          completed_at?: string | null
+          created_at?: string
+          error?: string | null
+          evidence?: Json
+          id?: string
+          reference?: string
+          status?: string
+          user_id?: string
+          vfd_account_number?: string
+          vfd_reference?: string | null
+        }
+        Relationships: []
+      }
       vfd_idempotency_keys: {
         Row: {
           action: string
