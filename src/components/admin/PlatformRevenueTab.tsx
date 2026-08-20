@@ -38,6 +38,8 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { RevenueAnalytics } from "@/components/admin/RevenueAnalytics";
+
 
 export function PlatformRevenueTab() {
   const { toast } = useToast();
