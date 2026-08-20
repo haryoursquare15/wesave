@@ -1,6 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { vfdFetch, getGatewayAccessToken } from "../_shared/vfd-gateway.ts";
+import {
+  createMandate,
+  mapFrequencyToVfd,
+  addCycles,
+  MANDATE_MIN_AMOUNT,
+  MANDATE_EXPIRY_DAYS,
+  VFD_POOL_BANK_CODE,
+} from "../_shared/vfd-mandate.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
