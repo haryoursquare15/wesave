@@ -26,7 +26,7 @@ const VFD_BANKS: { code: string; name: string }[] = [
   { code: "000037", name: "The Alternative Bank" }, { code: "000025", name: "TITAN TRUST BANK" },
   { code: "000004", name: "UBA" }, { code: "000018", name: "UNION BANK" },
   { code: "000011", name: "UNITY BANK" }, { code: "000017", name: "Wema Bank" },
-  { code: "000015", name: "ZENITH BANK" }, { code: "999999", name: "VFD Microfinance Bank (Sandbox)" },
+  { code: "000015", name: "ZENITH BANK" },
 ];
 
 // Subject is a generic descriptor for whatever is being authorized: a thrift
@@ -238,6 +238,9 @@ export function MandateAuthorizationDialog({ subject, onClose, onAuthorized }: P
                     value={form.accountNumber}
                     onChange={(e) => setForm((f) => ({ ...f, accountNumber: e.target.value.replace(/\D/g, "").slice(0, 10) }))}
                     placeholder="10-digit NUBAN" className="h-10" />
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Use an external commercial bank account in your own name. Your Vestara (VFD) NUBAN cannot be used as the mandate payer.
+                  </p>
                 </div>
                 <div>
                   <Label className="text-xs">Phone</Label>

@@ -8196,6 +8196,13 @@ interface VfdMandatePayer {
   bankCode: string; accountNumber: string; phone: string; email: string; address: string;
 }
 
+// VFD-held accounts (999999 sandbox alias / 090110 CBN code) are rejected by
+// NIBSS as e-mandate payers — the payer must be an external commercial bank.
+function isVfdBankCode(code: string): boolean {
+  const c = (code || "").replace(/^0+/, "");
+  return c === "999999" || c === "90110" || code === "090110";
+}
+
 function validatePayerInput(body: Record<string, unknown>): { ok: true; payer: VfdMandatePayer } | { ok: false; error: string; code: string } {
   const bankCode = String((body.payer_bank_code as string) || "").trim();
   const accountNumber = String((body.payer_account_number as string) || "").trim();
@@ -8206,6 +8213,9 @@ function validatePayerInput(body: Record<string, unknown>): { ok: true; payer: V
     return { ok: false, error: "Bank, account number, phone, email and address are all required to authorize a Direct Debit Mandate.", code: "PAYER_DETAILS_REQUIRED" };
   }
   if (!/^\d{10}$/.test(accountNumber)) return { ok: false, error: "Account number must be 10 digits.", code: "INVALID_ACCOUNT_NUMBER" };
+  if (isVfdBankCode(bankCode)) {
+    return { ok: false, error: "Direct Debit mandates must be authorized on an external commercial bank account. Your Vestara (VFD) account cannot be the payer — please use your bank (e.g. GTBank, Access, Zenith).", code: "PAYER_MUST_BE_EXTERNAL_BANK" };
+  }
   return { ok: true, payer: { bankCode, accountNumber, phone, email, address } };
 }
 
