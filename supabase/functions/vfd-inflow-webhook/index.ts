@@ -50,6 +50,9 @@ const INTERNAL_NARRATION_PATTERNS: RegExp[] = [
   /^\s*from\s+wesave\s+ng\s+ltd\s*\//i,
   /^\s*from\s+vestara\b/i,
   /vestara-(bill|savings|split|transfer)-/i,
+  // Fee sweep: customer sub-account → corporate pool. Never a customer credit.
+  /vestara\s+fee\s+sweep/i,
+  /VES-FEESWEEP-/i,
   /\b(bill\s+refund|investment\s+reversal|split\s+share\s+reimbursement|savings\s+refund|thrift\s+payout)\b/i,
 ];
 
