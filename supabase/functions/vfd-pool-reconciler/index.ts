@@ -257,6 +257,35 @@ serve(async (req) => {
       .select("user_id, vfd_account_number")
       .not("vfd_account_number", "is", null);
 
+    // ---- Fee float -------------------------------------------------------
+    // Vestara convenience/service fees are booked to the internal `revenue`
+    // account, but the cash never physically leaves the user's VFD
+    // sub-account (nothing is transferred out for the fee portion). So the
+    // bank legitimately holds MORE than the user's ledger wallet by exactly
+    // the fees collected from that user. Without this adjustment every
+    // fee-paying user gets flagged as a "missed inflow" and a correcting
+    // credit would inflate their balance with phantom money.
+    const feeFloat = new Map<string, number>();
+    const { data: revenueAcct } = await supabase
+      .from("vestara_accounts")
+      .select("id")
+      .eq("account_type", "revenue")
+      .is("user_id", null)
+      .maybeSingle();
+    if (revenueAcct?.id) {
+      const { data: feeEntries } = await supabase
+        .from("vestara_ledger_entries")
+        .select("credit, vestara_transactions!inner(initiated_by)")
+        .eq("account_id", revenueAcct.id)
+        .gt("credit", 0);
+      for (const e of (feeEntries ?? []) as Array<Record<string, unknown>>) {
+        const tx = e.vestara_transactions as { initiated_by?: string } | null;
+        const uid = tx?.initiated_by;
+        if (!uid) continue;
+        feeFloat.set(uid, (feeFloat.get(uid) ?? 0) + Number(e.credit ?? 0));
+      }
+    }
+
     const findings: Array<Record<string, unknown>> = [];
     for (const c of clients ?? []) {
       const acctNo = c.vfd_account_number as string;
@@ -273,11 +302,10 @@ serve(async (req) => {
         .maybeSingle();
       const ledgerBal = Number(walletAcct?.balance ?? 0);
 
-      // TRUE drift = live bank balance vs ledger wallet balance.
-      // (Previously this recorded `enquiry.balance - 0`, so every funded
-      // account was flagged unhealthy every night with drift == balance —
-      // pure noise that buried real discrepancies and made alerting useless.)
-      const drift = Math.round((enquiry.balance - ledgerBal) * 100) / 100;
+      // TRUE drift = live bank balance vs (ledger wallet + unswept fee float).
+      const fees = Math.round((feeFloat.get(c.user_id as string) ?? 0) * 100) / 100;
+      const rawDrift = Math.round((enquiry.balance - ledgerBal) * 100) / 100;
+      const drift = Math.round((rawDrift - fees) * 100) / 100;
       const threshold = 0.01;
       if (Math.abs(drift) > threshold) {
         const finding = {
@@ -290,9 +318,11 @@ serve(async (req) => {
           is_healthy: false,
           details: {
             mode: "per_nuban_live_vs_ledger",
+            raw_drift: rawDrift,
+            fee_float: fees,
             direction: drift > 0 ? "bank_ahead_of_ledger" : "ledger_ahead_of_bank",
             note: drift > 0
-              ? "Bank holds more than ledger — possible missed inflow webhook/sweep"
+              ? "Bank holds more than ledger + fee float — possible missed inflow webhook/sweep"
               : "Ledger holds more than bank — possible phantom/duplicate credit",
           },
           resolved: false,
@@ -302,6 +332,7 @@ serve(async (req) => {
         findings.push(finding);
       }
     }
+
 
 
     await supabase.from("reconciliation_runs").insert({
