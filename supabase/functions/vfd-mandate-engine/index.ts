@@ -23,7 +23,9 @@ import {
   MANDATE_TEST_MODE,
   VFD_IS_PRODUCTION,
   VFD_MANDATE_BASE,
+  VFD_MANDATE_CREATE_PATH,
   VFD_POOL_NUBAN,
+  formatVfdMandateDate,
   addCycles,
   checkMandateApproval,
   createMandate,
@@ -33,6 +35,7 @@ import {
   mapFrequencyToVfd,
   type MandatePayer,
 } from "../_shared/vfd-mandate.ts";
+import { vfdFetch } from "../_shared/vfd-gateway.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -652,7 +655,7 @@ Deno.serve(async (req) => {
     const action = String(body.action || "");
 
     // Cron / service-to-service actions. Never client-triggered.
-    const CRON_ACTIONS = new Set(["poll_pending", "run_due_debits", "go_live_check", "live_probe"]);
+    const CRON_ACTIONS = new Set(["poll_pending", "run_due_debits", "go_live_check", "live_probe", "raw_token_probe"]);
     if (CRON_ACTIONS.has(action)) {
       if (!(await verifyCronToken(req, CRON_TOKEN_NAME))) {
         return json({ error: "Unauthorized" }, 401);
@@ -661,6 +664,7 @@ Deno.serve(async (req) => {
       if (action === "poll_pending") return await handlePollPending(limit);
       if (action === "run_due_debits") return await handleRunDueDebits(limit);
       if (action === "live_probe") return await handleLiveProbe(body);
+      if (action === "raw_token_probe") return await handleRawTokenProbe(body);
       return handleGoLiveCheck();
     }
 
