@@ -562,14 +562,18 @@ async function handleLiveProbe(body: Record<string, unknown>): Promise<Response>
   const startDate = new Date();
   const endDate = addCycles(startDate, frequency, 13);
   const reference = `vestara-probe-${product}-${Date.now()}`;
-  const vfd = await createMandate({
-    reference,
-    payer,
-    amount: Math.max(MANDATE_MIN_AMOUNT, Number(body.amount) || MANDATE_MIN_AMOUNT),
-    frequency,
-    startDate,
-    endDate,
-  });
+  const amount = Math.max(MANDATE_MIN_AMOUNT, Number(body.amount) || MANDATE_MIN_AMOUNT);
+
+  const vfd = await createMandate({ reference, payer, amount, frequency, startDate, endDate });
+
+  // When VFD rejects the token, replay the identical payload with every
+  // credential pair so ops can see exactly which one is entitled.
+  let tokenSources: Array<Record<string, unknown>> | undefined;
+  if (!vfd.created && body.compare_tokens !== false) {
+    const req = (vfd.raw as Record<string, unknown>).request as Record<string, unknown> | undefined;
+    tokenSources = await probeMandateTokenSources(req ?? { reference });
+  }
+
   return json({
     product,
     reference,
@@ -581,6 +585,7 @@ async function handleLiveProbe(body: Record<string, unknown>): Promise<Response>
     nibss_account: vfd.nibssAccount,
     nibss_message: vfd.nibssMessage,
     raw: vfd.raw,
+    token_sources: tokenSources,
   });
 }
 
