@@ -1430,14 +1430,17 @@ serve(async (req) => {
           .maybeSingle();
 
         const payer = {
-          bankCode: String(p.payer_bank_code || VFD_POOL_BANK_CODE).trim(),
-          accountNumber: String(p.payer_account_number || client?.vfd_account_number || "").trim(),
+          // Payer MUST be an external commercial bank account. VFD-held NUBANs
+          // are rejected by NIBSS, so there is deliberately no fallback here.
+          bankCode: String(p.payer_bank_code || "").trim(),
+          accountNumber: String(p.payer_account_number || "").trim(),
           phone: String(p.payer_phone || client?.phone_number || "").trim(),
           email: String(p.payer_email || client?.email || "").trim(),
           address: String(p.payer_address || "Lagos, Nigeria").trim(),
         };
 
-        if (!/^\d{10}$/.test(payer.accountNumber) || !payer.phone || !payer.email) {
+        const payerIsVfd = ["999999", "090110", "90110"].includes(payer.bankCode.replace(/^0+/, "") === "90110" ? "090110" : payer.bankCode);
+        if (!/^\d{10}$/.test(payer.accountNumber) || !payer.phone || !payer.email || !payer.bankCode || payerIsVfd) {
           if (fee > 0) {
             await supabase.rpc("vestara_deposit", {
               _user_id: userId, _amount: fee, _reference: `${feeRef}-REFUND`,
