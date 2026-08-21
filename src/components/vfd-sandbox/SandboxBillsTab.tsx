@@ -18,6 +18,7 @@ import { SandboxBillBeneficiaries } from "./SandboxBillBeneficiaries";
 import { SandboxRecurringBills } from "./SandboxRecurringBills";
 import { BillBeneficiaryRename } from "./BillBeneficiaryRename";
 import { TransactionPinGate } from "@/components/security/TransactionPinGate";
+import { useDebounce } from "@/hooks/useDebounce";
 
 /* ─── Types ─── */
 interface Biller {
@@ -123,6 +124,8 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
   const [phoneNumber, setPhoneNumber] = useState("");
   const [validationResult, setValidationResult] = useState<string | null>(null);
   const [validating, setValidating] = useState(false);
+  const [validatedName, setValidatedName] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
   // Validation requirement comes from the backend policy (single source of truth).
   const [needsValidation, setNeedsValidation] = useState(false);
   const [paying, setPaying] = useState(false);
@@ -289,32 +292,62 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
     setCustomerId("");
     setPhoneNumber("");
     setValidationResult(null);
+    setValidatedName(null);
+    setValidationError(null);
     setStep("payment");
   };
 
-  /* ─── Validate Customer ─── */
-  const validateCustomer = async () => {
-    if (!customerId || !selectedBiller || !selectedItem) return;
-    setValidating(true);
-    setValidationResult(null);
-    try {
-      const result = await callProducts("bills_validate", {
-        customerId,
-        divisionId: selectedBiller.division,
-        paymentItem: selectedItem.paymentCode,
-        billerId: selectedBiller.id,
-      });
-      if (result?.data?.status === "00") {
-        setValidationResult("valid");
-      } else {
+  /* ─── Auto-validate customer ID (debounced, no manual button) ─── */
+  const debouncedCustomerId = useDebounce(customerId, 700);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!needsValidation || !selectedBiller || !selectedItem || step !== "payment") return;
+    const id = debouncedCustomerId.trim();
+    if (id.length < 5 || id !== customerId.trim()) return;
+
+    (async () => {
+      setValidating(true);
+      setValidationResult(null);
+      setValidatedName(null);
+      setValidationError(null);
+      try {
+        const result = await callProducts("bills_validate", {
+          customerId: id,
+          divisionId: selectedBiller.division,
+          paymentItem: selectedItem.paymentCode,
+          billerId: selectedBiller.id,
+        });
+        if (cancelled) return;
+        const d = result?.data as Record<string, any> | undefined;
+        if (d?.status === "00") {
+          const name = String(
+            d?.customerName ?? d?.customer_name ?? d?.data?.customerName ?? d?.name ?? ""
+          ).trim();
+          setValidatedName(name || null);
+          setValidationResult("valid");
+        } else {
+          setValidationResult("invalid");
+          setValidationError(
+            String(d?.message || d?.error || "").trim() ||
+              "We couldn't verify this number with the biller. Please check it and try again."
+          );
+        }
+      } catch (err) {
+        if (cancelled) return;
         setValidationResult("invalid");
+        setValidationError(
+          err instanceof Error && err.message
+            ? err.message
+            : "We couldn't verify this number right now. Please check it and try again."
+        );
+      } finally {
+        if (!cancelled) setValidating(false);
       }
-    } catch {
-      setValidationResult("invalid");
-    } finally {
-      setValidating(false);
-    }
-  };
+    })();
+
+    return () => { cancelled = true; };
+  }, [debouncedCustomerId, customerId, needsValidation, selectedBiller, selectedItem, step, callProducts]);
 
   /* ─── Pay ─── */
   const handlePay = async () => {
@@ -818,40 +851,59 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
                       ? "Smartcard / IUC Number"
                       : "Customer ID"}
               </Label>
-              <Input
-                placeholder={
-                  selectedCategory === "Airtime" || selectedCategory === "Data"
-                    ? "e.g. 08012345678"
-                    : selectedCategory === "Utility"
-                      ? "e.g. 1234567890"
-                      : "Enter customer ID"
-                }
-                value={customerId}
-                onChange={(e) => { setCustomerId(e.target.value); setValidationResult(null); }}
-              />
-              {needsValidation && customerId.length >= 5 && (
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={validateCustomer}
-                    disabled={validating}
-                    className="text-xs"
-                  >
-                    {validating ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-                    Validate
-                  </Button>
-                  {validationResult === "valid" && (
-                    <span className="text-xs text-success flex items-center gap-1">
-                      <CheckCircle2 className="h-3.5 w-3.5" /> Verified
-                    </span>
-                  )}
-                  {validationResult === "invalid" && (
-                    <span className="text-xs text-destructive flex items-center gap-1">
-                      <AlertCircle className="h-3.5 w-3.5" /> Invalid
-                    </span>
-                  )}
+              <div className="relative">
+                <Input
+                  placeholder={
+                    selectedCategory === "Airtime" || selectedCategory === "Data"
+                      ? "e.g. 08012345678"
+                      : selectedCategory === "Utility"
+                        ? "e.g. 1234567890"
+                        : "Enter customer ID"
+                  }
+                  value={customerId}
+                  onChange={(e) => {
+                    setCustomerId(e.target.value);
+                    setValidationResult(null);
+                    setValidatedName(null);
+                    setValidationError(null);
+                  }}
+                  className={
+                    needsValidation && validationResult === "valid"
+                      ? "pr-10 border-success"
+                      : needsValidation && validationResult === "invalid"
+                        ? "pr-10 border-destructive"
+                        : "pr-10"
+                  }
+                />
+                {needsValidation && validating && (
+                  <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+                )}
+                {needsValidation && !validating && validationResult === "valid" && (
+                  <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-success" />
+                )}
+                {needsValidation && !validating && validationResult === "invalid" && (
+                  <AlertCircle className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-destructive" />
+                )}
+              </div>
+
+              {needsValidation && validating && (
+                <p className="text-xs text-muted-foreground">Verifying with {selectedBiller.name}…</p>
+              )}
+
+              {needsValidation && !validating && validationResult === "valid" && (
+                <div className="p-3 bg-success/10 border border-success/20 rounded-lg">
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Account name</p>
+                  <p className="text-sm font-medium text-foreground">
+                    {validatedName || "Verified — name not provided by biller"}
+                  </p>
                 </div>
+              )}
+
+              {needsValidation && !validating && validationResult === "invalid" && (
+                <p className="text-xs text-destructive flex items-start gap-1.5">
+                  <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                  <span>{validationError || "Invalid number. Please check and try again."}</span>
+                </p>
               )}
             </div>
 
