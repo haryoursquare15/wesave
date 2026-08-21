@@ -11,6 +11,7 @@ interface Props {
   message?: string
   actionUrl?: string
   actionLabel?: string
+  details?: { label?: string; value?: string }[]
   unsubscribeUrl?: string
 }
 
@@ -24,6 +25,7 @@ const Notification = ({
   message = 'You have a new notification from Vestara.',
   actionUrl,
   actionLabel = 'Open Vestara',
+  details,
   unsubscribeUrl,
 }: Props) => (
   <Html lang="en" dir="ltr">
@@ -43,6 +45,16 @@ const Notification = ({
           <Heading style={h1}>{title}</Heading>
           <Text style={text}>Hi {recipientName},</Text>
           <Text style={text}>{message}</Text>
+          {Array.isArray(details) && details.length > 0 ? (
+            <Section style={detailBox}>
+              {details.map((d, i) => (
+                <Text key={i} style={detailRow}>
+                  <span style={detailLabel}>{d?.label ?? ''}</span>
+                  <span style={detailValue}>{d?.value ?? ''}</span>
+                </Text>
+              ))}
+            </Section>
+          ) : null}
           {actionUrl ? (
             <Section style={{ textAlign: 'center', margin: '24px 0 4px' }}>
               <Button style={button} href={actionUrl}>{actionLabel}</Button>
@@ -155,6 +167,21 @@ const card = {
 }
 const h1 = { fontSize: '22px', fontWeight: 'bold' as const, color: '#1a1208', margin: '0 0 18px' }
 const text = { fontSize: '15px', color: '#3a2a1a', lineHeight: '1.6', margin: '0 0 14px' }
+const detailBox = {
+  backgroundColor: '#ffffff',
+  border: '1px solid #f3e3cf',
+  borderRadius: '10px',
+  padding: '6px 16px',
+  margin: '4px 0 8px',
+}
+const detailRow = {
+  fontSize: '14px',
+  margin: '10px 0',
+  color: '#3a2a1a',
+}
+const detailLabel = { color: '#8a7656', marginRight: '8px' }
+const detailValue = { color: '#1a1208', fontWeight: 'bold' as const }
+
 const button = {
   backgroundColor: '#E8621A',
   color: '#ffffff',
