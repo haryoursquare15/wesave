@@ -2318,12 +2318,35 @@ async function handleTransfer(
         notification_type: "transfer_sent",
       });
     } catch (_) { /* best-effort */ }
-  } else {
+  }
+
+  // Translate raw VFD failure strings into actionable customer language.
+  let friendlyError: string | null = null;
+  let friendlyCode: string | null = null;
+  if (!isSuccess) {
+    const raw = String((vfdData?.message as string | undefined) ?? "").toLowerCase();
+    if (raw.includes("interbank") && raw.includes("limit")) {
+      friendlyError =
+        "Your bank's single interbank transfer limit was exceeded, so this transfer was declined and your money has been returned. Please send it in smaller amounts (try ₦1,000,000 or less per transfer).";
+      friendlyCode = "VFD_INTERBANK_LIMIT_EXCEEDED";
+    } else if (raw.includes("limit")) {
+      friendlyError =
+        "The receiving/sending bank declined this transfer because a transfer limit was exceeded. Your money has been returned — try a smaller amount.";
+      friendlyCode = "VFD_BANK_LIMIT_EXCEEDED";
+    } else if (raw.includes("insufficient")) {
+      friendlyError = "This transfer was declined for insufficient funds. Your money has been returned.";
+      friendlyCode = "VFD_INSUFFICIENT_FUNDS";
+    }
+  }
+
+  if (!isSuccess) {
     try {
       await supabaseAdmin.from("vfd_sandbox_notifications").insert({
         user_id: userId,
         title: "Transfer failed",
-        message: `Transfer of ₦${Number(body.amount).toLocaleString()} to ${body.beneficiaryName || toAccount} could not be processed.`,
+        message:
+          friendlyError ??
+          `Transfer of ₦${Number(body.amount).toLocaleString()} to ${body.beneficiaryName || toAccount} could not be processed.`,
         notification_type: "transfer_failed",
       });
     } catch (_) { /* best-effort */ }
@@ -2331,6 +2354,7 @@ async function handleTransfer(
 
   return jsonResponse({
     data,
+    ...(friendlyError ? { error: friendlyError, code: friendlyCode } : {}),
     vfd_status: status,
     reference,
     vfd_reference: vfdTxnId,
