@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { sendBrandedEmail } from "../_shared/send-branded-email.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -253,15 +254,6 @@ serve(async (req) => {
   }
 
   try {
-    const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
-    if (!RESEND_API_KEY) {
-      console.error('RESEND_API_KEY not configured');
-      return new Response(JSON.stringify({ error: 'Email service not configured' }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -308,39 +300,28 @@ serve(async (req) => {
     const safeMessage = escapeHtml(record.message);
     const safeType = String(record.notification_type || 'notification').replace(/[^a-z0-9_]/gi, '').slice(0, 60);
 
-    const subject = getEmailSubject(safeType, safeTitle);
-    const html = buildEmailHtml(safeTitle, safeMessage, safeType, profile.full_name);
+    console.log(`Sending email to ${profile.email}: ${getEmailSubject(safeType, safeTitle)}`);
 
-
-    console.log(`Sending email to ${profile.email}: ${subject}`);
-
-    const emailRes = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${RESEND_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: 'Vestara <no-reply@vestara.ng>',
-        to: [profile.email],
-        subject,
-        html,
-      }),
+    const sendResult = await sendBrandedEmail({
+      recipientEmail: profile.email,
+      recipientName: profile.full_name || undefined,
+      title: safeTitle,
+      message: safeMessage,
+      actionUrl: getCTAUrl(safeType),
+      actionLabel: getCTALabel(safeType),
+      idempotencyKey: `notification-${record.id}`,
     });
 
-    if (!emailRes.ok) {
-      const errorText = await emailRes.text();
-      console.error('Resend API error:', errorText);
-      return new Response(JSON.stringify({ success: false, error: errorText }), {
+    if (!sendResult.ok) {
+      return new Response(JSON.stringify({ success: false, error: sendResult.error }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    const result = await emailRes.json();
-    console.log('Email sent successfully:', result.id);
+    console.log('Email queued successfully');
 
-    return new Response(JSON.stringify({ success: true, email_id: result.id }), {
+    return new Response(JSON.stringify({ success: true }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
