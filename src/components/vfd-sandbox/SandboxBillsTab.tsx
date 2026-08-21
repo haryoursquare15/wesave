@@ -18,6 +18,7 @@ import { SandboxBillBeneficiaries } from "./SandboxBillBeneficiaries";
 import { SandboxRecurringBills } from "./SandboxRecurringBills";
 import { BillBeneficiaryRename } from "./BillBeneficiaryRename";
 import { TransactionPinGate } from "@/components/security/TransactionPinGate";
+import { useDebounce } from "@/hooks/useDebounce";
 
 /* ─── Types ─── */
 interface Biller {
@@ -123,6 +124,8 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
   const [phoneNumber, setPhoneNumber] = useState("");
   const [validationResult, setValidationResult] = useState<string | null>(null);
   const [validating, setValidating] = useState(false);
+  const [validatedName, setValidatedName] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
   // Validation requirement comes from the backend policy (single source of truth).
   const [needsValidation, setNeedsValidation] = useState(false);
   const [paying, setPaying] = useState(false);
