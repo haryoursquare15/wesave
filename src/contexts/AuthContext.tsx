@@ -32,12 +32,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Note: Excludes sensitive banking fields (bvn, bank_account, bank_name, phone, flw_* fields)
-  // Fetch those separately only when needed in banking/payout settings pages
+  // Note: Excludes sensitive banking fields (bvn, bank_account, bank_name, phone)
+  // Fetch those separately only when needed in banking/payout settings pages.
+  // The virtual (funding) account fields are included: they are the user's own
+  // deposit details, shown on the Wallet page so they can fund by bank transfer.
   const fetchProfile = async (userId: string) => {
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, username, full_name, email, avatar_url, membership_tier, credit_score, completed_cycles, created_at, updated_at, onboarding_completed")
+      .select("id, username, full_name, email, avatar_url, membership_tier, credit_score, completed_cycles, created_at, updated_at, onboarding_completed, flw_virtual_account_number, flw_virtual_bank_name")
       .eq("id", userId)
       .maybeSingle();
     
