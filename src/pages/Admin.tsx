@@ -29,7 +29,8 @@ import { VestaraAuditExportTab } from "@/components/admin/VestaraAuditExportTab"
 import { VfdWebhookDlqTab } from "@/components/admin/VfdWebhookDlqTab";
 import { VfdAuditTab } from "@/components/admin/VfdAuditTab";
 import { RolesPermissionsTab } from "@/components/admin/RolesPermissionsTab";
-import { Percent, PiggyBank, FileSpreadsheet, AlertTriangle, ScanLine, UserCog } from "lucide-react";
+import { KycReviewTab } from "@/components/admin/KycReviewTab";
+import { Percent, PiggyBank, FileSpreadsheet, AlertTriangle, ScanLine, UserCog, ScanFace } from "lucide-react";
 import { ADMIN_LOGIN_PATH, ADMIN_RECURRING_TEST_PATH, applyNoIndex } from "@/lib/adminRoutes";
 
 export default function Admin() {
