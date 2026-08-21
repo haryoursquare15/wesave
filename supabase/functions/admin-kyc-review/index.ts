@@ -252,6 +252,16 @@ async function approve(db: Db, adminId: string, userId: string, note: string | n
     .eq("user_id", userId);
   if (docErr) return json({ error: docErr.message }, 500);
 
+  const { data: existing } = await db
+    .from("vfd_sandbox_clients")
+    .select("kyc_requested_tier, tier, account_status")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  const requested = (existing?.kyc_requested_tier as number | null) ?? null;
+  const currentTierNum = Number(String(existing?.tier || "tier1").replace(/\D/g, "")) || 1;
+  const nextTier = requested && requested > currentTierNum ? `tier${requested}` : null;
+
   const { error: clientErr } = await db
     .from("vfd_sandbox_clients")
     .update({
@@ -259,7 +269,10 @@ async function approve(db: Db, adminId: string, userId: string, note: string | n
       kyc_review_reason: note,
       kyc_reviewed_by: adminId,
       kyc_reviewed_at: now,
+      ...(nextTier ? { tier: nextTier } : {}),
+      ...(existing?.account_status === "pending" ? { account_status: "active" } : {}),
     })
+
     .eq("user_id", userId);
   if (clientErr) return json({ error: clientErr.message }, 500);
 
