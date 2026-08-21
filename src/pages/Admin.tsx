@@ -29,7 +29,8 @@ import { VestaraAuditExportTab } from "@/components/admin/VestaraAuditExportTab"
 import { VfdWebhookDlqTab } from "@/components/admin/VfdWebhookDlqTab";
 import { VfdAuditTab } from "@/components/admin/VfdAuditTab";
 import { RolesPermissionsTab } from "@/components/admin/RolesPermissionsTab";
-import { Percent, PiggyBank, FileSpreadsheet, AlertTriangle, ScanLine, UserCog } from "lucide-react";
+import { KycReviewTab } from "@/components/admin/KycReviewTab";
+import { Percent, PiggyBank, FileSpreadsheet, AlertTriangle, ScanLine, UserCog, ScanFace } from "lucide-react";
 import { ADMIN_LOGIN_PATH, ADMIN_RECURRING_TEST_PATH, applyNoIndex } from "@/lib/adminRoutes";
 
 export default function Admin() {
@@ -163,6 +164,13 @@ export default function Admin() {
                 Support
               </TabsTrigger>
             )}
+            {hasPermission("compliance.view") && (
+              <TabsTrigger value="kyc-review" className="flex items-center gap-1">
+                <ScanFace className="h-4 w-4" />
+                KYC Review
+              </TabsTrigger>
+            )}
+
             <TabsTrigger value="emails" className="flex items-center gap-1">
               <Mail className="h-4 w-4" />
               Emails
@@ -245,6 +253,11 @@ export default function Admin() {
           <TabsContent value="support">
             <SupportTab />
           </TabsContent>
+
+          <TabsContent value="kyc-review">
+            <KycReviewTab />
+          </TabsContent>
+
 
           <TabsContent value="emails">
             <AdminEmailTab />
