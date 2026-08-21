@@ -4560,6 +4560,11 @@ export type Database = {
           gender: string | null
           id: string
           kyc_method: string | null
+          kyc_requested_tier: number | null
+          kyc_review_reason: string | null
+          kyc_review_status: string
+          kyc_reviewed_at: string | null
+          kyc_reviewed_by: string | null
           metadata: Json | null
           nin: string | null
           phone: string | null
@@ -4582,6 +4587,11 @@ export type Database = {
           gender?: string | null
           id?: string
           kyc_method?: string | null
+          kyc_requested_tier?: number | null
+          kyc_review_reason?: string | null
+          kyc_review_status?: string
+          kyc_reviewed_at?: string | null
+          kyc_reviewed_by?: string | null
           metadata?: Json | null
           nin?: string | null
           phone?: string | null
@@ -4604,6 +4614,11 @@ export type Database = {
           gender?: string | null
           id?: string
           kyc_method?: string | null
+          kyc_requested_tier?: number | null
+          kyc_review_reason?: string | null
+          kyc_review_status?: string
+          kyc_reviewed_at?: string | null
+          kyc_reviewed_by?: string | null
           metadata?: Json | null
           nin?: string | null
           phone?: string | null
@@ -5164,6 +5179,9 @@ export type Database = {
           id: string
           metadata: Json | null
           mime_type: string | null
+          rejection_reason: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
           tier_level: number
           uploaded_at: string
           user_id: string
@@ -5178,6 +5196,9 @@ export type Database = {
           id?: string
           metadata?: Json | null
           mime_type?: string | null
+          rejection_reason?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           tier_level: number
           uploaded_at?: string
           user_id: string
@@ -5192,6 +5213,9 @@ export type Database = {
           id?: string
           metadata?: Json | null
           mime_type?: string | null
+          rejection_reason?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           tier_level?: number
           uploaded_at?: string
           user_id?: string
