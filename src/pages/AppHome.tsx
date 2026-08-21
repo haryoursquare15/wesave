@@ -33,6 +33,7 @@ const slides = [
 ];
 
 export default function AppHome() {
+  const navigate = useNavigate();
   const [currentSlide, setCurrentSlide] = useState(0);
   const [showSplash, setShowSplash] = useState(true);
 
