@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { sendBrandedEmail } from "../_shared/send-branded-email.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { encode as base32Encode, decode as base32Decode } from "https://deno.land/std@0.177.0/encoding/base32.ts";
 
@@ -818,39 +819,15 @@ serve(async (req) => {
         });
 
 
-        // Send email via Resend
-        const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
-        if (!RESEND_API_KEY) {
-          throw new Error('Email service not configured');
-        }
-
-        const emailRes = await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${RESEND_API_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            from: 'Vestara <noreply@vestara.ng>',
-            to: [userEmail],
-            subject: 'Vestara — Bank Change Verification Code',
-            html: `
-              <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 20px;">
-                <h2 style="color: #1a1a1a;">Bank Detail Change Verification</h2>
-                <p>You requested to change your bank details on Vestara. Use the code below to verify this action:</p>
-                <div style="background: #f5f5f5; border-radius: 8px; padding: 20px; text-align: center; margin: 20px 0;">
-                  <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #1a1a1a;">${otpCode}</span>
-                </div>
-                <p style="color: #666; font-size: 14px;">This code expires in 5 minutes. If you didn't request this, please ignore this email and secure your account.</p>
-                <p style="color: #999; font-size: 12px; margin-top: 30px;">— Vestara Team</p>
-              </div>
-            `,
-          }),
+        const sendResult = await sendBrandedEmail({
+          recipientEmail: userEmail,
+          title: 'Bank change verification code',
+          message: `You requested to change your bank details on Vestara. Use the code below to verify this action. It expires in 5 minutes. If you didn't request this, ignore this email and secure your account.`,
+          details: [{ label: 'Verification code', value: otpCode }],
         });
 
-        if (!emailRes.ok) {
-          const emailError = await emailRes.text();
-          console.error('Resend email error:', emailError);
+        if (!sendResult.ok) {
+          console.error('Verification email error:', sendResult.error);
           throw new Error('Failed to send verification email');
         }
 
