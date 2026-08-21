@@ -164,6 +164,13 @@ export default function Admin() {
                 Support
               </TabsTrigger>
             )}
+            {hasPermission("compliance.view") && (
+              <TabsTrigger value="kyc-review" className="flex items-center gap-1">
+                <ScanFace className="h-4 w-4" />
+                KYC Review
+              </TabsTrigger>
+            )}
+
             <TabsTrigger value="emails" className="flex items-center gap-1">
               <Mail className="h-4 w-4" />
               Emails
