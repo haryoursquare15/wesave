@@ -254,6 +254,11 @@ export default function Admin() {
             <SupportTab />
           </TabsContent>
 
+          <TabsContent value="kyc-review">
+            <KycReviewTab />
+          </TabsContent>
+
+
           <TabsContent value="emails">
             <AdminEmailTab />
           </TabsContent>
