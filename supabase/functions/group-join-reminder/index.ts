@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { sendBrandedEmail } from "../_shared/send-branded-email.ts";
 import { verifyCronToken, requireAdminJwt, unauthorized } from "../_shared/cron-auth.ts";
 
 const corsHeaders = {
@@ -104,14 +105,6 @@ serve(async (req) => {
   }
 
   try {
-    const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
-    if (!RESEND_API_KEY) {
-      return new Response(JSON.stringify({ error: 'Email service not configured' }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -238,36 +231,30 @@ serve(async (req) => {
       }
 
       try {
-        let html: string;
+        let plainText: string;
         let subject: string;
 
         // `isCustom` is only ever true after the admin-JWT gate above.
         if (isCustom) {
-          html = buildGenericEmail(user.full_name || '', customSubject, customBody);
+          plainText = customBody;
           subject = customSubject;
         } else {
-          html = buildReminderEmail(user.full_name || '');
+          plainText = "Your savings group is waiting for you. Join a Vestara group to start saving together and reach your goals faster.";
           subject = '🤝 Vestara — Your savings group is waiting for you!';
         }
 
-        const emailRes = await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${RESEND_API_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            from: 'Vestara <no-reply@vestara.ng>',
-            to: [user.email],
-            subject,
-            html,
-          }),
+        const sendResult = await sendBrandedEmail({
+          recipientEmail: user.email,
+          recipientName: user.full_name || undefined,
+          title: subject.replace(/^[^A-Za-z0-9]+/, '').replace(/^Vestara\s*[—-]\s*/, ''),
+          message: plainText,
+          actionUrl: 'https://vestara.ng/groups',
+          actionLabel: 'View groups',
         });
 
-        if (!emailRes.ok) {
-          const errorText = await emailRes.text();
-          console.error(`Failed to send to ${user.email}:`, errorText);
-          errors.push(`${user.email}: ${errorText}`);
+        if (!sendResult.ok) {
+          console.error(`Failed to send to ${user.email}:`, sendResult.error);
+          errors.push(`${user.email}: ${sendResult.error}`);
           continue;
         }
 

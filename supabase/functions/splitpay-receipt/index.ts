@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { sendBrandedEmail } from "../_shared/send-branded-email.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -215,15 +216,6 @@ serve(async (req) => {
   }
 
   try {
-    const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
-    if (!RESEND_API_KEY) {
-      console.error('RESEND_API_KEY not configured');
-      return new Response(JSON.stringify({ error: 'Email service not configured' }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -349,40 +341,33 @@ serve(async (req) => {
       const profile = profileMap.get(userId);
       if (!profile?.email) continue;
 
-      const html = buildReceiptHtml(
-        profile.full_name || profile.username || '',
-        splitReq.purpose,
-        Number(splitReq.total_amount),
-        Number(splitReq.amount_per_person),
-        splitReq.merchant_account_name,
-        splitReq.merchant_bank_name,
-        splitReq.merchant_account_number,
-        participantDetails,
-        completedAt,
-        splitReference,
-        settlementReference,
-      );
+      const details = [
+        { label: 'Purpose', value: String(splitReq.purpose) },
+        { label: 'Total', value: `NGN ${Number(splitReq.total_amount).toLocaleString()}` },
+        { label: 'Per person', value: `NGN ${Number(splitReq.amount_per_person).toLocaleString()}` },
+        { label: 'Paid to', value: `${splitReq.merchant_account_name} · ${splitReq.merchant_bank_name} · ${splitReq.merchant_account_number}` },
+        { label: 'Participants', value: participantDetails.map((p) => `${p.name} (NGN ${Number(p.amount).toLocaleString()})`).join(', ') },
+        { label: 'Completed', value: new Date(completedAt).toLocaleString('en-NG') },
+        { label: 'Reference', value: String(splitReference) },
+        ...(settlementReference ? [{ label: 'Settlement ref', value: String(settlementReference) }] : []),
+      ];
 
-      const emailRes = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${RESEND_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from: 'Vestara <notify@vestara.ng>',
-          to: [profile.email],
-          subject: `🧾 Vestara — SplitPay Receipt: ${splitReq.purpose}`,
-          html,
-        }),
+      const sendResult = await sendBrandedEmail({
+        recipientEmail: profile.email,
+        recipientName: profile.full_name || profile.username || undefined,
+        title: `SplitPay receipt: ${splitReq.purpose}`,
+        message: 'Your split bill has been settled in full. Here is your receipt.',
+        details,
+        actionUrl: 'https://vestara.ng/splitpay',
+        actionLabel: 'View split bills',
+        idempotencyKey: `splitpay-receipt-${splitReference}-${userId}`,
       });
 
-      if (emailRes.ok) {
+      if (sendResult.ok) {
         sentCount++;
         console.log(`Receipt sent to ${profile.email}`);
       } else {
-        const errText = await emailRes.text();
-        console.error(`Failed to send to ${profile.email}:`, errText);
+        console.error(`Failed to send to ${profile.email}:`, sendResult.error);
       }
 
       // 600ms delay between sends to prevent rate limiting
