@@ -292,32 +292,62 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
     setCustomerId("");
     setPhoneNumber("");
     setValidationResult(null);
+    setValidatedName(null);
+    setValidationError(null);
     setStep("payment");
   };
 
-  /* ─── Validate Customer ─── */
-  const validateCustomer = async () => {
-    if (!customerId || !selectedBiller || !selectedItem) return;
-    setValidating(true);
-    setValidationResult(null);
-    try {
-      const result = await callProducts("bills_validate", {
-        customerId,
-        divisionId: selectedBiller.division,
-        paymentItem: selectedItem.paymentCode,
-        billerId: selectedBiller.id,
-      });
-      if (result?.data?.status === "00") {
-        setValidationResult("valid");
-      } else {
+  /* ─── Auto-validate customer ID (debounced, no manual button) ─── */
+  const debouncedCustomerId = useDebounce(customerId, 700);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!needsValidation || !selectedBiller || !selectedItem || step !== "payment") return;
+    const id = debouncedCustomerId.trim();
+    if (id.length < 5 || id !== customerId.trim()) return;
+
+    (async () => {
+      setValidating(true);
+      setValidationResult(null);
+      setValidatedName(null);
+      setValidationError(null);
+      try {
+        const result = await callProducts("bills_validate", {
+          customerId: id,
+          divisionId: selectedBiller.division,
+          paymentItem: selectedItem.paymentCode,
+          billerId: selectedBiller.id,
+        });
+        if (cancelled) return;
+        const d = result?.data as Record<string, any> | undefined;
+        if (d?.status === "00") {
+          const name = String(
+            d?.customerName ?? d?.customer_name ?? d?.data?.customerName ?? d?.name ?? ""
+          ).trim();
+          setValidatedName(name || null);
+          setValidationResult("valid");
+        } else {
+          setValidationResult("invalid");
+          setValidationError(
+            String(d?.message || d?.error || "").trim() ||
+              "We couldn't verify this number with the biller. Please check it and try again."
+          );
+        }
+      } catch (err) {
+        if (cancelled) return;
         setValidationResult("invalid");
+        setValidationError(
+          err instanceof Error && err.message
+            ? err.message
+            : "We couldn't verify this number right now. Please check it and try again."
+        );
+      } finally {
+        if (!cancelled) setValidating(false);
       }
-    } catch {
-      setValidationResult("invalid");
-    } finally {
-      setValidating(false);
-    }
-  };
+    })();
+
+    return () => { cancelled = true; };
+  }, [debouncedCustomerId, customerId, needsValidation, selectedBiller, selectedItem, step, callProducts]);
 
   /* ─── Pay ─── */
   const handlePay = async () => {
