@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowRight, Shield, Users, Zap, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,7 @@ const slides = [
 ];
 
 export default function AppHome() {
+  const navigate = useNavigate();
   const [currentSlide, setCurrentSlide] = useState(0);
   const [showSplash, setShowSplash] = useState(true);
 
@@ -52,12 +54,14 @@ export default function AppHome() {
 
   const goToSlide = useCallback((index: number) => setCurrentSlide(index), []);
 
+  // In-app routing (works in the browser and inside the Capacitor WebView,
+  // where an absolute https:// URL would leave the native shell).
   const handleGetStarted = () => {
-    window.location.href = "https://app.vestara.ng/auth?mode=signup";
+    navigate("/auth?mode=signup");
   };
 
   const handleSignIn = () => {
-    window.location.href = "https://app.vestara.ng/auth";
+    navigate("/auth");
   };
 
   // Splash Screen
