@@ -186,6 +186,18 @@
     flex-direction: column;
   }
 
+  /* iPhone safe areas (notch / Dynamic Island / home indicator).
+     Sticky app headers sit under the status bar in a Capacitor WebView,
+     so give every top-pinned bar the top inset automatically. */
+  .sticky.top-0 {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  /* Fixed bottom bars / sheets clear the home indicator. */
+  .fixed.bottom-0 {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
   h1, h2, h3, h4, h5, h6 {
     @apply font-semibold tracking-tight;
   }
