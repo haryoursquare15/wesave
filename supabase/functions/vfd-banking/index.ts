@@ -972,51 +972,112 @@ async function handleClientRelease(userId: string, accountNo: string) {
   return jsonResponse({ data, vfd_status: status });
 }
 
-// Tier Upgrade - /client/update
+// Tier Upgrade REQUEST — records the request for compliance review.
+// The tier is NOT changed here; it only changes when an admin approves.
 async function handleTierUpgrade(userId: string, body: Record<string, unknown>) {
   const supabaseAdmin = getSupabaseAdmin();
 
   const { data: clientData } = await supabaseAdmin
     .from("vfd_sandbox_clients")
-    .select("vfd_account_number, bvn, nin, address")
+    .select("vfd_account_number, bvn, nin, address, tier, kyc_review_status")
     .eq("user_id", userId)
     .maybeSingle();
 
   const accountNo = (body.accountNo as string) || clientData?.vfd_account_number;
   if (!accountNo) {
-    return jsonResponse({ error: "Account number is required for tier upgrade" }, 400);
+    return jsonResponse({ error: "Account number is required for this upgrade" }, 400);
   }
+
+  const currentTier = Number(String(clientData?.tier || "tier1").replace(/\D/g, "")) || 1;
+  const requestedTier = Number(body.requestedTier) > 0
+    ? Number(body.requestedTier)
+    : Math.min(currentTier + 1, 3);
+
+  if (requestedTier <= currentTier) {
+    return jsonResponse({ error: "Your account is already on this level" }, 400);
+  }
+
+  const pending: Record<string, unknown> = { accountNo };
+  if (body.bvn) pending.bvn = body.bvn;
+  if (body.nin) pending.nin = body.nin;
+  if (body.address) pending.address = body.address;
+
+  const { error } = await supabaseAdmin
+    .from("vfd_sandbox_clients")
+    .update({
+      kyc_review_status: "pending",
+      kyc_requested_tier: requestedTier,
+      kyc_previous_tier: currentTier,
+      kyc_pending_upgrade: pending,
+      kyc_review_reason: null,
+      kyc_reviewed_by: null,
+      kyc_reviewed_at: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("user_id", userId);
+
+  if (error) return jsonResponse({ error: error.message }, 500);
+
+  return jsonResponse({
+    data: {
+      status: "pending_review",
+      requested_tier: requestedTier,
+      message: "Your upgrade request has been submitted. Validation is in progress.",
+    },
+  });
+}
+
+// Applies an approved tier upgrade at the banking provider. Admin-only.
+async function applyApprovedTierUpgrade(userId: string) {
+  const supabaseAdmin = getSupabaseAdmin();
+
+  const { data: client } = await supabaseAdmin
+    .from("vfd_sandbox_clients")
+    .select("vfd_account_number, bvn, nin, address, tier, kyc_requested_tier, kyc_pending_upgrade")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (!client) return jsonResponse({ error: "No verification profile found" }, 404);
+
+  const pending = (client.kyc_pending_upgrade || {}) as Record<string, unknown>;
+  const accountNo = (pending.accountNo as string) || client.vfd_account_number;
+  if (!accountNo) return jsonResponse({ error: "Customer has no account number" }, 400);
 
   const upgradePayload: Record<string, unknown> = { accountNo };
-  if (body.bvn) upgradePayload.bvn = body.bvn;
-  if (body.nin) upgradePayload.nin = body.nin;
-  if (body.address) upgradePayload.address = body.address;
-
-  console.log("[VFD tier_upgrade] Payload:", JSON.stringify(upgradePayload));
+  const bvn = (pending.bvn as string) || client.bvn;
+  const nin = (pending.nin as string) || client.nin;
+  const address = (pending.address as string) || client.address;
+  if (bvn) upgradePayload.bvn = bvn;
+  if (nin) upgradePayload.nin = nin;
+  if (address) upgradePayload.address = address;
 
   const { data, status } = await vfdRequest("/client/update", "POST", upgradePayload);
-  console.log("[VFD tier_upgrade] Response:", JSON.stringify(data));
-
   const vfdData = data as Record<string, unknown>;
-  if (status === 200 && vfdData?.status === "00") {
-    const innerData = (vfdData?.data || {}) as Record<string, unknown>;
-    const newTier = innerData?.currentTier?.toString() || "2";
+  console.log("[tier upgrade apply] response:", JSON.stringify(vfdData));
 
-    const updatePayload: Record<string, unknown> = {
-      tier: `tier${newTier}`,
-      updated_at: new Date().toISOString(),
-    };
-    if (body.nin) updatePayload.nin = body.nin;
-    if (body.bvn) updatePayload.bvn = body.bvn;
-    if (body.address) updatePayload.address = body.address;
-
-    await supabaseAdmin
-      .from("vfd_sandbox_clients")
-      .update(updatePayload)
-      .eq("user_id", userId);
+  if (status !== 200 || vfdData?.status !== "00") {
+    return jsonResponse(
+      { error: vfdData?.message?.toString() || "The upgrade could not be completed with the bank" },
+      502,
+    );
   }
 
-  return jsonResponse({ data, vfd_status: status });
+  const innerData = (vfdData?.data || {}) as Record<string, unknown>;
+  const providerTier = Number(innerData?.currentTier) || Number(client.kyc_requested_tier) || 2;
+
+  await supabaseAdmin
+    .from("vfd_sandbox_clients")
+    .update({
+      tier: `tier${providerTier}`,
+      ...(pending.bvn ? { bvn: pending.bvn } : {}),
+      ...(pending.nin ? { nin: pending.nin } : {}),
+      ...(pending.address ? { address: pending.address } : {}),
+      kyc_pending_upgrade: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("user_id", userId);
+
+  return jsonResponse({ data: { tier: `tier${providerTier}` } });
 }
 
 // Balance Enquiry - VFD uses accountNumber (not accountNo)
