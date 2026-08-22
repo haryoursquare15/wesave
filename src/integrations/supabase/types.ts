@@ -4560,6 +4560,8 @@ export type Database = {
           gender: string | null
           id: string
           kyc_method: string | null
+          kyc_pending_upgrade: Json | null
+          kyc_previous_tier: number | null
           kyc_requested_tier: number | null
           kyc_review_reason: string | null
           kyc_review_status: string
@@ -4587,6 +4589,8 @@ export type Database = {
           gender?: string | null
           id?: string
           kyc_method?: string | null
+          kyc_pending_upgrade?: Json | null
+          kyc_previous_tier?: number | null
           kyc_requested_tier?: number | null
           kyc_review_reason?: string | null
           kyc_review_status?: string
@@ -4614,6 +4618,8 @@ export type Database = {
           gender?: string | null
           id?: string
           kyc_method?: string | null
+          kyc_pending_upgrade?: Json | null
+          kyc_previous_tier?: number | null
           kyc_requested_tier?: number | null
           kyc_review_reason?: string | null
           kyc_review_status?: string
