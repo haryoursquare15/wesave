@@ -216,8 +216,9 @@ serve(async (req) => {
         status === "discrepancy" ? "⚠️ Pool variance detected" : "Pool reconciler error";
       const alertMessage =
         status === "discrepancy"
-          ? `Corporate pool ₦${enquiry.balance?.toLocaleString()} vs ledger ₦${ledgerSum.toLocaleString()} — variance ₦${variance?.toLocaleString()}`
+          ? `Custody ₦${custodyTotal?.toLocaleString()} (pool ₦${enquiry.balance?.toLocaleString()} + sub-accounts ₦${subAccountSum.toLocaleString()}) vs ledger ₦${ledgerSum.toLocaleString()} — shortfall ₦${Math.abs(variance ?? 0).toLocaleString()}`
           : notes;
+
       const throttleSince = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
 
       const { data: admins } = await supabase
