@@ -40,9 +40,9 @@ interface SandboxDashboardProps {
 }
 
 const TIER_INFO: Record<string, { label: string; daily: string; color: string }> = {
-  tier1: { label: "Tier 1 — Starter", daily: "₦30,000 daily", color: "bg-blue-500/15 text-blue-200 border-blue-400/30" },
-  tier2: { label: "Tier 2 — Standard", daily: "₦100,000 daily", color: "bg-amber-500/15 text-amber-100 border-amber-400/30" },
-  tier3: { label: "Tier 3 — Premium", daily: "No daily cap", color: "bg-emerald-500/15 text-emerald-100 border-emerald-400/30" },
+  tier1: { label: "Tier 1 — Starter", daily: "₦30,000 daily", color: "bg-blue-500/25 text-blue-50 border-blue-300/50" },
+  tier2: { label: "Tier 2 — Standard", daily: "₦100,000 daily", color: "bg-amber-500/25 text-amber-50 border-amber-300/50" },
+  tier3: { label: "Tier 3 — Premium", daily: "No daily cap", color: "bg-emerald-500/25 text-emerald-50 border-emerald-300/50" },
 };
 
 /* ─── Animated Counter ─── */
@@ -425,8 +425,8 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
             <div className="flex items-center gap-2.5 min-w-0">
               <Shield className="h-4 w-4 shrink-0" />
               <div className="min-w-0">
-                <p className="text-xs font-semibold leading-tight truncate">{info.label}</p>
-                <p className="text-[10px] opacity-80 leading-tight">Limit: {info.daily}</p>
+                <p className="text-[13px] font-extrabold tracking-tight leading-tight truncate">{info.label}</p>
+                <p className="text-[11px] font-semibold opacity-95 leading-tight">Limit: {info.daily}</p>
               </div>
             </div>
             {canUpgrade && (
