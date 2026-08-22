@@ -743,11 +743,11 @@ export function SandboxKYC({ vfd, onComplete }: SandboxKYCProps) {
             </motion.div>
             <div>
               <h2 className="text-xl font-bold">
-                {isUpgrade ? "Account Upgraded!" : "Account Created!"}
+                {isUpgrade ? "Upgrade submitted" : "Account Created!"}
               </h2>
               <p className="text-sm text-muted-foreground mt-1">
                 {isUpgrade
-                  ? `Successfully upgraded to ${tierConfig.name}`
+                  ? `Validation is in progress. Your ${tierConfig.name} limits go live once your review is approved.`
                   : `Your ${tierConfig.name} wallet is ready`
                 }
               </p>
