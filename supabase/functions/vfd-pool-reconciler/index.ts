@@ -131,33 +131,77 @@ serve(async (req) => {
     }
     ledgerSum = Math.round(ledgerSum * 100) / 100;
 
+    // Customer cash physically sits in each user's VFD sub-account until it
+    // is swept; the corporate pool alone therefore NEVER equals the customer
+    // liability. Custody = corporate pool + every provisioned sub-account.
+    // Comparing pool-only against the wallet ledger produced a permanent
+    // phantom variance and spammed the variance alert.
+    const { data: custodyClients } = await supabase
+      .from("vfd_sandbox_clients")
+      .select("vfd_account_number")
+      .not("vfd_account_number", "is", null);
+
+    let subAccountSum = 0;
+    let subAccountsRead = 0;
+    let subAccountsFailed = 0;
+    for (const c of custodyClients ?? []) {
+      const acctNo = String(c.vfd_account_number);
+      if (!acctNo || acctNo.startsWith("9")) continue; // skip virtual NUBANs
+      const e = await vfdAccountEnquiry(acctNo);
+      if (e.ok && e.balance !== null) {
+        subAccountSum += Number(e.balance);
+        subAccountsRead += 1;
+      } else {
+        subAccountsFailed += 1;
+      }
+    }
+    subAccountSum = Math.round(subAccountSum * 100) / 100;
+
     let status: "matched" | "discrepancy" | "error" = "error";
     let variance: number | null = null;
     let notes = "";
+    let custodyTotal: number | null = null;
 
     if (!enquiry.ok || enquiry.balance === null) {
       status = "error";
       notes = "VFD corporate /account/enquiry failed";
+    } else if (subAccountsFailed > 0) {
+      status = "error";
+      notes = `${subAccountsFailed} sub-account enquiry(ies) failed — custody total incomplete`;
     } else {
-      variance = Math.round((enquiry.balance - ledgerSum) * 100) / 100;
-      status = Math.abs(variance) < 0.01 ? "matched" : "discrepancy";
-      if (status === "discrepancy") {
-        notes = `Variance ₦${variance.toLocaleString()} between VFD pool and ledger sum`;
-      } else {
-        notes = "Corporate pool balanced with ledger";
-      }
+      custodyTotal = Math.round((enquiry.balance + subAccountSum) * 100) / 100;
+      // Positive variance = bank holds more than the customer liability
+      // (retained fees / platform float) — healthy. Negative = shortfall.
+      variance = Math.round((custodyTotal - ledgerSum) * 100) / 100;
+      status = variance < -0.01 ? "discrepancy" : "matched";
+      notes =
+        status === "discrepancy"
+          ? `Custody shortfall ₦${Math.abs(variance).toLocaleString()} — bank holds less than customer ledger liability`
+          : `Custody ₦${custodyTotal.toLocaleString()} covers ledger liability ₦${ledgerSum.toLocaleString()} (float ₦${variance.toLocaleString()})`;
     }
+
+
 
     const { data: runRow } = await supabase
       .from("reconciliation_runs")
       .insert({
         run_type: "corporate_pool",
-        vfd_corporate_balance: enquiry.ok ? enquiry.balance : null,
+        vfd_corporate_balance: custodyTotal,
         ledger_sum: ledgerSum,
         variance,
         status,
         notes,
-        details: { enquiry_raw: enquiry.raw, account: PLATFORM_POOL_NUBAN, wallet_account_count: walletAccts?.length ?? 0 },
+        details: {
+          enquiry_raw: enquiry.raw,
+          account: PLATFORM_POOL_NUBAN,
+          pool_balance: enquiry.ok ? enquiry.balance : null,
+          sub_account_sum: subAccountSum,
+          sub_accounts_read: subAccountsRead,
+          sub_accounts_failed: subAccountsFailed,
+          custody_total: custodyTotal,
+          wallet_account_count: walletAccts?.length ?? 0,
+        },
+
       })
       .select()
       .single();
@@ -169,11 +213,13 @@ serve(async (req) => {
     // the reconciler runs hourly and would otherwise spam the inbox.
     if (status !== "matched") {
       const alertTitle =
-        status === "discrepancy" ? "⚠️ Pool variance detected" : "Pool reconciler error";
+        status === "discrepancy" ? "⚠️ Custody shortfall detected" : "Pool reconciler error";
+
       const alertMessage =
         status === "discrepancy"
-          ? `Corporate pool ₦${enquiry.balance?.toLocaleString()} vs ledger ₦${ledgerSum.toLocaleString()} — variance ₦${variance?.toLocaleString()}`
+          ? `Custody ₦${custodyTotal?.toLocaleString()} (pool ₦${enquiry.balance?.toLocaleString()} + sub-accounts ₦${subAccountSum.toLocaleString()}) vs ledger ₦${ledgerSum.toLocaleString()} — shortfall ₦${Math.abs(variance ?? 0).toLocaleString()}`
           : notes;
+
       const throttleSince = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
 
       const { data: admins } = await supabase
