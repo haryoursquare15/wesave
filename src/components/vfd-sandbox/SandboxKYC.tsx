@@ -214,22 +214,28 @@ export function SandboxKYC({ vfd, onComplete }: SandboxKYCProps) {
     const vfdDob = formatDobForVfd(dob);
 
     if (isUpgrade) {
-      // Upgrade existing account
-      const upgradeBody: { bvn?: string; nin?: string; address?: string } = {};
+      // Submit an upgrade REQUEST — the level only changes after compliance approval
+      const upgradeBody: { bvn?: string; nin?: string; address?: string; requestedTier?: number } = {
+        requestedTier: selectedTier,
+      };
       if (selectedTier >= 2 && !vfd.client?.bvn && bvn) upgradeBody.bvn = bvn;
       if (selectedTier >= 2 && !vfd.client?.nin && nin) upgradeBody.nin = nin;
       if (selectedTier >= 3 && address) upgradeBody.address = address;
 
       const result = await vfd.upgradeTier(upgradeBody) as Record<string, unknown> | null;
       if (result) {
-        const vfdData = result.data as Record<string, unknown>;
-        if (vfdData?.status === "00") {
+        const payload = result.data as Record<string, unknown>;
+        if (payload?.status === "pending_review") {
           await vfd.fetchClient();
           setStep("success");
+          toast({
+            title: "Upgrade submitted",
+            description: "Validation is in progress. We'll notify you once your review is complete.",
+          });
           setTimeout(onComplete, 2500);
           return;
         }
-        toast({ title: "Upgrade Failed", description: getUserFriendlyError(vfdData?.message?.toString() || "Could not upgrade account"), variant: "destructive" });
+        toast({ title: "Upgrade Failed", description: getUserFriendlyError((payload?.message ?? result.error)?.toString() || "Could not submit your upgrade"), variant: "destructive" });
       }
       return;
     }
@@ -737,11 +743,11 @@ export function SandboxKYC({ vfd, onComplete }: SandboxKYCProps) {
             </motion.div>
             <div>
               <h2 className="text-xl font-bold">
-                {isUpgrade ? "Account Upgraded!" : "Account Created!"}
+                {isUpgrade ? "Upgrade submitted" : "Account Created!"}
               </h2>
               <p className="text-sm text-muted-foreground mt-1">
                 {isUpgrade
-                  ? `Successfully upgraded to ${tierConfig.name}`
+                  ? `Validation is in progress. Your ${tierConfig.name} limits go live once your review is approved.`
                   : `Your ${tierConfig.name} wallet is ready`
                 }
               </p>
