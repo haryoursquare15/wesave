@@ -330,6 +330,17 @@ async function reject(db: Db, adminId: string, userId: string, reason: string) {
     .eq("user_id", userId);
   if (docErr) return json({ error: docErr.message }, 500);
 
+  // Roll the customer back to the tier they held before requesting the upgrade.
+  const { data: existing } = await db
+    .from("vfd_sandbox_clients")
+    .select("tier, kyc_previous_tier, kyc_requested_tier")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  const currentTierNum = Number(String(existing?.tier || "tier1").replace(/\D/g, "")) || 1;
+  const previousTier = (existing?.kyc_previous_tier as number | null) ?? null;
+  const revertTier = previousTier && previousTier < currentTierNum ? `tier${previousTier}` : null;
+
   const { error: clientErr } = await db
     .from("vfd_sandbox_clients")
     .update({
@@ -337,6 +348,8 @@ async function reject(db: Db, adminId: string, userId: string, reason: string) {
       kyc_review_reason: reason,
       kyc_reviewed_by: adminId,
       kyc_reviewed_at: now,
+      kyc_pending_upgrade: null,
+      ...(revertTier ? { tier: revertTier } : {}),
     })
     .eq("user_id", userId);
   if (clientErr) return json({ error: clientErr.message }, 500);
@@ -346,7 +359,7 @@ async function reject(db: Db, adminId: string, userId: string, reason: string) {
     _action: "kyc_rejected",
     _resource_type: "vfd_sandbox_clients",
     _resource_id: userId,
-    _details: { reason },
+    _details: { reason, reverted_tier: revertTier, requested_tier: existing?.kyc_requested_tier ?? null },
   });
 
   await notifyCustomer(
