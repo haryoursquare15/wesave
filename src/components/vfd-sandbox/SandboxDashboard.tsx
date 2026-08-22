@@ -37,6 +37,7 @@ interface SandboxDashboardProps {
   onNavigate: (tab: string) => void;
   recentTransactions?: Transaction[];
   tier?: string | null;
+  upgradePending?: boolean;
 }
 
 const TIER_INFO: Record<string, { label: string; daily: string; color: string }> = {
@@ -198,7 +199,7 @@ function getTxMeta(type: string) {
 }
 
 /* ─── Main Dashboard Component ─── */
-export function SandboxDashboard({ balance, onNavigate, recentTransactions = [], tier }: SandboxDashboardProps) {
+export function SandboxDashboard({ balance, onNavigate, recentTransactions = [], tier, upgradePending = false }: SandboxDashboardProps) {
   const [showBalance, setShowBalance] = useState(true);
   const [copied, setCopied] = useState(false);
   const [activeBanner, setActiveBanner] = useState(0);
@@ -412,7 +413,7 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
       {(() => {
         const tierKey = (tier || "tier1").toLowerCase();
         const info = TIER_INFO[tierKey] || TIER_INFO.tier1;
-        const canUpgrade = tierKey !== "tier3";
+        const canUpgrade = tierKey !== "tier3" && !upgradePending;
         return (
           <motion.button
             initial={{ opacity: 0, y: 8 }}
@@ -425,8 +426,12 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
             <div className="flex items-center gap-2.5 min-w-0">
               <Shield className="h-4 w-4 shrink-0" />
               <div className="min-w-0">
-                <p className="text-[13px] font-extrabold tracking-tight leading-tight truncate">{info.label}</p>
-                <p className="text-[11px] font-semibold opacity-95 leading-tight">Limit: {info.daily}</p>
+                <p className="text-[13px] font-extrabold tracking-tight leading-tight truncate">
+                  {upgradePending ? "Upgrade in progress" : info.label}
+                </p>
+                <p className="text-[11px] font-semibold opacity-95 leading-tight">
+                  {upgradePending ? "Takes no more than 24 hours" : `Limit: ${info.daily}`}
+                </p>
               </div>
             </div>
             {canUpgrade && (
