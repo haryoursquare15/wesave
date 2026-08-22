@@ -442,7 +442,7 @@ serve(async (req) => {
 
       if (action === "approve") {
         const note = body?.note ? String(body.note).slice(0, 500) : null;
-        return await approve(db, caller.id, userId, note);
+        return await approve(db, caller.id, userId, note, authHeader);
       }
 
       const reason = String(body?.reason || "").trim().slice(0, 500);
