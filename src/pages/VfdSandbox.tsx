@@ -501,6 +501,7 @@ function VfdSandboxInner() {
                 }}
                 recentTransactions={mappedTransactions}
                 tier={vfd.client?.tier}
+                upgradePending={vfd.client?.kyc_review_status === "pending" && !!vfd.client?.kyc_requested_tier}
               />
             )}
             {currentView === "kyc" && (

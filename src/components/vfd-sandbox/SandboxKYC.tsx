@@ -95,6 +95,7 @@ export function SandboxKYC({ vfd, onComplete }: SandboxKYCProps) {
   const [docsReady, setDocsReady] = useState(false);
   const [reactivating, setReactivating] = useState(false);
   const [retrying, setRetrying] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
 
   const reviewStatus = vfd.client?.kyc_review_status ?? null;
   const wasRejected = reviewStatus === "rejected";
@@ -211,6 +212,7 @@ export function SandboxKYC({ vfd, onComplete }: SandboxKYCProps) {
   };
 
   const handleCreateAccount = async () => {
+    if (submitted || vfd.loading) return;
     const vfdDob = formatDobForVfd(dob);
 
     if (isUpgrade) {
@@ -226,13 +228,13 @@ export function SandboxKYC({ vfd, onComplete }: SandboxKYCProps) {
       if (result) {
         const payload = result.data as Record<string, unknown>;
         if (payload?.status === "pending_review") {
-          await vfd.fetchClient();
-          setStep("success");
+          setSubmitted(true);
           toast({
             title: "Upgrade submitted",
-            description: "Validation is in progress. We'll notify you once your review is complete.",
+            description: "Validation is in progress — it takes no more than 24 hours. We'll notify you once it's complete.",
           });
-          setTimeout(onComplete, 2500);
+          await vfd.fetchClient();
+          onComplete();
           return;
         }
         toast({ title: "Upgrade Failed", description: getUserFriendlyError((payload?.message ?? result.error)?.toString() || "Could not submit your upgrade"), variant: "destructive" });
@@ -714,12 +716,12 @@ export function SandboxKYC({ vfd, onComplete }: SandboxKYCProps) {
               </Button>
               <Button
                 onClick={handleCreateAccount}
-                disabled={vfd.loading}
+                disabled={vfd.loading || submitted || (isUpgrade && reviewPending)}
                 className="flex-1"
                 variant="hero"
               >
-                {vfd.loading ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : isUpgrade ? <ChevronUp className="h-4 w-4 mr-1" /> : <CheckCircle2 className="h-4 w-4 mr-1" />}
-                {isUpgrade ? "Upgrade Account" : "Create Account"}
+                {vfd.loading || submitted ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : isUpgrade ? <ChevronUp className="h-4 w-4 mr-1" /> : <CheckCircle2 className="h-4 w-4 mr-1" />}
+                {submitted ? "Submitted" : isUpgrade ? "Upgrade Account" : "Create Account"}
               </Button>
             </div>
           </motion.div>
