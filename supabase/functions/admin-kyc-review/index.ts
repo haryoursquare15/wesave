@@ -237,8 +237,40 @@ async function notifyCustomer(
   }
 }
 
-async function approve(db: Db, adminId: string, userId: string, note: string | null) {
+async function approve(
+  db: Db,
+  adminId: string,
+  userId: string,
+  note: string | null,
+  authHeader: string,
+) {
   const now = new Date().toISOString();
+
+  const { data: existing } = await db
+    .from("vfd_sandbox_clients")
+    .select("kyc_requested_tier, tier, account_status, kyc_pending_upgrade")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  const requested = (existing?.kyc_requested_tier as number | null) ?? null;
+  const currentTierNum = Number(String(existing?.tier || "tier1").replace(/\D/g, "")) || 1;
+  const needsTierUpgrade = !!requested && requested > currentTierNum;
+
+  // Apply the upgrade at the banking provider FIRST — the tier only moves on success.
+  if (needsTierUpgrade) {
+    const res = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/vfd-banking`, {
+      method: "POST",
+      headers: { Authorization: authHeader, "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "admin_apply_tier_upgrade", target_user_id: userId }),
+    });
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return json(
+        { error: payload?.error || "The upgrade could not be completed with the bank. Nothing was changed." },
+        502,
+      );
+    }
+  }
 
   const { error: docErr } = await db
     .from("vfd_sandbox_kyc_documents")
@@ -252,16 +284,6 @@ async function approve(db: Db, adminId: string, userId: string, note: string | n
     .eq("user_id", userId);
   if (docErr) return json({ error: docErr.message }, 500);
 
-  const { data: existing } = await db
-    .from("vfd_sandbox_clients")
-    .select("kyc_requested_tier, tier, account_status")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  const requested = (existing?.kyc_requested_tier as number | null) ?? null;
-  const currentTierNum = Number(String(existing?.tier || "tier1").replace(/\D/g, "")) || 1;
-  const nextTier = requested && requested > currentTierNum ? `tier${requested}` : null;
-
   const { error: clientErr } = await db
     .from("vfd_sandbox_clients")
     .update({
@@ -269,10 +291,9 @@ async function approve(db: Db, adminId: string, userId: string, note: string | n
       kyc_review_reason: note,
       kyc_reviewed_by: adminId,
       kyc_reviewed_at: now,
-      ...(nextTier ? { tier: nextTier } : {}),
+      kyc_pending_upgrade: null,
       ...(existing?.account_status === "pending" ? { account_status: "active" } : {}),
     })
-
     .eq("user_id", userId);
   if (clientErr) return json({ error: clientErr.message }, 500);
 
@@ -281,7 +302,7 @@ async function approve(db: Db, adminId: string, userId: string, note: string | n
     _action: "kyc_approved",
     _resource_type: "vfd_sandbox_clients",
     _resource_id: userId,
-    _details: { note },
+    _details: { note, upgraded_to_tier: needsTierUpgrade ? requested : null },
   });
 
   await notifyCustomer(
