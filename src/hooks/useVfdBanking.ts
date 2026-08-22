@@ -162,6 +162,12 @@ export function useVfdBanking() {
     return result;
   }, [invokeVfd]);
 
+  const retryKyc = useCallback(async () => {
+    const result = await invokeVfd("kyc_retry");
+    if (result) await fetchClient();
+    return result;
+  }, [invokeVfd, fetchClient]);
+
   const fetchTransactions = useCallback(async () => {
     const result = await invokeVfd("get_transactions");
     if (result?.data) setTransactions(result.data);
@@ -298,6 +304,7 @@ export function useVfdBanking() {
   return {
     loading,
     client,
+    retryKyc,
     transactions,
     fetchClient,
     fetchTransactions,
