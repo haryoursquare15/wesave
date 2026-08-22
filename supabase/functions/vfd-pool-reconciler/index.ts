@@ -213,7 +213,8 @@ serve(async (req) => {
     // the reconciler runs hourly and would otherwise spam the inbox.
     if (status !== "matched") {
       const alertTitle =
-        status === "discrepancy" ? "⚠️ Pool variance detected" : "Pool reconciler error";
+        status === "discrepancy" ? "⚠️ Custody shortfall detected" : "Pool reconciler error";
+
       const alertMessage =
         status === "discrepancy"
           ? `Custody ₦${custodyTotal?.toLocaleString()} (pool ₦${enquiry.balance?.toLocaleString()} + sub-accounts ₦${subAccountSum.toLocaleString()}) vs ledger ₦${ledgerSum.toLocaleString()} — shortfall ₦${Math.abs(variance ?? 0).toLocaleString()}`
