@@ -2666,6 +2666,43 @@ async function handleGetClient(userId: string) {
   return jsonResponse({ data });
 }
 
+// Restart a rejected KYC upgrade so the customer can resubmit
+async function handleKycRetry(userId: string) {
+  const supabaseAdmin = getSupabaseAdmin();
+
+  const { data: client } = await supabaseAdmin
+    .from("vfd_sandbox_clients")
+    .select("kyc_review_status")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (!client) {
+    return jsonResponse({ error: "No verification profile found" }, 404);
+  }
+  if (client.kyc_review_status !== "rejected") {
+    return jsonResponse({ error: "There is no rejected upgrade to restart" }, 400);
+  }
+
+  const { error: cErr } = await supabaseAdmin
+    .from("vfd_sandbox_clients")
+    .update({
+      kyc_review_status: "pending",
+      kyc_review_reason: null,
+      kyc_reviewed_by: null,
+      kyc_reviewed_at: null,
+    })
+    .eq("user_id", userId);
+  if (cErr) return jsonResponse({ error: cErr.message }, 500);
+
+  await supabaseAdmin
+    .from("vfd_sandbox_kyc_documents")
+    .update({ verification_status: "pending", rejection_reason: null, reviewed_at: null, reviewed_by: null })
+    .eq("user_id", userId)
+    .eq("verification_status", "rejected");
+
+  return jsonResponse({ data: { status: "pending" } });
+}
+
 // Get user's VFD transactions from DB
 async function handleGetTransactions(userId: string) {
   const supabaseAdmin = getSupabaseAdmin();
@@ -3588,6 +3625,9 @@ Deno.serve(async (req) => {
 
       case "get_transactions":
         return await handleGetTransactions(userId);
+
+      case "kyc_retry":
+        return await handleKycRetry(userId);
 
       // Lock Funds actions
       case "get_lock_configs":
