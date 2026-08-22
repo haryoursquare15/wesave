@@ -122,18 +122,18 @@ export function SandboxKYC({ vfd, onComplete }: SandboxKYCProps) {
         const stillVirtual = !newNuban || newNuban.startsWith("9") || newNuban === "1001695610";
         if (stillVirtual) {
           toast({
-            title: "VFD still returned the pool account",
+            title: "Account number not assigned",
             description: "We could not assign your account number automatically. Please contact support and we will complete this for you.",
             variant: "destructive",
           });
         } else {
-          toast({ title: "NUBAN provisioned", description: `Your real VFD account ${newNuban} is now active.` });
+          toast({ title: "Account number ready", description: `Your account number ${newNuban} is now active.` });
           onComplete();
         }
       } else {
         const code = (result as Record<string, unknown> | null)?.code;
         const msg = code === "POOL_NUBAN_REJECTED"
-          ? "VFD echoed the platform pool account. Please retry in a moment."
+          ? "We could not assign a dedicated account number. Please retry in a moment."
           : vfdData?.message?.toString() || "Reactivation failed";
         toast({ title: "Reprovision failed", description: getUserFriendlyError(msg), variant: "destructive" });
       }
@@ -227,7 +227,7 @@ export function SandboxKYC({ vfd, onComplete }: SandboxKYCProps) {
     if (result) {
       const vfdData = result.data as Record<string, unknown>;
       if (vfdData?.status !== "00" && vfdData?.status !== "01") {
-        toast({ title: "VFD Error", description: getUserFriendlyError(vfdData?.message?.toString() || "Account creation failed"), variant: "destructive" });
+        toast({ title: "Verification error", description: getUserFriendlyError(vfdData?.message?.toString() || "Account creation failed"), variant: "destructive" });
         return;
       }
       await vfd.fetchClient();
@@ -320,11 +320,11 @@ export function SandboxKYC({ vfd, onComplete }: SandboxKYCProps) {
               <RefreshCw className="h-5 w-5 text-primary" />
             </div>
             <div className="flex-1">
-              <h2 className="text-base font-bold">{hasVirtualNuban ? "Reprovision your VFD NUBAN" : "Reactivate your account"}</h2>
+              <h2 className="text-base font-bold">{hasVirtualNuban ? "Set up your dedicated account number" : "Reactivate your account"}</h2>
               <p className="text-xs text-muted-foreground mt-1">
                 {hasVirtualNuban
-                  ? `You're currently on a virtual NUBAN (${vfd.client?.vfd_account_number}). We'll provision a real VFD sub-account using your KYC on file — no need to re-enter your details.`
-                  : `You're already on Tier ${currentTierNum}. We just need to provision your unique VFD account number — no need to re-enter your details.`}
+                  ? `You're currently on a temporary account number (${vfd.client?.vfd_account_number}). We'll set up your dedicated account using the details already on file — no need to re-enter anything.`
+                  : `You're already on Tier ${currentTierNum}. We just need to set up your unique account number — no need to re-enter your details.`}
               </p>
             </div>
           </div>
@@ -336,7 +336,7 @@ export function SandboxKYC({ vfd, onComplete }: SandboxKYCProps) {
             {reactivating ? (
               <><RefreshCw className="h-4 w-4 mr-2 animate-spin" /> Provisioning…</>
             ) : (
-              <>{hasVirtualNuban ? "Reprovision NUBAN" : "Reactivate account"} <ArrowRight className="h-4 w-4 ml-2" /></>
+              <>{hasVirtualNuban ? "Set up account number" : "Reactivate account"} <ArrowRight className="h-4 w-4 ml-2" /></>
             )}
           </Button>
           <p className="text-[11px] text-muted-foreground text-center">
@@ -559,7 +559,7 @@ export function SandboxKYC({ vfd, onComplete }: SandboxKYCProps) {
           >
             <div className="text-center mb-2">
               <h2 className="text-lg font-bold">{isUpgrade ? "Confirm Upgrade" : "Confirm & Create"}</h2>
-              <p className="text-xs text-muted-foreground">Review before submitting to VFD</p>
+              <p className="text-xs text-muted-foreground">Review before submitting for verification</p>
             </div>
 
             {/* Tier Badge */}
@@ -632,8 +632,8 @@ export function SandboxKYC({ vfd, onComplete }: SandboxKYCProps) {
               <AlertCircle className="h-4 w-4 text-primary shrink-0 mt-0.5" />
               <p className="text-[10px] text-muted-foreground">
                 {isUpgrade
-                  ? "Your account will be upgraded via VFD's /client/update endpoint. Limits will increase immediately upon success."
-                  : "Your account will be created via VFD's new /client/tiers/individual endpoint with the appropriate tier level."
+                  ? "Validation is in progress. Your new limits go live as soon as verification is complete."
+                  : "Validation is in progress. Your account will be activated as soon as verification is complete."
                 }
               </p>
             </div>
