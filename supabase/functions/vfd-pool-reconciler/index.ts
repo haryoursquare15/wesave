@@ -186,12 +186,22 @@ serve(async (req) => {
       .from("reconciliation_runs")
       .insert({
         run_type: "corporate_pool",
-        vfd_corporate_balance: enquiry.ok ? enquiry.balance : null,
+        vfd_corporate_balance: custodyTotal,
         ledger_sum: ledgerSum,
         variance,
         status,
         notes,
-        details: { enquiry_raw: enquiry.raw, account: PLATFORM_POOL_NUBAN, wallet_account_count: walletAccts?.length ?? 0 },
+        details: {
+          enquiry_raw: enquiry.raw,
+          account: PLATFORM_POOL_NUBAN,
+          pool_balance: enquiry.ok ? enquiry.balance : null,
+          sub_account_sum: subAccountSum,
+          sub_accounts_read: subAccountsRead,
+          sub_accounts_failed: subAccountsFailed,
+          custody_total: custodyTotal,
+          wallet_account_count: walletAccts?.length ?? 0,
+        },
+
       })
       .select()
       .single();
