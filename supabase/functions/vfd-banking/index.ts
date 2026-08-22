@@ -3642,6 +3642,17 @@ Deno.serve(async (req) => {
       case "tier_upgrade":
         return await handleTierUpgrade(userId, body);
 
+      case "admin_apply_tier_upgrade": {
+        const admin = getSupabaseAdmin();
+        const { data: isAdmin } = await admin.rpc("is_any_admin", { _user_id: userId });
+        if (isAdmin !== true) return jsonResponse({ error: "Admin access required" }, 403);
+        const targetUserId = String(body.target_user_id || "");
+        if (!/^[0-9a-f-]{36}$/i.test(targetUserId)) {
+          return jsonResponse({ error: "Invalid customer reference" }, 400);
+        }
+        return await applyApprovedTierUpgrade(targetUserId);
+      }
+
       case "balance_enquiry":
         return await handleBalanceEnquiry(userId, body.accountNo as string);
 
