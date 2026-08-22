@@ -17,6 +17,9 @@ interface VfdClient {
   date_of_birth: string | null;
   tier: string;
   kyc_method: string | null;
+  kyc_review_status?: string | null;
+  kyc_review_reason?: string | null;
+  kyc_requested_tier?: number | null;
   consent_status: string;
   account_status: string;
   balance: number;
