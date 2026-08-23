@@ -2744,11 +2744,15 @@ async function handleKycRetry(userId: string) {
     return jsonResponse({ error: "There is no rejected upgrade to restart" }, 400);
   }
 
+  // Reset to a clean, non-pending state so the customer can re-enter the
+  // upgrade flow and resubmit documents. Review only becomes "pending" again
+  // when they actually submit a new upgrade request.
   const { error: cErr } = await supabaseAdmin
     .from("vfd_sandbox_clients")
     .update({
-      kyc_review_status: "pending",
+      kyc_review_status: null,
       kyc_review_reason: null,
+      kyc_requested_tier: null,
       kyc_reviewed_by: null,
       kyc_reviewed_at: null,
     })
@@ -2761,7 +2765,7 @@ async function handleKycRetry(userId: string) {
     .eq("user_id", userId)
     .eq("verification_status", "rejected");
 
-  return jsonResponse({ data: { status: "pending" } });
+  return jsonResponse({ data: { status: "reset" } });
 }
 
 // Get user's VFD transactions from DB
