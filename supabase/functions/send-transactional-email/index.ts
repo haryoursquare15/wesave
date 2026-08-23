@@ -34,16 +34,12 @@ function generateToken(): string {
 function isServiceRoleCaller(req: Request, serviceKey: string): boolean {
   const authHeader = req.headers.get('Authorization') || ''
   const token = authHeader.replace(/^Bearer\s+/i, '').trim()
-  if (!token) return false
-  if (token === serviceKey) return true
-  // Also accept any JWT whose role claim is service_role (e.g. rotated keys).
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
-    return payload?.role === 'service_role'
-  } catch {
-    return false
-  }
+  if (!token || !serviceKey) return false
+  // Exact match against the real service-role key only. Reading a `role` claim
+  // out of an unverified JWT payload is forgeable and must never be trusted.
+  return token === serviceKey
 }
+
 
 Deno.serve(async (req) => {
   // Handle CORS preflight

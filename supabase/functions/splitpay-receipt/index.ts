@@ -230,15 +230,10 @@ serve(async (req) => {
       });
     }
 
-    let isServiceRole = token === supabaseServiceKey;
-    if (!isServiceRole) {
-      try {
-        const payload = JSON.parse(
-          atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')),
-        );
-        isServiceRole = payload?.role === 'service_role';
-      } catch { /* not a service-role JWT */ }
-    }
+    // Internal callers must present the actual service-role key. Decoding an
+    // unverified JWT payload for a `role` claim is forgeable, so it is not used.
+    const isServiceRole = !!supabaseServiceKey && token === supabaseServiceKey;
+
 
     let callerId: string | null = null;
     if (!isServiceRole) {
