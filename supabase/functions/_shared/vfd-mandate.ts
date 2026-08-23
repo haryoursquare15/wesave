@@ -185,6 +185,7 @@ export async function probeMandateTokenSources(
   payload: Record<string, unknown>,
 ): Promise<Array<Record<string, unknown>>> {
   const sources: Array<{ source: string; token: string | null }> = [
+    { source: "vfd_issued_mandate_token", token: Deno.env.get("VFD_MANDATE_ACCESS_TOKEN") || null },
     {
       source: "mandate_consumer_pair",
       token: await mintTokenWithPair(
