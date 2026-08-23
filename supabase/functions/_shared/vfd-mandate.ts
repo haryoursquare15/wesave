@@ -258,6 +258,9 @@ export async function getMandateAccessToken(): Promise<string | null> {
   if (cachedToken && cachedToken.expiresAt > Date.now()) return cachedToken.token;
   cachedToken = null;
   const candidates: Array<{ source: string; token: string | null }> = [
+    // VFD-issued static mandate AccessToken takes precedence — the mandate
+    // service authenticates with this header, not a BaaS-minted wallet token.
+    { source: "vfd_issued_mandate_token", token: Deno.env.get("VFD_MANDATE_ACCESS_TOKEN") || null },
     { source: "mandate_credentials", token: await mintMandateCredentialToken().catch(() => null) },
     { source: "gateway_wallet", token: await getGatewayAccessToken().catch(() => null) },
     { source: "configured_access_token", token: Deno.env.get("VFD_ACCESS_TOKEN") || null },
