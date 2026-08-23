@@ -126,6 +126,57 @@ async function mintTokenWithPair(consumerKey: string, consumerSecret: string): P
 }
 
 /**
+ * Ops diagnostic: attempt to MINT a BaaS token with each configured consumer
+ * pair and report VFD's verbatim auth response (status + message only, never
+ * the token). This isolates "bad auth key" from "key not entitled for
+ * e-mandate": a pair that cannot even mint a token is simply wrong/revoked.
+ */
+export async function probeCredentialMint(): Promise<Array<Record<string, unknown>>> {
+  const pairs: Array<{ source: string; key?: string; secret?: string }> = [
+    {
+      source: "mandate_consumer_pair",
+      key: Deno.env.get("VFD_MANDATE_CONSUMER_KEY"),
+      secret: Deno.env.get("VFD_MANDATE_CONSUMER_SECRET"),
+    },
+    {
+      source: "primary_consumer_pair",
+      key: Deno.env.get("VFD_CONSUMER_KEY"),
+      secret: Deno.env.get("VFD_CONSUMER_SECRET"),
+    },
+  ];
+
+  const out: Array<Record<string, unknown>> = [];
+  for (const p of pairs) {
+    if (!p.key || !p.secret) {
+      out.push({ source: p.source, configured: false });
+      continue;
+    }
+    try {
+      const res = await vfdFetch(`${VFD_HOST}/vfd-tech/baas-portal/v1.1/baasauth/token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ consumerKey: p.key, consumerSecret: p.secret, validityTime: "-1" }),
+      });
+      const body = await res.json().catch(() => ({} as Record<string, any>));
+      const data = (body?.data || {}) as Record<string, unknown>;
+      const token = String(data.access_token || data.accessToken || data.token || body?.access_token || "");
+      out.push({
+        source: p.source,
+        configured: true,
+        http_status: res.status,
+        vfd_status: body?.status ?? null,
+        vfd_message: body?.message ?? body?.error ?? null,
+        token_minted: !!token,
+        token_length: token.length,
+      });
+    } catch (e) {
+      out.push({ source: p.source, configured: true, error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+  return out;
+}
+
+/**
  * Ops diagnostic: fire the SAME real e-mandate setup payload with every token
  * source we can mint, and report VFD's verbatim answer for each. Reveals which
  * credential pair (if any) is entitled for e-mandate. Never returns a token.
