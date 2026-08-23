@@ -172,22 +172,14 @@ serve(async (req) => {
     if (authHeader) {
       const token = authHeader.replace('Bearer ', '');
       
-      // Try getUser with token first
+      // Only a signature-verified token is ever trusted. There is no
+      // decode-the-payload fallback: an unsigned/forged JWT must never be
+      // able to impersonate a user here.
       const { data: { user: authUser }, error: authError } = await supabase.auth.getUser(token);
       if (!authError && authUser) {
         user = authUser;
-      } else {
-        // Fallback: decode JWT and use admin API
-        try {
-          const payload = JSON.parse(atob(token.split('.')[1]));
-          if (payload.sub) {
-            const { data: { user: adminUser } } = await supabase.auth.admin.getUserById(payload.sub);
-            if (adminUser) user = adminUser;
-          }
-        } catch (_e) {
-          // Token invalid
-        }
       }
+
     }
 
     const body = await req.json();

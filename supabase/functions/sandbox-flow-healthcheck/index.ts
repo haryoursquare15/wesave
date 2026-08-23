@@ -4,6 +4,8 @@
 // Probes are READ-ONLY. They infer health from completion ratios over 24h.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { verifyCronToken, requireAdminJwt } from "../_shared/cron-auth.ts";
+
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -277,8 +279,20 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
+  // Internal diagnostics: cron token or admin JWT only.
+  const isCron = await verifyCronToken(req, "sandbox-flow-healthcheck");
+  if (!isCron) {
+    const admin = await requireAdminJwt(req);
+    if (!admin) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401,
+      });
+    }
+  }
   try {
     const results = await runAllProbes();
+
     await persistResults(results);
     const overall = results.every((r) => r.status === "healthy" || r.status === "idle")
       ? "healthy"
