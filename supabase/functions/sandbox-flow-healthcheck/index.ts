@@ -4,6 +4,8 @@
 // Probes are READ-ONLY. They infer health from completion ratios over 24h.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { verifyCronToken, requireAdminJwt } from "../_shared/cron-auth.ts";
+
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
