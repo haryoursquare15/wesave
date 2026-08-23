@@ -290,14 +290,10 @@ serve(async (req) => {
       });
     }
 
-    // Escape + length-cap caller-supplied content before it enters the email body
-    const escapeHtml = (s: string) =>
-      String(s).slice(0, 2000)
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-
-    const safeTitle = escapeHtml(record.title).slice(0, 200);
-    const safeMessage = escapeHtml(record.message);
+    // The React Email template escapes props at render time, so we only
+    // length-cap here. Escaping again would render literal HTML entities.
+    const safeTitle = String(record.title).slice(0, 200);
+    const safeMessage = String(record.message).slice(0, 2000);
     const safeType = String(record.notification_type || 'notification').replace(/[^a-z0-9_]/gi, '').slice(0, 60);
 
     console.log(`Sending email to ${profile.email}: ${getEmailSubject(safeType, safeTitle)}`);

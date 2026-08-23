@@ -2765,7 +2765,7 @@ async function handleKycRetry(userId: string) {
     .eq("user_id", userId)
     .eq("verification_status", "rejected");
 
-  return jsonResponse({ data: { status: "pending" } });
+  return jsonResponse({ data: { status: "reset" } });
 }
 
 // Get user's VFD transactions from DB
