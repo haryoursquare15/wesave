@@ -32,6 +32,7 @@ import {
   debitMandate,
   getLastMandateTokenSource,
   probeMandateTokenSources,
+  probeCredentialMint,
   mapFrequencyToVfd,
   type MandatePayer,
 } from "../_shared/vfd-mandate.ts";
