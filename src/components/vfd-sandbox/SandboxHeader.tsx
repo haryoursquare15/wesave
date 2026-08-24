@@ -37,6 +37,7 @@ export function SandboxHeader() {
         </div>
         <SandboxNotificationBell />
       </div>
+      <ServiceStatusBanner />
       <BillDeliveryPopupListener />
     </div>
   );
