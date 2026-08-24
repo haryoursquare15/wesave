@@ -38,7 +38,7 @@ export const BRAND = {
 
 export const APP_URL = 'https://vestara.ng'
 export const LOGO_URL =
-  'https://vestara.ng/__l5e/assets-v1/833d06eb-58c2-42da-9af9-e4a7a732febe/vestara-logo.jpg'
+  'https://vestara.ng/__l5e/assets-v1/0a3456da-5bb0-466e-8e36-0d625b8dfc63/vestara-logo-email.png'
 
 export const COMPANY_ADDRESS = 'Vestara Technologies, Lagos, Nigeria'
 export const SUPPORT_EMAIL = 'support@vestara.ng'
