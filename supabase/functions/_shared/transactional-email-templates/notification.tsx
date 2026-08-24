@@ -6,6 +6,7 @@ import {
   EmailHeading,
   EmailText,
   EmailButton,
+  EmailHighlight,
   DetailList,
 } from '../email-templates/email-shell.tsx'
 
@@ -16,7 +17,53 @@ interface Props {
   actionUrl?: string
   actionLabel?: string
   details?: { label?: string; value?: string }[]
+  /** Optional headline figure, e.g. an amount or status. Presentation only. */
+  highlightLabel?: string
+  highlightValue?: string
+  /** Closing line; falls back to the standard Vestara sign-off. */
+  signOff?: string
+  /** Defaults to true — every account/transaction email carries the notice. */
+  securityNotice?: boolean
+  showAppBadges?: boolean
   unsubscribeUrl?: string
+}
+
+/**
+ * Presentation helpers — these only affect how existing text is displayed.
+ * No amount, reference or date is computed or altered here.
+ */
+const MONEY_OR_REF =
+  /((?:NGN|\u20A6)\s?[\d,]+(?:\.\d{2})?|vestara-[A-Za-z0-9-]+|[A-Z]{2,}-[A-Z0-9]{4,})/
+const MONEY_OR_REF_G = new RegExp(MONEY_OR_REF.source, 'g')
+
+const emphasise = (line: string, keyPrefix: string): React.ReactNode[] =>
+  line
+    .split(MONEY_OR_REF_G)
+    .filter((part) => part !== '' && part !== undefined)
+    .map((part, i) =>
+      MONEY_OR_REF.test(part) ? (
+        <strong key={`${keyPrefix}-${i}`}>{part}</strong>
+      ) : (
+        <React.Fragment key={`${keyPrefix}-${i}`}>{part}</React.Fragment>
+      )
+    )
+
+/** Turn a message blob into scannable paragraphs / key-value rows. */
+const Bodycopy = ({ message }: { message: string }) => {
+  const lines = message
+    .split(/\r?\n+/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+
+  if (lines.length === 0) return null
+
+  return (
+    <>
+      {lines.map((line, i) => (
+        <EmailText key={i}>{emphasise(line, `l${i}`)}</EmailText>
+      ))}
+    </>
+  )
 }
 
 const Notification = ({
@@ -26,15 +73,27 @@ const Notification = ({
   actionUrl,
   actionLabel = 'Open Vestara',
   details,
+  highlightLabel,
+  highlightValue,
+  signOff,
+  securityNotice = true,
+  showAppBadges = false,
   unsubscribeUrl,
 }: Props) => (
-  <EmailShell preview={title} unsubscribeUrl={unsubscribeUrl}>
+  <EmailShell
+    preview={title}
+    greetingName={recipientName}
+    signOff={signOff || 'Thank you for choosing Vestara — we are glad to have you.'}
+    securityNotice={securityNotice}
+    showAppBadges={showAppBadges}
+    unsubscribeUrl={unsubscribeUrl}
+  >
     <EmailHeading>{title}</EmailHeading>
-    <EmailText>Hi {recipientName},</EmailText>
-    <EmailText>{message}</EmailText>
-    {Array.isArray(details) && details.length > 0 ? (
-      <DetailList items={details} />
+    <Bodycopy message={message} />
+    {highlightValue ? (
+      <EmailHighlight label={highlightLabel} value={highlightValue} />
     ) : null}
+    {Array.isArray(details) && details.length > 0 ? <DetailList items={details} /> : null}
     {actionUrl ? <EmailButton href={actionUrl}>{actionLabel}</EmailButton> : null}
   </EmailShell>
 )
@@ -46,7 +105,10 @@ export const template = {
   previewData: {
     recipientName: 'Ada',
     title: 'Transaction successful',
-    message: 'Your airtime purchase was completed successfully.',
+    message:
+      'Your airtime purchase of NGN 1,000.00 was completed successfully.\nThe amount has been debited from your Vestara wallet.',
+    highlightLabel: 'Amount paid',
+    highlightValue: 'NGN 1,000.00',
     details: [
       { label: 'Amount', value: 'NGN 1,000.00' },
       { label: 'Reference', value: 'vestara-bill-98213' },
@@ -54,6 +116,7 @@ export const template = {
       { label: 'Wallet balance', value: 'NGN 24,500.00' },
     ],
     actionUrl: 'https://vestara.ng/wallet',
-    actionLabel: 'View in Vestara',
+    actionLabel: 'View Transaction',
+    showAppBadges: true,
   },
 } satisfies TemplateEntry

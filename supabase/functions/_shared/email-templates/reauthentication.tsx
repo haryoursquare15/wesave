@@ -5,10 +5,15 @@ import { EmailShell, EmailHeading, EmailText, BRAND } from './email-shell.tsx'
 
 interface ReauthenticationEmailProps {
   token: string
+  recipientName?: string
 }
 
-export const ReauthenticationEmail = ({ token }: ReauthenticationEmailProps) => (
-  <EmailShell preview="Your verification code">
+export const ReauthenticationEmail = ({ token, recipientName }: ReauthenticationEmailProps) => (
+  <EmailShell
+    preview="Your verification code"
+    greetingName={recipientName || 'there'}
+    signOff="Thanks for keeping your account secure."
+  >
     <EmailHeading>Confirm it's you</EmailHeading>
     <EmailText>Use the verification code below to confirm your identity.</EmailText>
     <Text style={codeStyle}>{token}</Text>

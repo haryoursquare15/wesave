@@ -83,11 +83,12 @@ async function alertAdmins(findings: Array<Record<string, unknown>>) {
           templateName: "notification",
           recipientEmail: p.email,
           templateData: {
-            recipientName: p.full_name || "there",
+            recipientName: String(p.full_name || "").trim().split(/\s+/)[0] || "there",
             title,
             message: body,
             actionUrl: "https://vestara.ng/vst-ops-9f3c",
             actionLabel: "Open Admin Portal",
+            signOff: "Please action this before the next reconciliation window.",
           },
         },
       });

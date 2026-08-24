@@ -20,6 +20,12 @@ export interface BrandedEmailInput {
   actionUrl?: string;
   actionLabel?: string;
   idempotencyKey?: string;
+  /** Presentation-only extras handled by the shared email shell. */
+  highlightLabel?: string;
+  highlightValue?: string;
+  signOff?: string;
+  securityNotice?: boolean;
+  showAppBadges?: boolean;
 }
 
 export async function sendBrandedEmail(input: BrandedEmailInput): Promise<{ ok: boolean; error?: string }> {
@@ -48,6 +54,11 @@ export async function sendBrandedEmail(input: BrandedEmailInput): Promise<{ ok: 
           details: input.details,
           actionUrl: input.actionUrl,
           actionLabel: input.actionLabel,
+          highlightLabel: input.highlightLabel,
+          highlightValue: input.highlightValue,
+          signOff: input.signOff,
+          securityNotice: input.securityNotice,
+          showAppBadges: input.showAppBadges,
         },
       }),
     });
