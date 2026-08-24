@@ -33,14 +33,15 @@ interface Props {
  * No amount, reference or date is computed or altered here.
  */
 const MONEY_OR_REF =
-  /((?:NGN|₦)\s?[\d,]+(?:\.\d{2})?|\bvestara-[A-Za-z0-9-]+\b|\b[A-Z]{2,}-[A-Z0-9]{4,}\b)/g
+  /((?:NGN|\u20A6)\s?[\d,]+(?:\.\d{2})?|vestara-[A-Za-z0-9-]+|[A-Z]{2,}-[A-Z0-9]{4,})/
+const MONEY_OR_REF_G = new RegExp(MONEY_OR_REF.source, 'g')
 
 const emphasise = (line: string, keyPrefix: string): React.ReactNode[] =>
   line
-    .split(MONEY_OR_REF)
-    .filter((part) => part !== '')
+    .split(MONEY_OR_REF_G)
+    .filter((part) => part !== '' && part !== undefined)
     .map((part, i) =>
-      MONEY_OR_REF.test(part) && (MONEY_OR_REF.lastIndex = 0) === 0 ? (
+      MONEY_OR_REF.test(part) ? (
         <strong key={`${keyPrefix}-${i}`}>{part}</strong>
       ) : (
         <React.Fragment key={`${keyPrefix}-${i}`}>{part}</React.Fragment>
