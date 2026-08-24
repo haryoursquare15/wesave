@@ -165,7 +165,13 @@ function GroupDetailsRow({ groupId, source = "legacy", onRefresh }: GroupDetails
                         <Badge variant="outline" className="text-xs shrink-0">
                           Pos {membership.payout_position || "—"}
                         </Badge>
+                        {Number(membership.outstanding_owed || 0) > 0 && (
+                          <Badge variant="destructive" className="text-xs shrink-0">
+                            Owes ₦{Number(membership.outstanding_owed).toLocaleString()}
+                          </Badge>
+                        )}
                       </div>
+
                       {hasPermission("groups.resolve_disputes") && membership.status === "active" && (
                         <Button
                           variant="ghost"
