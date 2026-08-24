@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Mail, Send, Eye, Loader2, Users, UserX, UserCheck, Globe } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { buildEmailPreviewHtml, EMAIL_APP_URL, GROUP_REMINDER_PREVIEW } from "@/lib/emailPreview";
 
 type Audience = "pending" | "no_group" | "active" | "all";
 type EmailType = "reminder" | "custom";
@@ -60,46 +61,16 @@ export function AdminEmailTab() {
     }
   };
 
-  const previewHtml = emailType === "custom"
-    ? `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-      <body style="margin:0;padding:0;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f4f4f5;">
-          <tr><td align="center" style="padding:40px 20px;">
-            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:480px;background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-              <tr><td style="background-color:#E8621A;padding:24px 30px;"><h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:700;">Vestara</h1></td></tr>
-              <tr><td style="padding:30px;">
-                <h2 style="margin:0 0 12px;color:#1a1a1a;font-size:18px;font-weight:600;">Hi John 👋</h2>
-                <div style="margin:0 0 24px;color:#4b5563;font-size:15px;line-height:1.6;">${(customBody || "Your message here...").replace(/\n/g, "<br/>")}</div>
-                <a href="#" style="display:inline-block;background-color:#E8621A;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:600;">Open Vestara</a>
-              </td></tr>
-              <tr><td style="padding:20px 30px;border-top:1px solid #e5e7eb;"><p style="margin:0;color:#9ca3af;font-size:12px;line-height:1.5;">You're receiving this because you have an account on Vestara.</p></td></tr>
-            </table>
-          </td></tr>
-        </table>
-      </body></html>`
-    : `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-      <body style="margin:0;padding:0;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f4f4f5;">
-          <tr><td align="center" style="padding:40px 20px;">
-            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:480px;background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-              <tr><td style="background-color:#E8621A;padding:24px 30px;"><h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:700;">Vestara</h1></td></tr>
-              <tr><td style="padding:30px;">
-                <h2 style="margin:0 0 12px;color:#1a1a1a;font-size:18px;font-weight:600;">Hey John, you're missing out! 👋</h2>
-                <p style="margin:0 0 16px;color:#4b5563;font-size:15px;line-height:1.6;">You signed up for Vestara but haven't joined a savings group yet. Here's what you're missing:</p>
-                <ul style="margin:0 0 20px;padding-left:20px;color:#4b5563;font-size:15px;line-height:1.8;">
-                  <li><strong>Save Together</strong> — Join a group and contribute alongside trusted members</li>
-                  <li><strong>Earn Payouts</strong> — Receive your lump-sum payout when it's your turn</li>
-                  <li><strong>Build Credit</strong> — Boost your Vestara credit score with every on-time contribution</li>
-                  <li><strong>Zero Fees to Join</strong> — Getting started is completely free</li>
-                </ul>
-                <p style="margin:0 0 24px;color:#4b5563;font-size:15px;line-height:1.6;">It only takes a minute to create or join a group. Start saving smarter today!</p>
-                <a href="#" style="display:inline-block;background-color:#E8621A;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:600;">Explore Groups</a>
-              </td></tr>
-              <tr><td style="padding:20px 30px;border-top:1px solid #e5e7eb;"><p style="margin:0;color:#9ca3af;font-size:12px;line-height:1.5;">You're receiving this because you have an account on Vestara.</p></td></tr>
-            </table>
-          </td></tr>
-        </table>
-      </body></html>`;
+  const previewHtml = buildEmailPreviewHtml(
+    emailType === "custom"
+      ? {
+          title: customSubject.trim() || "Subject line",
+          message: customBody.trim() || "Your message here...",
+          actionUrl: `${EMAIL_APP_URL}/groups`,
+          actionLabel: "Open Vestara",
+        }
+      : GROUP_REMINDER_PREVIEW
+  );
 
   const selectedAudience = audienceOptions.find(a => a.value === audience);
 
@@ -176,12 +147,12 @@ export function AdminEmailTab() {
                 <DialogTrigger asChild>
                   <Button variant="outline" size="sm"><Eye className="h-4 w-4 mr-1" /> Preview</Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+                <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
                   <DialogHeader>
                     <DialogTitle>Email Preview — {emailType === "custom" ? (customSubject || "Custom") : "Group Join Reminder"}</DialogTitle>
                   </DialogHeader>
                   <div className="border rounded-lg overflow-hidden">
-                    <iframe srcDoc={previewHtml} className="w-full h-[500px] border-0" title="Email Preview" sandbox="" />
+                    <iframe srcDoc={previewHtml} className="w-full h-[640px] border-0 bg-white rounded-md" title="Email Preview" sandbox="" />
                   </div>
                 </DialogContent>
               </Dialog>
