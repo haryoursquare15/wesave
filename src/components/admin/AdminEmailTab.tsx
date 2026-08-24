@@ -66,7 +66,7 @@ export function AdminEmailTab() {
       ? {
           title: customSubject.trim() || "Subject line",
           message: customBody.trim() || "Your message here...",
-          actionUrl: `${EMAIL_APP_URL}/groups`,
+          actionUrl: EMAIL_APP_URL,
           actionLabel: "Open Vestara",
         }
       : GROUP_REMINDER_PREVIEW
