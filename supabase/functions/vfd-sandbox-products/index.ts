@@ -757,10 +757,12 @@ async function handleRequestSwap(userId: string, body: Record<string, unknown>) 
   if (group.status !== "active" && group.status !== "swap_window") {
     return jsonResponse({ error: "Group is not in a swap-eligible state" }, 400);
   }
-  // If we're past the swap window, no more swap requests allowed
-  if (group.status === "swap_window" && group.swap_window_ends_at && new Date(group.swap_window_ends_at) <= new Date()) {
+  // Hard deadline: once swap_window_ends_at has passed, no swap can be requested
+  // in ANY status (the group may already have flipped to "active").
+  if (group.swap_window_ends_at && new Date(group.swap_window_ends_at).getTime() <= Date.now()) {
     return jsonResponse({ error: "Swap window has closed" }, 400);
   }
+
 
   const { data: requester } = await db.from("vfd_sandbox_group_members")
     .select("*").eq("group_id", groupId).eq("user_id", userId).maybeSingle();
