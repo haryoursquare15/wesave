@@ -1021,8 +1021,13 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
             </motion.div>
             <div>
               <h3 className="text-xl font-bold text-foreground mb-1">Payment Successful!</h3>
+              <p className="text-sm font-semibold text-foreground">
+                {billCategoryFor(selectedBiller?.name || "", `${selectedCategory || ""} ${selectedItem?.name || ""}`)} — {selectedBiller?.name}
+              </p>
               <p className="text-sm text-muted-foreground">
-                ₦{Number(amount).toLocaleString()} paid to {selectedBiller?.name}
+                ₦{Number(amount).toLocaleString()}
+                {selectedItem?.name ? ` · ${selectedItem.name}` : ""}
+                {customerId ? ` · ${customerId}` : ""}
               </p>
             </div>
             {paymentResult.delivery_token && (
