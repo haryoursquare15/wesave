@@ -134,6 +134,28 @@ function GroupDetailsRow({ groupId, source = "legacy", onRefresh }: GroupDetails
     }
   };
 
+  const handleSettleOutstanding = async (memberUserId: string, memberName: string, owed: number) => {
+    setSettling(memberUserId);
+    try {
+      const { data, error } = await supabaseClient.functions.invoke("vfd-sandbox-products", {
+        body: { action: "settle_member_outstanding", group_id: groupId, member_user_id: memberUserId },
+      });
+      const err = (data as any)?.error || error?.message;
+      if (err) throw new Error(err);
+      toast({
+        title: "Outstanding Settled",
+        description: `₦${owed.toLocaleString()} recovered from ${memberName}'s wallet. Payout block lifted.`,
+      });
+      fetchData();
+      onRefresh();
+    } catch (e: any) {
+      toast({ title: "Settlement Failed", description: e?.message || "Could not settle balance.", variant: "destructive" });
+    } finally {
+      setSettling(null);
+    }
+  };
+
+
   if (loading) {
     return (
       <TableRow>
