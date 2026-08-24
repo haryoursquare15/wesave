@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
+import { billCategoryFor } from "@/lib/transactionLabels";
 
 interface ReceiptRow {
   id: string;
