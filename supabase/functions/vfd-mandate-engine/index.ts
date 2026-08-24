@@ -664,6 +664,93 @@ async function handleRawTokenProbe(body: Record<string, unknown>): Promise<Respo
   });
 }
 
+/**
+ * Ops-only: isolate WHY VFD's e-mandate endpoint answers "Invalid wallet
+ * token". Mints a token with the mandate consumer pair, then replays the same
+ * minimal setup payload across auth-header names and documented base paths.
+ * Returns VFD's verbatim status/message per combination; never the token.
+ */
+async function handleHeaderVariantProbe(body: Record<string, unknown>): Promise<Response> {
+  const host = VFD_MANDATE_BASE.replace(/\/vtech-mandate.*$/, "");
+  const consumerKey = Deno.env.get("VFD_MANDATE_CONSUMER_KEY_V2") || Deno.env.get("VFD_MANDATE_CONSUMER_KEY") || "";
+  const consumerSecret = Deno.env.get("VFD_MANDATE_CONSUMER_SECRET_V2") || Deno.env.get("VFD_MANDATE_CONSUMER_SECRET") || "";
+  let token = "";
+  try {
+    const tRes = await vfdFetch(`${host}/vfd-tech/baas-portal/v1.1/baasauth/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "-1" }),
+    });
+    const tJson = await tRes.json().catch(() => ({} as Record<string, any>));
+    token = String(tJson?.data?.access_token || tJson?.data?.accessToken || tJson?.access_token || "");
+  } catch (e) {
+    return json({ error: "token mint failed", detail: e instanceof Error ? e.message : String(e) }, 502);
+  }
+  if (!token) return json({ error: "no token minted" }, 502);
+
+  const startDate = new Date();
+  const payload = {
+    reference: `vestara-hdr-${Date.now()}`,
+    payerBank: String(body.payer_bank_code || "999999"),
+    payerAccountNumber: String(body.payer_account_number || "1049299737"),
+    payerPhone: String(body.payer_phone || "08100000000"),
+    payerEmailAddress: String(body.payer_email || "ops@vestara.ng"),
+    payerAddress: "Lagos, Nigeria",
+    receiverBank: "999999",
+    receiverAccountNumber: VFD_POOL_NUBAN,
+    amount: String(MANDATE_MIN_AMOUNT),
+    startDate: formatVfdMandateDate(startDate),
+    endDate: formatVfdMandateDate(addCycles(startDate, "3", 13)),
+    frequency: "3",
+  };
+
+  const paths = Array.isArray(body.paths) && body.paths.length
+    ? (body.paths as string[]).map(String)
+    : [
+      "/vtech-mandate/api/v2/directdebit/mandate/setup?e-mandate=true",
+      "/vtech-mandate/api/v1/directdebit/mandate/setup?e-mandate=true",
+      "/vtech-mandate/api/v2/directdebit/mandate/setup",
+    ];
+  const extra = (body.extra && typeof body.extra === "object") ? body.extra as Record<string, unknown> : {};
+  const methods = Array.isArray(body.methods) && body.methods.length ? (body.methods as string[]).map(String) : ["POST"];
+  const headerSets: Array<{ name: string; headers: Record<string, string> }> =
+    body.single_header === true
+      ? [{ name: "AccessToken", headers: { AccessToken: token } }]
+      : [
+        { name: "AccessToken", headers: { AccessToken: token } },
+        { name: "Authorization_Bearer", headers: { Authorization: `Bearer ${token}` } },
+        { name: "accesstoken_lower", headers: { accesstoken: token } },
+        { name: "AccessToken_plus_Bearer", headers: { AccessToken: token, Authorization: `Bearer ${token}` } },
+      ];
+
+  const results: Array<Record<string, unknown>> = [];
+  for (const p of paths) {
+    for (const h of headerSets) {
+      for (const m of methods) {
+        try {
+          const init: RequestInit = {
+            method: m,
+            headers: { "Content-Type": "application/json", ...h.headers },
+          };
+          if (m !== "GET") {
+            init.body = JSON.stringify({ ...payload, ...extra, reference: `${payload.reference}-${results.length}` });
+          }
+          const res = await vfdFetch(`${host}${p}`, init);
+          const raw = await res.text();
+          let rb: unknown = raw;
+          try { rb = JSON.parse(raw); } catch { /* keep text */ }
+          results.push({ path: p, method: m, auth_header: h.name, http_status: res.status, response: rb });
+        } catch (e) {
+          results.push({ path: p, method: m, auth_header: h.name, error: e instanceof Error ? e.message : String(e) });
+        }
+      }
+    }
+  }
+  return json({ host, token_minted: true, request_shape: payload, results });
+}
+
+
+
 // Diagnostic: compare wallet vs mandate consumer credentials WITHOUT revealing
 // them. Returns short SHA-256 fingerprints and equality flags only.
 async function fp(v: string | undefined): Promise<string | null> {
@@ -699,7 +786,7 @@ Deno.serve(async (req) => {
     const action = String(body.action || "");
 
     // Cron / service-to-service actions. Never client-triggered.
-    const CRON_ACTIONS = new Set(["poll_pending", "run_due_debits", "go_live_check", "live_probe", "raw_token_probe", "credential_fingerprint", "credential_mint_probe"]);
+    const CRON_ACTIONS = new Set(["poll_pending", "run_due_debits", "go_live_check", "live_probe", "raw_token_probe", "header_variant_probe", "credential_fingerprint", "credential_mint_probe"]);
     if (CRON_ACTIONS.has(action)) {
       if (!(await verifyCronToken(req, CRON_TOKEN_NAME))) {
         return json({ error: "Unauthorized" }, 401);
@@ -711,6 +798,7 @@ Deno.serve(async (req) => {
       if (action === "run_due_debits") return await handleRunDueDebits(limit);
       if (action === "live_probe") return await handleLiveProbe(body);
       if (action === "raw_token_probe") return await handleRawTokenProbe(body);
+      if (action === "header_variant_probe") return await handleHeaderVariantProbe(body);
       return handleGoLiveCheck();
     }
 
