@@ -4935,8 +4935,12 @@ export type Database = {
           mandate_start_date: string | null
           mandate_status: string
           outstanding_owed: number
+          outstanding_settled_at: string | null
+          payout_blocked: boolean
+          payout_blocked_reason: string | null
           payout_order: number | null
           payout_position: number | null
+          payout_withheld_total: number
           status: string | null
           terms_accepted_at: string | null
           user_id: string
@@ -4971,8 +4975,12 @@ export type Database = {
           mandate_start_date?: string | null
           mandate_status?: string
           outstanding_owed?: number
+          outstanding_settled_at?: string | null
+          payout_blocked?: boolean
+          payout_blocked_reason?: string | null
           payout_order?: number | null
           payout_position?: number | null
+          payout_withheld_total?: number
           status?: string | null
           terms_accepted_at?: string | null
           user_id: string
@@ -5007,8 +5015,12 @@ export type Database = {
           mandate_start_date?: string | null
           mandate_status?: string
           outstanding_owed?: number
+          outstanding_settled_at?: string | null
+          payout_blocked?: boolean
+          payout_blocked_reason?: string | null
           payout_order?: number | null
           payout_position?: number | null
+          payout_withheld_total?: number
           status?: string | null
           terms_accepted_at?: string | null
           user_id?: string
@@ -5036,6 +5048,7 @@ export type Database = {
           recipient_id: string
           recovered_outstanding: number
           status: string
+          withheld: boolean
         }
         Insert: {
           created_at?: string
@@ -5048,6 +5061,7 @@ export type Database = {
           recipient_id: string
           recovered_outstanding?: number
           status?: string
+          withheld?: boolean
         }
         Update: {
           created_at?: string
@@ -5060,6 +5074,7 @@ export type Database = {
           recipient_id?: string
           recovered_outstanding?: number
           status?: string
+          withheld?: boolean
         }
         Relationships: [
           {
