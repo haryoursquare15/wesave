@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { describeTransaction } from "@/lib/transactionLabels";
 
 interface Transaction {
   id: string;
@@ -17,6 +18,9 @@ interface Transaction {
   reference: string | null;
   vfd_reference?: string | null;
   session_id?: string | null;
+  beneficiary_name?: string | null;
+  beneficiary_account?: string | null;
+  beneficiary_bank?: string | null;
   status: string;
   created_at: string;
 }
