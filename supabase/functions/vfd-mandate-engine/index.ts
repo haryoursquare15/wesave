@@ -659,8 +659,8 @@ async function fp(v: string | undefined): Promise<string | null> {
 async function handleCredentialFingerprint() {
   const wk = Deno.env.get("VFD_CONSUMER_KEY");
   const ws = Deno.env.get("VFD_CONSUMER_SECRET");
-  const mk = Deno.env.get("VFD_MANDATE_CONSUMER_KEY");
-  const ms = Deno.env.get("VFD_MANDATE_CONSUMER_SECRET");
+  const mk = (Deno.env.get("VFD_MANDATE_CONSUMER_KEY_V2") || Deno.env.get("VFD_MANDATE_CONSUMER_KEY"));
+  const ms = (Deno.env.get("VFD_MANDATE_CONSUMER_SECRET_V2") || Deno.env.get("VFD_MANDATE_CONSUMER_SECRET"));
   const at = Deno.env.get("VFD_ACCESS_TOKEN");
   return json({
     wallet_key: { set: !!wk, len: wk?.length ?? 0, fp: await fp(wk) },

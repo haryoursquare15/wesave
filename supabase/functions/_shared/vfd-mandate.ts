@@ -91,8 +91,8 @@ let cachedToken: { token: string; expiresAt: number } | null = null;
 async function mintMandateCredentialToken(): Promise<string | null> {
   // VFD confirmed e-mandate is entitled on the SAME consumer key/secret pair as
   // every other BaaS call — mandate-specific vars are only an override.
-  const consumerKey = Deno.env.get("VFD_MANDATE_CONSUMER_KEY") || Deno.env.get("VFD_CONSUMER_KEY");
-  const consumerSecret = Deno.env.get("VFD_MANDATE_CONSUMER_SECRET") || Deno.env.get("VFD_CONSUMER_SECRET");
+  const consumerKey = (Deno.env.get("VFD_MANDATE_CONSUMER_KEY_V2") || Deno.env.get("VFD_MANDATE_CONSUMER_KEY")) || Deno.env.get("VFD_CONSUMER_KEY");
+  const consumerSecret = (Deno.env.get("VFD_MANDATE_CONSUMER_SECRET_V2") || Deno.env.get("VFD_MANDATE_CONSUMER_SECRET")) || Deno.env.get("VFD_CONSUMER_SECRET");
   if (!consumerKey || !consumerSecret) return null;
   const res = await vfdFetch(`${VFD_HOST}/vfd-tech/baas-portal/v1.1/baasauth/token`, {
     method: "POST",
@@ -135,8 +135,8 @@ export async function probeCredentialMint(): Promise<Array<Record<string, unknow
   const pairs: Array<{ source: string; key?: string; secret?: string }> = [
     {
       source: "mandate_consumer_pair",
-      key: Deno.env.get("VFD_MANDATE_CONSUMER_KEY"),
-      secret: Deno.env.get("VFD_MANDATE_CONSUMER_SECRET"),
+      key: (Deno.env.get("VFD_MANDATE_CONSUMER_KEY_V2") || Deno.env.get("VFD_MANDATE_CONSUMER_KEY")),
+      secret: (Deno.env.get("VFD_MANDATE_CONSUMER_SECRET_V2") || Deno.env.get("VFD_MANDATE_CONSUMER_SECRET")),
     },
     {
       source: "primary_consumer_pair",
@@ -189,8 +189,8 @@ export async function probeMandateTokenSources(
     {
       source: "mandate_consumer_pair",
       token: await mintTokenWithPair(
-        Deno.env.get("VFD_MANDATE_CONSUMER_KEY") || "",
-        Deno.env.get("VFD_MANDATE_CONSUMER_SECRET") || "",
+        (Deno.env.get("VFD_MANDATE_CONSUMER_KEY_V2") || Deno.env.get("VFD_MANDATE_CONSUMER_KEY")) || "",
+        (Deno.env.get("VFD_MANDATE_CONSUMER_SECRET_V2") || Deno.env.get("VFD_MANDATE_CONSUMER_SECRET")) || "",
       ),
     },
     {
