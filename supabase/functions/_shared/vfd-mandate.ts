@@ -89,11 +89,12 @@ export function addCycles(from: Date, frequency: string, cycles: number): Date {
 let cachedToken: { token: string; expiresAt: number } | null = null;
 
 async function mintMandateCredentialToken(): Promise<string | null> {
-  // VFD confirmed e-mandate is entitled on the SAME consumer key/secret pair as
-  // every other BaaS call — mandate-specific vars are only an override.
-  const consumerKey = (Deno.env.get("VFD_MANDATE_CONSUMER_KEY_V2") || Deno.env.get("VFD_MANDATE_CONSUMER_KEY")) || Deno.env.get("VFD_CONSUMER_KEY");
-  const consumerSecret = (Deno.env.get("VFD_MANDATE_CONSUMER_SECRET_V2") || Deno.env.get("VFD_MANDATE_CONSUMER_SECRET")) || Deno.env.get("VFD_CONSUMER_SECRET");
+  // The e-mandate-entitled pair wins; the older mandate/primary pairs remain
+  // as fallbacks for non-entitled environments.
+  const consumerKey = Deno.env.get("VFD_EMANDATE_CONSUMER_KEY") || Deno.env.get("VFD_MANDATE_CONSUMER_KEY_V2") || Deno.env.get("VFD_MANDATE_CONSUMER_KEY") || Deno.env.get("VFD_CONSUMER_KEY");
+  const consumerSecret = Deno.env.get("VFD_EMANDATE_CONSUMER_SECRET") || Deno.env.get("VFD_MANDATE_CONSUMER_SECRET_V2") || Deno.env.get("VFD_MANDATE_CONSUMER_SECRET") || Deno.env.get("VFD_CONSUMER_SECRET");
   if (!consumerKey || !consumerSecret) return null;
+
   const res = await vfdFetch(`${VFD_HOST}/vfd-tech/baas-portal/v1.1/baasauth/token`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -134,6 +135,11 @@ async function mintTokenWithPair(consumerKey: string, consumerSecret: string): P
 export async function probeCredentialMint(): Promise<Array<Record<string, unknown>>> {
   const pairs: Array<{ source: string; key?: string; secret?: string }> = [
     {
+      source: "emandate_consumer_pair",
+      key: Deno.env.get("VFD_EMANDATE_CONSUMER_KEY"),
+      secret: Deno.env.get("VFD_EMANDATE_CONSUMER_SECRET"),
+    },
+    {
       source: "mandate_consumer_pair",
       key: (Deno.env.get("VFD_MANDATE_CONSUMER_KEY_V2") || Deno.env.get("VFD_MANDATE_CONSUMER_KEY")),
       secret: (Deno.env.get("VFD_MANDATE_CONSUMER_SECRET_V2") || Deno.env.get("VFD_MANDATE_CONSUMER_SECRET")),
@@ -144,6 +150,7 @@ export async function probeCredentialMint(): Promise<Array<Record<string, unknow
       secret: Deno.env.get("VFD_CONSUMER_SECRET"),
     },
   ];
+
 
   const out: Array<Record<string, unknown>> = [];
   for (const p of pairs) {
@@ -185,7 +192,15 @@ export async function probeMandateTokenSources(
   payload: Record<string, unknown>,
 ): Promise<Array<Record<string, unknown>>> {
   const sources: Array<{ source: string; token: string | null }> = [
+    {
+      source: "emandate_consumer_pair",
+      token: await mintTokenWithPair(
+        Deno.env.get("VFD_EMANDATE_CONSUMER_KEY") || "",
+        Deno.env.get("VFD_EMANDATE_CONSUMER_SECRET") || "",
+      ),
+    },
     { source: "vfd_issued_mandate_token", token: Deno.env.get("VFD_MANDATE_ACCESS_TOKEN") || null },
+
     {
       source: "mandate_consumer_pair",
       token: await mintTokenWithPair(
