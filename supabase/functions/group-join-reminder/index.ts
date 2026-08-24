@@ -159,8 +159,8 @@ serve(async (req) => {
           recipientName: String(user.full_name || '').trim().split(/\s+/)[0] || undefined,
           title: subject.replace(/^[^A-Za-z0-9]+/, '').replace(/^Vestara\s*[—-]\s*/, ''),
           message: plainText,
-          actionUrl: 'https://vestara.ng/groups',
-          actionLabel: 'View groups',
+          actionUrl: 'https://app.vestara.ng',
+          actionLabel: 'Open Vestara',
         });
 
         if (!sendResult.ok) {

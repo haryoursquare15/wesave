@@ -19,7 +19,7 @@ export const EMAIL_BRAND = {
   page: "#eef3f9",
 };
 
-export const EMAIL_APP_URL = "https://vestara.ng";
+export const EMAIL_APP_URL = "https://app.vestara.ng";
 export const EMAIL_LOGO_URL =
   "https://vestara.ng/__l5e/assets-v1/0a3456da-5bb0-466e-8e36-0d625b8dfc63/vestara-logo-email.png";
 export const EMAIL_COMPANY_ADDRESS = "Vestara Technologies, Lagos, Nigeria";
@@ -190,6 +190,6 @@ export const GROUP_REMINDER_PREVIEW = {
   title: "Your savings group is waiting for you!",
   message:
     "You signed up for Vestara but haven't joined a savings group yet.\n\nSave together with trusted members, receive your lump-sum payout when it's your turn, and build your Vestara credit score with every on-time contribution. Joining is completely free.\n\nIt only takes a minute to create or join a group.",
-  actionUrl: `${EMAIL_APP_URL}/groups`,
-  actionLabel: "View groups",
+  actionUrl: EMAIL_APP_URL,
+  actionLabel: "Open Vestara",
 };
