@@ -28,16 +28,14 @@ let cachedToken: string | null = null;
 async function getAccessToken(): Promise<string> {
   if (cachedToken) return cachedToken;
 
-  const gatewayToken = await getGatewayAccessToken();
-  if (gatewayToken) {
-    cachedToken = gatewayToken;
-    return gatewayToken;
-  }
-
   const staticToken = Deno.env.get("VFD_ACCESS_TOKEN");
   const consumerKey = Deno.env.get("VFD_CONSUMER_KEY");
   const consumerSecret = Deno.env.get("VFD_CONSUMER_SECRET");
 
+  // Wallet onboarding must use the primary wallet consumer pair. E-mandate
+  // credentials are product-specific and are intentionally handled only by
+  // _shared/vfd-mandate.ts. Prefer minting here so a mandate-oriented token
+  // cached by the gateway can never leak into /wallet2/client calls.
   if (consumerKey && consumerSecret) {
     console.log("[VFD] Generating access token via auth API...");
     try {
@@ -58,6 +56,15 @@ async function getAccessToken(): Promise<string> {
     } catch (err) {
       console.error("[VFD] Token generation error:", err);
     }
+  }
+
+  // Retain the gateway-issued wallet token as a compatibility fallback only.
+  // This is reached when the primary wallet pair is not configured or cannot
+  // mint a token, rather than allowing it to override the dedicated pair.
+  const gatewayToken = await getGatewayAccessToken();
+  if (gatewayToken) {
+    cachedToken = gatewayToken;
+    return gatewayToken;
   }
 
   if (staticToken) {
@@ -190,9 +197,14 @@ async function vfdRequest(
 
   const data = await response.json();
 
-  // If token expired, clear cache and retry once
-  if (response.status === 403 && (data as Record<string, unknown>)?.message?.toString()?.toLowerCase()?.includes("expired")) {
-    console.log("[VFD] Token expired, regenerating...");
+  // Refresh once for every explicit token rejection, not only the word
+  // "expired". VFD also reports stale/revoked wallet tokens as status 99 with
+  // "Invalid wallet token".
+  const responseMessage = (data as Record<string, unknown>)?.message?.toString()?.toLowerCase() || "";
+  const tokenRejected = response.status === 401 || response.status === 403 ||
+    responseMessage.includes("invalid wallet token") || responseMessage.includes("token expired");
+  if (tokenRejected) {
+    console.log("[VFD] Wallet token rejected, regenerating once...");
     cachedToken = null;
     const newToken = await getAccessToken();
     (options.headers as Record<string, string>)["AccessToken"] = newToken;
