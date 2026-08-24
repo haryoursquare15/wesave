@@ -294,12 +294,12 @@ function VfdSandboxInner() {
         : tx.type.includes("reversal") ? "credit"
         : "debit",
       amount: net,
-      description: isPayout && fee > 0
-        ? `thrift payout (₦${gross.toLocaleString()} − ₦${fee.toLocaleString()} fee)`
-        : tx.type.replace(/_/g, " "),
+      description: richDescription,
       reference: tx.reference,
       vfd_reference: vfdMeta.vfd_reference,
       session_id: vfdMeta.session_id,
+      beneficiary_name: metaStr("beneficiary_name"),
+      beneficiary_account: metaStr("to_account"),
       status: tx.status,
       created_at: tx.created_at,
     };
