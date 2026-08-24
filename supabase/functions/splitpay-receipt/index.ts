@@ -7,19 +7,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const BRAND = {
-  orange: '#E8621A',
-  orangeLight: '#FFF5EB',
-  green: '#22c55e',
-  greenLight: '#f0fdf4',
-  textDark: '#171717',
-  textBody: '#555555',
-  textMuted: '#999999',
-  white: '#ffffff',
-  border: '#e5e7eb',
-  logoUrl: 'https://sdwkqwmqgpsjrmijkdix.supabase.co/storage/v1/object/public/email-assets/wesave-logo.png',
-};
-
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -164,8 +151,10 @@ serve(async (req) => {
         title: `SplitPay receipt: ${splitReq.purpose}`,
         message: 'Your split bill has been settled in full. Here is your receipt.',
         details,
+        highlightLabel: 'Total settled',
+        highlightValue: `NGN ${Number(splitReq.total_amount).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
         actionUrl: 'https://vestara.ng/splitpay',
-        actionLabel: 'View split bills',
+        actionLabel: 'View Receipt',
         idempotencyKey: `splitpay-receipt-${splitReference}-${userId}`,
       });
 
