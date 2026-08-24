@@ -4934,6 +4934,7 @@ export type Database = {
           mandate_reference: string | null
           mandate_start_date: string | null
           mandate_status: string
+          outstanding_owed: number
           payout_order: number | null
           payout_position: number | null
           status: string | null
@@ -4969,6 +4970,7 @@ export type Database = {
           mandate_reference?: string | null
           mandate_start_date?: string | null
           mandate_status?: string
+          outstanding_owed?: number
           payout_order?: number | null
           payout_position?: number | null
           status?: string | null
@@ -5004,6 +5006,7 @@ export type Database = {
           mandate_reference?: string | null
           mandate_start_date?: string | null
           mandate_status?: string
+          outstanding_owed?: number
           payout_order?: number | null
           payout_position?: number | null
           status?: string | null
@@ -5031,6 +5034,7 @@ export type Database = {
           net_amount: number
           platform_fee: number
           recipient_id: string
+          recovered_outstanding: number
           status: string
         }
         Insert: {
@@ -5042,6 +5046,7 @@ export type Database = {
           net_amount: number
           platform_fee?: number
           recipient_id: string
+          recovered_outstanding?: number
           status?: string
         }
         Update: {
@@ -5053,6 +5058,7 @@ export type Database = {
           net_amount?: number
           platform_fee?: number
           recipient_id?: string
+          recovered_outstanding?: number
           status?: string
         }
         Relationships: [
@@ -5270,7 +5276,10 @@ export type Database = {
           cycle_id: string
           group_id: string
           id: string
+          missed_amount: number
+          penalty_fee: number
           reason: string
+          recovered_at: string | null
           user_id: string
         }
         Insert: {
@@ -5279,7 +5288,10 @@ export type Database = {
           cycle_id: string
           group_id: string
           id?: string
+          missed_amount?: number
+          penalty_fee?: number
           reason: string
+          recovered_at?: string | null
           user_id: string
         }
         Update: {
@@ -5288,7 +5300,10 @@ export type Database = {
           cycle_id?: string
           group_id?: string
           id?: string
+          missed_amount?: number
+          penalty_fee?: number
           reason?: string
+          recovered_at?: string | null
           user_id?: string
         }
         Relationships: []
