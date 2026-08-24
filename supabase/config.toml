@@ -68,3 +68,5 @@ project_id = "sdwkqwmqgpsjrmijkdix"
     verify_jwt = false
   [functions.vfd-fee-sweep]
     verify_jwt = false
+  [functions.vfd-credential-health]
+    verify_jwt = false

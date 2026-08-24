@@ -3675,6 +3675,51 @@ export type Database = {
         }
         Relationships: []
       }
+      vfd_credential_health: {
+        Row: {
+          account_scoped_ok: boolean
+          alerted_at: string | null
+          checked_at: string
+          details: Json
+          enquiry_message: string | null
+          enquiry_status: string | null
+          healthy: boolean
+          id: string
+          latency_ms: number | null
+          probed_account: string | null
+          token_mint_ok: boolean
+          token_mint_status: string | null
+        }
+        Insert: {
+          account_scoped_ok?: boolean
+          alerted_at?: string | null
+          checked_at?: string
+          details?: Json
+          enquiry_message?: string | null
+          enquiry_status?: string | null
+          healthy?: boolean
+          id?: string
+          latency_ms?: number | null
+          probed_account?: string | null
+          token_mint_ok?: boolean
+          token_mint_status?: string | null
+        }
+        Update: {
+          account_scoped_ok?: boolean
+          alerted_at?: string | null
+          checked_at?: string
+          details?: Json
+          enquiry_message?: string | null
+          enquiry_status?: string | null
+          healthy?: boolean
+          id?: string
+          latency_ms?: number | null
+          probed_account?: string | null
+          token_mint_ok?: boolean
+          token_mint_status?: string | null
+        }
+        Relationships: []
+      }
       vfd_fee_sweeps: {
         Row: {
           amount: number
