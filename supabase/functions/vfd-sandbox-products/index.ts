@@ -998,12 +998,35 @@ async function processAutoPayout(
   const grossAmount = amount * memberCount;
   // PRODUCTION PARITY: Tiered fee structure
   const platformFee = calculatePlatformFee(grossAmount);
-  const netAmount = grossAmount - platformFee;
 
-  const payout = await creditVestaraThriftPayout(recipientId, groupId, grossAmount, platformFee, `ajo-payout-${groupId}-${activeCycle.id}`, {
+  // OUTSTANDING RECOVERY: a defaulting member owes the group (missed contribution
+  // + penalty). We net it off THEIR OWN payout. The recovered amount is simply
+  // never debited from the thrift pool — it stays in the pool, covering the
+  // shortfall that member's missed contribution created.
+  const { data: recipientRow } = await db.from("vfd_sandbox_group_members")
+    .select("id, outstanding_owed").eq("group_id", groupId).eq("user_id", recipientId).maybeSingle();
+  const owed = Math.max(0, Number(recipientRow?.outstanding_owed || 0));
+  const payoutBeforeRecovery = grossAmount - platformFee;
+  const recovered = Math.min(owed, Math.max(0, payoutBeforeRecovery));
+  const shortfall = Math.round((owed - recovered) * 100) / 100;
+  const netAmount = Math.round((payoutBeforeRecovery - recovered) * 100) / 100;
+  const debitFromPool = Math.round((netAmount + platformFee) * 100) / 100;
+
+  if (shortfall > 0) {
+    // Never disburse negative: recover what we can, flag the rest for admin.
+    console.error(`[processAutoPayout] group=${groupId} cycle=${currentCycle} user=${recipientId} outstanding ₦${owed} exceeds payout ₦${payoutBeforeRecovery}; residual ₦${shortfall} left owing`);
+    await sendNotification(group.admin_id as string, "Outstanding Exceeds Payout",
+      `A member's outstanding balance (₦${owed.toLocaleString()}) in ${group.name} exceeds their cycle ${currentCycle} payout. ₦${recovered.toLocaleString()} was recovered; ₦${shortfall.toLocaleString()} remains owed.`,
+      "payout_notification", groupId);
+  }
+
+  const payout = await creditVestaraThriftPayout(recipientId, groupId, debitFromPool, platformFee, `ajo-payout-${groupId}-${activeCycle.id}`, {
     cycle_id: activeCycle.id,
     cycle_number: currentCycle,
     source: "vfd_sandbox_ajo",
+    gross_pool_value: grossAmount,
+    recovered_outstanding: recovered,
+    residual_owed: shortfall,
   });
   if (!payout.success) {
     const err = payout.error || "Payout failed";
@@ -1016,11 +1039,27 @@ async function processAutoPayout(
     return { success: false, error: err };
   }
 
+  if (recovered > 0 && recipientRow?.id) {
+    await db.from("vfd_sandbox_group_members")
+      .update({ outstanding_owed: shortfall })
+      .eq("id", recipientRow.id as string);
+    await db.from("vfd_sandbox_penalties")
+      .update({ recovered_at: new Date().toISOString() })
+      .eq("group_id", groupId).eq("user_id", recipientId).is("recovered_at", null);
+    await postChatMessage(groupId, recipientId,
+      `ℹ️ ₦${recovered.toLocaleString()} outstanding (missed contributions + penalties) was recovered from this payout and retained in the group pool.`, "system");
+    await sendNotification(recipientId, "Outstanding Recovered",
+      `₦${recovered.toLocaleString()} you owed ${group.name} was deducted from your payout. You received ₦${netAmount.toLocaleString()}.`,
+      "payout_notification", groupId);
+  }
+
   await db.from("vfd_sandbox_group_payouts").insert({
     group_id: groupId, recipient_id: recipientId,
     cycle_number: currentCycle, gross_amount: grossAmount,
     platform_fee: platformFee, net_amount: netAmount,
+    recovered_outstanding: recovered,
   });
+
 
   await db.from("vfd_sandbox_contribution_cycles").update({
     status: "completed", payout_recipient_id: recipientId,
