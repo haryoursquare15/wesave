@@ -477,8 +477,12 @@ export function SandboxAjoTab() {
                   </div>
                   <div className="flex items-center gap-2">
                     {m.has_contributed_current && <Badge variant="secondary" className="text-[10px]">Contributed</Badge>}
+                    {Number(m.outstanding_owed || 0) > 0 && (
+                      <Badge variant="destructive" className="text-[10px]">Owes ₦{Number(m.outstanding_owed).toLocaleString()}</Badge>
+                    )}
                     {m.has_received_payout && <Badge className="text-[10px]">Received</Badge>}
                     {m.payout_position != null && <span className="text-muted-foreground">#{m.payout_position}</span>}
+
                     {canRequestSwap && (
                       <Button size="sm" variant="ghost" className="h-7 px-2 text-[11px]"
                         disabled={products.loading}
