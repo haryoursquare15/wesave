@@ -159,6 +159,7 @@ const ERROR_MAP: Array<[string, string]> = [
   ["bvn error", "We couldn't verify your BVN. Please double-check it and try again."],
   ["upgrade failed", "We couldn't upgrade your account right now. Please try again shortly."],
   ["account creation failed", "We couldn't create your account right now. Please try again shortly."],
+  ["invalid wallet token", "We couldn't complete your account setup because the banking connection needs to be refreshed. Please try again shortly."],
   ["account number is required for tier upgrade", "Please provide your account number to upgrade."],
   ["failed to upload", "We couldn't upload that file. Please try again."],
   ["upload failed", "We couldn't upload that file. Please try again."],

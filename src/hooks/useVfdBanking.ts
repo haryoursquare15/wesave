@@ -132,7 +132,7 @@ export function useVfdBanking() {
             title: embeddedCode === "TIER_LIMIT_EXCEEDED" || embeddedCode === "TIER_DAILY_LIMIT_EXCEEDED"
               ? "Transaction limit reached"
               : "Transaction failed",
-            description: embeddedMsg || "The transaction could not be completed.",
+            description: getUserFriendlyError(embeddedMsg || "The transaction could not be completed."),
             variant: "destructive",
           });
           return null;
