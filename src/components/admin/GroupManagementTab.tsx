@@ -32,6 +32,7 @@ function GroupDetailsRow({ groupId, source = "legacy", onRefresh }: GroupDetails
   const [data, setData] = useState<{ members: any[]; wallet: any; currentCycle: any } | null>(null);
   const [loading, setLoading] = useState(true);
   const [removingMember, setRemovingMember] = useState<string | null>(null);
+  const [settling, setSettling] = useState<string | null>(null);
   const { hasPermission } = useAdminPermissions();
   const { toast } = useToast();
 
