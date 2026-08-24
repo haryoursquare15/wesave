@@ -73,7 +73,7 @@ const BRAND = {
   textMuted: '#999999',
   white: '#ffffff',
   border: '#e5e7eb',
-  logoUrl: 'https://sdwkqwmqgpsjrmijkdix.supabase.co/storage/v1/object/public/email-assets/wesave-logo.png',
+  logoUrl: 'https://vestara.ng/__l5e/assets-v1/0a3456da-5bb0-466e-8e36-0d625b8dfc63/vestara-logo-email.png',
 };
 
 function getTypeColors(type: string): { accent: string; bg: string; icon: string } {
