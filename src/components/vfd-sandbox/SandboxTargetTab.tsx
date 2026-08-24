@@ -162,7 +162,7 @@ export function SandboxTargetTab() {
             {isIndependent ? "Independent" : "Group Wallet"}
           </Badge>
           <Badge variant={t.funding_mode === "ddm" ? "default" : "outline"}>
-            Funding: {t.funding_mode === "ddm" ? "DDM (bank)" : "Wallet"}
+            Funding: {t.funding_mode === "ddm" ? "E-Mandate (bank)" : "Wallet"}
           </Badge>
         </div>
 
@@ -185,7 +185,7 @@ export function SandboxTargetTab() {
               const r = await products.updateTargetSettings({ target_id: t.id, funding_mode: next });
               if (r?.data) { toast({ title: `Switched to ${next.toUpperCase()}` }); loadDetail(t.id); }
             }}>
-              Switch to {t.funding_mode === "ddm" ? "Wallet" : "DDM"}
+              Switch to {t.funding_mode === "ddm" ? "Wallet" : "E-Mandate"}
             </Button>
           </div>
         )}
@@ -224,7 +224,7 @@ export function SandboxTargetTab() {
           const label = ms === "awaiting_approval" ? "Bank approval pending"
             : ms === "failed" ? "Mandate failed — re-authorize"
             : ms === "expired" ? "Mandate expired — re-authorize"
-            : "Authorize DDM Mandate";
+            : "Authorize E-Mandate";
           return (
             <div className="p-3 rounded-xl border border-amber-500/40 bg-amber-500/10 flex items-center justify-between gap-2">
               <div className="text-xs">
@@ -530,7 +530,7 @@ export function SandboxTargetTab() {
               </Select>
               <p className="text-[11px] text-muted-foreground">
                 {form.funding_mode === "ddm"
-                  ? "Each contribution is pulled straight from members' bank accounts via VFD DDM — no wallet balance needed."
+                  ? "Each contribution is pulled straight from members' bank accounts via the VFD e-mandate — no wallet balance needed."
                   : "Members fund their wallet and contributions are debited from there."}
               </p>
             </div>

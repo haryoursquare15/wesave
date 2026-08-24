@@ -184,7 +184,7 @@ export function MandateAuthorizationDialog({ subject, onClose, onAuthorized }: P
     setBusy(false);
     if (res?.data?.bank_approved) {
       setStep("active");
-      toast({ title: "Mandate Approved", description: "Bank has approved your DDM." });
+      toast({ title: "Mandate Approved", description: "Bank has approved your E-Mandate." });
       onAuthorized?.();
     } else {
       toast({ title: "Still pending", description: "Your bank has not approved the mandate yet. We'll keep checking in the background." });
@@ -346,7 +346,7 @@ export function MandateAuthorizationDialog({ subject, onClose, onAuthorized }: P
               </DialogDescription>
             </DialogHeader>
             <div className="flex justify-center py-4">
-              <Badge variant="success" className="text-sm">🔵 DDM Active</Badge>
+              <Badge variant="success" className="text-sm">🔵 E-Mandate Active</Badge>
             </div>
             <Button onClick={onClose} className="h-11 w-full">Done</Button>
           </>
