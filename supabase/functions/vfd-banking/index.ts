@@ -25,6 +25,23 @@ const VFD_AUTH_URL =
 // In-memory token cache (per isolate)
 let cachedToken: string | null = null;
 
+// Thrown when VFD itself rejects our wallet credentials. This is a
+// configuration/entitlement problem (wrong environment pair, revoked key), NOT
+// a transient network error — never retry-loop on it.
+export class WalletCredentialError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "WalletCredentialError";
+  }
+}
+
+const CREDENTIALS_REJECTED =
+  `Banking credentials rejected by VFD for VFD_MODE="${VFD_MODE}". ` +
+  `The wallet consumer key/secret pair is not valid on this environment ` +
+  `(sandbox keys cannot be used against production). Wallet operations ` +
+  `(account creation, balance enquiry, transfers, bill funding) stay disabled ` +
+  `until a valid production wallet pair is configured.`;
+
 async function getAccessToken(): Promise<string> {
   if (cachedToken) return cachedToken;
 
@@ -34,33 +51,37 @@ async function getAccessToken(): Promise<string> {
 
   // Wallet onboarding must use the primary wallet consumer pair. E-mandate
   // credentials are product-specific and are intentionally handled only by
-  // _shared/vfd-mandate.ts. Prefer minting here so a mandate-oriented token
-  // cached by the gateway can never leak into /wallet2/client calls.
+  // _shared/vfd-mandate.ts. A mandate-scoped token is NOT valid for
+  // /wallet2/* calls, so it must never be substituted here.
   if (consumerKey && consumerSecret) {
     console.log("[VFD] Generating access token via auth API...");
+    let data: Record<string, unknown> | null = null;
     try {
       const res = await vfdFetch(VFD_AUTH_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "-1" }),
       });
-
-      const data = await res.json();
-      if (data?.status === "00" && data?.data?.access_token) {
-        cachedToken = data.data.access_token;
-        console.log("[VFD] Access token generated successfully");
-        return cachedToken;
-      }
-
-      console.error("[VFD] Token generation failed:", JSON.stringify(data));
+      data = await res.json();
     } catch (err) {
       console.error("[VFD] Token generation error:", err);
+      throw new Error("Banking network unavailable while authenticating. Please try again.");
     }
+
+    const token = (data as { data?: { access_token?: string } } | null)?.data?.access_token;
+    if ((data as { status?: string } | null)?.status === "00" && token) {
+      cachedToken = token;
+      console.log("[VFD] Access token generated successfully");
+      return token;
+    }
+
+    // status "01" / "Invalid wallet credentials" => hard configuration failure.
+    console.error("[VFD] Token generation failed:", JSON.stringify(data));
+    throw new WalletCredentialError(CREDENTIALS_REJECTED);
   }
 
-  // Retain the gateway-issued wallet token as a compatibility fallback only.
-  // This is reached when the primary wallet pair is not configured or cannot
-  // mint a token, rather than allowing it to override the dedicated pair.
+  // No wallet pair configured. The gateway mints with whatever credentials live
+  // on the droplet — accept it only as an explicitly configured fallback.
   const gatewayToken = await getGatewayAccessToken();
   if (gatewayToken) {
     cachedToken = gatewayToken;
@@ -206,7 +227,21 @@ async function vfdRequest(
   if (tokenRejected) {
     console.log("[VFD] Wallet token rejected, regenerating once...");
     cachedToken = null;
-    const newToken = await getAccessToken();
+    let newToken: string;
+    try {
+      newToken = await getAccessToken();
+    } catch (err) {
+      // Credentials are rejected outright — stop here instead of looping.
+      console.error("[VFD] Wallet re-authentication failed:", err);
+      return {
+        data: {
+          error: "Banking service authentication failed. Our team has been alerted — please try again later.",
+          detail: err instanceof Error ? err.message : String(err),
+          credential_failure: true,
+        },
+        status: 503,
+      };
+    }
     (options.headers as Record<string, string>)["AccessToken"] = newToken;
 
     const retryResponse = await vfdFetch(url.toString(), options);
