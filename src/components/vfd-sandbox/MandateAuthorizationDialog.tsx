@@ -122,7 +122,7 @@ export function MandateAuthorizationDialog({ subject, onClose, onAuthorized }: P
       if (res?.data?.bank_approved) {
         if (pollTimer.current) window.clearInterval(pollTimer.current);
         setStep("active");
-        toast({ title: "Mandate Approved", description: "Your bank has approved the Direct Debit Mandate." });
+        toast({ title: "Mandate Approved", description: "Your bank has approved the E-Mandate." });
         onAuthorized?.();
       }
     }, 60_000);
@@ -184,7 +184,7 @@ export function MandateAuthorizationDialog({ subject, onClose, onAuthorized }: P
     setBusy(false);
     if (res?.data?.bank_approved) {
       setStep("active");
-      toast({ title: "Mandate Approved", description: "Bank has approved your DDM." });
+      toast({ title: "Mandate Approved", description: "Bank has approved your E-Mandate." });
       onAuthorized?.();
     } else {
       toast({ title: "Still pending", description: "Your bank has not approved the mandate yet. We'll keep checking in the background." });
@@ -197,7 +197,7 @@ export function MandateAuthorizationDialog({ subject, onClose, onAuthorized }: P
         {step === "form" && subject && (
           <>
             <DialogHeader>
-              <DialogTitle className="text-base">Set Up Direct Debit Mandate</DialogTitle>
+              <DialogTitle className="text-base">Set Up E-Mandate</DialogTitle>
               <DialogDescription className="text-xs">
                 Authorize VFD to debit your bank account for each contribution to {subject.name}.
               </DialogDescription>
@@ -280,7 +280,7 @@ export function MandateAuthorizationDialog({ subject, onClose, onAuthorized }: P
                 <Check className="h-4 w-4 text-success" /> Mandate Created — Authorization Required
               </DialogTitle>
               <DialogDescription className="text-xs">
-                To activate your Direct Debit Mandate, send ₦50 from your bank account ending in <span className="font-mono">{mandate.payerAccount.slice(-4)}</span> to the NIBSS account below.
+                To activate your E-Mandate, send ₦50 from your bank account ending in <span className="font-mono">{mandate.payerAccount.slice(-4)}</span> to the NIBSS account below.
               </DialogDescription>
             </DialogHeader>
 
@@ -339,14 +339,14 @@ export function MandateAuthorizationDialog({ subject, onClose, onAuthorized }: P
           <>
             <DialogHeader>
               <DialogTitle className="text-base flex items-center gap-2">
-                <Check className="h-4 w-4 text-success" /> Direct Debit Active
+                <Check className="h-4 w-4 text-success" /> E-Mandate Active
               </DialogTitle>
               <DialogDescription className="text-xs">
                 Your mandate for {subject.name} is bank-authorized and ready to debit on each cycle.
               </DialogDescription>
             </DialogHeader>
             <div className="flex justify-center py-4">
-              <Badge variant="success" className="text-sm">🔵 DDM Active</Badge>
+              <Badge variant="success" className="text-sm">🔵 E-Mandate Active</Badge>
             </div>
             <Button onClick={onClose} className="h-11 w-full">Done</Button>
           </>

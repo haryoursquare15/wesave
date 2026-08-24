@@ -139,7 +139,7 @@ export function SandboxAjoTab() {
     setMandateBusy(false);
     if (res?.data?.success) {
       toast({
-        title: "DDM Mandate Authorized",
+        title: "E-Mandate Authorized",
         description: `₦${AJO_DDM_FEE} setup fee charged. ${mandateGroup.name} can now run automatic bank debits.`,
       });
       setMandateGroup(null);
@@ -541,7 +541,7 @@ export function SandboxAjoTab() {
               <div className="flex justify-between"><span className="text-muted-foreground">Auto-debit (wallet)</span><span className="font-medium">{g.auto_debit ? "On" : "Off"}</span></div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Funding mode</span>
-                <span className="font-medium uppercase">{g.funding_mode === "ddm" ? "DDM (bank)" : "Wallet"}</span>
+                <span className="font-medium uppercase">{g.funding_mode === "ddm" ? "E-Mandate (bank)" : "Wallet"}</span>
               </div>
               {g.funding_mode === "ddm" && (
                 <div className="flex justify-between"><span className="text-muted-foreground">Mandate ref</span><span className="font-mono text-[10px]">{g.mandate_reference || "—"}</span></div>
@@ -558,7 +558,7 @@ export function SandboxAjoTab() {
                   const next = g.funding_mode === "ddm" ? "wallet" : "ddm";
                   const r = await products.updateGroupSettings({ group_id: g.id, funding_mode: next });
                   if (r?.data) { toast({ title: `Funding mode set to ${next.toUpperCase()}` }); loadDetail(g.id); }
-                }}>Switch to {g.funding_mode === "ddm" ? "Wallet" : "DDM"} funding</Button>
+                }}>Switch to {g.funding_mode === "ddm" ? "Wallet" : "E-Mandate"} funding</Button>
                 <Button size="sm" variant="outline" disabled={products.loading} onClick={async () => {
                   const r = await products.sandboxAutoContribute(g.id);
                   if (r?.data) { toast({ title: "Auto-sweep triggered", description: `Processed ${r.data.processed_count} group(s)` }); loadDetail(g.id); }
@@ -664,7 +664,7 @@ export function SandboxAjoTab() {
                 <SelectTrigger className="h-12"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="wallet">Wallet debit — pull from each member's Vestara wallet</SelectItem>
-                  <SelectItem value="ddm">Direct Debit Mandate — auto-debit each member's bank (VFD DDM)</SelectItem>
+                  <SelectItem value="ddm">E-Mandate — auto-debit each member's bank (VFD e-mandate)</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-[11px] text-muted-foreground">
@@ -794,13 +794,13 @@ export function SandboxAjoTab() {
                       )}
                       {isMember && isDdm && (
                         myMandate === "authorized" ? (
-                          <Badge variant="outline" className="text-[10px] text-green-600 border-green-500/40">DDM authorized</Badge>
+                          <Badge variant="outline" className="text-[10px] text-green-600 border-green-500/40">E-Mandate authorized</Badge>
                         ) : myMandate === "awaiting_approval" ? (
                           <Badge variant="outline" className="text-[10px] text-blue-600 border-blue-500/40">Awaiting bank approval</Badge>
                         ) : myMandate === "failed" ? (
-                          <Badge variant="outline" className="text-[10px] text-red-600 border-red-500/40">DDM failed</Badge>
+                          <Badge variant="outline" className="text-[10px] text-red-600 border-red-500/40">E-Mandate failed</Badge>
                         ) : (
-                          <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-500/40">DDM mandate pending</Badge>
+                          <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-500/40">E-Mandate pending</Badge>
                         )
                       )}
                       <Badge variant="outline" className={g.status === "active" ? "text-green-600 border-green-500" : g.status === "completed" ? "text-primary border-primary" : "text-muted-foreground"}>
@@ -827,7 +827,7 @@ export function SandboxAjoTab() {
                         e.stopPropagation();
                         setMandateGroup(g);
                       }}>
-                        Authorize DDM Mandate (₦{AJO_DDM_FEE})
+                        Authorize E-Mandate (₦{AJO_DDM_FEE})
                       </Button>
                     )}
                     {myMandate === "awaiting_approval" && (
@@ -835,7 +835,7 @@ export function SandboxAjoTab() {
                         e.stopPropagation();
                         const r = await products.checkGroupMandateStatus(g.id);
                         if ((r as any)?.data?.bank_approved) {
-                          toast({ title: "Mandate approved", description: "The bank has approved your Direct Debit Mandate." });
+                          toast({ title: "Mandate approved", description: "The bank has approved your E-Mandate." });
                         } else {
                           toast({ title: "Still awaiting bank approval", description: `Current status: ${(r as any)?.data?.bank_approval_status || "Pending"}` });
                         }

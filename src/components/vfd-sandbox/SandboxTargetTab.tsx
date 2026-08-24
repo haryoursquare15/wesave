@@ -162,7 +162,7 @@ export function SandboxTargetTab() {
             {isIndependent ? "Independent" : "Group Wallet"}
           </Badge>
           <Badge variant={t.funding_mode === "ddm" ? "default" : "outline"}>
-            Funding: {t.funding_mode === "ddm" ? "DDM (bank)" : "Wallet"}
+            Funding: {t.funding_mode === "ddm" ? "E-Mandate (bank)" : "Wallet"}
           </Badge>
         </div>
 
@@ -173,7 +173,7 @@ export function SandboxTargetTab() {
               <p className="font-medium">Funding mode</p>
               <p className="text-muted-foreground">
                 {t.funding_mode === "ddm"
-                  ? "Direct Debit Mandate — contributions are pulled from members' banks."
+                  ? "E-Mandate — contributions are pulled from members' banks."
                   : "Wallet debit — contributions are pulled from members' Vestara wallets."}
               </p>
               {t.funding_mode === "ddm" && t.mandate_reference && (
@@ -185,7 +185,7 @@ export function SandboxTargetTab() {
               const r = await products.updateTargetSettings({ target_id: t.id, funding_mode: next });
               if (r?.data) { toast({ title: `Switched to ${next.toUpperCase()}` }); loadDetail(t.id); }
             }}>
-              Switch to {t.funding_mode === "ddm" ? "Wallet" : "DDM"}
+              Switch to {t.funding_mode === "ddm" ? "Wallet" : "E-Mandate"}
             </Button>
           </div>
         )}
@@ -224,11 +224,11 @@ export function SandboxTargetTab() {
           const label = ms === "awaiting_approval" ? "Bank approval pending"
             : ms === "failed" ? "Mandate failed — re-authorize"
             : ms === "expired" ? "Mandate expired — re-authorize"
-            : "Authorize DDM Mandate";
+            : "Authorize E-Mandate";
           return (
             <div className="p-3 rounded-xl border border-amber-500/40 bg-amber-500/10 flex items-center justify-between gap-2">
               <div className="text-xs">
-                <p className="font-semibold text-amber-700 dark:text-amber-300">Direct Debit Mandate required</p>
+                <p className="font-semibold text-amber-700 dark:text-amber-300">E-Mandate required</p>
                 <p className="text-muted-foreground">Authorize your bank account to enable auto-contributions for this Target Ajo.</p>
               </div>
               <Button size="sm" onClick={() => setMandateSubject({
@@ -525,12 +525,12 @@ export function SandboxTargetTab() {
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="wallet">Wallet debit (Vestara balance)</SelectItem>
-                  <SelectItem value="ddm">Direct Debit Mandate (VFD bank debit)</SelectItem>
+                  <SelectItem value="ddm">E-Mandate (VFD bank debit)</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-[11px] text-muted-foreground">
                 {form.funding_mode === "ddm"
-                  ? "Each contribution is pulled straight from members' bank accounts via VFD DDM — no wallet balance needed."
+                  ? "Each contribution is pulled straight from members' bank accounts via the VFD e-mandate — no wallet balance needed."
                   : "Members fund their wallet and contributions are debited from there."}
               </p>
             </div>

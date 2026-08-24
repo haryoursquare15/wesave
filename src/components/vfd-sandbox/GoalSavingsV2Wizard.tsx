@@ -133,7 +133,7 @@ export function GoalSavingsV2Wizard({ onClose, onCreated, walletAvailable }: Pro
     }
     setPinGate({
       purpose: "Create Goal Savings",
-      description: `Authorize Direct Debit Mandate (${fmt(quote.mandate_fee)} setup fee)`,
+      description: `Authorize E-Mandate (${fmt(quote.mandate_fee)} setup fee)`,
       onAuthorized: async () => {
         setSubmitting(true);
         try {
@@ -417,7 +417,7 @@ export function GoalSavingsV2Wizard({ onClose, onCreated, walletAvailable }: Pro
         />
       )}
 
-      {/* Direct Debit Mandate authorization — VFD E-Mandate Create + NIBSS ₦50 leg */}
+      {/* E-Mandate authorization — VFD E-Mandate Create + NIBSS ₦50 leg */}
       <MandateAuthorizationDialog
         subject={mandateSubject}
         onClose={() => setMandateSubject(null)}
