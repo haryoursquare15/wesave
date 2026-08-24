@@ -669,8 +669,9 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
             {recentTransactions.slice(0, 5).map((tx, i) => {
               const meta = getTxMeta(tx.transaction_type);
               const TxIcon = meta.icon;
+              const info = describeTransaction(tx);
               const isCredit = tx.transaction_type === "credit" || tx.transaction_type === "unlock" || tx.transaction_type === "interest";
-              const displayLabel = tx.description || (tx.transaction_type === "unlock" ? "Unlocked to wallet" : tx.transaction_type);
+              const displayLabel = info.title;
               return (
                 <motion.div
                   key={tx.id}
