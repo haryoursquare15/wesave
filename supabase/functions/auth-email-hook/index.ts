@@ -218,11 +218,33 @@ async function handleWebhook(req: Request): Promise<Response> {
     )
   }
 
+  // Client used for the greeting-name lookup and for enqueueing.
+  const supabase = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  )
+
+  // Greeting name: same source of truth as in-app greetings (profiles.full_name).
+  // Read-only — falls back to "there" when unknown.
+  let recipientName = 'there'
+  try {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('full_name')
+      .eq('email', payload.data.email)
+      .maybeSingle()
+    const first = String(profile?.full_name || '').trim().split(/\s+/)[0]
+    if (first) recipientName = first
+  } catch (_e) {
+    // non-fatal: keep the generic greeting
+  }
+
   // Build template props from payload.data (HookData structure)
   const templateProps = {
     siteName: SITE_NAME,
     siteUrl: `https://${ROOT_DOMAIN}`,
     recipient: payload.data.email,
+    recipientName,
     confirmationUrl: payload.data.url,
     token: payload.data.token,
     email: payload.data.email,
@@ -237,10 +259,7 @@ async function handleWebhook(req: Request): Promise<Response> {
   })
 
   // Enqueue email for async processing by the dispatcher (process-email-queue).
-  const supabase = createClient(
-    Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-  )
+
 
   const messageId = crypto.randomUUID()
 
