@@ -8830,13 +8830,22 @@ Deno.serve(async (req) => {
       "send_bill_reminders",
       "poll_pending_mandates",
       "reconcile_pending_bills_cron",
+      "auto_start_pending_groups",
     ]);
+    // Thrift sweep + swap-window auto-start: pg_cron authenticates with the
+    // DB-held thrift_sweep token.
+    if ((action === "sandbox_auto_contribute" || action === "auto_start_pending_groups")
+      && await assertCronToken(req, "thrift_sweep")) {
+      if (action === "auto_start_pending_groups") return await handleAutoStartPendingGroups("system", body);
+      return await handleSandboxAutoContribute("system", body);
+    }
     if (action === "reconcile_pending_bills_cron" && await assertCronToken(req, "bills_reconciler")) {
       return await handleReconcilePendingBills("system", body);
     }
     if (action === "recover_stuck_split_settlements" && await assertCronToken(req, "bills_reconciler")) {
       return await handleRecoverStuckSplitSettlements();
     }
+
     // Ops-only: force the bank-level reversal sweep for failed bills whose real
     // funding leg is still sitting in the corporate pool.
     if (action === "reverse_stranded_bill_funding" && await assertCronToken(req, "bills_reconciler")) {
