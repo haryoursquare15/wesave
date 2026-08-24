@@ -463,6 +463,13 @@ function calculatePlatformFee(grossAmount: number): number {
   return Math.min(Math.round(grossAmount * 0.01 * 100) / 100, 500);
 }
 
+// Default-contribution penalty: 5% of the missed contribution, min ₦100, max ₦2,000.
+function calculateContributionPenalty(contributionAmount: number): number {
+  const pct = Math.round(contributionAmount * 0.05 * 100) / 100;
+  return Math.min(Math.max(pct, 100), 2000);
+}
+
+
 // =============================================
 // FISHER-YATES RANDOMIZATION (matches production)
 // =============================================
