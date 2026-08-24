@@ -2,7 +2,14 @@
 //
 // Owns the full mandate lifecycle for BOTH recurring products:
 //   product_type = 'thrift'         (Ajo / thrift group contributions)
+//   product_type = 'target_ajo'     (Target Ajo group contributions)
 //   product_type = 'fd_investment'  (fixed-deposit / savings recurring deposits)
+//
+// Collection ownership (exactly one worker collects per product, and all three
+// call the SAME shared `collectMandateDebit`):
+//   thrift        -> vfd-sandbox-products `sandbox_auto_contribute` cycle sweep
+//   fd_investment -> goalsave-debit-worker (installment schedule)
+//   target_ajo    -> this engine's `run_due_debits`
 //
 // Architecture rules enforced here:
 //  * Every VFD call runs server-side; debit + polling actions require the
@@ -29,7 +36,8 @@ import {
   addCycles,
   checkMandateApproval,
   createMandate,
-  debitMandate,
+  collectMandateDebit,
+  markAttemptLedgerPosted,
   getLastMandateTokenSource,
   probeMandateTokenSources,
   probeCredentialMint,
@@ -165,8 +173,8 @@ async function handleCreateMandate(userId: string, body: Record<string, unknown>
   const supabase = db();
   const productType = String(body.product_type || "");
   const productReference = String(body.product_reference || "").trim();
-  if (!["thrift", "fd_investment"].includes(productType)) {
-    return json({ error: "product_type must be 'thrift' or 'fd_investment'", code: "INVALID_PRODUCT_TYPE" }, 400);
+  if (!["thrift", "target_ajo", "fd_investment"].includes(productType)) {
+    return json({ error: "product_type must be 'thrift', 'target_ajo' or 'fd_investment'", code: "INVALID_PRODUCT_TYPE" }, 400);
   }
   if (!productReference) return json({ error: "product_reference is required", code: "INVALID_PRODUCT" }, 400);
 
@@ -288,6 +296,11 @@ async function markProductFailed(mandate: Record<string, any>, reason: string) {
         .update({ mandate_status: "failed" })
         .eq("group_id", mandate.product_reference)
         .eq("user_id", mandate.user_id);
+    } else if (mandate.product_type === "target_ajo") {
+      await supabase.from("vfd_sandbox_target_members")
+        .update({ mandate_status: "failed" })
+        .eq("target_id", mandate.product_reference)
+        .eq("user_id", mandate.user_id);
     } else {
       await supabase.from("vfd_savings_debit_schedule")
         .update({ status: "failed", failed_reason: reason })
@@ -297,6 +310,28 @@ async function markProductFailed(mandate: Record<string, any>, reason: string) {
     }
   } catch (e) {
     console.error("[mandate-engine] product failure flag failed", e);
+  }
+}
+
+/** Mirror a bank approval back onto the owning product row. */
+async function markProductApproved(mandate: Record<string, any>, nowIso: string) {
+  const supabase = db();
+  try {
+    if (mandate.product_type === "thrift") {
+      await supabase.from("vfd_sandbox_group_members")
+        .update({ mandate_status: "authorized", mandate_authorized_at: nowIso })
+        .eq("group_id", mandate.product_reference).eq("user_id", mandate.user_id);
+    } else if (mandate.product_type === "target_ajo") {
+      await supabase.from("vfd_sandbox_target_members")
+        .update({ mandate_status: "authorized", mandate_authorized_at: nowIso })
+        .eq("target_id", mandate.product_reference).eq("user_id", mandate.user_id);
+    } else {
+      await supabase.from("vestara_savings")
+        .update({ mandate_status: "authorized", mandate_authorized_at: nowIso })
+        .eq("id", mandate.product_reference);
+    }
+  } catch (e) {
+    console.error("[mandate-engine] product approval flag failed", e);
   }
 }
 
@@ -328,6 +363,7 @@ async function handlePollPending(limit: number) {
         status: "bank_approved", bank_approved_at: nowIso, resolved_at: nowIso,
         vfd_payload: approval.raw,
       }).eq("id", m.id).eq("status", "pending");
+      await markProductApproved(m, nowIso);
       await logEvent(m.id, m.user_id, m.mandate_reference, "bank_approved", { status: approval.status });
       await notify(m.user_id as string, "Direct Debit Mandate active",
         "Your bank approved the mandate. Scheduled contributions will now be collected automatically.",
@@ -379,27 +415,61 @@ function dueDateForMandate(m: Record<string, any>): string | null {
   return now.getUTCDate() === start.getUTCDate() ? today() : null;
 }
 
-async function resolveDueDate(m: Record<string, any>): Promise<{ date: string; scheduleId?: string } | null> {
-  if (m.product_type === "fd_investment") {
-    const { data: row } = await db().from("vfd_savings_debit_schedule")
-      .select("id, scheduled_at, amount")
-      .eq("savings_id", m.product_reference)
-      .eq("user_id", m.user_id)
-      .eq("status", "pending")
-      .lte("scheduled_at", new Date().toISOString())
-      .order("scheduled_at", { ascending: true })
-      .limit(1).maybeSingle();
-    if (!row) return null;
-    return { date: String(row.scheduled_at).slice(0, 10), scheduleId: row.id as string };
-  }
+async function resolveDueDate(m: Record<string, any>): Promise<{ date: string } | null> {
   const date = dueDateForMandate(m);
   return date ? { date } : null;
 }
 
+/**
+ * Book the internal leg for a Target Ajo collection. Called ONLY after VFD has
+ * confirmed the debit with status "00".
+ */
+async function postTargetAjoContribution(
+  m: Record<string, any>,
+  amount: number,
+): Promise<boolean> {
+  const supabase = db();
+  try {
+    const { error: insErr } = await supabase.from("vfd_sandbox_target_contributions").insert({
+      target_id: m.product_reference,
+      user_id: m.user_id,
+      amount,
+      status: "completed",
+    });
+    if (insErr) throw insErr;
+
+    const { data: member } = await supabase.from("vfd_sandbox_target_members")
+      .select("id, contributed_amount")
+      .eq("target_id", m.product_reference).eq("user_id", m.user_id).maybeSingle();
+    if (member) {
+      await supabase.from("vfd_sandbox_target_members")
+        .update({ contributed_amount: Number(member.contributed_amount || 0) + amount })
+        .eq("id", member.id);
+    }
+
+    const { data: target } = await supabase.from("vfd_sandbox_targets")
+      .select("id, total_contributed").eq("id", m.product_reference).maybeSingle();
+    if (target) {
+      await supabase.from("vfd_sandbox_targets")
+        .update({ total_contributed: Number(target.total_contributed || 0) + amount })
+        .eq("id", target.id);
+    }
+    return true;
+  } catch (e) {
+    console.error("[mandate-engine] target ajo ledger post failed", e);
+    return false;
+  }
+}
+
 async function handleRunDueDebits(limit: number) {
   const supabase = db();
+  // Only the products this engine OWNS are collected here. thrift is collected
+  // by the cycle sweep and fd_investment by goalsave-debit-worker — both call
+  // the same shared `collectMandateDebit`, so running them here too would only
+  // create a second scheduling path for the same money.
   const { data: mandates } = await supabase.from("mandates")
-    .select("*").eq("status", "bank_approved").order("created_at", { ascending: true }).limit(limit);
+    .select("*").eq("status", "bank_approved").eq("product_type", "target_ajo")
+    .order("created_at", { ascending: true }).limit(limit);
 
   const results: Array<Record<string, unknown>> = [];
 
@@ -407,119 +477,65 @@ async function handleRunDueDebits(limit: number) {
     const due = await resolveDueDate(m);
     if (!due) { results.push({ mandate_id: m.id, outcome: "not_due" }); continue; }
 
-    const txRef = `vestara-ddm-debit-${m.id}-${due.date}`;
-
-    // IDEMPOTENCY GATE — atomically claim (mandate_id, scheduled_date).
-    // A second cron fire / concurrent invocation gets claimed:false and never
-    // reaches the VFD debit call below.
-    const { data: claim, error: claimErr } = await supabase.rpc("claim_mandate_debit_attempt", {
-      _mandate_id: m.id,
-      _scheduled_date: due.date,
-      _amount: Number(m.amount),
-      _transaction_reference: txRef,
+    // ONE shared collection path: atomic attempt claim + real VFD ACCOUNT DEBIT.
+    const collection = await collectMandateDebit({
+      db: supabase,
+      mandateId: m.id as string,
+      mandateReference: m.mandate_reference as string,
+      amount: Number(m.amount),
+      purpose: "Vestara Target Ajo contribution",
+      productRef: m.product_reference as string,
+      scheduledDate: due.date,
     });
-    const claimResult = (claim || {}) as Record<string, any>;
-    if (claimErr || !claimResult.claimed) {
-      results.push({ mandate_id: m.id, outcome: "skipped", reason: claimResult.reason || claimErr?.message });
+
+    if (collection.skipped) {
+      results.push({ mandate_id: m.id, outcome: "skipped", reason: collection.reason });
       continue;
     }
 
-    const attemptId = claimResult.attempt_id as string;
     await logEvent(m.id, m.user_id, m.mandate_reference, "debit_attempted", {
-      attempt_id: attemptId, scheduled_date: due.date, amount: Number(m.amount), transaction_reference: txRef,
+      attempt_id: collection.attemptId, scheduled_date: due.date, amount: Number(m.amount),
     });
 
-    const debit = await debitMandate({
-      mandateReference: m.mandate_reference as string,
-      amount: Number(m.amount),
-      narration: `Vestara ${m.product_type === "thrift" ? "thrift" : "investment"} contribution`,
-      transactionReference: txRef,
-      idempotencyKey: claimResult.idempotency_key as string,
-    });
-
-    if (!debit.ok) {
-      // No automatic retry within this cycle — the attempt row stays and blocks
-      // any further debit for this scheduled date.
-      await supabase.from("mandate_debit_attempts").update({
-        status: "failed",
-        failure_class: debit.failureClass,
-        failure_reason: debit.message,
-        vfd_response: debit.raw,
-        needs_review: debit.failureClass !== "insufficient_funds",
-        completed_at: new Date().toISOString(),
-      }).eq("id", attemptId);
-
-      if (debit.failureClass === "mandate_revoked") {
+    if (!collection.collected) {
+      if (collection.failureClass === "mandate_revoked") {
         await supabase.from("mandates").update({
-          status: "revoked", resolved_at: new Date().toISOString(), rejection_reason: debit.message,
+          status: "revoked", resolved_at: new Date().toISOString(), rejection_reason: collection.reason,
         }).eq("id", m.id);
-        await markProductFailed(m, debit.message);
+        await markProductFailed(m, collection.reason || "Mandate revoked");
       }
 
       await logEvent(m.id, m.user_id, m.mandate_reference, "debit_failed", {
-        attempt_id: attemptId, scheduled_date: due.date, failure_class: debit.failureClass,
-        reason: debit.message, vfd: debit.raw,
+        attempt_id: collection.attemptId, scheduled_date: due.date,
+        failure_class: collection.failureClass, reason: collection.reason, vfd: collection.raw,
       });
 
-      if (debit.failureClass === "insufficient_funds") {
+      if (collection.failureClass === "insufficient_funds") {
         await notify(m.user_id as string, "Contribution could not be collected",
           `Your bank declined today's NGN ${Number(m.amount).toLocaleString()} contribution for insufficient funds. Fund the account before the next scheduled date.`,
           "mandate_debit_failed");
-      } else if (debit.failureClass === "mandate_revoked") {
+      } else if (collection.failureClass === "mandate_revoked") {
         await notify(m.user_id as string, "Direct Debit Mandate is no longer active",
           "Your bank reports the mandate as revoked or inactive. Set up a new mandate to resume automatic contributions.",
           "mandate_revoked");
       }
 
-      results.push({ mandate_id: m.id, outcome: "failed", failure_class: debit.failureClass });
+      results.push({ mandate_id: m.id, outcome: "failed", failure_class: collection.failureClass });
       continue;
     }
 
     // CONFIRMED by VFD (status "00") — only now does the ledger move.
-    let ledgerPosted = false;
-    try {
-      const { data: dep, error: depErr } = await supabase.rpc("vestara_deposit", {
-        _user_id: m.user_id,
-        _amount: Number(m.amount),
-        _reference: txRef,
-        _metadata: {
-          source: "mandate_debit",
-          product_type: m.product_type,
-          product_reference: m.product_reference,
-          mandate_id: m.id,
-          mandate_reference: m.mandate_reference,
-          scheduled_date: due.date,
-          pool_nuban: VFD_POOL_NUBAN,
-        },
-      });
-      ledgerPosted = !depErr && !!(dep as { success?: boolean } | null)?.success;
-      if (!ledgerPosted) console.error("[mandate-engine] ledger post failed", txRef, depErr);
-    } catch (e) {
-      console.error("[mandate-engine] ledger post threw", txRef, e);
-    }
-
-    await supabase.from("mandate_debit_attempts").update({
-      status: "succeeded",
-      vfd_response: debit.raw,
-      ledger_posted: ledgerPosted,
-      ledger_reference: ledgerPosted ? txRef : null,
-      needs_review: !ledgerPosted,
-      completed_at: new Date().toISOString(),
-    }).eq("id", attemptId);
-
-    if (due.scheduleId) {
-      await supabase.from("vfd_savings_debit_schedule").update({
-        status: "collected", collected_at: new Date().toISOString(), vfd_reference: txRef,
-      }).eq("id", due.scheduleId);
-    }
+    const txRef = `vestara-ddm-debit-${m.id}-${due.date}`;
+    const ledgerPosted = await postTargetAjoContribution(m, Number(m.amount));
+    await markAttemptLedgerPosted(supabase, collection.attemptId, ledgerPosted ? txRef : null, ledgerPosted);
 
     await logEvent(m.id, m.user_id, m.mandate_reference, "debit_succeeded", {
-      attempt_id: attemptId, scheduled_date: due.date, amount: Number(m.amount),
+      attempt_id: collection.attemptId, scheduled_date: due.date, amount: Number(m.amount),
       transaction_reference: txRef, ledger_posted: ledgerPosted,
     });
 
     await notify(m.user_id as string, "Contribution collected",
-      `NGN ${Number(m.amount).toLocaleString()} was debited from your bank account for your ${m.product_type === "thrift" ? "thrift group" : "investment"} plan.`,
+      `NGN ${Number(m.amount).toLocaleString()} was debited from your bank account for your Target Ajo group.`,
       "mandate_debit_succeeded");
 
     results.push({ mandate_id: m.id, outcome: "succeeded", ledger_posted: ledgerPosted });

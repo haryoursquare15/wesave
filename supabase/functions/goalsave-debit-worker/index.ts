@@ -1,13 +1,19 @@
-// Goal Savings 2.0 — recurring DDM settlement worker.
+// Goal Savings 2.0 — recurring DDM collection worker.
 //
 // IMPORTANT: Recurring contributions do NOT debit the user's Vestara wallet.
 // Funds flow VFD Direct Debit Mandate (DDM) → settlement pool → goal savings
-// lock account. This worker books the internal credit leg per scheduled
-// installment once the DDM has settled at VFD.
+// lock account.
+//
+// This worker NEVER assumes money arrived. For every due installment it calls
+// the ONE shared collection entry point (`collectMandateDebit` in
+// _shared/vfd-mandate.ts), which atomically claims the attempt and fires the
+// real VFD ACCOUNT DEBIT call. The internal ledger leg is booked only after
+// VFD returns status "00".
 //
 // Reference convention (Vestara-originated): VES-GOAL-DEBIT-<savings_id>-<seq>
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { verifyCronToken, unauthorized } from "../_shared/cron-auth.ts";
+import { collectMandateDebit, markAttemptLedgerPosted } from "../_shared/vfd-mandate.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -94,8 +100,73 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // Book the DDM-funded credit: settlement (debit) → user's lock account (credit)
-      // No user wallet involvement — funds came in via VFD DDM.
+      // --- REAL MONEY FIRST -------------------------------------------------
+      // Pull the installment from the customer's bank via the mandate. No
+      // ledger movement happens unless VFD confirms the debit.
+      const { data: mandateRow } = await supabase
+        .from("mandates")
+        .select("id, mandate_reference, status")
+        .eq("product_type", "fd_investment")
+        .eq("product_reference", r.savings_id)
+        .eq("user_id", r.user_id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!mandateRow || mandateRow.status !== "bank_approved") {
+        // Not bank-approved yet — leave the installment scheduled, never credit.
+        await supabase.from("vfd_savings_debit_schedule")
+          .update({ failed_reason: mandateRow ? `Mandate not bank-approved (${mandateRow.status})` : "Mandate not registered" })
+          .eq("id", r.id);
+        skipped++;
+        continue;
+      }
+
+      const collection = await collectMandateDebit({
+        db: supabase,
+        mandateId: mandateRow.id as string,
+        mandateReference: mandateRow.mandate_reference as string,
+        amount: Number(r.amount),
+        purpose: `Vestara Goal Savings installment ${r.seq}`,
+        productRef: r.savings_id,
+        scheduledDate: String(r.scheduled_at).slice(0, 10),
+      });
+
+      if (collection.skipped) {
+        // Another worker already claimed this (mandate, date) pair.
+        skipped++;
+        continue;
+      }
+
+      if (!collection.collected) {
+        const attempts = (r.attempt_count || 0) + 1;
+        const reason = collection.reason || "VFD debit declined";
+        await supabase.from("vfd_savings_debit_schedule")
+          .update({
+            status: attempts >= MAX_ATTEMPTS ? "failed" : "scheduled",
+            attempt_count: attempts,
+            failed_reason: reason.slice(0, 300),
+            scheduled_at: attempts >= MAX_ATTEMPTS
+              ? r.scheduled_at
+              : new Date(Date.now() + 6 * 3600 * 1000).toISOString(),
+          })
+          .eq("id", r.id);
+
+        await supabase.from("user_notifications").insert({
+          user_id: r.user_id,
+          title: "Goal Savings contribution not collected",
+          message: collection.failureClass === "insufficient_funds"
+            ? `Your bank declined the NGN ${Number(r.amount).toLocaleString()} Goal Savings installment for insufficient funds. Please fund the account before the next scheduled date.`
+            : `We could not collect your NGN ${Number(r.amount).toLocaleString()} Goal Savings installment. ${reason}`,
+          notification_type: "mandate_debit_failed",
+        }).then(() => {}, () => {});
+
+        failed++;
+        continue;
+      }
+
+      // --- VFD CONFIRMED (status "00") — now book the internal credit leg ----
+      // settlement (debit) → user's lock account (credit). No user wallet involvement.
       const reference = `VES-GOAL-DEBIT-${r.savings_id}-${r.seq}`;
       const { data: txResult, error: txErr } = await supabase.rpc("vestara_post_transaction", {
         _type: "lock",
@@ -112,6 +183,9 @@ Deno.serve(async (req) => {
           savings_id: r.savings_id,
           seq: r.seq,
           funding_channel: "vfd_direct_debit_mandate",
+          mandate_id: mandateRow.id,
+          mandate_reference: mandateRow.mandate_reference,
+          vfd_debit_attempt_id: collection.attemptId,
         },
       });
 
@@ -121,21 +195,22 @@ Deno.serve(async (req) => {
         (typeof txResult === "object" ? (txResult as Record<string, unknown>).success !== false : true);
 
       if (!okPosted) {
+        // Money WAS collected at VFD but the internal leg failed — flag for ops
+        // rather than retrying the debit, which would double-charge the customer.
         const reason = txErr?.message || JSON.stringify(txResult)?.slice(0, 200) || "post_transaction_failed";
-        const attempts = (r.attempt_count || 0) + 1;
+        await markAttemptLedgerPosted(supabase, collection.attemptId, null, false);
         await supabase.from("vfd_savings_debit_schedule")
           .update({
-            status: attempts >= MAX_ATTEMPTS ? "failed" : "scheduled",
-            attempt_count: attempts,
-            failed_reason: reason,
-            scheduled_at: attempts >= MAX_ATTEMPTS
-              ? r.scheduled_at
-              : new Date(Date.now() + 6 * 3600 * 1000).toISOString(),
+            status: "needs_review",
+            attempt_count: (r.attempt_count || 0) + 1,
+            failed_reason: `COLLECTED AT VFD BUT LEDGER POST FAILED: ${reason}`.slice(0, 300),
           })
           .eq("id", r.id);
         failed++;
         continue;
       }
+
+      await markAttemptLedgerPosted(supabase, collection.attemptId, reference, true);
 
       // Mark schedule succeeded
       await supabase.from("vfd_savings_debit_schedule")
@@ -174,6 +249,14 @@ Deno.serve(async (req) => {
       }
 
       await supabase.from("vestara_savings").update(updates).eq("id", r.savings_id);
+
+      await supabase.from("user_notifications").insert({
+        user_id: r.user_id,
+        title: "Goal Savings contribution collected",
+        message: `NGN ${Number(r.amount).toLocaleString()} was debited from your bank account and added to your Goal Savings plan.`,
+        notification_type: "mandate_debit_succeeded",
+      }).then(() => {}, () => {});
+
       succeeded++;
     } catch (e) {
       failed++;

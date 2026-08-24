@@ -443,3 +443,243 @@ export async function debitMandate(params: {
       failureClass: "bank_error", message: e instanceof Error ? e.message : String(e) };
   }
 }
+
+// ---------------------------------------------------------------------------
+// SHARED HELPERS — the single implementation every product must use.
+// ---------------------------------------------------------------------------
+
+/**
+ * VFD-held accounts (999999 sandbox alias / 090110 CBN code) are rejected by
+ * NIBSS as e-mandate payers — the payer must be an external commercial bank.
+ * Enforced identically for thrift, Target Ajo and Goal Save.
+ */
+export function isVfdBankCode(code: string): boolean {
+  const c = (code || "").replace(/^0+/, "");
+  return c === "999999" || c === "90110" || code === "090110";
+}
+
+/** ONE implementation of mandate end-date math (was duplicated 3x). */
+export function computeMandateEndDate(period: string, totalCycles: number, from?: Date): Date {
+  const freq = mapFrequencyToVfd(period);
+  // +2 cycle safety buffer so the mandate never expires before the last debit.
+  return addCycles(from || new Date(), freq, Math.max(1, Number(totalCycles) || 1) + 2);
+}
+
+export interface MandateFeeResult {
+  ok: boolean;
+  fee: number;
+  available?: number;
+}
+
+/**
+ * ONE fee path: ₦100 setup fee = ₦50 Vestara management + ₦50 NIBSS.
+ * MUST only be called AFTER the mandate provider token check has succeeded.
+ */
+export async function chargeMandateSetupFee(
+  db: { rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>; from: (t: string) => any },
+  userId: string,
+  feeRef: string,
+  ctx: Record<string, unknown>,
+): Promise<MandateFeeResult> {
+  const { error } = await db.rpc("vestara_withdraw", {
+    _user_id: userId,
+    _amount: MANDATE_SETUP_FEE,
+    _reference: feeRef,
+    _metadata: { source: "mandate_setup_fee", ...ctx },
+  });
+  if (error) return { ok: false, fee: MANDATE_SETUP_FEE };
+  await db.from("vestara_fee_ledger").insert([
+    {
+      user_id: userId, fee_type: "mandate_setup_internal", amount: MANDATE_INTERNAL_SHARE,
+      reference: `${feeRef}-INT`, tx_reference: feeRef,
+      metadata: { ...ctx, split: "internal", parent_fee: MANDATE_SETUP_FEE },
+    },
+    {
+      user_id: userId, fee_type: "mandate_setup_nibss", amount: MANDATE_NIBSS_SHARE,
+      reference: `${feeRef}-NIBSS`, tx_reference: feeRef,
+      metadata: { ...ctx, split: "nibss", parent_fee: MANDATE_SETUP_FEE },
+    },
+  ]);
+  return { ok: true, fee: MANDATE_SETUP_FEE };
+}
+
+export async function refundMandateSetupFee(
+  db: { rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }> },
+  userId: string,
+  feeRef: string,
+  ctx: Record<string, unknown>,
+): Promise<boolean> {
+  try {
+    const { data, error } = await db.rpc("vestara_deposit", {
+      _user_id: userId,
+      _amount: MANDATE_SETUP_FEE,
+      _reference: `${feeRef}-REFUND`,
+      _metadata: { source: "mandate_setup_fee_refund", original_reference: feeRef, ...ctx },
+    });
+    return !error && !!(data as { success?: boolean } | null)?.success;
+  } catch {
+    return false;
+  }
+}
+
+export interface CollectDebitResult {
+  /** TRUE only when VFD answered status === "00". Nothing may be booked otherwise. */
+  collected: boolean;
+  /** True when a concurrent/duplicate run already owns this scheduled slot. */
+  skipped: boolean;
+  reason: string;
+  attemptId: string | null;
+  transactionReference: string;
+  failureClass: MandateDebitResult["failureClass"] | "none";
+  raw: Record<string, unknown>;
+}
+
+/**
+ * THE single mandate-collection entry point. Every product's collection worker
+ * (thrift cycle sweep, Target Ajo sweep, Goal Save debit worker) calls this and
+ * nothing else.
+ *
+ * Guarantees:
+ *  1. `claim_mandate_debit_attempt` atomically claims (mandate_id, scheduled_date)
+ *     BEFORE any VFD call. A duplicate/concurrent run returns skipped:true.
+ *  2. The real VFD ACCOUNT DEBIT endpoint is called with the claim's
+ *     idempotency key, so a network retry cannot double-charge at the bank.
+ *  3. `collected` is true ONLY when VFD returns status "00". Callers must post
+ *     product ledger entries exclusively on `collected === true` — never on an
+ *     assumed or merely-scheduled basis.
+ */
+export async function collectMandateDebit(params: {
+  db: any;
+  mandateId: string;
+  mandateReference: string;
+  amount: number;
+  purpose: string;
+  productRef: string;
+  scheduledDate: string;
+  idempotencyKey?: string;
+}): Promise<CollectDebitResult> {
+  const { db } = params;
+  const scheduledDate = params.scheduledDate.slice(0, 10);
+  const txRef = `vestara-ddm-debit-${params.mandateId}-${scheduledDate}`;
+
+  const { data: claim, error: claimErr } = await db.rpc("claim_mandate_debit_attempt", {
+    _mandate_id: params.mandateId,
+    _scheduled_date: scheduledDate,
+    _amount: Number(params.amount),
+    _transaction_reference: txRef,
+  });
+  const claimResult = (claim || {}) as Record<string, any>;
+  if (claimErr || !claimResult.claimed) {
+    return {
+      collected: false, skipped: true,
+      reason: String(claimResult.reason || (claimErr as any)?.message || "already_claimed"),
+      attemptId: (claimResult.attempt_id as string) || null,
+      transactionReference: txRef, failureClass: "none", raw: {},
+    };
+  }
+
+  const attemptId = claimResult.attempt_id as string;
+  const debit = await debitMandate({
+    mandateReference: params.mandateReference,
+    amount: Number(params.amount),
+    narration: params.purpose,
+    transactionReference: txRef,
+    idempotencyKey: params.idempotencyKey || (claimResult.idempotency_key as string) || txRef,
+  });
+
+  if (!debit.ok) {
+    await db.from("mandate_debit_attempts").update({
+      status: "failed",
+      failure_class: debit.failureClass,
+      failure_reason: debit.message,
+      vfd_response: debit.raw,
+      needs_review: debit.failureClass !== "insufficient_funds",
+      completed_at: new Date().toISOString(),
+    }).eq("id", attemptId);
+    return {
+      collected: false, skipped: false, reason: debit.message, attemptId,
+      transactionReference: txRef, failureClass: debit.failureClass, raw: debit.raw,
+    };
+  }
+
+  await db.from("mandate_debit_attempts").update({
+    status: "succeeded",
+    vfd_response: debit.raw,
+    ledger_reference: txRef,
+    completed_at: new Date().toISOString(),
+  }).eq("id", attemptId);
+
+  return {
+    collected: true, skipped: false, reason: "VFD confirmed (status 00)", attemptId,
+    transactionReference: txRef, failureClass: "none", raw: debit.raw,
+  };
+}
+
+/** Mark the shared `mandates` registry row as ledger-posted for an attempt. */
+export async function markAttemptLedgerPosted(db: any, attemptId: string | null, reference: string | null, posted: boolean) {
+  if (!attemptId) return;
+  await db.from("mandate_debit_attempts").update({
+    ledger_posted: posted,
+    ledger_reference: posted ? reference : null,
+    needs_review: !posted,
+  }).eq("id", attemptId);
+}
+
+/**
+ * Register (or fetch) the canonical `mandates` row for a product mandate.
+ * Every product writes here so that collection idempotency, polling and the
+ * admin audit trail all read from ONE table.
+ */
+export async function registerMandate(db: any, row: {
+  user_id: string;
+  product_type: "thrift" | "target_ajo" | "fd_investment";
+  product_reference: string;
+  mandate_reference: string;
+  mandate_code?: string | null;
+  amount: number;
+  frequency: string;
+  start_date: string;
+  end_date: string;
+  payer: MandatePayer;
+  nibss_account?: string | null;
+  nibss_message?: string | null;
+  setup_fee_reference?: string | null;
+  vfd_payload?: Record<string, unknown>;
+}): Promise<string | null> {
+  try {
+    const { data, error } = await db.from("mandates").insert({
+      user_id: row.user_id,
+      product_type: row.product_type,
+      product_reference: row.product_reference,
+      mandate_reference: row.mandate_reference,
+      mandate_code: row.mandate_code || null,
+      status: "pending",
+      amount: row.amount,
+      frequency: row.frequency,
+      start_date: row.start_date,
+      end_date: row.end_date,
+      payer_bank_code: row.payer.bankCode,
+      payer_account_number: row.payer.accountNumber,
+      payer_phone: row.payer.phone,
+      payer_email: row.payer.email,
+      payer_address: row.payer.address,
+      nibss_account: row.nibss_account || null,
+      nibss_message: row.nibss_message || null,
+      setup_fee: MANDATE_SETUP_FEE,
+      setup_fee_internal_share: MANDATE_INTERNAL_SHARE,
+      setup_fee_nibss_share: MANDATE_NIBSS_SHARE,
+      setup_fee_reference: row.setup_fee_reference || null,
+      setup_fee_charged_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + MANDATE_EXPIRY_DAYS * 86400_000).toISOString(),
+      vfd_payload: row.vfd_payload || {},
+    }).select("id").single();
+    if (error) {
+      console.error("[mandate] registry insert failed", error);
+      return null;
+    }
+    return data.id as string;
+  } catch (e) {
+    console.error("[mandate] registry insert threw", e);
+    return null;
+  }
+}
