@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import vestaraBadge from "@/assets/vestara-badge.jpg";
+import { describeTransaction } from "@/lib/transactionLabels";
 
 interface BalanceData {
   totalBalance: number;
@@ -669,8 +670,9 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
             {recentTransactions.slice(0, 5).map((tx, i) => {
               const meta = getTxMeta(tx.transaction_type);
               const TxIcon = meta.icon;
+              const info = describeTransaction(tx);
               const isCredit = tx.transaction_type === "credit" || tx.transaction_type === "unlock" || tx.transaction_type === "interest";
-              const displayLabel = tx.description || (tx.transaction_type === "unlock" ? "Unlocked to wallet" : tx.transaction_type);
+              const displayLabel = info.title;
               return (
                 <motion.div
                   key={tx.id}
@@ -683,9 +685,12 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
                     <TxIcon className={`h-4 w-4 ${meta.color}`} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium capitalize text-foreground truncate">
+                    <p className="text-sm font-medium text-foreground truncate">
                       {displayLabel}
                     </p>
+                    {info.subtitle && (
+                      <p className="text-[10px] text-muted-foreground truncate">{info.subtitle}</p>
+                    )}
                     <p className="text-[10px] text-muted-foreground">
                       {new Date(tx.created_at).toLocaleDateString("en-NG", {
                         month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",

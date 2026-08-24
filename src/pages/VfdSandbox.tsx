@@ -262,11 +262,25 @@ function VfdSandboxInner() {
   }
 
   const mappedTransactions = vestara.transactions.flatMap((tx) => {
-    const fee = Number((tx.metadata as Record<string, unknown>)?.fee || 0);
+    const meta = (tx.metadata || {}) as Record<string, unknown>;
+    const fee = Number(meta.fee || 0);
     const gross = Number(tx.amount);
     const isPayout = tx.type === "thrift_payout";
     const net = isPayout && fee > 0 ? gross - fee : gross;
     const vfdMeta = (tx.reference && vfdRefIndex.get(tx.reference)) || { vfd_reference: null, session_id: null };
+
+    // Surface the richest context we have on the ledger row so history labels
+    // can say what the movement was actually for.
+    const metaStr = (k: string) => {
+      const v = meta[k];
+      return typeof v === "string" && v.trim() ? v.trim() : null;
+    };
+    const contextName =
+      metaStr("group_name") || metaStr("product_name") || metaStr("campaign_title") ||
+      metaStr("bill_name") || metaStr("product_code") || metaStr("source");
+    const richDescription = isPayout && fee > 0
+      ? `thrift payout (₦${gross.toLocaleString()} − ₦${fee.toLocaleString()} fee)`
+      : [tx.type.replace(/_/g, " "), contextName].filter(Boolean).join(" — ");
 
     const base = {
       id: tx.id,
@@ -280,12 +294,12 @@ function VfdSandboxInner() {
         : tx.type.includes("reversal") ? "credit"
         : "debit",
       amount: net,
-      description: isPayout && fee > 0
-        ? `thrift payout (₦${gross.toLocaleString()} − ₦${fee.toLocaleString()} fee)`
-        : tx.type.replace(/_/g, " "),
+      description: richDescription,
       reference: tx.reference,
       vfd_reference: vfdMeta.vfd_reference,
       session_id: vfdMeta.session_id,
+      beneficiary_name: metaStr("beneficiary_name"),
+      beneficiary_account: metaStr("to_account"),
       status: tx.status,
       created_at: tx.created_at,
     };

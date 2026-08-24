@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
+import { billCategoryFor } from "@/lib/transactionLabels";
 
 interface ReceiptRow {
   id: string;
@@ -103,7 +104,12 @@ export function SandboxBillReceipts() {
               <Receipt className="h-5 w-5 text-primary" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-foreground truncate">{r.biller_name}</p>
+              <p className="text-sm font-semibold text-foreground truncate">
+                {billCategoryFor(r.biller_name, `${r.category || ""} ${r.payment_item_name || ""}`)} — {r.biller_name}
+              </p>
+              {r.payment_item_name && (
+                <p className="text-[11px] text-muted-foreground truncate">{r.payment_item_name}</p>
+              )}
               <p className="text-xs text-muted-foreground truncate">{r.customer_id} • {formatDistanceToNow(new Date(r.paid_at), { addSuffix: true })}</p>
               {r.delivery_token && (
                 <p className="sm:hidden text-[11px] font-mono font-semibold text-primary truncate">
