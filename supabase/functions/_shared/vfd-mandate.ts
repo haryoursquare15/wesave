@@ -135,6 +135,11 @@ async function mintTokenWithPair(consumerKey: string, consumerSecret: string): P
 export async function probeCredentialMint(): Promise<Array<Record<string, unknown>>> {
   const pairs: Array<{ source: string; key?: string; secret?: string }> = [
     {
+      source: "emandate_consumer_pair",
+      key: Deno.env.get("VFD_EMANDATE_CONSUMER_KEY"),
+      secret: Deno.env.get("VFD_EMANDATE_CONSUMER_SECRET"),
+    },
+    {
       source: "mandate_consumer_pair",
       key: (Deno.env.get("VFD_MANDATE_CONSUMER_KEY_V2") || Deno.env.get("VFD_MANDATE_CONSUMER_KEY")),
       secret: (Deno.env.get("VFD_MANDATE_CONSUMER_SECRET_V2") || Deno.env.get("VFD_MANDATE_CONSUMER_SECRET")),
@@ -145,6 +150,7 @@ export async function probeCredentialMint(): Promise<Array<Record<string, unknow
       secret: Deno.env.get("VFD_CONSUMER_SECRET"),
     },
   ];
+
 
   const out: Array<Record<string, unknown>> = [];
   for (const p of pairs) {
