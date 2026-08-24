@@ -439,8 +439,24 @@ export function SandboxAjoTab() {
               </div>
             ))}
 
+            {(() => {
+              const me = members.find((mm: any) => mm.user_id === currentUserId);
+              const owed = Number(me?.outstanding_owed || 0);
+              if (owed <= 0) return null;
+              return (
+                <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs space-y-1">
+                  <p className="font-semibold text-destructive">Payouts on hold — you owe ₦{owed.toLocaleString()}</p>
+                  <p className="text-muted-foreground">
+                    This covers missed contributions and penalties. Your payout stays withheld until it's cleared —
+                    it is recovered automatically from your payout, or you can fund your wallet and ask your group admin to apply it.
+                  </p>
+                </div>
+              );
+            })()}
+
             {members.length === 0 ? (
               <p className="text-center text-sm text-muted-foreground py-4">No members yet</p>
+
             ) : members.map((m: any, i: number) => {
               const isMe = m.user_id === currentUserId;
               const myMembership = members.find((mm: any) => mm.user_id === currentUserId);
@@ -461,8 +477,12 @@ export function SandboxAjoTab() {
                   </div>
                   <div className="flex items-center gap-2">
                     {m.has_contributed_current && <Badge variant="secondary" className="text-[10px]">Contributed</Badge>}
+                    {Number(m.outstanding_owed || 0) > 0 && (
+                      <Badge variant="destructive" className="text-[10px]">Owes ₦{Number(m.outstanding_owed).toLocaleString()}</Badge>
+                    )}
                     {m.has_received_payout && <Badge className="text-[10px]">Received</Badge>}
                     {m.payout_position != null && <span className="text-muted-foreground">#{m.payout_position}</span>}
+
                     {canRequestSwap && (
                       <Button size="sm" variant="ghost" className="h-7 px-2 text-[11px]"
                         disabled={products.loading}

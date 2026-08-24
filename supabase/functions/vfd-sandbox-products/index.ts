@@ -1006,71 +1006,106 @@ async function processAutoPayout(
   // PRODUCTION PARITY: Tiered fee structure
   const platformFee = calculatePlatformFee(grossAmount);
 
-  // OUTSTANDING RECOVERY: a defaulting member owes the group (missed contribution
-  // + penalty). We net it off THEIR OWN payout. The recovered amount is simply
-  // never debited from the thrift pool — it stays in the pool, covering the
-  // shortfall that member's missed contribution created.
+  // ===========================================================
+  // PAYOUT ELIGIBILITY GATE (single choke point for every payout)
+  // A member owing the group (missed contribution + penalty) is netted off
+  // their own payout. If the payout does NOT fully clear the debt, the payout
+  // is WITHHELD entirely — nothing is disbursed, the whole payout value is
+  // applied to the debt, and the member stays payout_blocked until the
+  // residual is settled (auto-recovered later, or admin-applied after the
+  // member funds their wallet).
+  // ===========================================================
   const { data: recipientRow } = await db.from("vfd_sandbox_group_members")
-    .select("id, outstanding_owed").eq("group_id", groupId).eq("user_id", recipientId).maybeSingle();
+    .select("id, outstanding_owed, payout_blocked, payout_withheld_total")
+    .eq("group_id", groupId).eq("user_id", recipientId).maybeSingle();
   const owed = Math.max(0, Number(recipientRow?.outstanding_owed || 0));
   const payoutBeforeRecovery = grossAmount - platformFee;
-  const recovered = Math.min(owed, Math.max(0, payoutBeforeRecovery));
-  const shortfall = Math.round((owed - recovered) * 100) / 100;
-  const netAmount = Math.round((payoutBeforeRecovery - recovered) * 100) / 100;
-  const debitFromPool = Math.round((netAmount + platformFee) * 100) / 100;
+  const withheld = owed > 0 && owed > payoutBeforeRecovery;
 
-  if (shortfall > 0) {
-    // Never disburse negative: recover what we can, flag the rest for admin.
-    console.error(`[processAutoPayout] group=${groupId} cycle=${currentCycle} user=${recipientId} outstanding ₦${owed} exceeds payout ₦${payoutBeforeRecovery}; residual ₦${shortfall} left owing`);
-    await sendNotification(group.admin_id as string, "Outstanding Exceeds Payout",
-      `A member's outstanding balance (₦${owed.toLocaleString()}) in ${group.name} exceeds their cycle ${currentCycle} payout. ₦${recovered.toLocaleString()} was recovered; ₦${shortfall.toLocaleString()} remains owed.`,
-      "payout_notification", groupId);
+  // Withheld payout: recover the full payout value, disburse ₦0.
+  const recovered = withheld
+    ? Math.round(payoutBeforeRecovery * 100) / 100
+    : Math.min(owed, Math.max(0, payoutBeforeRecovery));
+  const residual = Math.round((owed - recovered) * 100) / 100;
+  const netAmount = withheld ? 0 : Math.round((payoutBeforeRecovery - recovered) * 100) / 100;
+  const feeCharged = withheld ? 0 : platformFee; // no disbursement ⇒ no platform fee
+  const debitFromPool = Math.round((netAmount + feeCharged) * 100) / 100;
+
+  if (withheld) {
+    console.error(`[processAutoPayout] BLOCKED group=${groupId} cycle=${currentCycle} user=${recipientId} owed=₦${owed} > payout=₦${payoutBeforeRecovery}; withholding entire payout, residual ₦${residual}`);
   }
 
-  const payout = await creditVestaraThriftPayout(recipientId, groupId, debitFromPool, platformFee, `ajo-payout-${groupId}-${activeCycle.id}`, {
-    cycle_id: activeCycle.id,
-    cycle_number: currentCycle,
-    source: "vfd_sandbox_ajo",
-    gross_pool_value: grossAmount,
-    recovered_outstanding: recovered,
-    residual_owed: shortfall,
-  });
-  if (!payout.success) {
-    const err = payout.error || "Payout failed";
-    console.error(`[processAutoPayout] group=${groupId} cycle=${currentCycle} failed:`, err);
-    await postChatMessage(groupId, recipientId,
-      `⚠️ Auto-payout for cycle ${currentCycle} failed: ${err}. Admin will retry.`, "contribution_failed");
-    await sendNotification(recipientId, "Payout Pending",
-      `Your payout for ${group.name} cycle ${currentCycle} could not be processed (${err}). Our team has been alerted.`,
-      "payout_notification", groupId);
-    return { success: false, error: err };
+  // Only touch the ledger when something is actually disbursed. When withheld,
+  // the funds simply stay in the group's thrift pool (covering the shortfall
+  // the member's missed contributions created).
+  if (debitFromPool > 0) {
+    const payout = await creditVestaraThriftPayout(recipientId, groupId, debitFromPool, feeCharged, `ajo-payout-${groupId}-${activeCycle.id}`, {
+      cycle_id: activeCycle.id,
+      cycle_number: currentCycle,
+      source: "vfd_sandbox_ajo",
+      gross_pool_value: grossAmount,
+      recovered_outstanding: recovered,
+      residual_owed: residual,
+    });
+    if (!payout.success) {
+      const err = payout.error || "Payout failed";
+      console.error(`[processAutoPayout] group=${groupId} cycle=${currentCycle} failed:`, err);
+      await postChatMessage(groupId, recipientId,
+        `⚠️ Auto-payout for cycle ${currentCycle} failed: ${err}. Admin will retry.`, "contribution_failed");
+      await sendNotification(recipientId, "Payout Pending",
+        `Your payout for ${group.name} cycle ${currentCycle} could not be processed (${err}). Our team has been alerted.`,
+        "payout_notification", groupId);
+      return { success: false, error: err };
+    }
   }
 
   if (recovered > 0 && recipientRow?.id) {
-    await db.from("vfd_sandbox_group_members")
-      .update({ outstanding_owed: shortfall })
-      .eq("id", recipientRow.id as string);
-    await db.from("vfd_sandbox_penalties")
-      .update({ recovered_at: new Date().toISOString() })
-      .eq("group_id", groupId).eq("user_id", recipientId).is("recovered_at", null);
-    await postChatMessage(groupId, recipientId,
-      `ℹ️ ₦${recovered.toLocaleString()} outstanding (missed contributions + penalties) was recovered from this payout and retained in the group pool.`, "system");
-    await sendNotification(recipientId, "Outstanding Recovered",
-      `₦${recovered.toLocaleString()} you owed ${group.name} was deducted from your payout. You received ₦${netAmount.toLocaleString()}.`,
-      "payout_notification", groupId);
+    await db.from("vfd_sandbox_group_members").update({
+      outstanding_owed: residual,
+      payout_blocked: residual > 0,
+      payout_blocked_reason: residual > 0
+        ? `₦${residual.toLocaleString()} still owed to the group — payouts are on hold until settled`
+        : null,
+      outstanding_settled_at: residual > 0 ? null : new Date().toISOString(),
+      payout_withheld_total: Math.round(((Number(recipientRow.payout_withheld_total || 0)) + (withheld ? recovered : 0)) * 100) / 100,
+    }).eq("id", recipientRow.id as string);
+
+    if (residual === 0) {
+      await db.from("vfd_sandbox_penalties")
+        .update({ recovered_at: new Date().toISOString() })
+        .eq("group_id", groupId).eq("user_id", recipientId).is("recovered_at", null);
+    }
+
+    if (withheld) {
+      await postChatMessage(groupId, recipientId,
+        `⛔ Cycle ${currentCycle} payout withheld — the recipient owes the group ₦${owed.toLocaleString()}. ₦${recovered.toLocaleString()} was applied to that balance; ₦${residual.toLocaleString()} remains outstanding and stays in the group pool.`, "payout_notification");
+      await sendNotification(recipientId, "Payout Withheld",
+        `Your ₦${payoutBeforeRecovery.toLocaleString()} payout from ${group.name} was withheld because you owe the group ₦${owed.toLocaleString()} in missed contributions and penalties. The full payout was applied to that balance. ₦${residual.toLocaleString()} is still outstanding — fund your wallet and ask your group admin to apply it, and future payouts will resume.`,
+        "payout_notification", groupId);
+      await sendNotification(group.admin_id as string, "Payout Withheld — Member Owes Group",
+        `A member's cycle ${currentCycle} payout in ${group.name} was withheld: they owed ₦${owed.toLocaleString()}, ₦${recovered.toLocaleString()} was recovered, ₦${residual.toLocaleString()} remains. They stay payout-blocked until settled (Admin → Groups → member "Owes" badge → Settle).`,
+        "payout_notification", groupId);
+    } else {
+      await postChatMessage(groupId, recipientId,
+        `ℹ️ ₦${recovered.toLocaleString()} outstanding (missed contributions + penalties) was recovered from this payout and retained in the group pool.`, "system");
+      await sendNotification(recipientId, "Outstanding Recovered",
+        `₦${recovered.toLocaleString()} you owed ${group.name} was deducted from your payout. You received ₦${netAmount.toLocaleString()} and your balance is now clear.`,
+        "payout_notification", groupId);
+    }
   }
 
   await db.from("vfd_sandbox_group_payouts").insert({
     group_id: groupId, recipient_id: recipientId,
     cycle_number: currentCycle, gross_amount: grossAmount,
-    platform_fee: platformFee, net_amount: netAmount,
-    recovered_outstanding: recovered,
+    platform_fee: feeCharged, net_amount: netAmount,
+    recovered_outstanding: recovered, withheld,
   });
+
 
 
   await db.from("vfd_sandbox_contribution_cycles").update({
     status: "completed", payout_recipient_id: recipientId,
-    payout_amount: netAmount, platform_fee: platformFee,
+    payout_amount: netAmount, platform_fee: feeCharged,
     total_contributions: grossAmount, completed_at: new Date().toISOString(),
   }).eq("id", activeCycle.id as string);
 
@@ -1083,8 +1118,9 @@ async function processAutoPayout(
       status: "completed", updated_at: new Date().toISOString(),
     }).eq("id", groupId);
 
-    await postChatMessage(groupId, recipientId,
-      `🎉 Group completed! Final payout of ₦${netAmount.toLocaleString()} sent (fee: ₦${platformFee.toLocaleString()}).`, "payout_notification");
+    await postChatMessage(groupId, recipientId, withheld
+      ? `Group completed! Final cycle payout was withheld against the recipient's outstanding balance.`
+      : `🎉 Group completed! Final payout of ₦${netAmount.toLocaleString()} sent (fee: ₦${feeCharged.toLocaleString()}).`, "payout_notification");
   } else {
     const nextRecipientId = payoutOrder[nextCycle - 1];
     await db.from("vfd_sandbox_contribution_cycles").insert({
@@ -1099,16 +1135,84 @@ async function processAutoPayout(
     // Reset contribution flags
     await db.from("vfd_sandbox_group_members").update({ has_contributed_current: false }).eq("group_id", groupId);
 
-    await postChatMessage(groupId, recipientId,
-      `🎉 Cycle ${currentCycle} complete! Payout of ₦${netAmount.toLocaleString()} sent (fee: ₦${platformFee.toLocaleString()}). Cycle ${nextCycle} begins now.`, "payout_notification");
+    await postChatMessage(groupId, recipientId, withheld
+      ? `Cycle ${currentCycle} complete — payout withheld against the recipient's outstanding balance. Cycle ${nextCycle} begins now.`
+      : `🎉 Cycle ${currentCycle} complete! Payout of ₦${netAmount.toLocaleString()} sent (fee: ₦${feeCharged.toLocaleString()}). Cycle ${nextCycle} begins now.`, "payout_notification");
   }
 
-  await sendNotification(recipientId, "Payout Received!",
-    `You received ₦${netAmount.toLocaleString()} from your thrift group ${group.name}. Platform fee: ₦${platformFee.toLocaleString()}.`,
-    "payout_received", groupId);
+  if (!withheld) {
+    await sendNotification(recipientId, "Payout Received!",
+      `You received ₦${netAmount.toLocaleString()} from your thrift group ${group.name}. Platform fee: ₦${feeCharged.toLocaleString()}.`,
+      "payout_received", groupId);
+  }
 
-  return { success: true, recipient_id: recipientId, net_amount: netAmount, platform_fee: platformFee };
+  return { success: true, recipient_id: recipientId, net_amount: netAmount, platform_fee: feeCharged, withheld, recovered_outstanding: recovered, residual_owed: residual };
+
 }
+
+// MANUAL SETTLEMENT of a member's outstanding balance.
+// Group admin or platform admin only. Debits the member's Vestara wallet into
+// the group's thrift pool (real ledger movement — never a bookkeeping-only
+// write-off) and lifts the payout block once the balance reaches zero.
+async function handleSettleMemberOutstanding(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const groupId = body.group_id as string;
+  const memberUserId = body.member_user_id as string;
+  const requested = Number(body.amount ?? 0);
+  if (!groupId || !memberUserId) return jsonResponse({ error: "group_id and member_user_id required" }, 400);
+  if (!(await isGroupAdmin(groupId, userId)) && !(await isPlatformAdmin(userId))) return forbidden("Group admin only");
+
+  const { data: member } = await db.from("vfd_sandbox_group_members")
+    .select("id, outstanding_owed").eq("group_id", groupId).eq("user_id", memberUserId).maybeSingle();
+  if (!member) return jsonResponse({ error: "Member not found in this group" }, 404);
+
+  const owed = Math.max(0, Number(member.outstanding_owed || 0));
+  if (owed <= 0) return jsonResponse({ error: "This member has no outstanding balance" }, 400);
+
+  const amount = requested > 0 ? Math.min(requested, owed) : owed;
+  const balance = await getVestaraWalletBalance(memberUserId);
+  if (balance < amount) {
+    return jsonResponse({
+      error: `Member's wallet has ₦${balance.toLocaleString()} — they need ₦${amount.toLocaleString()} to settle. Ask them to fund their wallet first.`,
+      code: "INSUFFICIENT_BALANCE", required: amount, available: balance,
+    }, 400);
+  }
+
+  const debit = await debitVestaraForThrift(memberUserId, groupId, amount,
+    `ajo-settlement-${groupId}-${memberUserId}-${Date.now()}`,
+    { source: "vfd_sandbox_ajo", reason: "outstanding_settlement", settled_by: userId });
+  if (!debit.success) {
+    return jsonResponse({ error: debit.error || "Settlement debit failed" }, 400);
+  }
+
+  const residual = Math.round((owed - amount) * 100) / 100;
+  await db.from("vfd_sandbox_group_members").update({
+    outstanding_owed: residual,
+    payout_blocked: residual > 0,
+    payout_blocked_reason: residual > 0
+      ? `₦${residual.toLocaleString()} still owed to the group — payouts are on hold until settled`
+      : null,
+    outstanding_settled_at: residual > 0 ? null : new Date().toISOString(),
+  }).eq("id", member.id as string);
+
+  if (residual === 0) {
+    await db.from("vfd_sandbox_penalties")
+      .update({ recovered_at: new Date().toISOString() })
+      .eq("group_id", groupId).eq("user_id", memberUserId).is("recovered_at", null);
+  }
+
+  await postChatMessage(groupId, memberUserId,
+    `✅ ₦${amount.toLocaleString()} outstanding settled from wallet.${residual > 0 ? ` ₦${residual.toLocaleString()} still owed.` : " Payouts are unblocked."}`, "system");
+  await sendNotification(memberUserId, residual > 0 ? "Partial Settlement Applied" : "Outstanding Cleared",
+    residual > 0
+      ? `₦${amount.toLocaleString()} was applied to what you owe your thrift group. ₦${residual.toLocaleString()} remains — payouts stay on hold until it's cleared.`
+      : `₦${amount.toLocaleString()} was applied and your thrift balance is now clear. You're eligible for payouts again.`,
+    "contribution_success", groupId);
+
+  return jsonResponse({ data: { settled: amount, residual_owed: residual, payout_blocked: residual > 0 } });
+}
+
+
 
 async function handleGetGroupDetail(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
@@ -8901,6 +9005,7 @@ Deno.serve(async (req) => {
       case "contribute_group": return await handleContributeGroup(userId, body);
       case "get_group_detail": return await handleGetGroupDetail(userId, body);
       case "request_swap": return await handleRequestSwap(userId, body);
+      case "settle_member_outstanding": return await handleSettleMemberOutstanding(userId, body);
       case "respond_swap": return await handleRespondSwap(userId, body);
       case "exit_group": return await handleExitGroup(userId, body);
       case "confirm_continue": return await handleConfirmContinue(userId, body);

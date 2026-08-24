@@ -32,6 +32,7 @@ function GroupDetailsRow({ groupId, source = "legacy", onRefresh }: GroupDetails
   const [data, setData] = useState<{ members: any[]; wallet: any; currentCycle: any } | null>(null);
   const [loading, setLoading] = useState(true);
   const [removingMember, setRemovingMember] = useState<string | null>(null);
+  const [settling, setSettling] = useState<string | null>(null);
   const { hasPermission } = useAdminPermissions();
   const { toast } = useToast();
 
@@ -44,7 +45,7 @@ function GroupDetailsRow({ groupId, source = "legacy", onRefresh }: GroupDetails
       if (source === "sandbox") {
         const [membersRes, groupRes, cycleRes] = await Promise.all([
           supabase.from("vfd_sandbox_group_members")
-            .select("id, user_id, payout_position, status, has_contributed_current, has_received_payout, outstanding_owed")
+            .select("id, user_id, payout_position, status, has_contributed_current, has_received_payout, outstanding_owed, payout_blocked")
             .eq("group_id", groupId),
           supabase.from("vfd_sandbox_groups")
             .select("pool_ledger_balance, total_contributed_kobo, total_paid_out_kobo, current_cycle, status")
@@ -134,6 +135,28 @@ function GroupDetailsRow({ groupId, source = "legacy", onRefresh }: GroupDetails
     }
   };
 
+  const handleSettleOutstanding = async (memberUserId: string, memberName: string, owed: number) => {
+    setSettling(memberUserId);
+    try {
+      const { data, error } = await supabaseClient.functions.invoke("vfd-sandbox-products", {
+        body: { action: "settle_member_outstanding", group_id: groupId, member_user_id: memberUserId },
+      });
+      const err = (data as any)?.error || error?.message;
+      if (err) throw new Error(err);
+      toast({
+        title: "Outstanding Settled",
+        description: `₦${owed.toLocaleString()} recovered from ${memberName}'s wallet. Payout block lifted.`,
+      });
+      fetchData();
+      onRefresh();
+    } catch (e: any) {
+      toast({ title: "Settlement Failed", description: e?.message || "Could not settle balance.", variant: "destructive" });
+    } finally {
+      setSettling(null);
+    }
+  };
+
+
   if (loading) {
     return (
       <TableRow>
@@ -170,7 +193,26 @@ function GroupDetailsRow({ groupId, source = "legacy", onRefresh }: GroupDetails
                             Owes ₦{Number(membership.outstanding_owed).toLocaleString()}
                           </Badge>
                         )}
+                        {membership.payout_blocked && (
+                          <Badge variant="destructive" className="text-xs shrink-0">
+                            Payout blocked
+                          </Badge>
+                        )}
                       </div>
+
+                      {source === "sandbox" && Number(membership.outstanding_owed || 0) > 0 && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-6 shrink-0 text-xs"
+                          disabled={settling === membership.user_id}
+                          onClick={() => handleSettleOutstanding(membership.user_id, name, Number(membership.outstanding_owed))}
+                          title="Debit the member's wallet to settle their outstanding balance"
+                        >
+                          {settling === membership.user_id ? "Settling…" : "Settle"}
+                        </Button>
+                      )}
+
 
                       {hasPermission("groups.resolve_disputes") && membership.status === "active" && (
                         <Button
