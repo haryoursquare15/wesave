@@ -117,8 +117,16 @@ export function SandboxTransactions({ transactions, loading, onRefresh, onBack }
                     <Icon className={`h-4 w-4 ${color}`} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{displayLabel}</p>
-                    <p className="text-[10px] text-muted-foreground truncate">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <p className="text-sm font-medium truncate">{displayLabel}</p>
+                      <Badge variant="secondary" className="text-[9px] h-4 px-1.5 shrink-0">
+                        {info.category}
+                      </Badge>
+                    </div>
+                    {info.subtitle && (
+                      <p className="text-[11px] text-muted-foreground truncate">{info.subtitle}</p>
+                    )}
+                    <p className="text-[10px] text-muted-foreground/80 truncate">
                       {tx.description || tx.reference || "—"}
                     </p>
                     <p className="text-[10px] text-muted-foreground">
