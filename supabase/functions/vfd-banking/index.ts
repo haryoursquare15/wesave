@@ -1882,8 +1882,21 @@ async function handleTransfer(
   });
 
   if (senderStatus !== 200 || (senderEnquiry as Record<string, unknown>)?.status !== "00") {
+    const enq = (senderEnquiry as Record<string, unknown>) || {};
+    const enqMsg = String(enq.message || "");
+    const enqStatus = String(enq.status || "");
+    // Bank-partner credential/entitlement failures ("Invalid wallet token",
+    // 99/929) are an upstream outage, not a bad request. Surface them as a
+    // retryable service message instead of a raw VFD error string.
+    if (/invalid wallet token|access denied/i.test(enqMsg) || enqStatus === "99" || enqStatus === "929") {
+      return jsonResponse({
+        error: "Bank transfers are temporarily unavailable while we restore connectivity with our banking partner. Your balance is safe — please try again shortly.",
+        code: "BANK_SERVICE_UNAVAILABLE",
+      }, 503);
+    }
     return jsonResponse({ error: "Could not retrieve sender account details", data: senderEnquiry }, 400);
   }
+
 
   // VFD response shape can be either { data: { accountId, ... } } or
   // { data: { account: { id, ... } } } depending on endpoint version.
