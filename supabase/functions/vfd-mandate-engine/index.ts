@@ -772,7 +772,7 @@ Deno.serve(async (req) => {
     const action = String(body.action || "");
 
     // Cron / service-to-service actions. Never client-triggered.
-    const CRON_ACTIONS = new Set(["poll_pending", "run_due_debits", "go_live_check", "live_probe", "raw_token_probe", "credential_fingerprint", "credential_mint_probe"]);
+    const CRON_ACTIONS = new Set(["poll_pending", "run_due_debits", "go_live_check", "live_probe", "raw_token_probe", "header_variant_probe", "credential_fingerprint", "credential_mint_probe"]);
     if (CRON_ACTIONS.has(action)) {
       if (!(await verifyCronToken(req, CRON_TOKEN_NAME))) {
         return json({ error: "Unauthorized" }, 401);
@@ -784,6 +784,7 @@ Deno.serve(async (req) => {
       if (action === "run_due_debits") return await handleRunDueDebits(limit);
       if (action === "live_probe") return await handleLiveProbe(body);
       if (action === "raw_token_probe") return await handleRawTokenProbe(body);
+      if (action === "header_variant_probe") return await handleHeaderVariantProbe(body);
       return handleGoLiveCheck();
     }
 
