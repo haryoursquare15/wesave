@@ -182,16 +182,22 @@ export function describeTransaction(tx: TxLike): TxDescriptor {
 
   // ---- Transfers ---------------------------------------------------------
   if (tx.transaction_type === "transfer" || tx.transaction_type === "debit" || tx.transaction_type === "credit") {
-    const narration = desc && !/^vestara transfer$/i.test(desc) ? cleanInflowNarration(desc) : "";
+    const counterparty =
+      tx.beneficiary_name?.trim() ||
+      (desc && !/^vestara transfer$/i.test(desc) ? cleanInflowNarration(desc) : "");
+    const acct = [tx.beneficiary_account, tx.beneficiary_bank].filter(Boolean).join(" · ") || undefined;
+    const note = desc && desc !== counterparty && !/^vestara transfer$/i.test(desc) ? desc : undefined;
     if (isCredit) {
       return {
-        title: narration ? `Transfer received — ${narration}` : "Transfer received",
+        title: counterparty ? `Transfer received — ${counterparty}` : "Transfer received",
+        subtitle: acct || note,
         category: "Transfer",
         isCredit,
       };
     }
     return {
-      title: narration ? `Transfer sent — ${narration}` : "Transfer sent",
+      title: counterparty ? `Transfer to ${counterparty}` : "Transfer sent",
+      subtitle: [acct, note].filter(Boolean).join(" · ") || undefined,
       category: "Transfer",
       isCredit,
     };
