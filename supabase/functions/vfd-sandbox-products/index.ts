@@ -463,6 +463,13 @@ function calculatePlatformFee(grossAmount: number): number {
   return Math.min(Math.round(grossAmount * 0.01 * 100) / 100, 500);
 }
 
+// Default-contribution penalty: 5% of the missed contribution, min ₦100, max ₦2,000.
+function calculateContributionPenalty(contributionAmount: number): number {
+  const pct = Math.round(contributionAmount * 0.05 * 100) / 100;
+  return Math.min(Math.max(pct, 100), 2000);
+}
+
+
 // =============================================
 // FISHER-YATES RANDOMIZATION (matches production)
 // =============================================
@@ -757,10 +764,12 @@ async function handleRequestSwap(userId: string, body: Record<string, unknown>) 
   if (group.status !== "active" && group.status !== "swap_window") {
     return jsonResponse({ error: "Group is not in a swap-eligible state" }, 400);
   }
-  // If we're past the swap window, no more swap requests allowed
-  if (group.status === "swap_window" && group.swap_window_ends_at && new Date(group.swap_window_ends_at) <= new Date()) {
+  // Hard deadline: once swap_window_ends_at has passed, no swap can be requested
+  // in ANY status (the group may already have flipped to "active").
+  if (group.swap_window_ends_at && new Date(group.swap_window_ends_at).getTime() <= Date.now()) {
     return jsonResponse({ error: "Swap window has closed" }, 400);
   }
+
 
   const { data: requester } = await db.from("vfd_sandbox_group_members")
     .select("*").eq("group_id", groupId).eq("user_id", userId).maybeSingle();
@@ -996,12 +1005,35 @@ async function processAutoPayout(
   const grossAmount = amount * memberCount;
   // PRODUCTION PARITY: Tiered fee structure
   const platformFee = calculatePlatformFee(grossAmount);
-  const netAmount = grossAmount - platformFee;
 
-  const payout = await creditVestaraThriftPayout(recipientId, groupId, grossAmount, platformFee, `ajo-payout-${groupId}-${activeCycle.id}`, {
+  // OUTSTANDING RECOVERY: a defaulting member owes the group (missed contribution
+  // + penalty). We net it off THEIR OWN payout. The recovered amount is simply
+  // never debited from the thrift pool — it stays in the pool, covering the
+  // shortfall that member's missed contribution created.
+  const { data: recipientRow } = await db.from("vfd_sandbox_group_members")
+    .select("id, outstanding_owed").eq("group_id", groupId).eq("user_id", recipientId).maybeSingle();
+  const owed = Math.max(0, Number(recipientRow?.outstanding_owed || 0));
+  const payoutBeforeRecovery = grossAmount - platformFee;
+  const recovered = Math.min(owed, Math.max(0, payoutBeforeRecovery));
+  const shortfall = Math.round((owed - recovered) * 100) / 100;
+  const netAmount = Math.round((payoutBeforeRecovery - recovered) * 100) / 100;
+  const debitFromPool = Math.round((netAmount + platformFee) * 100) / 100;
+
+  if (shortfall > 0) {
+    // Never disburse negative: recover what we can, flag the rest for admin.
+    console.error(`[processAutoPayout] group=${groupId} cycle=${currentCycle} user=${recipientId} outstanding ₦${owed} exceeds payout ₦${payoutBeforeRecovery}; residual ₦${shortfall} left owing`);
+    await sendNotification(group.admin_id as string, "Outstanding Exceeds Payout",
+      `A member's outstanding balance (₦${owed.toLocaleString()}) in ${group.name} exceeds their cycle ${currentCycle} payout. ₦${recovered.toLocaleString()} was recovered; ₦${shortfall.toLocaleString()} remains owed.`,
+      "payout_notification", groupId);
+  }
+
+  const payout = await creditVestaraThriftPayout(recipientId, groupId, debitFromPool, platformFee, `ajo-payout-${groupId}-${activeCycle.id}`, {
     cycle_id: activeCycle.id,
     cycle_number: currentCycle,
     source: "vfd_sandbox_ajo",
+    gross_pool_value: grossAmount,
+    recovered_outstanding: recovered,
+    residual_owed: shortfall,
   });
   if (!payout.success) {
     const err = payout.error || "Payout failed";
@@ -1014,11 +1046,27 @@ async function processAutoPayout(
     return { success: false, error: err };
   }
 
+  if (recovered > 0 && recipientRow?.id) {
+    await db.from("vfd_sandbox_group_members")
+      .update({ outstanding_owed: shortfall })
+      .eq("id", recipientRow.id as string);
+    await db.from("vfd_sandbox_penalties")
+      .update({ recovered_at: new Date().toISOString() })
+      .eq("group_id", groupId).eq("user_id", recipientId).is("recovered_at", null);
+    await postChatMessage(groupId, recipientId,
+      `ℹ️ ₦${recovered.toLocaleString()} outstanding (missed contributions + penalties) was recovered from this payout and retained in the group pool.`, "system");
+    await sendNotification(recipientId, "Outstanding Recovered",
+      `₦${recovered.toLocaleString()} you owed ${group.name} was deducted from your payout. You received ₦${netAmount.toLocaleString()}.`,
+      "payout_notification", groupId);
+  }
+
   await db.from("vfd_sandbox_group_payouts").insert({
     group_id: groupId, recipient_id: recipientId,
     cycle_number: currentCycle, gross_amount: grossAmount,
     platform_fee: platformFee, net_amount: netAmount,
+    recovered_outstanding: recovered,
   });
+
 
   await db.from("vfd_sandbox_contribution_cycles").update({
     status: "completed", payout_recipient_id: recipientId,
@@ -6839,6 +6887,16 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
   const db = getSupabaseAdmin();
   const forceGroupId = body.force_group_id as string | undefined;
 
+  // Groups whose swap window has expired must transition to cycle 1 automatically,
+  // independent of anyone opening the app — do it before the sweep runs.
+  try {
+    await handleAutoStartPendingGroups("system", {});
+  } catch (e) {
+    console.error("[sandbox_auto_contribute] auto-start pass failed:", e);
+  }
+
+
+
   // WAT = UTC+1
   const now = new Date();
   const watMs = now.getTime() + 60 * 60 * 1000;
@@ -6965,15 +7023,27 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
         }
 
         if (reachedLimit) {
+          const penaltyFee = calculateContributionPenalty(amount);
+          const owedDelta = Math.round((amount + penaltyFee) * 100) / 100;
           await db.from("vfd_sandbox_penalties").insert({
             user_id: m.user_id, group_id: group.id, cycle_id: activeCycle.id,
-            amount, reason: `Failed ${MAX_RETRIES} ${isDdmMember ? "direct-debit" : "auto-debit"} attempts (${errMsg})`,
+            amount: owedDelta, penalty_fee: penaltyFee, missed_amount: amount,
+            reason: `Failed ${MAX_RETRIES} ${isDdmMember ? "direct-debit" : "auto-debit"} attempts (${errMsg})`,
           });
+          // Outstanding balance owed BY this member — netted off their own payout.
+          const { data: memberRow } = await db.from("vfd_sandbox_group_members")
+            .select("id, outstanding_owed").eq("group_id", group.id).eq("user_id", m.user_id).maybeSingle();
+          if (memberRow?.id) {
+            await db.from("vfd_sandbox_group_members")
+              .update({ outstanding_owed: Math.round((Number(memberRow.outstanding_owed || 0) + owedDelta) * 100) / 100 })
+              .eq("id", memberRow.id as string);
+          }
           await postChatMessage(group.id, m.user_id,
-            `🚫 ${isDdmMember ? "Direct debit" : "Auto-contribution"} failed after ${MAX_RETRIES} attempts — penalty served.`, "contribution_failed");
+            `🚫 ${isDdmMember ? "Direct debit" : "Auto-contribution"} failed after ${MAX_RETRIES} attempts — ₦${owedDelta.toLocaleString()} (₦${amount.toLocaleString()} missed + ₦${penaltyFee.toLocaleString()} penalty) now outstanding.`, "contribution_failed");
           await sendNotification(m.user_id, "Penalty Served",
-            `Your ${isDdmMember ? "direct debit" : "auto-contribution"} for ${group.name} failed after ${MAX_RETRIES} attempts (${errMsg}). A penalty has been recorded.`,
+            `Your ${isDdmMember ? "direct debit" : "auto-contribution"} for ${group.name} failed after ${MAX_RETRIES} attempts (${errMsg}). ₦${owedDelta.toLocaleString()} is now outstanding and will be deducted from your payout.`,
             "contribution_failed", group.id);
+
           penalized++;
         } else {
           await postChatMessage(group.id, m.user_id,
@@ -8760,13 +8830,22 @@ Deno.serve(async (req) => {
       "send_bill_reminders",
       "poll_pending_mandates",
       "reconcile_pending_bills_cron",
+      "auto_start_pending_groups",
     ]);
+    // Thrift sweep + swap-window auto-start: pg_cron authenticates with the
+    // DB-held thrift_sweep token.
+    if ((action === "sandbox_auto_contribute" || action === "auto_start_pending_groups")
+      && await assertCronToken(req, "thrift_sweep")) {
+      if (action === "auto_start_pending_groups") return await handleAutoStartPendingGroups("system", body);
+      return await handleSandboxAutoContribute("system", body);
+    }
     if (action === "reconcile_pending_bills_cron" && await assertCronToken(req, "bills_reconciler")) {
       return await handleReconcilePendingBills("system", body);
     }
     if (action === "recover_stuck_split_settlements" && await assertCronToken(req, "bills_reconciler")) {
       return await handleRecoverStuckSplitSettlements();
     }
+
     // Ops-only: force the bank-level reversal sweep for failed bills whose real
     // funding leg is still sitting in the corporate pool.
     if (action === "reverse_stranded_bill_funding" && await assertCronToken(req, "bills_reconciler")) {
