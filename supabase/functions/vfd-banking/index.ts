@@ -227,7 +227,21 @@ async function vfdRequest(
   if (tokenRejected) {
     console.log("[VFD] Wallet token rejected, regenerating once...");
     cachedToken = null;
-    const newToken = await getAccessToken();
+    let newToken: string;
+    try {
+      newToken = await getAccessToken();
+    } catch (err) {
+      // Credentials are rejected outright — stop here instead of looping.
+      console.error("[VFD] Wallet re-authentication failed:", err);
+      return {
+        data: {
+          error: "Banking service authentication failed. Our team has been alerted — please try again later.",
+          detail: err instanceof Error ? err.message : String(err),
+          credential_failure: true,
+        },
+        status: 503,
+      };
+    }
     (options.headers as Record<string, string>)["AccessToken"] = newToken;
 
     const retryResponse = await vfdFetch(url.toString(), options);
