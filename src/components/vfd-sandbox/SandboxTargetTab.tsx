@@ -173,7 +173,7 @@ export function SandboxTargetTab() {
               <p className="font-medium">Funding mode</p>
               <p className="text-muted-foreground">
                 {t.funding_mode === "ddm"
-                  ? "Direct Debit Mandate — contributions are pulled from members' banks."
+                  ? "E-Mandate — contributions are pulled from members' banks."
                   : "Wallet debit — contributions are pulled from members' Vestara wallets."}
               </p>
               {t.funding_mode === "ddm" && t.mandate_reference && (
@@ -228,7 +228,7 @@ export function SandboxTargetTab() {
           return (
             <div className="p-3 rounded-xl border border-amber-500/40 bg-amber-500/10 flex items-center justify-between gap-2">
               <div className="text-xs">
-                <p className="font-semibold text-amber-700 dark:text-amber-300">Direct Debit Mandate required</p>
+                <p className="font-semibold text-amber-700 dark:text-amber-300">E-Mandate required</p>
                 <p className="text-muted-foreground">Authorize your bank account to enable auto-contributions for this Target Ajo.</p>
               </div>
               <Button size="sm" onClick={() => setMandateSubject({
@@ -525,7 +525,7 @@ export function SandboxTargetTab() {
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="wallet">Wallet debit (Vestara balance)</SelectItem>
-                  <SelectItem value="ddm">Direct Debit Mandate (VFD bank debit)</SelectItem>
+                  <SelectItem value="ddm">E-Mandate (VFD bank debit)</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-[11px] text-muted-foreground">

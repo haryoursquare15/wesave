@@ -664,7 +664,7 @@ export function SandboxAjoTab() {
                 <SelectTrigger className="h-12"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="wallet">Wallet debit — pull from each member's Vestara wallet</SelectItem>
-                  <SelectItem value="ddm">Direct Debit Mandate — auto-debit each member's bank (VFD DDM)</SelectItem>
+                  <SelectItem value="ddm">E-Mandate — auto-debit each member's bank (VFD e-mandate)</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-[11px] text-muted-foreground">
@@ -835,7 +835,7 @@ export function SandboxAjoTab() {
                         e.stopPropagation();
                         const r = await products.checkGroupMandateStatus(g.id);
                         if ((r as any)?.data?.bank_approved) {
-                          toast({ title: "Mandate approved", description: "The bank has approved your Direct Debit Mandate." });
+                          toast({ title: "Mandate approved", description: "The bank has approved your E-Mandate." });
                         } else {
                           toast({ title: "Still awaiting bank approval", description: `Current status: ${(r as any)?.data?.bank_approval_status || "Pending"}` });
                         }
