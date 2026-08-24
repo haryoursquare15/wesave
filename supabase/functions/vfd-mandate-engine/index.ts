@@ -704,31 +704,45 @@ async function handleHeaderVariantProbe(body: Record<string, unknown>): Promise<
     frequency: "3",
   };
 
-  const paths = [
-    "/vtech-mandate/api/v2/directdebit/mandate/setup?e-mandate=true",
-    "/vtech-mandate/api/v1/directdebit/mandate/setup?e-mandate=true",
-    "/vtech-mandate/api/v2/directdebit/mandate/setup",
-  ];
-  const headerSets: Array<{ name: string; headers: Record<string, string> }> = [
-    { name: "AccessToken", headers: { AccessToken: token } },
-    { name: "Authorization_Bearer", headers: { Authorization: `Bearer ${token}` } },
-    { name: "accesstoken_lower", headers: { accesstoken: token } },
-    { name: "AccessToken_plus_Bearer", headers: { AccessToken: token, Authorization: `Bearer ${token}` } },
-  ];
+  const paths = Array.isArray(body.paths) && body.paths.length
+    ? (body.paths as string[]).map(String)
+    : [
+      "/vtech-mandate/api/v2/directdebit/mandate/setup?e-mandate=true",
+      "/vtech-mandate/api/v1/directdebit/mandate/setup?e-mandate=true",
+      "/vtech-mandate/api/v2/directdebit/mandate/setup",
+    ];
+  const extra = (body.extra && typeof body.extra === "object") ? body.extra as Record<string, unknown> : {};
+  const methods = Array.isArray(body.methods) && body.methods.length ? (body.methods as string[]).map(String) : ["POST"];
+  const headerSets: Array<{ name: string; headers: Record<string, string> }> =
+    body.single_header === true
+      ? [{ name: "AccessToken", headers: { AccessToken: token } }]
+      : [
+        { name: "AccessToken", headers: { AccessToken: token } },
+        { name: "Authorization_Bearer", headers: { Authorization: `Bearer ${token}` } },
+        { name: "accesstoken_lower", headers: { accesstoken: token } },
+        { name: "AccessToken_plus_Bearer", headers: { AccessToken: token, Authorization: `Bearer ${token}` } },
+      ];
 
   const results: Array<Record<string, unknown>> = [];
   for (const p of paths) {
     for (const h of headerSets) {
-      try {
-        const res = await vfdFetch(`${host}${p}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", ...h.headers },
-          body: JSON.stringify({ ...payload, reference: `${payload.reference}-${results.length}` }),
-        });
-        const rb = await res.json().catch(() => ({}));
-        results.push({ path: p, auth_header: h.name, http_status: res.status, response: rb });
-      } catch (e) {
-        results.push({ path: p, auth_header: h.name, error: e instanceof Error ? e.message : String(e) });
+      for (const m of methods) {
+        try {
+          const init: RequestInit = {
+            method: m,
+            headers: { "Content-Type": "application/json", ...h.headers },
+          };
+          if (m !== "GET") {
+            init.body = JSON.stringify({ ...payload, ...extra, reference: `${payload.reference}-${results.length}` });
+          }
+          const res = await vfdFetch(`${host}${p}`, init);
+          const raw = await res.text();
+          let rb: unknown = raw;
+          try { rb = JSON.parse(raw); } catch { /* keep text */ }
+          results.push({ path: p, method: m, auth_header: h.name, http_status: res.status, response: rb });
+        } catch (e) {
+          results.push({ path: p, method: m, auth_header: h.name, error: e instanceof Error ? e.message : String(e) });
+        }
       }
     }
   }
