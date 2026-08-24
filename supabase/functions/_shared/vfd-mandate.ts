@@ -91,8 +91,8 @@ let cachedToken: { token: string; expiresAt: number } | null = null;
 async function mintMandateCredentialToken(): Promise<string | null> {
   // VFD confirmed e-mandate is entitled on the SAME consumer key/secret pair as
   // every other BaaS call — mandate-specific vars are only an override.
-  const consumerKey = Deno.env.get("VFD_MANDATE_CONSUMER_KEY") || Deno.env.get("VFD_CONSUMER_KEY");
-  const consumerSecret = Deno.env.get("VFD_MANDATE_CONSUMER_SECRET") || Deno.env.get("VFD_CONSUMER_SECRET");
+  const consumerKey = (Deno.env.get("VFD_MANDATE_CONSUMER_KEY_V2") || Deno.env.get("VFD_MANDATE_CONSUMER_KEY")) || Deno.env.get("VFD_CONSUMER_KEY");
+  const consumerSecret = (Deno.env.get("VFD_MANDATE_CONSUMER_SECRET_V2") || Deno.env.get("VFD_MANDATE_CONSUMER_SECRET")) || Deno.env.get("VFD_CONSUMER_SECRET");
   if (!consumerKey || !consumerSecret) return null;
   const res = await vfdFetch(`${VFD_HOST}/vfd-tech/baas-portal/v1.1/baasauth/token`, {
     method: "POST",
@@ -135,8 +135,8 @@ export async function probeCredentialMint(): Promise<Array<Record<string, unknow
   const pairs: Array<{ source: string; key?: string; secret?: string }> = [
     {
       source: "mandate_consumer_pair",
-      key: Deno.env.get("VFD_MANDATE_CONSUMER_KEY"),
-      secret: Deno.env.get("VFD_MANDATE_CONSUMER_SECRET"),
+      key: (Deno.env.get("VFD_MANDATE_CONSUMER_KEY_V2") || Deno.env.get("VFD_MANDATE_CONSUMER_KEY")),
+      secret: (Deno.env.get("VFD_MANDATE_CONSUMER_SECRET_V2") || Deno.env.get("VFD_MANDATE_CONSUMER_SECRET")),
     },
     {
       source: "primary_consumer_pair",
@@ -189,8 +189,8 @@ export async function probeMandateTokenSources(
     {
       source: "mandate_consumer_pair",
       token: await mintTokenWithPair(
-        Deno.env.get("VFD_MANDATE_CONSUMER_KEY") || "",
-        Deno.env.get("VFD_MANDATE_CONSUMER_SECRET") || "",
+        (Deno.env.get("VFD_MANDATE_CONSUMER_KEY_V2") || Deno.env.get("VFD_MANDATE_CONSUMER_KEY")) || "",
+        (Deno.env.get("VFD_MANDATE_CONSUMER_SECRET_V2") || Deno.env.get("VFD_MANDATE_CONSUMER_SECRET")) || "",
       ),
     },
     {
@@ -259,13 +259,14 @@ export async function getMandateAccessToken(): Promise<string | null> {
   if (cachedToken && cachedToken.expiresAt > Date.now()) return cachedToken.token;
   cachedToken = null;
   const candidates: Array<{ source: string; token: string | null }> = [
-    // VFD-issued static mandate AccessToken takes precedence — the mandate
-    // service authenticates with this header, not a BaaS-minted wallet token.
-    { source: "vfd_issued_mandate_token", token: Deno.env.get("VFD_MANDATE_ACCESS_TOKEN") || null },
+    // Freshly minted token from the mandate consumer pair takes precedence;
+    // the static VFD-issued token is only a fallback.
     { source: "mandate_credentials", token: await mintMandateCredentialToken().catch(() => null) },
+    { source: "vfd_issued_mandate_token", token: Deno.env.get("VFD_MANDATE_ACCESS_TOKEN") || null },
     { source: "gateway_wallet", token: await getGatewayAccessToken().catch(() => null) },
     { source: "configured_access_token", token: Deno.env.get("VFD_ACCESS_TOKEN") || null },
   ];
+
   const tested = new Set<string>();
   for (const c of candidates) {
     if (!c.token || tested.has(c.token)) continue;
