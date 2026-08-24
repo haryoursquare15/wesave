@@ -150,13 +150,13 @@ serve(async (req) => {
           plainText = customBody;
           subject = customSubject;
         } else {
-          plainText = "Your savings group is waiting for you. Join a Vestara group to start saving together and reach your goals faster.";
+          plainText = "You signed up for Vestara but haven't joined a savings group yet.\n\nSave together with trusted members, receive your lump-sum payout when it's your turn, and build your Vestara credit score with every on-time contribution. Joining is completely free.\n\nIt only takes a minute to create or join a group.";
           subject = '🤝 Vestara — Your savings group is waiting for you!';
         }
 
         const sendResult = await sendBrandedEmail({
           recipientEmail: user.email,
-          recipientName: user.full_name || undefined,
+          recipientName: String(user.full_name || '').trim().split(/\s+/)[0] || undefined,
           title: subject.replace(/^[^A-Za-z0-9]+/, '').replace(/^Vestara\s*[—-]\s*/, ''),
           message: plainText,
           actionUrl: 'https://vestara.ng/groups',

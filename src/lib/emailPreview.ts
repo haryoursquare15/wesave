@@ -112,10 +112,8 @@ export function buildEmailPreviewHtml({
 
   const socials = SOCIALS.map(
     (s) =>
-      `<td align="center" style="padding:0 6px;"><a href="${s.href}" style="display:inline-block;width:28px;height:28px;line-height:28px;border-radius:14px;background-color:#123straight;color:#ffffff;font-size:11px;font-weight:bold;text-decoration:none;">${s.label}</a></td>`
-  )
-    .join("")
-    .replace(/#123straight/g, "#123a6b");
+      `<td align="center" style="padding:0 6px;"><a href="${s.href}" style="display:inline-block;width:28px;height:28px;line-height:28px;border-radius:14px;background-color:#123a6b;color:#ffffff;font-size:11px;font-weight:bold;text-decoration:none;">${s.label}</a></td>`
+  ).join("");
 
   const unsubscribe = unsubscribeUrl
     ? `<a href="${escapeHtml(unsubscribeUrl)}" style="color:${EMAIL_BRAND.green};text-decoration:none;">Unsubscribe</a>&nbsp; |&nbsp; `
