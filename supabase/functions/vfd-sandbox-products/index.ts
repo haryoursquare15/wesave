@@ -7226,6 +7226,7 @@ let cachedMandateToken: { token: string; expiresAt: number } | null = null;
 async function handleEmandateProbe(): Promise<Response> {
   const results: Array<Record<string, unknown>> = [];
   const sources: Array<{ source: string; get: () => Promise<string | null> }> = [
+    { source: "vfd_issued_mandate_token", get: async () => Deno.env.get("VFD_MANDATE_ACCESS_TOKEN") || null },
     { source: "mandate_credentials", get: () => mintMandateCredentialToken().catch(() => null) },
     { source: "gateway_wallet", get: () => getGatewayAccessToken().catch(() => null) },
     { source: "configured_access_token", get: async () => Deno.env.get("VFD_ACCESS_TOKEN") || null },
@@ -7327,6 +7328,7 @@ async function handleEmandatePayloadProbe(): Promise<Response> {
   // the wallet entitlement check runs after the payload is complete.
   const variants: Array<Record<string, unknown>> = [];
   const tokenSources: Array<{ source: string; get: () => Promise<string | null> }> = [
+    { source: "vfd_issued_mandate_token", get: async () => Deno.env.get("VFD_MANDATE_ACCESS_TOKEN") || null },
     { source: "mandate_credentials", get: () => mintMandateCredentialToken().catch(() => null) },
     { source: "gateway_wallet", get: () => getGatewayAccessToken().catch(() => null) },
     { source: "configured_access_token", get: async () => Deno.env.get("VFD_ACCESS_TOKEN") || null },
@@ -7369,6 +7371,7 @@ async function handleMandateEndpointProbe(): Promise<Response> {
     : "https://api-devapps.vfdbank.systems";
 
   const tokenVariants: Array<{ source: string; get: () => Promise<string | null> }> = [
+    { source: "vfd_issued_mandate_token", get: async () => Deno.env.get("VFD_MANDATE_ACCESS_TOKEN") || null },
     { source: "mandate_baas_token", get: () => mintMandateCredentialToken().catch(() => null) },
     { source: "gateway_wallet", get: () => getGatewayAccessToken().catch(() => null) },
     { source: "configured_access_token", get: async () => Deno.env.get("VFD_ACCESS_TOKEN") || null },
@@ -7438,6 +7441,7 @@ async function handleMandateEndpointProbe(): Promise<Response> {
 async function handleMandateAuthDiagnostic(): Promise<Response> {
   const results: Array<Record<string, unknown>> = [];
   const sources: Array<{ source: string; get: () => Promise<string | null> }> = [
+    { source: "vfd_issued_mandate_token", get: async () => Deno.env.get("VFD_MANDATE_ACCESS_TOKEN") || null },
     { source: "mandate_credentials", get: () => mintMandateCredentialToken().catch(() => null) },
     { source: "gateway_wallet", get: () => getGatewayAccessToken().catch(() => null) },
     { source: "configured_access_token", get: async () => Deno.env.get("VFD_ACCESS_TOKEN") || null },
@@ -7550,6 +7554,7 @@ async function getVfdMandateAccessToken(): Promise<string | null> {
   cachedMandateToken = null;
   try {
     const candidates: Array<{ source: string; token: string | null }> = [
+      { source: "vfd_issued_mandate_token", token: Deno.env.get("VFD_MANDATE_ACCESS_TOKEN") || null },
       { source: "mandate_credentials", token: await mintMandateCredentialToken().catch((error) => {
         console.error("[mandate-auth] mandate token mint failed", error instanceof Error ? error.message : String(error));
         return null;
