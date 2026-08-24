@@ -193,7 +193,26 @@ function GroupDetailsRow({ groupId, source = "legacy", onRefresh }: GroupDetails
                             Owes ₦{Number(membership.outstanding_owed).toLocaleString()}
                           </Badge>
                         )}
+                        {membership.payout_blocked && (
+                          <Badge variant="destructive" className="text-xs shrink-0">
+                            Payout blocked
+                          </Badge>
+                        )}
                       </div>
+
+                      {source === "sandbox" && Number(membership.outstanding_owed || 0) > 0 && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-6 shrink-0 text-xs"
+                          disabled={settling === membership.user_id}
+                          onClick={() => handleSettleOutstanding(membership.user_id, name, Number(membership.outstanding_owed))}
+                          title="Debit the member's wallet to settle their outstanding balance"
+                        >
+                          {settling === membership.user_id ? "Settling…" : "Settle"}
+                        </Button>
+                      )}
+
 
                       {hasPermission("groups.resolve_disputes") && membership.status === "active" && (
                         <Button
