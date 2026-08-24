@@ -44,7 +44,7 @@ function GroupDetailsRow({ groupId, source = "legacy", onRefresh }: GroupDetails
       if (source === "sandbox") {
         const [membersRes, groupRes, cycleRes] = await Promise.all([
           supabase.from("vfd_sandbox_group_members")
-            .select("id, user_id, payout_position, status, has_contributed_current, has_received_payout")
+            .select("id, user_id, payout_position, status, has_contributed_current, has_received_payout, outstanding_owed")
             .eq("group_id", groupId),
           supabase.from("vfd_sandbox_groups")
             .select("pool_ledger_balance, total_contributed_kobo, total_paid_out_kobo, current_cycle, status")
