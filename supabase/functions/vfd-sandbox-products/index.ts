@@ -6887,6 +6887,16 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
   const db = getSupabaseAdmin();
   const forceGroupId = body.force_group_id as string | undefined;
 
+  // Groups whose swap window has expired must transition to cycle 1 automatically,
+  // independent of anyone opening the app — do it before the sweep runs.
+  try {
+    await handleAutoStartPendingGroups("system", {});
+  } catch (e) {
+    console.error("[sandbox_auto_contribute] auto-start pass failed:", e);
+  }
+
+
+
   // WAT = UTC+1
   const now = new Date();
   const watMs = now.getTime() + 60 * 60 * 1000;
