@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import vestaraBadge from "@/assets/vestara-badge.jpg";
+import { describeTransaction } from "@/lib/transactionLabels";
 
 interface BalanceData {
   totalBalance: number;
