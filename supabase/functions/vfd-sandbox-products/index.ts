@@ -1150,6 +1150,70 @@ async function processAutoPayout(
 
 }
 
+// MANUAL SETTLEMENT of a member's outstanding balance.
+// Group admin or platform admin only. Debits the member's Vestara wallet into
+// the group's thrift pool (real ledger movement — never a bookkeeping-only
+// write-off) and lifts the payout block once the balance reaches zero.
+async function handleSettleMemberOutstanding(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const groupId = body.group_id as string;
+  const memberUserId = body.member_user_id as string;
+  const requested = Number(body.amount ?? 0);
+  if (!groupId || !memberUserId) return jsonResponse({ error: "group_id and member_user_id required" }, 400);
+  if (!(await isGroupAdmin(groupId, userId)) && !(await isPlatformAdmin(userId))) return forbidden("Group admin only");
+
+  const { data: member } = await db.from("vfd_sandbox_group_members")
+    .select("id, outstanding_owed").eq("group_id", groupId).eq("user_id", memberUserId).maybeSingle();
+  if (!member) return jsonResponse({ error: "Member not found in this group" }, 404);
+
+  const owed = Math.max(0, Number(member.outstanding_owed || 0));
+  if (owed <= 0) return jsonResponse({ error: "This member has no outstanding balance" }, 400);
+
+  const amount = requested > 0 ? Math.min(requested, owed) : owed;
+  const balance = await getVestaraWalletBalance(memberUserId);
+  if (balance < amount) {
+    return jsonResponse({
+      error: `Member's wallet has ₦${balance.toLocaleString()} — they need ₦${amount.toLocaleString()} to settle. Ask them to fund their wallet first.`,
+      code: "INSUFFICIENT_BALANCE", required: amount, available: balance,
+    }, 400);
+  }
+
+  const debit = await debitVestaraForThrift(memberUserId, groupId, amount,
+    `ajo-settlement-${groupId}-${memberUserId}-${Date.now()}`,
+    { source: "vfd_sandbox_ajo", reason: "outstanding_settlement", settled_by: userId });
+  if (!debit.success) {
+    return jsonResponse({ error: debit.error || "Settlement debit failed" }, 400);
+  }
+
+  const residual = Math.round((owed - amount) * 100) / 100;
+  await db.from("vfd_sandbox_group_members").update({
+    outstanding_owed: residual,
+    payout_blocked: residual > 0,
+    payout_blocked_reason: residual > 0
+      ? `₦${residual.toLocaleString()} still owed to the group — payouts are on hold until settled`
+      : null,
+    outstanding_settled_at: residual > 0 ? null : new Date().toISOString(),
+  }).eq("id", member.id as string);
+
+  if (residual === 0) {
+    await db.from("vfd_sandbox_penalties")
+      .update({ recovered_at: new Date().toISOString() })
+      .eq("group_id", groupId).eq("user_id", memberUserId).is("recovered_at", null);
+  }
+
+  await postChatMessage(groupId, memberUserId,
+    `✅ ₦${amount.toLocaleString()} outstanding settled from wallet.${residual > 0 ? ` ₦${residual.toLocaleString()} still owed.` : " Payouts are unblocked."}`, "system");
+  await sendNotification(memberUserId, residual > 0 ? "Partial Settlement Applied" : "Outstanding Cleared",
+    residual > 0
+      ? `₦${amount.toLocaleString()} was applied to what you owe your thrift group. ₦${residual.toLocaleString()} remains — payouts stay on hold until it's cleared.`
+      : `₦${amount.toLocaleString()} was applied and your thrift balance is now clear. You're eligible for payouts again.`,
+    "contribution_success", groupId);
+
+  return jsonResponse({ data: { settled: amount, residual_owed: residual, payout_blocked: residual > 0 } });
+}
+
+
+
 async function handleGetGroupDetail(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const groupId = body.group_id as string;
