@@ -7006,15 +7006,27 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
         }
 
         if (reachedLimit) {
+          const penaltyFee = calculateContributionPenalty(amount);
+          const owedDelta = Math.round((amount + penaltyFee) * 100) / 100;
           await db.from("vfd_sandbox_penalties").insert({
             user_id: m.user_id, group_id: group.id, cycle_id: activeCycle.id,
-            amount, reason: `Failed ${MAX_RETRIES} ${isDdmMember ? "direct-debit" : "auto-debit"} attempts (${errMsg})`,
+            amount: owedDelta, penalty_fee: penaltyFee, missed_amount: amount,
+            reason: `Failed ${MAX_RETRIES} ${isDdmMember ? "direct-debit" : "auto-debit"} attempts (${errMsg})`,
           });
+          // Outstanding balance owed BY this member — netted off their own payout.
+          const { data: memberRow } = await db.from("vfd_sandbox_group_members")
+            .select("id, outstanding_owed").eq("group_id", group.id).eq("user_id", m.user_id).maybeSingle();
+          if (memberRow?.id) {
+            await db.from("vfd_sandbox_group_members")
+              .update({ outstanding_owed: Math.round((Number(memberRow.outstanding_owed || 0) + owedDelta) * 100) / 100 })
+              .eq("id", memberRow.id as string);
+          }
           await postChatMessage(group.id, m.user_id,
-            `🚫 ${isDdmMember ? "Direct debit" : "Auto-contribution"} failed after ${MAX_RETRIES} attempts — penalty served.`, "contribution_failed");
+            `🚫 ${isDdmMember ? "Direct debit" : "Auto-contribution"} failed after ${MAX_RETRIES} attempts — ₦${owedDelta.toLocaleString()} (₦${amount.toLocaleString()} missed + ₦${penaltyFee.toLocaleString()} penalty) now outstanding.`, "contribution_failed");
           await sendNotification(m.user_id, "Penalty Served",
-            `Your ${isDdmMember ? "direct debit" : "auto-contribution"} for ${group.name} failed after ${MAX_RETRIES} attempts (${errMsg}). A penalty has been recorded.`,
+            `Your ${isDdmMember ? "direct debit" : "auto-contribution"} for ${group.name} failed after ${MAX_RETRIES} attempts (${errMsg}). ₦${owedDelta.toLocaleString()} is now outstanding and will be deducted from your payout.`,
             "contribution_failed", group.id);
+
           penalized++;
         } else {
           await postChatMessage(group.id, m.user_id,
