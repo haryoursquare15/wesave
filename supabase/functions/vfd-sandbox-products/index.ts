@@ -1105,7 +1105,7 @@ async function processAutoPayout(
 
   await db.from("vfd_sandbox_contribution_cycles").update({
     status: "completed", payout_recipient_id: recipientId,
-    payout_amount: netAmount, platform_fee: platformFee,
+    payout_amount: netAmount, platform_fee: feeCharged,
     total_contributions: grossAmount, completed_at: new Date().toISOString(),
   }).eq("id", activeCycle.id as string);
 
@@ -1118,8 +1118,9 @@ async function processAutoPayout(
       status: "completed", updated_at: new Date().toISOString(),
     }).eq("id", groupId);
 
-    await postChatMessage(groupId, recipientId,
-      `🎉 Group completed! Final payout of ₦${netAmount.toLocaleString()} sent (fee: ₦${platformFee.toLocaleString()}).`, "payout_notification");
+    await postChatMessage(groupId, recipientId, withheld
+      ? `Group completed! Final cycle payout was withheld against the recipient's outstanding balance.`
+      : `🎉 Group completed! Final payout of ₦${netAmount.toLocaleString()} sent (fee: ₦${feeCharged.toLocaleString()}).`, "payout_notification");
   } else {
     const nextRecipientId = payoutOrder[nextCycle - 1];
     await db.from("vfd_sandbox_contribution_cycles").insert({
@@ -1134,15 +1135,19 @@ async function processAutoPayout(
     // Reset contribution flags
     await db.from("vfd_sandbox_group_members").update({ has_contributed_current: false }).eq("group_id", groupId);
 
-    await postChatMessage(groupId, recipientId,
-      `🎉 Cycle ${currentCycle} complete! Payout of ₦${netAmount.toLocaleString()} sent (fee: ₦${platformFee.toLocaleString()}). Cycle ${nextCycle} begins now.`, "payout_notification");
+    await postChatMessage(groupId, recipientId, withheld
+      ? `Cycle ${currentCycle} complete — payout withheld against the recipient's outstanding balance. Cycle ${nextCycle} begins now.`
+      : `🎉 Cycle ${currentCycle} complete! Payout of ₦${netAmount.toLocaleString()} sent (fee: ₦${feeCharged.toLocaleString()}). Cycle ${nextCycle} begins now.`, "payout_notification");
   }
 
-  await sendNotification(recipientId, "Payout Received!",
-    `You received ₦${netAmount.toLocaleString()} from your thrift group ${group.name}. Platform fee: ₦${platformFee.toLocaleString()}.`,
-    "payout_received", groupId);
+  if (!withheld) {
+    await sendNotification(recipientId, "Payout Received!",
+      `You received ₦${netAmount.toLocaleString()} from your thrift group ${group.name}. Platform fee: ₦${feeCharged.toLocaleString()}.`,
+      "payout_received", groupId);
+  }
 
-  return { success: true, recipient_id: recipientId, net_amount: netAmount, platform_fee: platformFee };
+  return { success: true, recipient_id: recipientId, net_amount: netAmount, platform_fee: feeCharged, withheld, recovered_outstanding: recovered, residual_owed: residual };
+
 }
 
 async function handleGetGroupDetail(userId: string, body: Record<string, unknown>) {
