@@ -19,6 +19,7 @@ import { SandboxRecurringBills } from "./SandboxRecurringBills";
 import { BillBeneficiaryRename } from "./BillBeneficiaryRename";
 import { TransactionPinGate } from "@/components/security/TransactionPinGate";
 import { useDebounce } from "@/hooks/useDebounce";
+import { billCategoryFor } from "@/lib/transactionLabels";
 
 /* ─── Types ─── */
 interface Biller {
@@ -1022,11 +1023,11 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
             <div>
               <h3 className="text-xl font-bold text-foreground mb-1">Payment Successful!</h3>
               <p className="text-sm font-semibold text-foreground">
-                {billCategoryFor(selectedBiller?.name || "", `${selectedCategory || ""} ${selectedItem?.name || ""}`)} — {selectedBiller?.name}
+                {billCategoryFor(selectedBiller?.name || "", `${selectedCategory || ""} ${selectedItem?.paymentitemname || ""}`)} — {selectedBiller?.name}
               </p>
               <p className="text-sm text-muted-foreground">
                 ₦{Number(amount).toLocaleString()}
-                {selectedItem?.name ? ` · ${selectedItem.name}` : ""}
+                {selectedItem?.paymentitemname ? ` · ${selectedItem.paymentitemname}` : ""}
                 {customerId ? ` · ${customerId}` : ""}
               </p>
             </div>
