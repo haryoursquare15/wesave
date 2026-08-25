@@ -24,7 +24,6 @@ function timingSafeEqual(a: string, b: string): boolean {
 async function getAccessToken(): Promise<string> {
   const gw = await getGatewayAccessToken();
   if (gw) return gw;
-  const staticToken = Deno.env.get("VFD_ACCESS_TOKEN");
   const consumerKey = Deno.env.get("VFD_CONSUMER_KEY");
   const consumerSecret = Deno.env.get("VFD_CONSUMER_SECRET");
   if (consumerKey && consumerSecret) {
@@ -36,7 +35,6 @@ async function getAccessToken(): Promise<string> {
     const data = await res.json().catch(() => null);
     if (data?.status === "00" && data?.data?.access_token) return data.data.access_token;
   }
-  if (staticToken) return staticToken;
   throw new Error("VFD credentials not configured");
 }
 

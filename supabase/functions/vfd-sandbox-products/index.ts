@@ -7328,9 +7328,7 @@ function readMandateCreateResponse(json: Record<string, unknown>) {
 async function handleEmandateProbe(): Promise<Response> {
   const results: Array<Record<string, unknown>> = [];
   const sources: Array<{ source: string; get: () => Promise<string | null> }> = [
-    { source: "vfd_issued_mandate_token", get: async () => Deno.env.get("VFD_MANDATE_ACCESS_TOKEN") || null },
     { source: "gateway_wallet", get: () => getGatewayAccessToken().catch(() => null) },
-    { source: "configured_access_token", get: async () => Deno.env.get("VFD_ACCESS_TOKEN") || null },
   ];
 
   for (const s of sources) {
@@ -7429,9 +7427,7 @@ async function handleEmandatePayloadProbe(): Promise<Response> {
   // the wallet entitlement check runs after the payload is complete.
   const variants: Array<Record<string, unknown>> = [];
   const tokenSources: Array<{ source: string; get: () => Promise<string | null> }> = [
-    { source: "vfd_issued_mandate_token", get: async () => Deno.env.get("VFD_MANDATE_ACCESS_TOKEN") || null },
     { source: "gateway_wallet", get: () => getGatewayAccessToken().catch(() => null) },
-    { source: "configured_access_token", get: async () => Deno.env.get("VFD_ACCESS_TOKEN") || null },
   ];
   for (const ts of tokenSources) {
     const t = await ts.get();
@@ -7471,9 +7467,7 @@ async function handleMandateEndpointProbe(): Promise<Response> {
     : "https://api-devapps.vfdbank.systems";
 
   const tokenVariants: Array<{ source: string; get: () => Promise<string | null> }> = [
-    { source: "vfd_issued_mandate_token", get: async () => Deno.env.get("VFD_MANDATE_ACCESS_TOKEN") || null },
     { source: "gateway_wallet", get: () => getGatewayAccessToken().catch(() => null) },
-    { source: "configured_access_token", get: async () => Deno.env.get("VFD_ACCESS_TOKEN") || null },
     {
       source: "wallet_baas_token",
       get: async () => {
@@ -7540,9 +7534,7 @@ async function handleMandateEndpointProbe(): Promise<Response> {
 async function handleMandateAuthDiagnostic(): Promise<Response> {
   const results: Array<Record<string, unknown>> = [];
   const sources: Array<{ source: string; get: () => Promise<string | null> }> = [
-    { source: "vfd_issued_mandate_token", get: async () => Deno.env.get("VFD_MANDATE_ACCESS_TOKEN") || null },
     { source: "gateway_wallet", get: () => getGatewayAccessToken().catch(() => null) },
-    { source: "configured_access_token", get: async () => Deno.env.get("VFD_ACCESS_TOKEN") || null },
   ];
   const headerVariants: Array<{ name: string; build: (t: string) => Record<string, string> }> = [
     { name: "AccessToken", build: (t) => ({ AccessToken: t }) },

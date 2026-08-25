@@ -199,8 +199,6 @@ export async function probeMandateTokenSources(
         Deno.env.get("VFD_EMANDATE_CONSUMER_SECRET") || "",
       ),
     },
-    { source: "vfd_issued_mandate_token", token: Deno.env.get("VFD_MANDATE_ACCESS_TOKEN") || null },
-
     {
       source: "mandate_consumer_pair",
       token: await mintTokenWithPair(
@@ -216,7 +214,6 @@ export async function probeMandateTokenSources(
       ),
     },
     { source: "gateway_wallet", token: await getGatewayAccessToken().catch(() => null) },
-    { source: "configured_access_token", token: Deno.env.get("VFD_ACCESS_TOKEN") || null },
   ];
 
   const out: Array<Record<string, unknown>> = [];
@@ -271,15 +268,12 @@ export function getLastMandateTokenSource(): string {
 }
 
 export async function getMandateAccessToken(): Promise<string | null> {
-  if (cachedToken && cachedToken.expiresAt > Date.now()) return cachedToken.token;
+  // Always mint fresh: no cached or statically stored tokens.
   cachedToken = null;
   const candidates: Array<{ source: string; token: string | null }> = [
-    // Freshly minted token from the mandate consumer pair takes precedence;
-    // the static VFD-issued token is only a fallback.
+    // Freshly minted token from the mandate consumer pair takes precedence.
     { source: "mandate_credentials", token: await mintMandateCredentialToken().catch(() => null) },
-    { source: "vfd_issued_mandate_token", token: Deno.env.get("VFD_MANDATE_ACCESS_TOKEN") || null },
     { source: "gateway_wallet", token: await getGatewayAccessToken().catch(() => null) },
-    { source: "configured_access_token", token: Deno.env.get("VFD_ACCESS_TOKEN") || null },
   ];
 
   const tested = new Set<string>();
@@ -287,7 +281,6 @@ export async function getMandateAccessToken(): Promise<string | null> {
     if (!c.token || tested.has(c.token)) continue;
     tested.add(c.token);
     if (await tokenIsAccepted(c.token, c.source)) {
-      cachedToken = { token: c.token, expiresAt: Date.now() + 4 * 60 * 1000 };
       lastTokenSource = c.source;
       return c.token;
     }

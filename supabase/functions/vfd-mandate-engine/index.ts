@@ -764,13 +764,11 @@ async function handleCredentialFingerprint() {
   const ws = Deno.env.get("VFD_CONSUMER_SECRET");
   const mk = (Deno.env.get("VFD_MANDATE_CONSUMER_KEY_V2") || Deno.env.get("VFD_MANDATE_CONSUMER_KEY"));
   const ms = (Deno.env.get("VFD_MANDATE_CONSUMER_SECRET_V2") || Deno.env.get("VFD_MANDATE_CONSUMER_SECRET"));
-  const at = Deno.env.get("VFD_ACCESS_TOKEN");
   return json({
     wallet_key: { set: !!wk, len: wk?.length ?? 0, fp: await fp(wk) },
     wallet_secret: { set: !!ws, len: ws?.length ?? 0, fp: await fp(ws) },
     mandate_key: { set: !!mk, len: mk?.length ?? 0, fp: await fp(mk) },
     mandate_secret: { set: !!ms, len: ms?.length ?? 0, fp: await fp(ms) },
-    static_access_token: { set: !!at, len: at?.length ?? 0, fp: await fp(at) },
     key_pairs_identical: !!wk && !!mk && wk === mk,
     secret_pairs_identical: !!ws && !!ms && ws === ms,
     vfd_mode: Deno.env.get("VFD_MODE") || null,
