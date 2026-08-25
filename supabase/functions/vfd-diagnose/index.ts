@@ -32,6 +32,14 @@ async function localToken(): Promise<string | null> {
 async function probe(label: string, url: string, token: string | null) {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers.AccessToken = token;
+  // TEMP DEBUG: never log AccessToken/credentials — only path + wallet-credential-id presence.
+  const debugPath = new URL(url).pathname;
+  const wcid = headers["wallet-credential-id"] ?? null;
+  if (debugPath.includes("/wallet2/account/enquiry")) {
+    console.log(
+      `[vfd-debug] path=${debugPath} wallet-credential-id_present=${!!wcid} value=${wcid ?? "(none)"}`,
+    );
+  }
   const res = await vfdFetch(url, { method: "GET", headers });
   const text = await res.text();
   let parsed: Record<string, unknown> | null = null;
@@ -41,6 +49,7 @@ async function probe(label: string, url: string, token: string | null) {
     http: res.status,
     status: parsed?.status ?? null,
     message: String(parsed?.message ?? text).slice(0, 300),
+    debug: { path: debugPath, wallet_credential_id_present: !!wcid, wallet_credential_id: wcid ?? "(none)" },
   };
 }
 
