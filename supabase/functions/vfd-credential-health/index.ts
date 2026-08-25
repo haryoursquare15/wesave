@@ -12,7 +12,7 @@
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
-import { vfdFetch } from "../_shared/vfd-gateway.ts";
+import { vfdFetch, getGatewayAccessToken } from "../_shared/vfd-gateway.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -21,7 +21,6 @@ const HOST = VFD_MODE === "production"
   ? "https://api-apps.vfdbank.systems"
   : "https://api-devapps.vfdbank.systems";
 const WALLET_BASE = `${HOST}/vtech-wallet/api/v2/wallet2`;
-const AUTH_URL = `${HOST}/vfd-tech/baas-portal/v1.1/baasauth/token`;
 const POOL_NUBAN = Deno.env.get("VFD_CORPORATE_POOL_NUBAN") || "1047279595";
 
 const ALERT_COOLDOWN_MS = 60 * 60 * 1000; // one alert per hour while broken
@@ -66,36 +65,14 @@ interface Probe {
 }
 
 async function runProbe(): Promise<Probe> {
-  const consumerKey = Deno.env.get("VFD_CONSUMER_KEY") || "";
-  const consumerSecret = Deno.env.get("VFD_CONSUMER_SECRET") || "";
-  const details: Record<string, unknown> = { vfd_mode: VFD_MODE, host: HOST };
-
-  if (!consumerKey || !consumerSecret) {
-    return {
-      token_mint_ok: false,
-      token_mint_status: "missing_credentials",
-      account_scoped_ok: false,
-      enquiry_status: "skipped",
-      enquiry_message: "VFD_CONSUMER_KEY / VFD_CONSUMER_SECRET not configured",
-      probed_account: POOL_NUBAN,
-      details,
-    };
-  }
+  const details: Record<string, unknown> = { vfd_mode: VFD_MODE, host: HOST, token_source: "gateway" };
 
   // ---- Probe 1: token mint -------------------------------------------------
   let accessToken = "";
   let mintStatus = "unknown";
   try {
-    const res = await vfdFetch(AUTH_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "1" }),
-    });
-    const body = await res.json().catch(() => null);
-    mintStatus = String(body?.status ?? res.status);
-    details.mint_http_status = res.status;
-    details.mint_message = body?.message ?? null;
-    if (body?.status === "00" && body?.data?.access_token) accessToken = body.data.access_token;
+    accessToken = (await getGatewayAccessToken()) || "";
+    mintStatus = accessToken ? "00" : "no_token";
   } catch (e) {
     mintStatus = "error";
     details.mint_error = String(e);
