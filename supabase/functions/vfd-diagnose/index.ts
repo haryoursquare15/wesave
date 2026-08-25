@@ -34,12 +34,12 @@ async function probe(label: string, url: string, token: string | null) {
   if (token) headers.AccessToken = token;
   // TEMP DEBUG: never log AccessToken/credentials — only path + wallet-credential-id presence.
   const debugPath = new URL(url).pathname;
-  const wcid = headers["wallet-credential-id"] ?? null;
-  if (debugPath.includes("/wallet2/account/enquiry")) {
-    console.log(
-      `[vfd-debug] path=${debugPath} wallet-credential-id_present=${!!wcid} value=${wcid ?? "(none)"}`,
-    );
-  }
+  // The wallet-credential-id header is injected inside vfdFetch from
+  // VFD_WALLET_CREDENTIAL_ID; report the configured value here (non-secret).
+  const wcid = debugPath.includes("/wallet2/")
+    ? (Deno.env.get("VFD_WALLET_CREDENTIAL_ID") || null)
+    : null;
+
   const res = await vfdFetch(url, { method: "GET", headers });
   const text = await res.text();
   let parsed: Record<string, unknown> | null = null;
