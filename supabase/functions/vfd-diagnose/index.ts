@@ -69,6 +69,18 @@ Deno.serve(async (req) => {
     if (gwToken) results.push(await probe("bank_list_gateway_token", `${WALLET_BASE}/bank`, gwToken));
     // No AccessToken at all — does the gateway inject its own wallet auth?
     results.push(await probe("enquiry_pool_no_token", enquiry, null));
+    // Gateway self-report: is the wallet credential configured on the droplet?
+    const gwUrl = (Deno.env.get("VFD_GATEWAY_URL") || "").replace(/\/+$/, "");
+    const gwSecret = Deno.env.get("VFD_GATEWAY_SECRET") || "";
+    for (const path of ["/health", "/status", "/config"]) {
+      try {
+        const r = await fetch(`${gwUrl}${path}`, { headers: { "x-gateway-key": gwSecret } });
+        const t = (await r.text()).slice(0, 400);
+        results.push({ label: `gateway${path}`, http: r.status, message: t });
+      } catch (e) {
+        results.push({ label: `gateway${path}`, error: String(e).slice(0, 200) });
+      }
+    }
   } catch (e) {
     results.push({ error: String(e) });
   }
