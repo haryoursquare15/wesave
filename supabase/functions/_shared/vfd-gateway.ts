@@ -64,7 +64,18 @@ export async function vfdFetch(input: string | URL, init: VfdFetchOptions = {}):
   if (!headers.has("Content-Type") && init.body) headers.set("Content-Type", "application/json");
 
   const target = toGatewayUrl(url);
-  console.log(`[vfd-gateway] ${init.method || "GET"} ${new URL(target).pathname}`);
+  const targetPath = new URL(target).pathname;
+  console.log(`[vfd-gateway] ${init.method || "GET"} ${targetPath}`);
+
+  // TEMP DEBUG: wallet-credential-id visibility on account-scoped wallet2 calls.
+  // Never logs AccessToken, consumer keys, or the gateway secret.
+  if (targetPath.includes("/wallet2/account/enquiry")) {
+    const wcid = headers.get("wallet-credential-id");
+    console.log(
+      `[vfd-gateway][debug] path=${targetPath} wallet-credential-id_present=${!!wcid} value=${wcid ?? "(none)"}`,
+    );
+  }
+
   return fetch(target, { ...init, headers });
 }
 
