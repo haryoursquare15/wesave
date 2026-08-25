@@ -22,8 +22,7 @@ const VFD_AUTH_URL =
     ? "https://api-devapps.vfdbank.systems/vfd-tech/baas-portal/v1.1/baasauth/token"
     : "https://api-apps.vfdbank.systems/vfd-tech/baas-portal/v1.1/baasauth/token";
 
-// In-memory token cache (per isolate)
-let cachedToken: string | null = null;
+// No token caching and no static tokens: every VFD call mints a fresh token.
 
 // Thrown when VFD itself rejects our wallet credentials. This is a
 // configuration/entitlement problem (wrong environment pair, revoked key), NOT
@@ -43,9 +42,6 @@ const CREDENTIALS_REJECTED =
   `until a valid production wallet pair is configured.`;
 
 async function getAccessToken(): Promise<string> {
-  if (cachedToken) return cachedToken;
-
-  const staticToken = Deno.env.get("VFD_ACCESS_TOKEN");
   const consumerKey = Deno.env.get("VFD_CONSUMER_KEY");
   const consumerSecret = Deno.env.get("VFD_CONSUMER_SECRET");
 
@@ -70,7 +66,6 @@ async function getAccessToken(): Promise<string> {
 
     const token = (data as { data?: { access_token?: string } } | null)?.data?.access_token;
     if ((data as { status?: string } | null)?.status === "00" && token) {
-      cachedToken = token;
       console.log("[VFD] Access token generated successfully");
       return token;
     }
@@ -83,17 +78,9 @@ async function getAccessToken(): Promise<string> {
   // No wallet pair configured. The gateway mints with whatever credentials live
   // on the droplet — accept it only as an explicitly configured fallback.
   const gatewayToken = await getGatewayAccessToken();
-  if (gatewayToken) {
-    cachedToken = gatewayToken;
-    return gatewayToken;
-  }
+  if (gatewayToken) return gatewayToken;
 
-  if (staticToken) {
-    cachedToken = staticToken;
-    return staticToken;
-  }
-
-  throw new Error("VFD credentials not configured. Set VFD_CONSUMER_KEY + VFD_CONSUMER_SECRET or VFD_ACCESS_TOKEN.");
+  throw new Error("VFD credentials not configured. Set VFD_CONSUMER_KEY + VFD_CONSUMER_SECRET.");
 }
 
 function getSupabaseAdmin() {
