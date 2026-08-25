@@ -89,7 +89,7 @@ async function runProbe(): Promise<Probe> {
     const res = await vfdFetch(AUTH_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "-1" }),
+      body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "1" }),
     });
     const body = await res.json().catch(() => null);
     mintStatus = String(body?.status ?? res.status);

@@ -679,7 +679,7 @@ async function handleHeaderVariantProbe(body: Record<string, unknown>): Promise<
     const tRes = await vfdFetch(`${host}/vfd-tech/baas-portal/v1.1/baasauth/token`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "-1" }),
+      body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "1" }),
     });
     const tJson = await tRes.json().catch(() => ({} as Record<string, any>));
     token = String(tJson?.data?.access_token || tJson?.data?.accessToken || tJson?.access_token || "");

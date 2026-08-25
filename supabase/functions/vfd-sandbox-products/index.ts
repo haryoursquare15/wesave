@@ -184,7 +184,7 @@ async function fetchVfdLiveBalance(userId: string): Promise<{ ok: boolean; balan
       const authResp = await fetchWithTimeout(`${vfdBase}/vfd-tech/baas-portal/v1.1/baasauth/token`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "-1" }),
+        body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "1" }),
       }, 10_000);
       const authRaw = await authResp.text();
       const authData = authRaw ? JSON.parse(authRaw) : {};
@@ -7477,7 +7477,7 @@ async function handleMandateEndpointProbe(): Promise<Response> {
         const r = await vfdFetch(`${host}/vfd-tech/baas-portal/v1.1/baasauth/token`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "-1" }),
+          body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "1" }),
         });
         const j = await r.json().catch(() => ({} as Record<string, unknown>));
         const d = ((j as any)?.data || {}) as Record<string, unknown>;

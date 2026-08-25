@@ -30,7 +30,7 @@ async function getAccessToken(): Promise<string> {
     const res = await vfdFetch(AUTH_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "-1" }),
+      body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "1" }),
     });
     const data = await res.json().catch(() => null);
     if (data?.status === "00" && data?.data?.access_token) return data.data.access_token;
