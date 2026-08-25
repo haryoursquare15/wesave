@@ -17,12 +17,8 @@ const VFD_BASE_URL =
     ? "https://api-devapps.vfdbank.systems/vtech-wallet/api/v2/wallet2"
     : "https://api-apps.vfdbank.systems/vtech-wallet/api/v2/wallet2";
 
-const VFD_AUTH_URL =
-  VFD_MODE === "sandbox"
-    ? "https://api-devapps.vfdbank.systems/vfd-tech/baas-portal/v1.1/baasauth/token"
-    : "https://api-apps.vfdbank.systems/vfd-tech/baas-portal/v1.1/baasauth/token";
-
-// No token caching and no static tokens: every VFD call mints a fresh token.
+// No token caching and no static/local minting: every VFD call receives a
+// freshly minted wallet token from the whitelisted gateway.
 
 // Thrown when VFD itself rejects our wallet credentials. This is a
 // configuration/entitlement problem (wrong environment pair, revoked key), NOT
@@ -42,45 +38,14 @@ const CREDENTIALS_REJECTED =
   `until a valid production wallet pair is configured.`;
 
 async function getAccessToken(): Promise<string> {
-  const consumerKey = Deno.env.get("VFD_CONSUMER_KEY");
-  const consumerSecret = Deno.env.get("VFD_CONSUMER_SECRET");
-
-  // Wallet onboarding must use the primary wallet consumer pair. E-mandate
-  // credentials are product-specific and are intentionally handled only by
-  // _shared/vfd-mandate.ts. A mandate-scoped token is NOT valid for
-  // /wallet2/* calls, so it must never be substituted here.
-  if (consumerKey && consumerSecret) {
-    console.log("[VFD] Generating access token via auth API...");
-    let data: Record<string, unknown> | null = null;
-    try {
-      const res = await vfdFetch(VFD_AUTH_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "1" }),
-      });
-      data = await res.json();
-    } catch (err) {
-      console.error("[VFD] Token generation error:", err);
-      throw new Error("Banking network unavailable while authenticating. Please try again.");
-    }
-
-    const token = (data as { data?: { access_token?: string } } | null)?.data?.access_token;
-    if ((data as { status?: string } | null)?.status === "00" && token) {
-      console.log("[VFD] Access token generated successfully");
-      return token;
-    }
-
-    // status "01" / "Invalid wallet credentials" => hard configuration failure.
-    console.error("[VFD] Token generation failed:", JSON.stringify(data));
+  try {
+    const gatewayToken = await getGatewayAccessToken();
+    if (gatewayToken) return gatewayToken;
+  } catch (err) {
+    console.error("[VFD] Gateway token mint failed:", err);
     throw new WalletCredentialError(CREDENTIALS_REJECTED);
   }
-
-  // No wallet pair configured. The gateway mints with whatever credentials live
-  // on the droplet — accept it only as an explicitly configured fallback.
-  const gatewayToken = await getGatewayAccessToken();
-  if (gatewayToken) return gatewayToken;
-
-  throw new Error("VFD credentials not configured. Set VFD_CONSUMER_KEY + VFD_CONSUMER_SECRET.");
+  throw new WalletCredentialError("The banking gateway returned no wallet access token.");
 }
 
 function getSupabaseAdmin() {
