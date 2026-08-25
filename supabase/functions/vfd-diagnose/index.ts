@@ -1,5 +1,6 @@
 // Temporary diagnostic: compares gateway-minted vs locally-minted tokens on
 // account-scoped wallet2 calls. Protected by the credential-health cron token.
+// rev: wallet-credential-id debug logging (temporary)
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { vfdFetch, getGatewayAccessToken } from "../_shared/vfd-gateway.ts";
