@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
   const results: unknown[] = [];
   try {
     const requestBody = req.method === "POST"
-      ? await req.json().catch(() => ({})) as { accountNumber?: string }
+      ? await req.json().catch(() => ({})) as { accountNumber?: string; bvn?: string }
       : {};
     const accountNumber = requestBody.accountNumber || POOL;
     const gwToken = await getGatewayAccessToken().catch((e) => { results.push({ label: "gateway_token", error: String(e) }); return null; });
