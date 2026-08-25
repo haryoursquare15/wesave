@@ -2810,7 +2810,7 @@ async function handleKycRetry(userId: string) {
   const { error: cErr } = await supabaseAdmin
     .from("vfd_sandbox_clients")
     .update({
-      kyc_review_status: null,
+      kyc_review_status: "not_required",
       kyc_review_reason: null,
       kyc_requested_tier: null,
       kyc_reviewed_by: null,
