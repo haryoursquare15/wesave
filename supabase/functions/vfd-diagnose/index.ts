@@ -22,7 +22,7 @@ async function localToken(): Promise<string | null> {
     body: JSON.stringify({
       consumerKey: Deno.env.get("VFD_CONSUMER_KEY") || "",
       consumerSecret: Deno.env.get("VFD_CONSUMER_SECRET") || "",
-      validityTime: "-1",
+      validityTime: "1",
     }),
   });
   const body = await res.json().catch(() => null);

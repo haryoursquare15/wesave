@@ -12,6 +12,7 @@
 const GATEWAY_URL = (Deno.env.get("VFD_GATEWAY_URL") || "").replace(/\/+$/, "");
 const GATEWAY_SECRET = Deno.env.get("VFD_GATEWAY_SECRET") || "";
 const ALLOW_DIRECT = (Deno.env.get("VFD_ALLOW_DIRECT") || "").toLowerCase() === "true";
+const WALLET_CREDENTIAL_ID = Deno.env.get("VFD_WALLET_CREDENTIAL_ID") || "";
 
 const VFD_HOST_RE = /^https:\/\/api-(devapps|apps)\.vfdbank\.systems/i;
 
@@ -59,6 +60,9 @@ export async function vfdFetch(input: string | URL, init: VfdFetchOptions = {}):
     throw new Error("VFD_GATEWAY_SECRET is not configured");
   }
   if (GATEWAY_SECRET) headers.set("x-gateway-key", GATEWAY_SECRET);
+  if (url.includes("/wallet2/") && WALLET_CREDENTIAL_ID) {
+    headers.set("wallet-credential-id", WALLET_CREDENTIAL_ID);
+  }
   if (!headers.has("x-request-id")) headers.set("x-request-id", crypto.randomUUID());
   if (init.idempotencyKey) headers.set("Idempotency-Key", init.idempotencyKey);
   if (!headers.has("Content-Type") && init.body) headers.set("Content-Type", "application/json");

@@ -98,7 +98,7 @@ async function mintMandateCredentialToken(): Promise<string | null> {
   const res = await vfdFetch(`${VFD_HOST}/vfd-tech/baas-portal/v1.1/baasauth/token`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "-1" }),
+    body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "1" }),
   });
   const json = await res.json().catch(() => ({} as Record<string, unknown>));
   const data = ((json as Record<string, any>)?.data || {}) as Record<string, unknown>;
@@ -113,7 +113,7 @@ async function mintTokenWithPair(consumerKey: string, consumerSecret: string): P
     const res = await vfdFetch(`${VFD_HOST}/vfd-tech/baas-portal/v1.1/baasauth/token`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "-1" }),
+      body: JSON.stringify({ consumerKey, consumerSecret, validityTime: "1" }),
     });
     const json = await res.json().catch(() => ({} as Record<string, unknown>));
     const data = ((json as Record<string, any>)?.data || {}) as Record<string, unknown>;
@@ -162,7 +162,7 @@ export async function probeCredentialMint(): Promise<Array<Record<string, unknow
       const res = await vfdFetch(`${VFD_HOST}/vfd-tech/baas-portal/v1.1/baasauth/token`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ consumerKey: p.key, consumerSecret: p.secret, validityTime: "-1" }),
+        body: JSON.stringify({ consumerKey: p.key, consumerSecret: p.secret, validityTime: "1" }),
       });
       const body = await res.json().catch(() => ({} as Record<string, any>));
       const data = (body?.data || {}) as Record<string, unknown>;
