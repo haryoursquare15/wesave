@@ -68,11 +68,15 @@ Deno.serve(async (req) => {
 
   const results: unknown[] = [];
   try {
+    const requestBody = req.method === "POST"
+      ? await req.json().catch(() => ({})) as { accountNumber?: string }
+      : {};
+    const accountNumber = requestBody.accountNumber || POOL;
     const gwToken = await getGatewayAccessToken().catch((e) => { results.push({ label: "gateway_token", error: String(e) }); return null; });
     const lcToken = await localToken().catch((e) => { results.push({ label: "local_token", error: String(e) }); return null; });
     results.push({ label: "tokens", gateway: gwToken ? "minted" : "none", local: lcToken ? "minted" : "none", same: gwToken === lcToken });
 
-    const enquiry = `${WALLET_BASE}/account/enquiry?accountNumber=${POOL}`;
+    const enquiry = `${WALLET_BASE}/account/enquiry?accountNumber=${encodeURIComponent(accountNumber)}`;
     if (gwToken) results.push(await probe("enquiry_pool_gateway_token", enquiry, gwToken));
     if (lcToken) results.push(await probe("enquiry_pool_local_token", enquiry, lcToken));
     if (gwToken) results.push(await probe("enquiry_self_gateway_token", `${WALLET_BASE}/account/enquiry`, gwToken));
