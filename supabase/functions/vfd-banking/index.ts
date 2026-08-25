@@ -213,7 +213,6 @@ async function vfdRequest(
     responseMessage.includes("invalid wallet token") || responseMessage.includes("token expired");
   if (tokenRejected) {
     console.log("[VFD] Wallet token rejected, regenerating once...");
-    cachedToken = null;
     let newToken: string;
     try {
       newToken = await getAccessToken();
