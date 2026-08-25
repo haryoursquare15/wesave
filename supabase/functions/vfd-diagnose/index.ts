@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
   const results: unknown[] = [];
   try {
     const requestBody = req.method === "POST"
-      ? await req.json().catch(() => ({})) as { accountNumber?: string }
+      ? await req.json().catch(() => ({})) as { accountNumber?: string; bvn?: string }
       : {};
     const accountNumber = requestBody.accountNumber || POOL;
     const gwToken = await getGatewayAccessToken().catch((e) => { results.push({ label: "gateway_token", error: String(e) }); return null; });
@@ -64,6 +64,17 @@ Deno.serve(async (req) => {
     if (gwToken) results.push(await probe("enquiry_pool_gateway_token", enquiry, gwToken));
     if (gwToken) results.push(await probe("enquiry_self_gateway_token", `${WALLET_BASE}/account/enquiry`, gwToken));
     if (gwToken) results.push(await probe("bank_list_gateway_token", `${WALLET_BASE}/bank`, gwToken));
+    // Read-only surface map: which API families still respond.
+    if (gwToken) {
+      results.push(await probe("sub_accounts_list", `${WALLET_BASE}/sub-accounts?entity=individual&page=1&size=1`, gwToken));
+      results.push(await probe("name_enquiry_recipient", `${WALLET_BASE}/transfer/recipient?accountNo=${encodeURIComponent(accountNumber)}&bank=999999&transfer_type=intra`, gwToken));
+      const bvn = (requestBody as { bvn?: string }).bvn;
+      if (bvn) {
+        results.push(await probe("client_bvn_lookup", `${WALLET_BASE}/client?bvn=${encodeURIComponent(bvn)}`, gwToken));
+        results.push(await probe("bvn_consent", `${WALLET_BASE}/bvn-consent?bvn=${encodeURIComponent(bvn)}&type=02&reference=diag`, gwToken));
+      }
+    }
+
     // Gateway self-report: is the wallet credential configured on the droplet?
     const gwUrl = (Deno.env.get("VFD_GATEWAY_URL") || "").replace(/\/+$/, "");
     const gwSecret = Deno.env.get("VFD_GATEWAY_SECRET") || "";
