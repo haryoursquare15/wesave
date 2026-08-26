@@ -106,6 +106,7 @@ export function MandateAuthorizationDialog({ subject, onClose, onAuthorized }: P
   useEffect(() => {
     if (!subject) {
       setStep("form"); setMandate(null);
+      setPaymentReported(false); setLastChecked(null); setCooldown(0);
       if (pollTimer.current) { window.clearInterval(pollTimer.current); pollTimer.current = null; }
       return;
     }
