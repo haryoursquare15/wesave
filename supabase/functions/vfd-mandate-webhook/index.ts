@@ -11,6 +11,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { timingSafeEqual, logAuthFailure } from "../_shared/webhook-security.ts";
+import { notifyMandateApproved } from "../_shared/mandate-notify.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -113,6 +114,22 @@ Deno.serve(async (req) => {
       type: "ddm_mandate_authorized",
       reference_id: member.group_id,
     } as never).catch(() => null);
+
+    // Central approval alert: in-app + branded email + web push, carrying the
+    // real amount, frequency and start/end dates from the mandate record.
+    const { data: grp } = await db.from("vfd_sandbox_groups")
+      .select("name").eq("id", member.group_id).maybeSingle();
+    await notifyMandateApproved(db, {
+      userId: member.user_id as string,
+      productType: "thrift",
+      productReference: member.group_id as string,
+      mandateReference: (member.mandate_reference as string) || reference || null,
+      subjectName: (grp?.name as string) || undefined,
+    });
+
+    await db.from("mandates").update({
+      status: "bank_approved", bank_approved_at: nowIso, resolved_at: nowIso,
+    }).eq("mandate_reference", member.mandate_reference).neq("status", "bank_approved");
   } else if (failed) {
     await db.from("vfd_sandbox_group_members").update({ mandate_status: "failed" }).eq("id", member.id);
     await db.from("vfd_sandbox_group_mandates").insert({

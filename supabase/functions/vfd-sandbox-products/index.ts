@@ -8673,6 +8673,10 @@ async function handleGoalsaveCheckMandateStatus(userId: string, body: Record<str
     await sendNotification(userId, "Mandate Approved",
       "Your Goal Savings Direct Debit Mandate has been approved by your bank. Auto-debits will now run on schedule.",
       "ddm_mandate_authorized");
+    await notifyMandateApproved(db, {
+      userId, productType: "fd_investment", productReference: savingsId,
+      mandateReference: savings.mandate_reference as string, subjectName: "Goal Savings",
+    });
   }
 
   return jsonResponse({ data: { success: true, mandate_status: newStatus, bank_approved: approval.approved, bank_approval_status: approval.status, vfd: approval.raw } });
