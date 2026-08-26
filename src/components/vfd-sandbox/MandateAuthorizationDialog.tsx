@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useVfdSandboxProducts } from "@/hooks/useVfdSandboxProducts";
 import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
-import { Copy, Check, RefreshCw, Building2, ShieldCheck, AlertTriangle } from "lucide-react";
+import { Copy, Check, RefreshCw, Building2, ShieldCheck, AlertTriangle, Clock } from "lucide-react";
 
 // VFD-aligned CBN bank codes (from VFD DDM docs §"Bank codes").
 const VFD_BANKS: { code: string; name: string }[] = [
