@@ -363,13 +363,24 @@ export function MandateAuthorizationDialog({ subject, onClose, onAuthorized }: P
               <Button variant="outline" disabled={busy} onClick={() => copy(mandate.nibssAccount)} className="h-11">
                 <Copy className="h-4 w-4 mr-1" /> Copy Account
               </Button>
-              <Button disabled={busy} onClick={recheckNow} className="h-11">
+              <Button disabled={busy || cooldown > 0} onClick={recheckNow} className="h-11">
                 {busy ? <RefreshCw className="h-4 w-4 animate-spin mr-1" /> : <Check className="h-4 w-4 mr-1" />}
-                I've Made the Payment
+                {busy
+                  ? "Verifying…"
+                  : cooldown > 0
+                    ? `Rechecking in ${cooldown}s`
+                    : paymentReported
+                      ? "Check again"
+                      : "I've made the payment"}
               </Button>
             </div>
+            {paymentReported && (
+              <Button variant="ghost" disabled={busy} onClick={onClose} className="h-10 w-full text-xs">
+                Close — notify me when approved
+              </Button>
+            )}
             <p className="text-[10px] text-muted-foreground text-center pt-1">
-              We'll automatically recheck every 60 seconds and notify you when the bank approves.
+              We recheck automatically every {paymentReported ? "15" : "60"} seconds and notify you the moment your bank approves.
             </p>
           </>
         )}
