@@ -107,7 +107,10 @@ async function runProbe(): Promise<Probe> {
     enquiryStatus = String(parsed?.status ?? res.status);
     enquiryMessage = String(parsed?.message ?? text).slice(0, 300);
     details.enquiry_http_status = res.status;
-    accountOk = enquiryStatus === "00";
+    // "00" = account returned. "01" (Account Not Found) still proves the
+    // wallet credential was accepted and the account-scoped route is reachable
+    // — only auth/entitlement failures ("99", 403/929) mean broken credentials.
+    accountOk = enquiryStatus === "00" || enquiryStatus === "01";
   } catch (e) {
     enquiryStatus = "error";
     enquiryMessage = String(e).slice(0, 300);
