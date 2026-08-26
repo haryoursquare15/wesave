@@ -303,6 +303,27 @@ export function MandateAuthorizationDialog({ subject, onClose, onAuthorized }: P
             </DialogHeader>
 
             <div className="space-y-3 text-xs">
+              {/* Live mandate status — always visible so the customer knows where they stand */}
+              <div className={`p-3 rounded-xl border flex items-start gap-2 ${paymentReported ? "bg-primary/5 border-primary/30" : "bg-muted/40 border-border"}`}>
+                {paymentReported
+                  ? <RefreshCw className="h-4 w-4 mt-0.5 flex-none text-primary animate-spin" />
+                  : <Clock className="h-4 w-4 mt-0.5 flex-none text-muted-foreground" />}
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold">Mandate status</span>
+                    <Badge variant={paymentReported ? "secondary" : "outline"} className="text-[10px]">
+                      {paymentReported ? "Verifying with your bank" : "Awaiting your ₦50 authorization"}
+                    </Badge>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    {paymentReported
+                      ? "Thanks — we've logged your payment. Approval usually lands within a few minutes; this screen updates itself and you'll get a notification."
+                      : "Send the ₦50 below, then tap “I've made the payment”."}
+                    {lastChecked && ` Last checked ${lastChecked.toLocaleTimeString("en-NG", { hour: "2-digit", minute: "2-digit" })}.`}
+                  </p>
+                </div>
+              </div>
+
               <div className="p-4 rounded-xl border-2 border-dashed border-primary/40 bg-primary/5 space-y-2">
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Account Number</span>
