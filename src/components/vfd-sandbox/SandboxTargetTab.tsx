@@ -19,6 +19,8 @@ import { addDays, addWeeks, addMonths, format } from "date-fns";
 import { SandboxTargetInviteDialog } from "./SandboxTargetInviteDialog";
 import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
 import { MandateAuthorizationDialog, type MandateSubject } from "./MandateAuthorizationDialog";
+import { MandateStatusCard } from "./MandateStatusCard";
+import { useMandates } from "@/hooks/useMandates";
 import { ShieldCheck } from "lucide-react";
 
 interface TargetGroup {
@@ -47,6 +49,7 @@ export function SandboxTargetTab() {
   const [pendingInvites, setPendingInvites] = useState<any[]>([]);
   const [respondingId, setRespondingId] = useState<string | null>(null);
   const [mandateSubject, setMandateSubject] = useState<MandateSubject | null>(null);
+  const { findFor: findMandate, refresh: refreshMandates } = useMandates();
 
   const [form, setForm] = useState({
     name: "", description: "", reason: "", goal_amount: "",
@@ -214,6 +217,9 @@ export function SandboxTargetTab() {
           {t.target_date && <span className="flex items-center gap-1"><CalendarDays className="h-4 w-4" /> {format(new Date(t.target_date), "MMM d, yyyy")}</span>}
         </div>
 
+        {/* Live mandate summary — setup, amount, dates and bank status */}
+        <MandateStatusCard mandate={findMandate("target_ajo", t.id)} />
+
         {/* Per-member DDM mandate gate (extends e-mandate flow to Target Ajo) */}
         {(() => {
           if (t.funding_mode !== "ddm" || isClosed) return null;
@@ -358,8 +364,8 @@ export function SandboxTargetTab() {
 
         <MandateAuthorizationDialog
           subject={mandateSubject}
-          onClose={() => setMandateSubject(null)}
-          onAuthorized={() => loadDetail(t.id)}
+          onClose={() => { setMandateSubject(null); void refreshMandates(); }}
+          onAuthorized={() => { loadDetail(t.id); void refreshMandates(); }}
         />
       </div>
     );
