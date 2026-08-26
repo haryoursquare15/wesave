@@ -74,9 +74,9 @@ export async function vfdFetch(input: string | URL, init: VfdFetchOptions = {}):
   const targetPath = new URL(target).pathname;
   console.log(`[vfd-gateway] ${init.method || "GET"} ${targetPath}`);
 
-  // TEMP DEBUG: wallet-credential-id visibility on account-scoped wallet2 calls.
+  // TEMP DEBUG: wallet-credential-id visibility on account-scoped calls.
   // Never logs AccessToken, consumer keys, or the gateway secret.
-  if (targetPath.includes("/wallet2/account/enquiry")) {
+  if (targetPath.includes("/wallet2/account/enquiry") || targetPath.includes("/directdebit/")) {
     const wcid = headers.get("wallet-credential-id");
     console.log(
       `[vfd-gateway][debug] path=${targetPath} wallet-credential-id_present=${!!wcid} value=${wcid ?? "(none)"}`,
