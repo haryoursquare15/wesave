@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useVfdSandboxProducts } from "@/hooks/useVfdSandboxProducts";
 import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
-import { Copy, Check, RefreshCw, Building2, ShieldCheck, AlertTriangle } from "lucide-react";
+import { Copy, Check, RefreshCw, Building2, ShieldCheck, AlertTriangle, Clock } from "lucide-react";
 
 // VFD-aligned CBN bank codes (from VFD DDM docs §"Bank codes").
 const VFD_BANKS: { code: string; name: string }[] = [
@@ -84,6 +84,10 @@ export function MandateAuthorizationDialog({ subject, onClose, onAuthorized }: P
     payerAccount: string; bankCode: string;
   } | null>(null);
   const pollTimer = useRef<number | null>(null);
+  // UX state for the NIBSS authorization step
+  const [paymentReported, setPaymentReported] = useState(false);
+  const [lastChecked, setLastChecked] = useState<Date | null>(null);
+  const [cooldown, setCooldown] = useState(0);
 
   // Dispatch the right hook method based on subject kind.
   const accept = async (payer: { payer_bank_code: string; payer_account_number: string; payer_phone: string; payer_email: string; payer_address: string }) => {
@@ -102,6 +106,7 @@ export function MandateAuthorizationDialog({ subject, onClose, onAuthorized }: P
   useEffect(() => {
     if (!subject) {
       setStep("form"); setMandate(null);
+      setPaymentReported(false); setLastChecked(null); setCooldown(0);
       if (pollTimer.current) { window.clearInterval(pollTimer.current); pollTimer.current = null; }
       return;
     }
@@ -117,18 +122,28 @@ export function MandateAuthorizationDialog({ subject, onClose, onAuthorized }: P
 
   useEffect(() => {
     if (step !== "nibss" || !subject) return;
+    // Poll faster once the customer says they've sent the ₦50.
+    const intervalMs = paymentReported ? 15_000 : 60_000;
     pollTimer.current = window.setInterval(async () => {
       const res = await checkStatus();
+      setLastChecked(new Date());
       if (res?.data?.bank_approved) {
         if (pollTimer.current) window.clearInterval(pollTimer.current);
         setStep("active");
         toast({ title: "Mandate Approved", description: "Your bank has approved the E-Mandate." });
         onAuthorized?.();
       }
-    }, 60_000);
+    }, intervalMs);
     return () => { if (pollTimer.current) window.clearInterval(pollTimer.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, subject?.id]);
+  }, [step, subject?.id, paymentReported]);
+
+  // Cooldown ticker so the confirm button can't be spammed.
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const t = window.setTimeout(() => setCooldown((c) => Math.max(0, c - 1)), 1000);
+    return () => window.clearTimeout(t);
+  }, [cooldown]);
 
   const selectedBank = useMemo(() => VFD_BANKS.find((b) => b.code === form.bankCode), [form.bankCode]);
   const mandateAmount = subject ? Math.max(1000, Number(subject.contribution_amount) || 0) : 0;
@@ -178,16 +193,19 @@ export function MandateAuthorizationDialog({ subject, onClose, onAuthorized }: P
   };
 
   const recheckNow = async () => {
-    if (!subject) return;
+    if (!subject || busy || cooldown > 0) return;
+    setPaymentReported(true);
     setBusy(true);
     const res = await checkStatus();
     setBusy(false);
+    setLastChecked(new Date());
     if (res?.data?.bank_approved) {
       setStep("active");
       toast({ title: "Mandate Approved", description: "Bank has approved your E-Mandate." });
       onAuthorized?.();
     } else {
-      toast({ title: "Still pending", description: "Your bank has not approved the mandate yet. We'll keep checking in the background." });
+      setCooldown(20);
+      toast({ title: "Awaiting bank approval", description: "We've received your confirmation. Banks usually approve within a few minutes — we're checking automatically." });
     }
   };
 
@@ -285,6 +303,27 @@ export function MandateAuthorizationDialog({ subject, onClose, onAuthorized }: P
             </DialogHeader>
 
             <div className="space-y-3 text-xs">
+              {/* Live mandate status — always visible so the customer knows where they stand */}
+              <div className={`p-3 rounded-xl border flex items-start gap-2 ${paymentReported ? "bg-primary/5 border-primary/30" : "bg-muted/40 border-border"}`}>
+                {paymentReported
+                  ? <RefreshCw className="h-4 w-4 mt-0.5 flex-none text-primary animate-spin" />
+                  : <Clock className="h-4 w-4 mt-0.5 flex-none text-muted-foreground" />}
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold">Mandate status</span>
+                    <Badge variant={paymentReported ? "secondary" : "outline"} className="text-[10px]">
+                      {paymentReported ? "Verifying with your bank" : "Awaiting your ₦50 authorization"}
+                    </Badge>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    {paymentReported
+                      ? "Thanks — we've logged your payment. Approval usually lands within a few minutes; this screen updates itself and you'll get a notification."
+                      : "Send the ₦50 below, then tap “I've made the payment”."}
+                    {lastChecked && ` Last checked ${lastChecked.toLocaleTimeString("en-NG", { hour: "2-digit", minute: "2-digit" })}.`}
+                  </p>
+                </div>
+              </div>
+
               <div className="p-4 rounded-xl border-2 border-dashed border-primary/40 bg-primary/5 space-y-2">
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Account Number</span>
@@ -324,13 +363,24 @@ export function MandateAuthorizationDialog({ subject, onClose, onAuthorized }: P
               <Button variant="outline" disabled={busy} onClick={() => copy(mandate.nibssAccount)} className="h-11">
                 <Copy className="h-4 w-4 mr-1" /> Copy Account
               </Button>
-              <Button disabled={busy} onClick={recheckNow} className="h-11">
+              <Button disabled={busy || cooldown > 0} onClick={recheckNow} className="h-11">
                 {busy ? <RefreshCw className="h-4 w-4 animate-spin mr-1" /> : <Check className="h-4 w-4 mr-1" />}
-                I've Made the Payment
+                {busy
+                  ? "Verifying…"
+                  : cooldown > 0
+                    ? `Rechecking in ${cooldown}s`
+                    : paymentReported
+                      ? "Check again"
+                      : "I've made the payment"}
               </Button>
             </div>
+            {paymentReported && (
+              <Button variant="ghost" disabled={busy} onClick={onClose} className="h-10 w-full text-xs">
+                Close — notify me when approved
+              </Button>
+            )}
             <p className="text-[10px] text-muted-foreground text-center pt-1">
-              We'll automatically recheck every 60 seconds and notify you when the bank approves.
+              We recheck automatically every {paymentReported ? "15" : "60"} seconds and notify you the moment your bank approves.
             </p>
           </>
         )}
