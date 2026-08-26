@@ -193,16 +193,19 @@ export function MandateAuthorizationDialog({ subject, onClose, onAuthorized }: P
   };
 
   const recheckNow = async () => {
-    if (!subject) return;
+    if (!subject || busy || cooldown > 0) return;
+    setPaymentReported(true);
     setBusy(true);
     const res = await checkStatus();
     setBusy(false);
+    setLastChecked(new Date());
     if (res?.data?.bank_approved) {
       setStep("active");
       toast({ title: "Mandate Approved", description: "Bank has approved your E-Mandate." });
       onAuthorized?.();
     } else {
-      toast({ title: "Still pending", description: "Your bank has not approved the mandate yet. We'll keep checking in the background." });
+      setCooldown(20);
+      toast({ title: "Awaiting bank approval", description: "We've received your confirmation. Banks usually approve within a few minutes — we're checking automatically." });
     }
   };
 
