@@ -84,6 +84,10 @@ export function MandateAuthorizationDialog({ subject, onClose, onAuthorized }: P
     payerAccount: string; bankCode: string;
   } | null>(null);
   const pollTimer = useRef<number | null>(null);
+  // UX state for the NIBSS authorization step
+  const [paymentReported, setPaymentReported] = useState(false);
+  const [lastChecked, setLastChecked] = useState<Date | null>(null);
+  const [cooldown, setCooldown] = useState(0);
 
   // Dispatch the right hook method based on subject kind.
   const accept = async (payer: { payer_bank_code: string; payer_account_number: string; payer_phone: string; payer_email: string; payer_address: string }) => {
