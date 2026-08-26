@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { vfdFetch, getGatewayAccessToken } from "../_shared/vfd-gateway.ts";
 import {
+import { notifyMandateApproved } from "../_shared/mandate-notify.ts";
   MANDATE_SETUP_FEE,
   MANDATE_MIN_AMOUNT,
   MANDATE_TEST_MODE,
@@ -7882,6 +7883,10 @@ async function handleCheckGroupMandateStatus(userId: string, body: Record<string
     await sendNotification(userId, "Mandate Approved",
       `Your Direct Debit Mandate for ${group.name} has been approved by the bank.`,
       "ddm_mandate_authorized", groupId);
+    await notifyMandateApproved(db, {
+      userId, productType: "thrift", productReference: groupId,
+      mandateReference: member.mandate_reference as string, subjectName: group.name as string,
+    });
   }
 
   return jsonResponse({
@@ -8362,6 +8367,11 @@ async function handleCheckTargetMandateStatus(userId: string, body: Record<strin
     await sendNotification(userId, "Mandate Approved",
       `Your Direct Debit Mandate for ${target?.name || "Target Ajo"} has been approved by the bank.`,
       "ddm_mandate_authorized", targetId);
+    await notifyMandateApproved(db, {
+      userId, productType: "target_ajo", productReference: targetId,
+      mandateReference: member.mandate_reference as string,
+      subjectName: (target?.name as string) || "Target Ajo",
+    });
   }
 
   return jsonResponse({ data: { success: true, mandate_status: newStatus, bank_approved: approval.approved, bank_approval_status: approval.status, vfd: approval.raw } });
@@ -8663,6 +8673,10 @@ async function handleGoalsaveCheckMandateStatus(userId: string, body: Record<str
     await sendNotification(userId, "Mandate Approved",
       "Your Goal Savings Direct Debit Mandate has been approved by your bank. Auto-debits will now run on schedule.",
       "ddm_mandate_authorized");
+    await notifyMandateApproved(db, {
+      userId, productType: "fd_investment", productReference: savingsId,
+      mandateReference: savings.mandate_reference as string, subjectName: "Goal Savings",
+    });
   }
 
   return jsonResponse({ data: { success: true, mandate_status: newStatus, bank_approved: approval.approved, bank_approval_status: approval.status, vfd: approval.raw } });

@@ -20,6 +20,7 @@ import { SandboxSplitTab } from "@/components/vfd-sandbox/SandboxSplitTab";
 import { SandboxAssociationTab } from "@/components/vfd-sandbox/SandboxAssociationTab";
 import { SandboxBillsTab } from "@/components/vfd-sandbox/SandboxBillsTab";
 import { SandboxCardTab } from "@/components/vfd-sandbox/SandboxCardTab";
+import { SandboxMandatesTab } from "@/components/vfd-sandbox/SandboxMandatesTab";
 import { SandboxGroupInviteModal } from "@/components/vfd-sandbox/SandboxGroupInviteModal";
 import { SandboxSplash } from "@/components/vfd-sandbox/SandboxSplash";
 import { useSandboxSessionEnforcement } from "@/hooks/useSandboxSessionEnforcement";
@@ -35,7 +36,7 @@ interface UserBalance {
   no_vfd_account?: boolean; stale?: boolean;
 }
 
-type View = "dashboard" | "fund" | "transfer" | "lock" | "history" | "ajo" | "target" | "goal" | "split" | "association" | "bills" | "card" | "kyc";
+type View = "dashboard" | "fund" | "transfer" | "lock" | "history" | "ajo" | "target" | "goal" | "split" | "association" | "bills" | "card" | "kyc" | "mandates";
 
 function ProductWrapper({ children, onBack }: { children: React.ReactNode; onBack: () => void }) {
   return (
@@ -571,6 +572,7 @@ function VfdSandboxInner() {
             {currentView === "association" && <ProductWrapper onBack={goBack}><SandboxAssociationTab /></ProductWrapper>}
             {currentView === "bills" && <ProductWrapper onBack={goBack}><SandboxBillsTab /></ProductWrapper>}
             {currentView === "card" && <ProductWrapper onBack={goBack}><SandboxCardTab /></ProductWrapper>}
+            {currentView === "mandates" && <ProductWrapper onBack={goBack}><SandboxMandatesTab /></ProductWrapper>}
           </>
         )}
       </div>

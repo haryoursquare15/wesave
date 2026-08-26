@@ -4,7 +4,7 @@ import {
   Wallet, Lock, Users, Target, Heart, Receipt, Send,
   CreditCard, Eye, EyeOff, TrendingUp, Plus, ArrowDownLeft, ArrowUpRight,
   Shield, ChevronRight, ChevronLeft, PiggyBank,
-  Clock, Copy, Check, Building2, Vault as VaultIcon, Zap, Gift,
+  Clock, Copy, Check, Building2, Vault as VaultIcon, Zap, Gift, ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -168,6 +168,7 @@ const serviceCategories: ServiceCategory[] = [
     children: [
       { key: "lock", label: "Active Savings", icon: Lock, desc: "View all your holdings" },
       { key: "lock:goalsave", label: "Goal Save", icon: Target, desc: "Installment savings" },
+      { key: "mandates", label: "My E-Mandates", icon: ShieldCheck, desc: "Setup, amount, dates & status" },
       { key: "goal", label: "Crowdfunding", icon: Heart, desc: "Coming soon", comingSoon: true },
     ],
   },

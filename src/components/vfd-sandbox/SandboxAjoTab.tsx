@@ -20,6 +20,8 @@ import {
 import { SandboxGroupInviteDialog } from "./SandboxGroupInviteDialog";
 import { SandboxGroupChat } from "./SandboxGroupChat";
 import { MandateAuthorizationDialog } from "./MandateAuthorizationDialog";
+import { MandateStatusCard } from "./MandateStatusCard";
+import { useMandates } from "@/hooks/useMandates";
 import { Settings as SettingsIcon, MessageSquare, Check, X } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
@@ -128,6 +130,7 @@ export function SandboxAjoTab() {
   const [inviteGate, setInviteGate] = useState<{ invite: any; group: Group } | null>(null);
   const [inviteBusy, setInviteBusy] = useState(false);
   const [mandateGroup, setMandateGroup] = useState<Group | null>(null);
+  const { findFor: findMandate, refresh: refreshMandates } = useMandates();
   const [mandateBusy, setMandateBusy] = useState(false);
 
   const AJO_DDM_FEE = 100;
@@ -547,6 +550,9 @@ export function SandboxAjoTab() {
                 <div className="flex justify-between"><span className="text-muted-foreground">Mandate ref</span><span className="font-mono text-[10px]">{g.mandate_reference || "—"}</span></div>
               )}
             </div>
+            {g.funding_mode === "ddm" && (
+              <MandateStatusCard mandate={findMandate("thrift", g.id)} />
+            )}
             {isAdmin && g.status === "active" && (
               <div className="rounded-xl border bg-card p-3 space-y-2">
                 <p className="font-semibold text-foreground">Admin actions</p>
@@ -882,7 +888,7 @@ export function SandboxAjoTab() {
           period: String((mandateGroup as any).period || "monthly"),
           total_cycles: Number((mandateGroup as any).total_cycles || (mandateGroup as any).max_members) || 1,
         } : null}
-        onClose={() => { if (!mandateBusy) setMandateGroup(null); }}
+        onClose={() => { if (!mandateBusy) { setMandateGroup(null); void refreshMandates(); } }}
         onAuthorized={async () => {
           await loadGroups();
           if (mandateGroup && detailGroup === mandateGroup.id) await loadDetail(mandateGroup.id);
