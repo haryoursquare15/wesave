@@ -17,6 +17,8 @@ import {
 import { TransactionPinGate } from "@/components/security/TransactionPinGate";
 import { TransactionSuccessModal, TransactionSuccessPayload } from "@/components/feedback/TransactionSuccessModal";
 import { GoalSavingsV2Wizard } from "./GoalSavingsV2Wizard";
+import { MandateStatusCard } from "./MandateStatusCard";
+import { useMandates } from "@/hooks/useMandates";
 
 interface UserBalance {
   total_balance: number; locked_balance: number; savings_balance: number; available_balance: number;
