@@ -22,6 +22,7 @@
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { verifyCronToken } from "../_shared/cron-auth.ts";
 import {
+import { notifyMandateApproved } from "../_shared/mandate-notify.ts";
   MANDATE_EXPIRY_DAYS,
   MANDATE_INTERNAL_SHARE,
   MANDATE_MIN_AMOUNT,
@@ -368,6 +369,12 @@ async function handlePollPending(limit: number) {
       await notify(m.user_id as string, "Direct Debit Mandate active",
         "Your bank approved the mandate. Scheduled contributions will now be collected automatically.",
         "mandate_bank_approved");
+      await notifyMandateApproved(supabase, {
+        userId: m.user_id as string,
+        productType: String(m.product_type),
+        productReference: (m.product_reference as string) || null,
+        mandateReference: (m.mandate_reference as string) || null,
+      });
       results.push({ mandate_id: m.id, outcome: "bank_approved" });
       continue;
     }
