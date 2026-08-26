@@ -122,18 +122,28 @@ export function MandateAuthorizationDialog({ subject, onClose, onAuthorized }: P
 
   useEffect(() => {
     if (step !== "nibss" || !subject) return;
+    // Poll faster once the customer says they've sent the ₦50.
+    const intervalMs = paymentReported ? 15_000 : 60_000;
     pollTimer.current = window.setInterval(async () => {
       const res = await checkStatus();
+      setLastChecked(new Date());
       if (res?.data?.bank_approved) {
         if (pollTimer.current) window.clearInterval(pollTimer.current);
         setStep("active");
         toast({ title: "Mandate Approved", description: "Your bank has approved the E-Mandate." });
         onAuthorized?.();
       }
-    }, 60_000);
+    }, intervalMs);
     return () => { if (pollTimer.current) window.clearInterval(pollTimer.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, subject?.id]);
+  }, [step, subject?.id, paymentReported]);
+
+  // Cooldown ticker so the confirm button can't be spammed.
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const t = window.setTimeout(() => setCooldown((c) => Math.max(0, c - 1)), 1000);
+    return () => window.clearTimeout(t);
+  }, [cooldown]);
 
   const selectedBank = useMemo(() => VFD_BANKS.find((b) => b.code === form.bankCode), [form.bankCode]);
   const mandateAmount = subject ? Math.max(1000, Number(subject.contribution_amount) || 0) : 0;
