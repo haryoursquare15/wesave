@@ -168,6 +168,7 @@ const serviceCategories: ServiceCategory[] = [
     children: [
       { key: "lock", label: "Active Savings", icon: Lock, desc: "View all your holdings" },
       { key: "lock:goalsave", label: "Goal Save", icon: Target, desc: "Installment savings" },
+      { key: "mandates", label: "My E-Mandates", icon: ShieldCheck, desc: "Setup, amount, dates & status" },
       { key: "goal", label: "Crowdfunding", icon: Heart, desc: "Coming soon", comingSoon: true },
     ],
   },
