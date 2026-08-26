@@ -48,6 +48,7 @@ const PRODUCT_GRADIENTS: Record<VestaraProductCode, string> = {
 export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductCode }: Props) {
   const { toast } = useToast();
   const vestara = useVestaraLedger();
+  const { findFor: findMandate } = useMandates();
 
   const [products, setProducts] = useState<VestaraProduct[]>([]);
   const [savings, setSavings] = useState<VS[]>([]);
@@ -636,6 +637,8 @@ export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductC
               const allowEarly = s.vestara_products?.allow_early_withdrawal ?? true;
               const Icon = PRODUCT_ICONS[s.product_code] || Lock;
 
+              const savingsMandate = findMandate("fd_investment", s.id);
+
               return (
                 <motion.div
                   key={s.id}
@@ -671,6 +674,8 @@ export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductC
                         : s.status.replace("_", " ")}
                     </Badge>
                   </div>
+
+                  {savingsMandate && <MandateStatusCard mandate={savingsMandate} compact />}
 
                   {s.status === "active" && s.approval_status !== "pending" && (
                     <div>
