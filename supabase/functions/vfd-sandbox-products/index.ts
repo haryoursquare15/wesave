@@ -6991,7 +6991,7 @@ async function handleAutoStartPendingGroups(_userId: string, body: Record<string
   }
 
 
-  return jsonResponse({ data: { started_count: started.length, started } });
+  return jsonResponse({ data: { started_count: started.length, started, blocked_count: blocked.length, blocked } });
 }
 
 // =============================================
