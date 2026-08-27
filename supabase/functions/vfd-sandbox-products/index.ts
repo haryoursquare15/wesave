@@ -1,7 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { vfdFetch, getGatewayAccessToken } from "../_shared/vfd-gateway.ts";
-import {
 import { notifyMandateApproved } from "../_shared/mandate-notify.ts";
+import {
   MANDATE_SETUP_FEE,
   MANDATE_MIN_AMOUNT,
   MANDATE_TEST_MODE,
