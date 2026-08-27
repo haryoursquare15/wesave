@@ -297,7 +297,16 @@ export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductC
     };
   }, [savings]);
 
-  // Chips: product types the user actually holds
+  const liveSavings = useMemo(
+    () => savings.filter(s => !ARCHIVED_STATES.includes(planState(s))),
+    [savings],
+  );
+  const archivedSavings = useMemo(
+    () => savings.filter(s => ARCHIVED_STATES.includes(planState(s))),
+    [savings],
+  );
+
+  // Chips: product types the user actually holds in the current view
   const productChips = useMemo(() => {
     const map = new Map<string, { label: string; count: number }>();
     for (const s of (planView === "live" ? liveSavings : archivedSavings)) {
@@ -309,14 +318,6 @@ export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductC
     return Array.from(map.entries()).map(([code, v]) => ({ code, ...v }));
   }, [planView, liveSavings, archivedSavings]);
 
-  const liveSavings = useMemo(
-    () => savings.filter(s => !ARCHIVED_STATES.includes(planState(s))),
-    [savings],
-  );
-  const archivedSavings = useMemo(
-    () => savings.filter(s => ARCHIVED_STATES.includes(planState(s))),
-    [savings],
-  );
 
   const visibleSavings = useMemo(() => {
     const base = planView === "live" ? liveSavings : archivedSavings;
