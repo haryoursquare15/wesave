@@ -267,19 +267,42 @@ export function getLastMandateTokenSource(): string {
   return lastTokenSource;
 }
 
-export async function getMandateAccessToken(): Promise<string | null> {
-  // Always mint fresh: no cached or statically stored tokens.
+/** Every distinct token we can mint for mandate calls, best candidate first. */
+export async function getMandateTokenCandidates(): Promise<Array<{ source: string; token: string }>> {
   cachedToken = null;
-  const candidates: Array<{ source: string; token: string | null }> = [
-    // Freshly minted token from the mandate consumer pair takes precedence.
-    { source: "mandate_credentials", token: await mintMandateCredentialToken().catch(() => null) },
+  const raw: Array<{ source: string; token: string | null }> = [
+    { source: "emandate_credentials", token: await mintTokenWithPair(
+      Deno.env.get("VFD_EMANDATE_CONSUMER_KEY") || "",
+      Deno.env.get("VFD_EMANDATE_CONSUMER_SECRET") || "") },
+    { source: "mandate_credentials", token: await mintTokenWithPair(
+      (Deno.env.get("VFD_MANDATE_CONSUMER_KEY_V2") || Deno.env.get("VFD_MANDATE_CONSUMER_KEY")) || "",
+      (Deno.env.get("VFD_MANDATE_CONSUMER_SECRET_V2") || Deno.env.get("VFD_MANDATE_CONSUMER_SECRET")) || "") },
+    { source: "primary_credentials", token: await mintTokenWithPair(
+      Deno.env.get("VFD_CONSUMER_KEY") || "",
+      Deno.env.get("VFD_CONSUMER_SECRET") || "") },
     { source: "gateway_wallet", token: await getGatewayAccessToken().catch(() => null) },
   ];
 
-  const tested = new Set<string>();
+  const seen = new Set<string>();
+  const out: Array<{ source: string; token: string }> = [];
+  for (const c of raw) {
+    if (!c.token || seen.has(c.token)) continue;
+    seen.add(c.token);
+    out.push({ source: c.source, token: c.token });
+  }
+  return out;
+}
+
+/** True when VFD's answer means "this token isn't valid/entitled". */
+export function isInvalidTokenResponse(httpStatus: number, body: Record<string, unknown>): boolean {
+  const message = String((body as any)?.message || (body as any)?.error || "");
+  return httpStatus === 401 || httpStatus === 403 ||
+    /invalid wallet token|invalid token|unauthori[sz]ed|access denied|contact admin/i.test(message);
+}
+
+export async function getMandateAccessToken(): Promise<string | null> {
+  const candidates = await getMandateTokenCandidates();
   for (const c of candidates) {
-    if (!c.token || tested.has(c.token)) continue;
-    tested.add(c.token);
     if (await tokenIsAccepted(c.token, c.source)) {
       lastTokenSource = c.source;
       return c.token;
@@ -289,6 +312,7 @@ export async function getMandateAccessToken(): Promise<string | null> {
   console.error("[mandate-auth] VFD rejected every configured mandate token");
   return null;
 }
+
 
 function extractNibssAccount(message: string): string {
   const m = (message || "").match(/\b(\d{10})\b/);
