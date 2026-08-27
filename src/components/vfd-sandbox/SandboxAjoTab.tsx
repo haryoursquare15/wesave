@@ -22,6 +22,7 @@ import { SandboxGroupChat } from "./SandboxGroupChat";
 import { MandateAuthorizationDialog } from "./MandateAuthorizationDialog";
 import { MandateStatusCard } from "./MandateStatusCard";
 import { useMandates } from "@/hooks/useMandates";
+import { ThriftMandateReadiness } from "./ThriftMandateReadiness";
 import { Settings as SettingsIcon, MessageSquare, Check, X } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
