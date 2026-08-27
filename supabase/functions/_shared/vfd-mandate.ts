@@ -336,7 +336,6 @@ export async function createMandate(opts: {
   startDate: Date;
   endDate: Date;
 }): Promise<MandateCreateResult> {
-  const accessToken = await getMandateAccessToken();
   const payload = {
     reference: opts.reference,
     payerBank: opts.payer.bankCode,
@@ -351,33 +350,55 @@ export async function createMandate(opts: {
     endDate: formatVfdMandateDate(opts.endDate),
     frequency: opts.frequency,
   };
-  if (!accessToken) {
+
+  const candidates = await getMandateTokenCandidates();
+  if (candidates.length === 0) {
     return { created: false, mandateCode: "", nibssAccount: "", nibssMessage: "",
       raw: { step: "create", request: payload, error: "MANDATE_AUTH_FAILED" } };
   }
-  try {
-    const res = await vfdFetch(`${VFD_MANDATE_BASE}${VFD_MANDATE_CREATE_PATH}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", AccessToken: accessToken },
-      body: JSON.stringify(payload),
-    });
-    const json = await res.json().catch(() => ({} as Record<string, unknown>));
-    const data = ((json as Record<string, any>)?.data || {}) as Record<string, unknown>;
-    const mandateCode = String(data.mandateCode || data.mandateId || data.reference || "");
-    const nibssMessage = String(data.message || (json as Record<string, any>)?.message || "");
-    const nibssAccount = String(
-      data.nibssAccount || data.accountNumber || data.account || data.virtualAccountNumber || "",
-    ) || extractNibssAccount(nibssMessage);
-    const status = String((json as Record<string, any>)?.status || "");
-    // An empty / undocumented body is NEVER a created mandate.
-    const created = (status === "00" || res.status === 202) && !!(mandateCode || nibssAccount);
-    return { created, mandateCode, nibssAccount, nibssMessage,
-      raw: { step: "create", request: payload, response: json, http_status: res.status } };
-  } catch (e) {
-    return { created: false, mandateCode: "", nibssAccount: "", nibssMessage: "",
-      raw: { step: "create", request: payload, error: e instanceof Error ? e.message : String(e) } };
+
+  const attempts: Array<Record<string, unknown>> = [];
+  for (const c of candidates) {
+    try {
+      const res = await vfdFetch(`${VFD_MANDATE_BASE}${VFD_MANDATE_CREATE_PATH}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", AccessToken: c.token },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json().catch(() => ({} as Record<string, unknown>));
+      attempts.push({ source: c.source, http_status: res.status, response: json });
+
+      // Token not valid/entitled for e-mandate → try the next credential pair.
+      if (isInvalidTokenResponse(res.status, json as Record<string, unknown>)) {
+        console.warn(`[mandate-create] token source=${c.source} rejected (${res.status})`);
+        continue;
+      }
+
+      const data = ((json as Record<string, any>)?.data || {}) as Record<string, unknown>;
+      const mandateCode = String(data.mandateCode || data.mandateId || data.reference || "");
+      const nibssMessage = String(data.message || (json as Record<string, any>)?.message || "");
+      const nibssAccount = String(
+        data.nibssAccount || data.accountNumber || data.account || data.virtualAccountNumber || "",
+      ) || extractNibssAccount(nibssMessage);
+      const status = String((json as Record<string, any>)?.status || "");
+      // An empty / undocumented body is NEVER a created mandate.
+      const created = (status === "00" || res.status === 202) && !!(mandateCode || nibssAccount);
+      lastTokenSource = c.source;
+      return { created, mandateCode, nibssAccount, nibssMessage,
+        raw: { step: "create", request: payload, response: json, http_status: res.status,
+          token_source: c.source, attempts } };
+    } catch (e) {
+      attempts.push({ source: c.source, error: e instanceof Error ? e.message : String(e) });
+    }
   }
+
+  lastTokenSource = "none";
+  const last = attempts[attempts.length - 1] || {};
+  return { created: false, mandateCode: "", nibssAccount: "", nibssMessage: "",
+    raw: { step: "create", request: payload, response: (last as any).response,
+      http_status: (last as any).http_status ?? 0, error: "MANDATE_AUTH_FAILED", attempts } };
 }
+
 
 export interface MandateStatusResult {
   approved: boolean;
