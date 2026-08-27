@@ -283,6 +283,15 @@ export function SandboxAjoTab() {
           <ArrowLeft className="h-3 w-3" /> Back to Groups
         </button>
 
+        <ThriftMandateReadiness
+          gate={detailData.mandate_gate}
+          groupStatus={String(g.status)}
+          currentUserId={currentUserId}
+          isAdmin={isAdmin}
+        />
+
+
+
         <Card>
           <CardContent className="p-4 space-y-4">
             <div className="flex items-center justify-between">
