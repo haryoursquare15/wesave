@@ -603,6 +603,29 @@ export async function refundMandateSetupFee(
   }
 }
 
+/**
+ * Roll every product-level mirror of a mandate back to "awaiting bank
+ * approval" when VFD says the bank has not approved it. Applied to all
+ * e-mandate products so no surface can display an unapproved mandate as live.
+ */
+export async function demoteProductMandateStatus(db: any, mandateReference: string) {
+  if (!mandateReference) return;
+  try {
+    await db.from("vfd_sandbox_group_members")
+      .update({ mandate_status: "awaiting_approval", mandate_authorized_at: null })
+      .eq("mandate_reference", mandateReference);
+    await db.from("vfd_sandbox_target_members")
+      .update({ mandate_status: "awaiting_approval" })
+      .eq("mandate_reference", mandateReference);
+    await db.from("vestara_savings")
+      .update({ mandate_status: "awaiting_approval" })
+      .eq("mandate_reference", mandateReference);
+  } catch {
+    // best-effort mirror update; the canonical `mandates` row is authoritative
+  }
+}
+
+
 export interface CollectDebitResult {
   /** TRUE only when VFD answered status === "00". Nothing may be booked otherwise. */
   collected: boolean;
