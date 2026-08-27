@@ -300,14 +300,14 @@ export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductC
   // Chips: product types the user actually holds
   const productChips = useMemo(() => {
     const map = new Map<string, { label: string; count: number }>();
-    for (const s of savings) {
+    for (const s of (planView === "live" ? liveSavings : archivedSavings)) {
       const key = s.product_code as string;
       const label = s.vestara_products?.name || key;
       const prev = map.get(key);
       map.set(key, { label, count: (prev?.count || 0) + 1 });
     }
     return Array.from(map.entries()).map(([code, v]) => ({ code, ...v }));
-  }, [savings]);
+  }, [planView, liveSavings, archivedSavings]);
 
   const liveSavings = useMemo(
     () => savings.filter(s => !ARCHIVED_STATES.includes(planState(s))),
@@ -675,7 +675,7 @@ export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductC
         {/* Product filter chips */}
         {!loadingData && productChips.length > 1 && (
           <div className="flex gap-2 overflow-x-auto pb-3 -mx-1 px-1 scrollbar-none">
-            <FilterChip active={planFilter === "all"} onClick={() => setPlanFilter("all")} label={`All · ${savings.length}`} />
+            <FilterChip active={planFilter === "all"} onClick={() => setPlanFilter("all")} label={`All · ${(planView === "live" ? liveSavings : archivedSavings).length}`} />
             {productChips.map(c => (
               <FilterChip
                 key={c.code}
