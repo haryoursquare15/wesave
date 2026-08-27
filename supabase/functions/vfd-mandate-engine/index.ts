@@ -327,10 +327,18 @@ async function markProductApproved(mandate: Record<string, any>, nowIso: string)
         .update({ mandate_status: "authorized", mandate_authorized_at: nowIso })
         .eq("target_id", mandate.product_reference).eq("user_id", mandate.user_id);
     } else {
+      // Savings plans stay in `pending_mandate` until the bank approves. Flip
+      // them to `active` here too, otherwise the debit worker skips them
+      // forever even though the mandate is bank-approved.
+      await supabase.from("vestara_savings")
+        .update({ mandate_status: "authorized", mandate_authorized_at: nowIso, activation_status: "active" })
+        .eq("id", mandate.product_reference)
+        .eq("activation_status", "pending_mandate");
       await supabase.from("vestara_savings")
         .update({ mandate_status: "authorized", mandate_authorized_at: nowIso })
         .eq("id", mandate.product_reference);
     }
+
   } catch (e) {
     console.error("[mandate-engine] product approval flag failed", e);
   }
