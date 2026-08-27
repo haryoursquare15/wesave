@@ -7282,23 +7282,38 @@ async function handleUpdateGroupSettings(userId: string, body: Record<string, un
   // member to individually accept the DDM mandate (₦100 fee), so the
   // group-level status starts as "pending" — it flips to "authorized"
   // automatically once every active member has signed.
+  // Explicit per-member funding overrides are never accepted for a DDM group.
+  const requestedMemberMethod = body.member_contribution_method as string | undefined;
+  const effectiveMode = body.funding_mode !== undefined
+    ? ((body.funding_mode as string) === "ddm" ? "ddm" : "wallet")
+    : ((group.funding_mode as string) || "wallet");
+  if (requestedMemberMethod === "wallet" && effectiveMode === "ddm") {
+    return jsonResponse({
+      error: "This is an E-Mandate thrift — every member must fund through direct debit. Wallet funding cannot be enabled for a member.",
+      code: "WALLET_NOT_ALLOWED_IN_DDM",
+    }, 400);
+  }
+
   if (body.funding_mode !== undefined) {
-    const fm = (body.funding_mode as string) === "ddm" ? "ddm" : "wallet";
+    const fm = effectiveMode;
     updates.funding_mode = fm;
     if (fm === "ddm") {
       updates.mandate_status = "pending";
+      updates.commencement_status = "pending_mandate_auth";
       updates.mandate_reference = group.mandate_reference || `VES-DDM-AJO-${groupId}`;
-      // Reset all active members to pending so they re-authorize.
+      // E-Mandate is mandatory for everyone: force direct_debit + reset mandate
+      // readiness so each member re-authorizes with their bank.
       await db.from("vfd_sandbox_group_members")
-        .update({ mandate_status: "pending" })
+        .update({ contribution_method: "direct_debit", mandate_status: "pending" })
         .eq("group_id", groupId).eq("status", "active");
     } else {
       updates.mandate_status = "not_required";
       await db.from("vfd_sandbox_group_members")
-        .update({ mandate_status: "not_required" })
+        .update({ contribution_method: "wallet", mandate_status: "not_required" })
         .eq("group_id", groupId);
     }
   }
+
 
   const { error } = await db.from("vfd_sandbox_groups").update(updates).eq("id", groupId);
   if (error) return jsonResponse({ error: error.message }, 500);
