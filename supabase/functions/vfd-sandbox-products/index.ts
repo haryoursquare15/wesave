@@ -6936,25 +6936,46 @@ async function handleAutoStartPendingGroups(_userId: string, body: Record<string
 
   const { data: due } = await query;
   const started: string[] = [];
+  const blocked: Array<Record<string, unknown>> = [];
 
   for (const group of (due || [])) {
     const payoutOrder = (group.payout_order || []) as string[];
     if (!payoutOrder.length) continue;
+
+    // E-Mandate gate: an all-or-nothing DDM group stays in its swap-window
+    // state (retryable) until EVERY active member is bank-approved.
+    const gate = await checkGroupMandateGate(group.id);
+    if (!gate.ok) {
+      await db.from("vfd_sandbox_groups").update({
+        commencement_status: "pending_mandate_auth",
+        updated_at: new Date().toISOString(),
+      }).eq("id", group.id);
+      blocked.push({
+        group_id: group.id,
+        approved_count: gate.approved_count,
+        total_members: gate.total_members,
+        blocking_members: gate.blocking_members.map((m) => ({ name: m.name, mandate_status: m.mandate_status })),
+      });
+      continue;
+    }
+
+    // Conditional transition prevents two concurrent runs commencing the group.
+    const { data: claimed } = await db.from("vfd_sandbox_groups").update({
+      status: "active",
+      current_cycle: 1,
+      current_payout_position: 1,
+      total_cycles: payoutOrder.length,
+      commencement_status: "ready",
+      commenced_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }).eq("id", group.id).eq("status", "swap_window").select("id");
+    if (!claimed || claimed.length !== 1) continue;
 
     // Create cycle 1 for the (now-final) payout order
     const { data: cycle } = await db.from("vfd_sandbox_contribution_cycles").insert({
       group_id: group.id, cycle_number: 1, status: "active",
       payout_recipient_id: payoutOrder[0],
     }).select().single();
-
-    await db.from("vfd_sandbox_groups").update({
-      status: "active",
-      current_cycle: 1,
-      current_payout_position: 1,
-      total_cycles: payoutOrder.length,
-      commenced_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }).eq("id", group.id);
 
     await postChatMessage(group.id, group.admin_id,
       `🚀 Swap window closed. Thrift has commenced! Cycle 1 is now active — recipient has been notified.`,
@@ -6968,6 +6989,7 @@ async function handleAutoStartPendingGroups(_userId: string, body: Record<string
     started.push(group.id);
     void cycle;
   }
+
 
   return jsonResponse({ data: { started_count: started.length, started } });
 }
