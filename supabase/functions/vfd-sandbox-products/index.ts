@@ -7941,35 +7941,124 @@ async function handleUpdateTargetSettings(userId: string, body: Record<string, u
 // COMMENCEMENT READINESS + MANDATE DEBIT (DDM)
 // =============================================
 
-// Compute group's readiness to commence. Every member must either be a wallet
-// contributor, or have an authorized DDM mandate; the group must be full. Sets
-// commencement_status on vfd_sandbox_groups and returns the breakdown.
+// ---------------------------------------------------------------------------
+// AUTHORITATIVE E-MANDATE GATE (single source of truth)
+// A DDM ("E-Mandate") thrift is all-or-nothing: every ACTIVE member must be on
+// direct_debit AND have a canonical `mandates` row with status bank_approved.
+// The member mirror field alone is never trusted.
+// ---------------------------------------------------------------------------
+export interface MandateGateMember {
+  user_id: string;
+  name: string;
+  mandate_status: string;      // ui status: approved | pending | failed | expired | not_setup
+  mandate_expires_at: string | null;
+}
+
+async function checkGroupMandateGate(groupId: string): Promise<{
+  ok: boolean;
+  funding_mode: string;
+  approved_count: number;
+  total_members: number;
+  blocking_members: MandateGateMember[];
+  members: MandateGateMember[];
+}> {
+  const db = getSupabaseAdmin();
+  const { data: group } = await db.from("vfd_sandbox_groups")
+    .select("id, funding_mode").eq("id", groupId).maybeSingle();
+  const fundingMode = (group?.funding_mode as string) || "wallet";
+
+  const { data: memberRows } = await db.from("vfd_sandbox_group_members")
+    .select("user_id, contribution_method, mandate_status").eq("group_id", groupId).eq("status", "active");
+  const rows = memberRows || [];
+  const names = await fetchProfileNames(rows.map((m: { user_id: string }) => m.user_id));
+  const nameOf = (uid: string) => names[uid] || `User ${uid.slice(0, 6)}`;
+
+  if (fundingMode !== "ddm") {
+    const all = rows.map((m: any) => ({
+      user_id: m.user_id as string, name: nameOf(m.user_id), mandate_status: "not_required", mandate_expires_at: null,
+    }));
+    return { ok: true, funding_mode: fundingMode, approved_count: rows.length, total_members: rows.length, blocking_members: [], members: all };
+  }
+
+  // Canonical mandate registry — newest row per member wins, but an approved
+  // row always takes precedence over a newer pending one.
+  const { data: canonRows } = await db.from("mandates")
+    .select("user_id, status, expires_at, created_at")
+    .eq("product_type", "thrift").eq("product_reference", groupId)
+    .order("created_at", { ascending: false });
+  const canonical = new Map<string, any>();
+  for (const c of (canonRows || [])) {
+    const prev = canonical.get(c.user_id as string);
+    if (!prev || (c.status === "bank_approved" && prev.status !== "bank_approved")) canonical.set(c.user_id as string, c);
+  }
+
+  const members: MandateGateMember[] = rows.map((m: any) => {
+    const canon = canonical.get(m.user_id as string);
+    const mirror = String(m.mandate_status || "");
+    const canonStatus = String(canon?.status || "");
+    const approved =
+      m.contribution_method === "direct_debit" &&
+      mirror === "authorized" &&
+      !!canon && canonStatus === "bank_approved";
+
+    let ui = "not_setup";
+    if (approved) ui = "approved";
+    else if (canonStatus === "expired" || mirror === "expired") ui = "expired";
+    else if (canonStatus === "failed" || canonStatus === "cancelled" || mirror === "failed") ui = "failed";
+    else if (canon || ["pending", "awaiting_approval", "pending_authorization", "authorized"].includes(mirror)) ui = "pending";
+
+    return {
+      user_id: m.user_id as string,
+      name: nameOf(m.user_id as string),
+      mandate_status: ui,
+      mandate_expires_at: (canon?.expires_at as string) || null,
+    };
+  });
+
+  const blocking = members.filter((m) => m.mandate_status !== "approved");
+  return {
+    ok: blocking.length === 0 && members.length > 0,
+    funding_mode: fundingMode,
+    approved_count: members.length - blocking.length,
+    total_members: members.length,
+    blocking_members: blocking,
+    members,
+  };
+}
+
+// Compute group's readiness to commence — delegates the mandate decision to the
+// single authoritative gate above. Sets commencement_status and returns the
+// breakdown used by UI, manual commencement and automatic commencement alike.
 async function checkGroupCommencementReadiness(groupId: string) {
   const db = getSupabaseAdmin();
   const { data: group } = await db.from("vfd_sandbox_groups")
-    .select("id, admin_id, max_members, member_count, commencement_status").eq("id", groupId).maybeSingle();
+    .select("id, admin_id, max_members, member_count, commencement_status, funding_mode").eq("id", groupId).maybeSingle();
   if (!group) return { ready: false, error: "Group not found" };
-  const { data: members } = await db.from("vfd_sandbox_group_members")
-    .select("id, contribution_method, mandate_status").eq("group_id", groupId).eq("status", "active");
-  const rows = members || [];
-  const total = rows.length;
-  const walletReady = rows.filter((m) => m.contribution_method === "wallet").length;
-  const ddmActive = rows.filter((m) => m.contribution_method === "direct_debit" && m.mandate_status === "authorized").length;
-  const ddmPending = rows.filter((m) => m.contribution_method === "direct_debit" && ["awaiting_approval", "pending_authorization", "pending"].includes(String(m.mandate_status))).length;
-  const ddmFailed = rows.filter((m) => m.contribution_method === "direct_debit" && ["failed", "expired"].includes(String(m.mandate_status))).length;
+  const gate = await checkGroupMandateGate(groupId);
+  const total = gate.total_members;
   const slotsEmpty = Math.max(0, Number(group.max_members) - total);
-  const ready = total === Number(group.max_members) && (walletReady + ddmActive) === total;
+  const ready = total === Number(group.max_members) && gate.ok;
   const status = ready ? "ready" : (slotsEmpty > 0 ? "pending_members" : "pending_mandate_auth");
   await db.from("vfd_sandbox_groups")
     .update({ commencement_status: status, updated_at: new Date().toISOString() })
     .eq("id", groupId);
-  if (ready) {
+  if (ready && group.commencement_status !== "ready") {
     await sendNotification(group.admin_id, "Group Ready to Commence",
       "All members are ready. You can now commence this thrift group.",
       "group_ready_to_commence", groupId);
   }
-  return { ready, status, breakdown: { total, walletReady, ddmActive, ddmPending, ddmFailed, slotsEmpty } };
+  return {
+    ready,
+    status,
+    funding_mode: gate.funding_mode,
+    approved_count: gate.approved_count,
+    total_members: total,
+    blocking_members: gate.blocking_members,
+    members: gate.members,
+    breakdown: { total, slotsEmpty, approved: gate.approved_count, pending: gate.blocking_members.length },
+  };
 }
+
 
 async function handleCheckCommencementReadiness(userId: string, body: Record<string, unknown>) {
   const groupId = body.group_id as string;
