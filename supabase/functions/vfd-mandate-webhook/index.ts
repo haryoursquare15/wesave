@@ -12,6 +12,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { timingSafeEqual, logAuthFailure } from "../_shared/webhook-security.ts";
 import { notifyMandateApproved } from "../_shared/mandate-notify.ts";
+import { isBankApprovedWorkflow } from "../_shared/vfd-mandate.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -88,7 +89,9 @@ Deno.serve(async (req) => {
     return ok({ received: true, matched: false });
   }
 
-  const approved = /bank.?approved|approved|active/i.test(workflowStatus);
+  // Only VFD's explicit BANK approval counts — "ACTIVE"/"biller initiated"
+  // merely acknowledges our own mandate creation, not the payer bank's consent.
+  const approved = isBankApprovedWorkflow(workflowStatus, workflowStatus);
   const failed = /reject|fail|cancel|revoke/i.test(workflowStatus);
   const nowIso = new Date().toISOString();
 
