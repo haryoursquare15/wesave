@@ -285,6 +285,49 @@ export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductC
 
   const activeSavings = savings.filter(s => s.status === "active" && s.approval_status !== "pending");
 
+  const totals = useMemo(() => {
+    const active = savings.filter(s => s.status === "active" && s.approval_status !== "pending");
+    return {
+      principal: active.reduce((sum, s) => sum + Number(s.principal || 0), 0),
+      interest: active.reduce(
+        (sum, s) => sum + Number(s.accrued_interest || 0) + Number(s.discounted_interest_paid || 0), 0),
+      activeCount: active.length,
+    };
+  }, [savings]);
+
+  // Chips: product types the user actually holds
+  const productChips = useMemo(() => {
+    const map = new Map<string, { label: string; count: number }>();
+    for (const s of savings) {
+      const key = s.product_code as string;
+      const label = s.vestara_products?.name || key;
+      const prev = map.get(key);
+      map.set(key, { label, count: (prev?.count || 0) + 1 });
+    }
+    return Array.from(map.entries()).map(([code, v]) => ({ code, ...v }));
+  }, [savings]);
+
+  const visibleSavings = useMemo(
+    () => (planFilter === "all" ? savings : savings.filter(s => s.product_code === planFilter)),
+    [savings, planFilter],
+  );
+
+  // Group visible plans by product, active plans first inside each group
+  const grouped = useMemo(() => {
+    const order: PlanState[] = ["ready", "active", "pending", "rejected", "matured", "closed"];
+    const map = new Map<string, { label: string; items: VS[] }>();
+    for (const s of visibleSavings) {
+      const key = s.product_code as string;
+      const entry = map.get(key) || { label: s.vestara_products?.name || key, items: [] };
+      entry.items.push(s);
+      map.set(key, entry);
+    }
+    for (const g of map.values()) {
+      g.items.sort((a, b) => order.indexOf(planState(a)) - order.indexOf(planState(b)));
+    }
+    return Array.from(map.values());
+  }, [visibleSavings]);
+
   return (
     <div className="space-y-5">
       {/* Header */}
