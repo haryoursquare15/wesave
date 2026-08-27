@@ -1380,11 +1380,15 @@ export type Database = {
           created_at: string
           end_date: string | null
           expires_at: string
+          expiry_final_checked_at: string | null
           frequency: string
           id: string
           last_polled_at: string | null
           mandate_code: string | null
           mandate_reference: string
+          manual_review: boolean
+          manual_review_at: string | null
+          manual_review_reason: string | null
           nibss_account: string | null
           nibss_message: string | null
           payer_account_number: string | null
@@ -1402,6 +1406,8 @@ export type Database = {
           setup_fee_internal_share: number
           setup_fee_nibss_share: number
           setup_fee_reference: string | null
+          setup_fee_refund_reference: string | null
+          setup_fee_refunded_at: string | null
           start_date: string | null
           status: string
           updated_at: string
@@ -1414,11 +1420,15 @@ export type Database = {
           created_at?: string
           end_date?: string | null
           expires_at?: string
+          expiry_final_checked_at?: string | null
           frequency?: string
           id?: string
           last_polled_at?: string | null
           mandate_code?: string | null
           mandate_reference: string
+          manual_review?: boolean
+          manual_review_at?: string | null
+          manual_review_reason?: string | null
           nibss_account?: string | null
           nibss_message?: string | null
           payer_account_number?: string | null
@@ -1436,6 +1446,8 @@ export type Database = {
           setup_fee_internal_share?: number
           setup_fee_nibss_share?: number
           setup_fee_reference?: string | null
+          setup_fee_refund_reference?: string | null
+          setup_fee_refunded_at?: string | null
           start_date?: string | null
           status?: string
           updated_at?: string
@@ -1448,11 +1460,15 @@ export type Database = {
           created_at?: string
           end_date?: string | null
           expires_at?: string
+          expiry_final_checked_at?: string | null
           frequency?: string
           id?: string
           last_polled_at?: string | null
           mandate_code?: string | null
           mandate_reference?: string
+          manual_review?: boolean
+          manual_review_at?: string | null
+          manual_review_reason?: string | null
           nibss_account?: string | null
           nibss_message?: string | null
           payer_account_number?: string | null
@@ -1470,6 +1486,8 @@ export type Database = {
           setup_fee_internal_share?: number
           setup_fee_nibss_share?: number
           setup_fee_reference?: string | null
+          setup_fee_refund_reference?: string | null
+          setup_fee_refunded_at?: string | null
           start_date?: string | null
           status?: string
           updated_at?: string
@@ -3272,6 +3290,7 @@ export type Database = {
           created_at: string
           discounted_interest_paid: number
           effective_rate: number | null
+          expired_at: string | null
           id: string
           last_accrued_on: string | null
           lock_account_id: string
@@ -3336,6 +3355,7 @@ export type Database = {
           created_at?: string
           discounted_interest_paid?: number
           effective_rate?: number | null
+          expired_at?: string | null
           id?: string
           last_accrued_on?: string | null
           lock_account_id: string
@@ -3400,6 +3420,7 @@ export type Database = {
           created_at?: string
           discounted_interest_paid?: number
           effective_rate?: number | null
+          expired_at?: string | null
           id?: string
           last_accrued_on?: string | null
           lock_account_id?: string
