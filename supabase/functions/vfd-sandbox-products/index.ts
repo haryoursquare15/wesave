@@ -726,27 +726,37 @@ async function handleCommenceGroup(userId: string, body: Record<string, unknown>
   }
 
   // ---------------------------------------------------------------------------
-  // DDM Commencement Gate: every member must be either wallet-funded OR have an
-  // active (bank-authorized) Direct Debit Mandate. Spec §8.
+  // E-Mandate Commencement Gate (authoritative, shared with auto-start / sweep).
   // ---------------------------------------------------------------------------
   {
-    const { data: mandateCheck } = await db.from("vfd_sandbox_group_members")
-      .select("user_id, contribution_method, mandate_status")
-      .eq("group_id", groupId).eq("status", "active");
-    const blocking = (mandateCheck || []).filter((m: any) =>
-      m.contribution_method === "direct_debit" && m.mandate_status !== "authorized");
-    if (blocking.length > 0) {
+    const gate = await checkGroupMandateGate(groupId);
+    if (!gate.ok) {
+      await checkGroupCommencementReadiness(groupId);
       return jsonResponse({
-        error: `${blocking.length} member(s) have a Direct Debit Mandate that is not yet bank-authorized. The group cannot commence until every DDM mandate is active.`,
-        code: "MANDATES_NOT_ACTIVE",
-        pending_user_ids: blocking.map((m: any) => m.user_id),
+        success: false,
+        error: "This thrift cannot commence until all members have approved e-mandates.",
+        code: "MANDATES_PENDING",
+        approved_count: gate.approved_count,
+        total_members: gate.total_members,
+        blocking_members: gate.blocking_members.map((m) => ({ name: m.name, mandate_status: m.mandate_status })),
       }, 400);
     }
   }
 
-
   const memberIds = members.map(m => m.user_id);
   const payoutOrder = fisherYatesShuffle(memberIds);
+
+  // Conditional state transition — guarantees only ONE process commences the
+  // group even if a cron run and a manual click race each other.
+  const { data: claimed } = await db.from("vfd_sandbox_groups").update({
+    status: "active", current_cycle: 1, payout_order: payoutOrder,
+    current_payout_position: 1,
+    commenced_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }).eq("id", groupId).eq("status", "pending").select("id");
+  if (!claimed || claimed.length !== 1) {
+    return jsonResponse({ error: "Group has already commenced" }, 400);
+  }
 
   for (let i = 0; i < payoutOrder.length; i++) {
     await db.from("vfd_sandbox_group_members").update({
@@ -759,12 +769,6 @@ async function handleCommenceGroup(userId: string, body: Record<string, unknown>
     payout_recipient_id: payoutOrder[0],
   }).select().single();
 
-  await db.from("vfd_sandbox_groups").update({
-    status: "active", current_cycle: 1, payout_order: payoutOrder,
-    current_payout_position: 1,
-    commenced_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  }).eq("id", groupId);
 
   await postChatMessage(groupId, userId, "🎉 Group has commenced! Payout positions have been randomized. Cycle 1 is now active.", "system");
 
