@@ -17,7 +17,7 @@ import {
 import { TransactionPinGate } from "@/components/security/TransactionPinGate";
 import { TransactionSuccessModal, TransactionSuccessPayload } from "@/components/feedback/TransactionSuccessModal";
 import { GoalSavingsV2Wizard } from "./GoalSavingsV2Wizard";
-import { MandateStatusCard } from "./MandateStatusCard";
+import { SavingsPlanCard, planState, PlanState } from "./SavingsPlanCard";
 import { useMandates } from "@/hooks/useMandates";
 
 interface UserBalance {
