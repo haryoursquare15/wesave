@@ -95,10 +95,19 @@ Deno.serve(async (req) => {
         .eq("id", r.savings_id)
         .maybeSingle();
 
-      if (!s || s.activation_status !== "active" || s.mandate_status !== "authorized") {
+      // A bank-authorized mandate is the real gate. If the plan is still sitting
+      // in `pending_mandate` (activation flip missed), heal it here rather than
+      // silently skipping every installment.
+      if (!s || s.mandate_status !== "authorized" || (s.activation_status !== "active" && s.activation_status !== "pending_mandate")) {
         skipped++;
         continue;
       }
+      if (s.activation_status === "pending_mandate") {
+        await supabase.from("vestara_savings")
+          .update({ activation_status: "active" })
+          .eq("id", s.id);
+      }
+
 
       // --- REAL MONEY FIRST -------------------------------------------------
       // Pull the installment from the customer's bank via the mandate. No
