@@ -636,8 +636,8 @@ export function SandboxAjoTab() {
                 <Label>Maximum Members</Label>
                 <span className="text-lg font-semibold text-primary">{form.maxMembers}</span>
               </div>
-              <Slider value={[form.maxMembers]} onValueChange={([v]) => setForm(p => ({ ...p, maxMembers: v }))} min={3} max={20} step={1} className="py-2" />
-              <div className="flex justify-between text-xs text-muted-foreground"><span>3</span><span>20</span></div>
+              <Slider value={[form.maxMembers]} onValueChange={([v]) => setForm(p => ({ ...p, maxMembers: v }))} min={2} max={20} step={1} className="py-2" />
+              <div className="flex justify-between text-xs text-muted-foreground"><span>2</span><span>20</span></div>
             </div>
 
             {/* Contribution Slider */}
@@ -646,8 +646,8 @@ export function SandboxAjoTab() {
                 <Label>Contribution Amount</Label>
                 <span className="text-lg font-semibold text-primary">₦{fmt(form.contributionAmount)}</span>
               </div>
-              <Slider value={[form.contributionAmount]} onValueChange={([v]) => setForm(p => ({ ...p, contributionAmount: v }))} min={5000} max={500000} step={5000} className="py-2" />
-              <div className="flex justify-between text-xs text-muted-foreground"><span>₦5,000</span><span>₦500,000</span></div>
+              <Slider value={[form.contributionAmount]} onValueChange={([v]) => setForm(p => ({ ...p, contributionAmount: v }))} min={500} max={500000} step={500} className="py-2" />
+              <div className="flex justify-between text-xs text-muted-foreground"><span>₦500</span><span>₦500,000</span></div>
             </div>
 
             {/* Period */}

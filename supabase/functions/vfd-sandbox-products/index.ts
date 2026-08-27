@@ -530,8 +530,8 @@ async function handleCreateGroup(userId: string, body: Record<string, unknown>) 
   const contributionDayOfMonth = Number(body.contribution_day_of_month) || 1;
 
   if (!name || !amount || amount <= 0) return jsonResponse({ error: "Name and contribution amount required" }, 400);
-  if (maxMembers < 3 || maxMembers > 20) return jsonResponse({ error: "Members must be between 3 and 20" }, 400);
-  if (amount < 5000 || amount > 500000) return jsonResponse({ error: "Contribution must be between ₦5,000 and ₦500,000" }, 400);
+  if (maxMembers < 2 || maxMembers > 20) return jsonResponse({ error: "Members must be between 2 and 20" }, 400);
+  if (amount < 500 || amount > 500000) return jsonResponse({ error: "Contribution must be between ₦500 and ₦500,000" }, 400);
 
   // Group-level mandate is "pending" until ALL members individually authorize
   // their own DDM mandate (which costs a ₦100 setup fee per member). It flips
