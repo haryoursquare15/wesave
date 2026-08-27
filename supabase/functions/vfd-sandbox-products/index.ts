@@ -7087,7 +7087,7 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
       const debit = isDdmMember
         ? await (async () => {
             const r = await performMandateDebitForMember(group, m, Number(group.current_cycle));
-            return { success: r.success, error: r.error };
+            return { success: r.success, error: r.error, code: (r as any)?.details?.code as string | undefined };
           })()
         : await debitVestaraForThrift(m.user_id, group.id, amount, `ajo-auto-${group.id}-${activeCycle.id}-${m.user_id}`, {
             cycle_id: activeCycle.id,
@@ -7095,6 +7095,13 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
             source: "vfd_sandbox_auto_sweep",
           });
 
+
+      // A same-day debit attempt already claimed for this mandate is NOT a new
+      // failure — it must never increment retry_count or trigger a penalty.
+      if (!debit.success && (debit as any).code === "ALREADY_COLLECTED") {
+        deferred++;
+        continue;
+      }
 
       if (debit.success) {
         await db.from("vfd_sandbox_group_contributions").insert({
