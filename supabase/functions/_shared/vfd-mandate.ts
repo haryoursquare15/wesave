@@ -615,10 +615,10 @@ export async function demoteProductMandateStatus(db: any, mandateReference: stri
       .update({ mandate_status: "awaiting_approval", mandate_authorized_at: null })
       .eq("mandate_reference", mandateReference);
     await db.from("vfd_sandbox_target_members")
-      .update({ mandate_status: "awaiting_approval" })
+      .update({ mandate_status: "pending" })
       .eq("mandate_reference", mandateReference);
     await db.from("vestara_savings")
-      .update({ mandate_status: "awaiting_approval" })
+      .update({ mandate_status: "pending" })
       .eq("mandate_reference", mandateReference);
   } catch {
     // best-effort mirror update; the canonical `mandates` row is authoritative
