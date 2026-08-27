@@ -636,13 +636,28 @@ export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductC
         </AnimatePresence>
       )}
 
-      {/* Active Savings */}
+      {/* My Savings */}
       <div>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold">
             My Savings {savings.length > 0 && <span className="text-muted-foreground font-normal">({savings.length})</span>}
           </h3>
         </div>
+
+        {/* Product filter chips */}
+        {!loadingData && productChips.length > 1 && (
+          <div className="flex gap-2 overflow-x-auto pb-3 -mx-1 px-1 scrollbar-none">
+            <FilterChip active={planFilter === "all"} onClick={() => setPlanFilter("all")} label={`All · ${savings.length}`} />
+            {productChips.map(c => (
+              <FilterChip
+                key={c.code}
+                active={planFilter === c.code}
+                onClick={() => setPlanFilter(c.code)}
+                label={`${c.label} · ${c.count}`}
+              />
+            ))}
+          </div>
+        )}
 
         {loadingData ? (
           <div className="space-y-3">
@@ -655,101 +670,30 @@ export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductC
             <p className="text-xs text-muted-foreground mt-1">Start a new savings to grow your money.</p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {savings.map(s => {
-              const isMatured = new Date() >= new Date(s.maturity_date);
-              const elapsed = Date.now() - new Date(s.start_date).getTime();
-              const total = new Date(s.maturity_date).getTime() - new Date(s.start_date).getTime();
-              const progress = Math.min(100, Math.max(0, (elapsed / total) * 100));
-              const daysLeft = Math.max(0, Math.ceil((new Date(s.maturity_date).getTime() - Date.now()) / 86400000));
-              const productName = s.vestara_products?.name || s.product_code;
-              const allowEarly = s.vestara_products?.allow_early_withdrawal ?? true;
-              const Icon = PRODUCT_ICONS[s.product_code] || Lock;
-
-              const savingsMandate = findMandate("fd_investment", s.id);
-
+          <div className="space-y-5">
+            {grouped.map(group => {
+              const activeInGroup = group.items.filter(
+                s => planState(s) === "active" || planState(s) === "ready",
+              ).length;
               return (
-                <motion.div
-                  key={s.id}
-                  initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-                  className="bg-card rounded-2xl border border-border/50 p-4 space-y-3"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <div className="h-9 w-9 rounded-xl bg-muted/50 flex items-center justify-center">
-                        <Icon className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-bold">{productName}</p>
-                        <p className="text-[11px] text-muted-foreground">
-                          ₦{Number(s.principal).toLocaleString()} • {s.tenor_days}d @ {Number(s.user_rate).toFixed(2)}%
-                        </p>
-                      </div>
-                    </div>
-                    <Badge
-                      variant="outline"
-                      className={`text-[10px] px-2.5 py-0.5 rounded-full ${
-                        s.approval_status === "pending" ? "bg-warning/10 text-warning border-warning/30"
-                        : s.approval_status === "rejected" ? "bg-destructive/10 text-destructive border-destructive/30"
-                        : s.status === "active" && isMatured ? "bg-success/10 text-success border-success/30"
-                        : s.status === "active" ? "bg-primary/10 text-primary border-primary/30"
-                        : s.status === "matured" ? "bg-success/10 text-success border-success/30"
-                        : "bg-destructive/10 text-destructive border-destructive/30"
-                      }`}
-                    >
-                      {s.approval_status === "pending" ? "⏳ Pending approval"
-                        : s.approval_status === "rejected" ? "Rejected"
-                        : s.status === "active" && isMatured ? "✓ Ready"
-                        : s.status.replace("_", " ")}
-                    </Badge>
+                <div key={group.label} className="space-y-2.5">
+                  <div className="flex items-center gap-2 sticky top-0 bg-background/90 backdrop-blur-sm py-1 z-10">
+                    <h4 className="text-xs font-semibold uppercase tracking-wide">{group.label}</h4>
+                    <span className="text-[11px] text-muted-foreground">
+                      {activeInGroup} active{group.items.length !== activeInGroup ? ` · ${group.items.length - activeInGroup} other` : ""}
+                    </span>
                   </div>
-
-                  {savingsMandate && <MandateStatusCard mandate={savingsMandate} compact />}
-
-                  {s.status === "active" && s.approval_status !== "pending" && (
-                    <div>
-                      <div className="flex justify-between text-[10px] text-muted-foreground mb-1.5">
-                        <span>{new Date(s.start_date).toLocaleDateString("en-NG", { month: "short", day: "numeric" })}</span>
-                        <span>{isMatured ? "Matured!" : `${daysLeft}d left`}</span>
-                        <span>{new Date(s.maturity_date).toLocaleDateString("en-NG", { month: "short", day: "numeric" })}</span>
-                      </div>
-                      <Progress value={progress} className="h-1.5" />
-                    </div>
-                  )}
-
-                  <div className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-1 text-success">
-                      <TrendingUp className="h-3 w-3" />
-                      <span>
-                        {s.discounted_interest_paid > 0 ? "Upfront" : "Accrued"}:{" "}
-                        <span className="font-semibold">
-                          +₦{Number(s.discounted_interest_paid > 0 ? s.discounted_interest_paid : s.accrued_interest).toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                        </span>
-                      </span>
-                    </div>
-                    {s.penalty_amount > 0 && (
-                      <span className="text-destructive">Penalty: ₦{Number(s.penalty_amount).toLocaleString()}</span>
-                    )}
-                  </div>
-
-                  {s.status === "active" && s.approval_status !== "pending" && (
-                    <div className="flex gap-2">
-                      {isMatured ? (
-                        <Button size="sm" className="flex-1 bg-success hover:bg-success/90 text-success-foreground" onClick={() => handleMature(s)} disabled={vestara.loading}>
-                          <Unlock className="h-3.5 w-3.5 mr-1.5" /> Mature & Withdraw
-                        </Button>
-                      ) : allowEarly ? (
-                        <Button size="sm" variant="outline" className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/5" onClick={() => handleEarlyWithdraw(s)} disabled={vestara.loading}>
-                          <AlertTriangle className="h-3.5 w-3.5 mr-1.5" /> Withdraw Early
-                        </Button>
-                      ) : (
-                        <p className="text-[11px] text-muted-foreground italic flex-1 text-center py-1">
-                          Locked until maturity
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </motion.div>
+                  {group.items.map(s => (
+                    <SavingsPlanCard
+                      key={s.id}
+                      savings={s}
+                      mandate={findMandate("fd_investment", s.id)}
+                      busy={vestara.loading}
+                      onMature={handleMature}
+                      onEarlyWithdraw={handleEarlyWithdraw}
+                    />
+                  ))}
+                </div>
               );
             })}
           </div>
