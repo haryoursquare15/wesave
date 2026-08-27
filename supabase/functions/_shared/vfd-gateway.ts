@@ -60,10 +60,10 @@ export async function vfdFetch(input: string | URL, init: VfdFetchOptions = {}):
     throw new Error("VFD_GATEWAY_SECRET is not configured");
   }
   if (GATEWAY_SECRET) headers.set("x-gateway-key", GATEWAY_SECRET);
-  // VFD scopes account-level calls (wallet2 AND the direct-debit/e-mandate
-  // API) to a wallet credential profile. Without this header VFD answers
-  // 403 / status 99 "Invalid wallet token".
-  if ((url.includes("/wallet2/") || url.includes("/vtech-mandate/")) && WALLET_CREDENTIAL_ID) {
+  // VFD scopes wallet2 account-level calls to a wallet credential profile.
+  // The direct-debit / e-mandate API (/vtech-mandate/) is NOT wallet-scoped,
+  // so this header must not be sent there.
+  if (url.includes("/wallet2/") && WALLET_CREDENTIAL_ID) {
     headers.set("wallet-credential-id", WALLET_CREDENTIAL_ID);
   }
   if (!headers.has("x-request-id")) headers.set("x-request-id", crypto.randomUUID());
