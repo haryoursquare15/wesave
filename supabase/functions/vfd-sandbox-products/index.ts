@@ -1275,10 +1275,28 @@ async function handleGetGroupDetail(userId: string, body: Record<string, unknown
     ...(group?.payout_order || []) as string[],
   ]);
 
+  // Every member (not just the admin) sees mandate readiness — but never
+  // another member's banking details. Strip payer PII / raw VFD payloads.
+  const SENSITIVE_MEMBER_FIELDS = [
+    "mandate_payload", "mandate_payer_account_number", "mandate_payer_bank_code",
+    "mandate_payer_phone", "mandate_payer_email", "mandate_payer_address",
+    "mandate_nibss_account", "mandate_nibss_message",
+  ];
+  const safeMembers = (members || []).map((m: Record<string, unknown>) => {
+    const copy: Record<string, unknown> = { ...m };
+    for (const f of SENSITIVE_MEMBER_FIELDS) {
+      if (m.user_id !== userId) delete copy[f];
+    }
+    return copy;
+  });
+
+  const mandateGate = await checkGroupMandateGate(groupId);
+
   return jsonResponse({
     data: {
       group,
-      members: attachNames(members, nameMap),
+      members: attachNames(safeMembers, nameMap),
+      mandate_gate: mandateGate,
       contributions: attachNames(contributions, nameMap),
       payouts: (payouts || []).map((p: { recipient_id?: string }) => ({ ...p, display_name: p.recipient_id ? (nameMap[p.recipient_id] || `User ${p.recipient_id.slice(0, 6)}`) : "Unknown" })),
       cycles,
