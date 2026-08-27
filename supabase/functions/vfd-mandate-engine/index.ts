@@ -21,9 +21,10 @@
 //  * Every stage writes a structured row to `mandate_events`.
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { verifyCronToken } from "../_shared/cron-auth.ts";
-import {
 import { notifyMandateApproved } from "../_shared/mandate-notify.ts";
+import {
   MANDATE_EXPIRY_DAYS,
+
   MANDATE_INTERNAL_SHARE,
   MANDATE_MIN_AMOUNT,
   MANDATE_NIBSS_SHARE,
