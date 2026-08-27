@@ -22,6 +22,7 @@ import { SandboxGroupChat } from "./SandboxGroupChat";
 import { MandateAuthorizationDialog } from "./MandateAuthorizationDialog";
 import { MandateStatusCard } from "./MandateStatusCard";
 import { useMandates } from "@/hooks/useMandates";
+import { ThriftMandateReadiness } from "./ThriftMandateReadiness";
 import { Settings as SettingsIcon, MessageSquare, Check, X } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
@@ -282,6 +283,15 @@ export function SandboxAjoTab() {
         <button onClick={() => { setDetailGroup(null); setDetailData(null); }} className="text-sm text-primary flex items-center gap-1">
           <ArrowLeft className="h-3 w-3" /> Back to Groups
         </button>
+
+        <ThriftMandateReadiness
+          gate={detailData.mandate_gate}
+          groupStatus={String(g.status)}
+          currentUserId={currentUserId}
+          isAdmin={isAdmin}
+        />
+
+
 
         <Card>
           <CardContent className="p-4 space-y-4">
