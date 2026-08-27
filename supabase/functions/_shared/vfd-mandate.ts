@@ -408,7 +408,28 @@ export interface MandateStatusResult {
   http_status: number;
 }
 
-/** Stage 2 — poll MANDATE-APPROVAL-STATUS using the creation reference. */
+/**
+ * Stage 2 — poll MANDATE-APPROVAL-STATUS using the creation reference.
+ *
+ * IMPORTANT: only VFD's explicit BANK approval counts. VFD returns
+ * `mandateState: "ACTIVE"` with `mandateWorkflowStatus:
+ * NEW_MANDATE_INITIATED_BY_BILLER` ("Biller Initiated") as soon as WE create
+ * the mandate — that is our own request being acknowledged, NOT the payer's
+ * bank approving the debit instruction. Treating that as approved produced
+ * mandates marked bank_approved locally that VFD then rejected at
+ * /account/debit with status 108. The mandate stays PENDING until VFD's
+ * workflow status itself says approved/authorised by the bank.
+ */
+const BILLER_INITIATED_RE = /initiated.?by.?biller|biller.?initiated|new.?mandate/i;
+
+export function isBankApprovedWorkflow(workflowStatus: string, description: string): boolean {
+  const text = `${workflowStatus || ""} ${description || ""}`;
+  if (BILLER_INITIATED_RE.test(text)) return false;
+  if (/pending|await|initiat/i.test(text)) return false;
+  return /bank.?approved|approved.?by.?bank|mandate.?approved|authoris|authoriz|^\s*approved\s*$/i.test(text) ||
+    /\bapproved\b/i.test(text);
+}
+
 export async function checkMandateApproval(reference: string): Promise<MandateStatusResult> {
   const accessToken = await getMandateAccessToken();
   if (!accessToken) {
@@ -421,17 +442,19 @@ export async function checkMandateApproval(reference: string): Promise<MandateSt
     );
     const json = await res.json().catch(() => ({} as Record<string, unknown>));
     const data = ((json as Record<string, any>)?.data || {}) as Record<string, any>;
+    const workflow = String(data.mandateWorkflowStatus || "");
     const desc = String(
       data.mandateWorkflowStatusDescription || data.mandateWorkflowStatus || data.mandateState || "",
     );
-    const approved = /bank.?approved|approved/i.test(desc) ||
-      String(data.mandateState || "").toUpperCase() === "ACTIVE";
+    // NOTE: `mandateState === "ACTIVE"` alone is NOT approval — see comment above.
+    const approved = isBankApprovedWorkflow(workflow, desc);
     const rejected = /reject|decline|cancel|revok/i.test(desc);
     return { approved, rejected, status: desc || String((json as Record<string, any>)?.message || "Unknown"), raw: json, http_status: res.status };
   } catch (e) {
     return { approved: false, rejected: false, status: "ERROR", raw: { error: e instanceof Error ? e.message : String(e) }, http_status: 0 };
   }
 }
+
 
 export interface MandateDebitResult {
   ok: boolean;
