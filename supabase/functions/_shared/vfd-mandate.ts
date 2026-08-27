@@ -460,16 +460,21 @@ export interface MandateDebitResult {
   ok: boolean;
   raw: Record<string, unknown>;
   http_status: number;
-  failureClass: "none" | "insufficient_funds" | "mandate_revoked" | "auth" | "bank_error";
+  failureClass: "none" | "insufficient_funds" | "mandate_revoked" | "auth" | "bank_error" | "not_approved";
   message: string;
 }
 
 function classifyDebitFailure(message: string, httpStatus: number): MandateDebitResult["failureClass"] {
   const m = (message || "").toLowerCase();
+  // VFD status 108 — the bank has NOT approved the mandate yet (still in the
+  // biller-initiated stage). This is not a bank error; the mandate is simply
+  // still pending and must be shown to the user as such.
+  if (/has not been approved by the bank|not\s*approved.*bank|initiated_by_biller/.test(m)) return "not_approved";
   if (/insufficient|balance|funds/.test(m)) return "insufficient_funds";
   if (/revok|cancel|inactive|not\s*active|mandate.*(invalid|expired)/.test(m)) return "mandate_revoked";
   if (httpStatus === 401 || httpStatus === 403 || /invalid wallet token|unauthori[sz]ed/.test(m)) return "auth";
   return "bank_error";
+
 }
 
 /**
