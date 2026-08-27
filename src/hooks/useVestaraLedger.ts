@@ -109,6 +109,8 @@ export interface VestaraSavings {
   next_debit_at?: string | null;
   activation_status?: string | null;
   mandate_status?: string | null;
+  mandate_expires_at?: string | null;
+  expired_at?: string | null;
   metadata: Record<string, unknown>;
   created_at: string;
   vestara_products?: {
