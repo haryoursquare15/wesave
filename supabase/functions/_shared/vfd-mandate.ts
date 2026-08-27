@@ -408,7 +408,28 @@ export interface MandateStatusResult {
   http_status: number;
 }
 
-/** Stage 2 — poll MANDATE-APPROVAL-STATUS using the creation reference. */
+/**
+ * Stage 2 — poll MANDATE-APPROVAL-STATUS using the creation reference.
+ *
+ * IMPORTANT: only VFD's explicit BANK approval counts. VFD returns
+ * `mandateState: "ACTIVE"` with `mandateWorkflowStatus:
+ * NEW_MANDATE_INITIATED_BY_BILLER` ("Biller Initiated") as soon as WE create
+ * the mandate — that is our own request being acknowledged, NOT the payer's
+ * bank approving the debit instruction. Treating that as approved produced
+ * mandates marked bank_approved locally that VFD then rejected at
+ * /account/debit with status 108. The mandate stays PENDING until VFD's
+ * workflow status itself says approved/authorised by the bank.
+ */
+const BILLER_INITIATED_RE = /initiated.?by.?biller|biller.?initiated|new.?mandate/i;
+
+export function isBankApprovedWorkflow(workflowStatus: string, description: string): boolean {
+  const text = `${workflowStatus || ""} ${description || ""}`;
+  if (BILLER_INITIATED_RE.test(text)) return false;
+  if (/pending|await|initiat/i.test(text)) return false;
+  return /bank.?approved|approved.?by.?bank|mandate.?approved|authoris|authoriz|^\s*approved\s*$/i.test(text) ||
+    /\bapproved\b/i.test(text);
+}
+
 export async function checkMandateApproval(reference: string): Promise<MandateStatusResult> {
   const accessToken = await getMandateAccessToken();
   if (!accessToken) {
@@ -421,11 +442,12 @@ export async function checkMandateApproval(reference: string): Promise<MandateSt
     );
     const json = await res.json().catch(() => ({} as Record<string, unknown>));
     const data = ((json as Record<string, any>)?.data || {}) as Record<string, any>;
+    const workflow = String(data.mandateWorkflowStatus || "");
     const desc = String(
       data.mandateWorkflowStatusDescription || data.mandateWorkflowStatus || data.mandateState || "",
     );
-    const approved = /bank.?approved|approved/i.test(desc) ||
-      String(data.mandateState || "").toUpperCase() === "ACTIVE";
+    // NOTE: `mandateState === "ACTIVE"` alone is NOT approval — see comment above.
+    const approved = isBankApprovedWorkflow(workflow, desc);
     const rejected = /reject|decline|cancel|revok/i.test(desc);
     return { approved, rejected, status: desc || String((json as Record<string, any>)?.message || "Unknown"), raw: json, http_status: res.status };
   } catch (e) {
@@ -433,20 +455,26 @@ export async function checkMandateApproval(reference: string): Promise<MandateSt
   }
 }
 
+
 export interface MandateDebitResult {
   ok: boolean;
   raw: Record<string, unknown>;
   http_status: number;
-  failureClass: "none" | "insufficient_funds" | "mandate_revoked" | "auth" | "bank_error";
+  failureClass: "none" | "insufficient_funds" | "mandate_revoked" | "auth" | "bank_error" | "not_approved";
   message: string;
 }
 
 function classifyDebitFailure(message: string, httpStatus: number): MandateDebitResult["failureClass"] {
   const m = (message || "").toLowerCase();
+  // VFD status 108 — the bank has NOT approved the mandate yet (still in the
+  // biller-initiated stage). This is not a bank error; the mandate is simply
+  // still pending and must be shown to the user as such.
+  if (/has not been approved by the bank|not\s*approved.*bank|initiated_by_biller/.test(m)) return "not_approved";
   if (/insufficient|balance|funds/.test(m)) return "insufficient_funds";
   if (/revok|cancel|inactive|not\s*active|mandate.*(invalid|expired)/.test(m)) return "mandate_revoked";
   if (httpStatus === 401 || httpStatus === 403 || /invalid wallet token|unauthori[sz]ed/.test(m)) return "auth";
   return "bank_error";
+
 }
 
 /**
@@ -575,6 +603,29 @@ export async function refundMandateSetupFee(
   }
 }
 
+/**
+ * Roll every product-level mirror of a mandate back to "awaiting bank
+ * approval" when VFD says the bank has not approved it. Applied to all
+ * e-mandate products so no surface can display an unapproved mandate as live.
+ */
+export async function demoteProductMandateStatus(db: any, mandateReference: string) {
+  if (!mandateReference) return;
+  try {
+    await db.from("vfd_sandbox_group_members")
+      .update({ mandate_status: "awaiting_approval", mandate_authorized_at: null })
+      .eq("mandate_reference", mandateReference);
+    await db.from("vfd_sandbox_target_members")
+      .update({ mandate_status: "pending" })
+      .eq("mandate_reference", mandateReference);
+    await db.from("vestara_savings")
+      .update({ mandate_status: "pending" })
+      .eq("mandate_reference", mandateReference);
+  } catch {
+    // best-effort mirror update; the canonical `mandates` row is authoritative
+  }
+}
+
+
 export interface CollectDebitResult {
   /** TRUE only when VFD answered status === "00". Nothing may be booked otherwise. */
   collected: boolean;
@@ -646,14 +697,27 @@ export async function collectMandateDebit(params: {
       failure_class: debit.failureClass,
       failure_reason: debit.message,
       vfd_response: debit.raw,
-      needs_review: debit.failureClass !== "insufficient_funds",
+      needs_review: debit.failureClass !== "insufficient_funds" && debit.failureClass !== "not_approved",
       completed_at: new Date().toISOString(),
     }).eq("id", attemptId);
+
+    // VFD is the source of truth on approval. If it tells us the bank has not
+    // approved this mandate, roll our local record back to pending so the user
+    // sees "awaiting bank approval" instead of a false "active" state, and so
+    // the status poller picks it up again.
+    if (debit.failureClass === "not_approved") {
+      await db.from("mandates").update({
+        status: "pending", bank_approved_at: null, resolved_at: null,
+      }).eq("id", params.mandateId).neq("status", "pending");
+      await demoteProductMandateStatus(db, params.mandateReference);
+    }
+
     return {
       collected: false, skipped: false, reason: debit.message, attemptId,
       transactionReference: txRef, failureClass: debit.failureClass, raw: debit.raw,
     };
   }
+
 
   await db.from("mandate_debit_attempts").update({
     status: "succeeded",
