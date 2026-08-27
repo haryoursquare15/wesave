@@ -171,6 +171,50 @@ async function refundSetupFee(userId: string, feeRef: string, ctx: Record<string
   }
 }
 
+/**
+ * Ledger-backed reversal of the ₦100 mandate setup fee. Idempotent: a mandate
+ * that already carries `setup_fee_refunded_at` is never refunded twice.
+ */
+async function refundMandateSetupFee(
+  m: Record<string, any>,
+  reason: string,
+): Promise<{ refunded: boolean; skipped?: string }> {
+  const supabase = db();
+  if (m.setup_fee_refunded_at) return { refunded: false, skipped: "already_refunded" };
+  if (!m.setup_fee_reference || !Number(m.setup_fee || 0)) return { refunded: false, skipped: "no_fee_charged" };
+
+  const ok = await refundSetupFee(m.user_id as string, m.setup_fee_reference as string, {
+    product_type: m.product_type,
+    product_reference: m.product_reference,
+    mandate_reference: m.mandate_reference,
+    reason,
+  });
+  if (!ok) return { refunded: false, skipped: "refund_failed" };
+
+  await supabase.from("mandates").update({
+    setup_fee_refunded_at: new Date().toISOString(),
+    setup_fee_refund_reference: `${m.setup_fee_reference}-REFUND`,
+  }).eq("id", m.id);
+
+  await logEvent(m.id, m.user_id, m.mandate_reference, "setup_fee_refunded", {
+    amount: MANDATE_SETUP_FEE, reason,
+  });
+  return { refunded: true };
+}
+
+/** Park a mandate for a human to look at instead of auto-expiring it. */
+async function flagForManualReview(m: Record<string, any>, reason: string, vfd: Record<string, unknown>) {
+  await db().from("mandates").update({
+    manual_review: true,
+    manual_review_reason: reason,
+    manual_review_at: new Date().toISOString(),
+    expiry_final_checked_at: new Date().toISOString(),
+    vfd_payload: vfd,
+  }).eq("id", m.id);
+  await logEvent(m.id, m.user_id, m.mandate_reference, "manual_review_flagged", { reason, vfd });
+}
+
+
 async function handleCreateMandate(userId: string, body: Record<string, unknown>) {
   const supabase = db();
   const productType = String(body.product_type || "");
