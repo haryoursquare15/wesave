@@ -7321,7 +7321,8 @@ async function handleUpdateGroupSettings(userId: string, body: Record<string, un
     ? `Admin switched funding mode to ${(body.funding_mode as string).toUpperCase()}`
     : "Admin updated group settings";
   await postChatMessage(groupId, userId, note, "system");
-  return jsonResponse({ data: { success: true } });
+  const readiness = await checkGroupCommencementReadiness(groupId);
+  return jsonResponse({ data: { success: true, readiness } });
 }
 
 // =============================================
