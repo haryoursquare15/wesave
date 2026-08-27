@@ -69,6 +69,9 @@ export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductC
 
   const availableBalance = Number(userBalance?.available_balance || 0);
 
+  // Product filter for the plan list ("all" or a product code)
+  const [planFilter, setPlanFilter] = useState<string>("all");
+
   const loadAll = async () => {
     setLoadingData(true);
     const [p, s] = await Promise.all([vestara.listProducts(), vestara.listSavings()]);
