@@ -102,6 +102,13 @@ export interface VestaraSavings {
   matured_at: string | null;
   withdrawn_at: string | null;
   penalty_amount: number;
+  /* Recurring commitment plans (GoalSave via e-mandate) */
+  commitment_amount?: number | null;
+  commitment_frequency?: string | null;
+  tenor_count?: number | null;
+  next_debit_at?: string | null;
+  activation_status?: string | null;
+  mandate_status?: string | null;
   metadata: Record<string, unknown>;
   created_at: string;
   vestara_products?: {
