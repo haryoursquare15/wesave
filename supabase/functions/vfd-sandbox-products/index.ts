@@ -918,11 +918,24 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
     .select("id, user_id, contribution_method, mandate_status, mandate_code, mandate_reference")
     .eq("group_id", groupId).eq("user_id", userId).maybeSingle();
   const groupFundingMode = (group.funding_mode as string) || "wallet";
-  const memberMethod = (myMember?.contribution_method as string) || (groupFundingMode === "ddm" ? "direct_debit" : "wallet");
-  const isDdm = memberMethod === "direct_debit";
+  // An E-Mandate group funds EXCLUSIVELY through direct debit — wallet funding
+  // can never be used as a fallback or bypass.
+  const isDdm = groupFundingMode === "ddm" || (myMember?.contribution_method as string) === "direct_debit";
 
   if (isDdm) {
+    const gate = await checkGroupMandateGate(groupId);
+    if (!gate.ok) {
+      return jsonResponse({
+        success: false,
+        error: "This thrift runs on e-mandates and cannot collect until every member's mandate is approved by their bank.",
+        code: "MANDATES_PENDING",
+        approved_count: gate.approved_count,
+        total_members: gate.total_members,
+        blocking_members: gate.blocking_members.map((m) => ({ name: m.name, mandate_status: m.mandate_status })),
+      }, 400);
+    }
     if (!myMember || myMember.mandate_status !== "authorized") {
+
       return jsonResponse({
         error: "Your Direct Debit Mandate is not authorized yet. Please accept the mandate (₦100 setup fee) to enable automatic bank debits.",
         code: "MANDATE_NOT_AUTHORIZED",
