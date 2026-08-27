@@ -674,14 +674,27 @@ export async function collectMandateDebit(params: {
       failure_class: debit.failureClass,
       failure_reason: debit.message,
       vfd_response: debit.raw,
-      needs_review: debit.failureClass !== "insufficient_funds",
+      needs_review: debit.failureClass !== "insufficient_funds" && debit.failureClass !== "not_approved",
       completed_at: new Date().toISOString(),
     }).eq("id", attemptId);
+
+    // VFD is the source of truth on approval. If it tells us the bank has not
+    // approved this mandate, roll our local record back to pending so the user
+    // sees "awaiting bank approval" instead of a false "active" state, and so
+    // the status poller picks it up again.
+    if (debit.failureClass === "not_approved") {
+      await db.from("mandates").update({
+        status: "pending", bank_approved_at: null, resolved_at: null,
+      }).eq("id", params.mandateId).neq("status", "pending");
+      await demoteProductMandateStatus(db, params.mandateReference);
+    }
+
     return {
       collected: false, skipped: false, reason: debit.message, attemptId,
       transactionReference: txRef, failureClass: debit.failureClass, raw: debit.raw,
     };
   }
+
 
   await db.from("mandate_debit_attempts").update({
     status: "succeeded",
