@@ -17,7 +17,7 @@ import {
 import { TransactionPinGate } from "@/components/security/TransactionPinGate";
 import { TransactionSuccessModal, TransactionSuccessPayload } from "@/components/feedback/TransactionSuccessModal";
 import { GoalSavingsV2Wizard } from "./GoalSavingsV2Wizard";
-import { SavingsPlanCard, planState, PlanState } from "./SavingsPlanCard";
+import { SavingsPlanCard, planState, PlanState, ARCHIVED_STATES } from "./SavingsPlanCard";
 import { useMandates } from "@/hooks/useMandates";
 
 interface UserBalance {
@@ -71,6 +71,8 @@ export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductC
 
   // Product filter for the plan list ("all" or a product code)
   const [planFilter, setPlanFilter] = useState<string>("all");
+  // Live plans by default; expired/closed history lives behind an explicit tab.
+  const [planView, setPlanView] = useState<"live" | "archive">("live");
 
   const loadAll = async () => {
     setLoadingData(true);
@@ -295,26 +297,45 @@ export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductC
     };
   }, [savings]);
 
-  // Chips: product types the user actually holds
+  const liveSavings = useMemo(
+    () => savings.filter(s => !ARCHIVED_STATES.includes(planState(s))),
+    [savings],
+  );
+  const archivedSavings = useMemo(
+    () => savings.filter(s => ARCHIVED_STATES.includes(planState(s))),
+    [savings],
+  );
+
+  // Chips: product types the user actually holds in the current view
   const productChips = useMemo(() => {
     const map = new Map<string, { label: string; count: number }>();
-    for (const s of savings) {
+    for (const s of (planView === "live" ? liveSavings : archivedSavings)) {
       const key = s.product_code as string;
       const label = s.vestara_products?.name || key;
       const prev = map.get(key);
       map.set(key, { label, count: (prev?.count || 0) + 1 });
     }
     return Array.from(map.entries()).map(([code, v]) => ({ code, ...v }));
-  }, [savings]);
+  }, [planView, liveSavings, archivedSavings]);
 
-  const visibleSavings = useMemo(
-    () => (planFilter === "all" ? savings : savings.filter(s => s.product_code === planFilter)),
-    [savings, planFilter],
-  );
+
+  const visibleSavings = useMemo(() => {
+    const base = planView === "live" ? liveSavings : archivedSavings;
+    return planFilter === "all" ? base : base.filter(s => s.product_code === planFilter);
+  }, [liveSavings, archivedSavings, planView, planFilter]);
+
+  /** Expired plans are never revived — "Try again" opens a fresh subscription. */
+  const handleTryAgain = (s: VS) => {
+    setPlanView("live");
+    if (s.product_code === "goalsave") { setShowGoalV2(true); return; }
+    const p = products.find(x => x.code === s.product_code);
+    if (p) { setSelectedProduct(p); setShowCreate(true); setStep("amount"); }
+    else setShowCreate(true);
+  };
 
   // Group visible plans by product, active plans first inside each group
   const grouped = useMemo(() => {
-    const order: PlanState[] = ["ready", "active", "pending", "rejected", "matured", "closed"];
+    const order: PlanState[] = ["ready", "active", "pending", "rejected", "matured", "closed", "expired"];
     const map = new Map<string, { label: string; items: VS[] }>();
     for (const s of visibleSavings) {
       const key = s.product_code as string;
@@ -640,14 +661,22 @@ export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductC
       <div>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold">
-            My Savings {savings.length > 0 && <span className="text-muted-foreground font-normal">({savings.length})</span>}
+            My Savings {savings.length > 0 && <span className="text-muted-foreground font-normal">({liveSavings.length} live)</span>}
           </h3>
         </div>
+
+        {/* Live vs. history */}
+        {!loadingData && archivedSavings.length > 0 && (
+          <div className="flex gap-2 pb-2">
+            <FilterChip active={planView === "live"} onClick={() => setPlanView("live")} label={`Active · ${liveSavings.length}`} />
+            <FilterChip active={planView === "archive"} onClick={() => setPlanView("archive")} label={`Closed & expired · ${archivedSavings.length}`} />
+          </div>
+        )}
 
         {/* Product filter chips */}
         {!loadingData && productChips.length > 1 && (
           <div className="flex gap-2 overflow-x-auto pb-3 -mx-1 px-1 scrollbar-none">
-            <FilterChip active={planFilter === "all"} onClick={() => setPlanFilter("all")} label={`All · ${savings.length}`} />
+            <FilterChip active={planFilter === "all"} onClick={() => setPlanFilter("all")} label={`All · ${(planView === "live" ? liveSavings : archivedSavings).length}`} />
             {productChips.map(c => (
               <FilterChip
                 key={c.code}
@@ -691,6 +720,7 @@ export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductC
                       busy={vestara.loading}
                       onMature={handleMature}
                       onEarlyWithdraw={handleEarlyWithdraw}
+                      onTryAgain={handleTryAgain}
                     />
                   ))}
                 </div>

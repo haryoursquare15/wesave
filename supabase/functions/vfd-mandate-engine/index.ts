@@ -171,6 +171,50 @@ async function refundSetupFee(userId: string, feeRef: string, ctx: Record<string
   }
 }
 
+/**
+ * Ledger-backed reversal of the ₦100 mandate setup fee. Idempotent: a mandate
+ * that already carries `setup_fee_refunded_at` is never refunded twice.
+ */
+async function refundMandateSetupFee(
+  m: Record<string, any>,
+  reason: string,
+): Promise<{ refunded: boolean; skipped?: string }> {
+  const supabase = db();
+  if (m.setup_fee_refunded_at) return { refunded: false, skipped: "already_refunded" };
+  if (!m.setup_fee_reference || !Number(m.setup_fee || 0)) return { refunded: false, skipped: "no_fee_charged" };
+
+  const ok = await refundSetupFee(m.user_id as string, m.setup_fee_reference as string, {
+    product_type: m.product_type,
+    product_reference: m.product_reference,
+    mandate_reference: m.mandate_reference,
+    reason,
+  });
+  if (!ok) return { refunded: false, skipped: "refund_failed" };
+
+  await supabase.from("mandates").update({
+    setup_fee_refunded_at: new Date().toISOString(),
+    setup_fee_refund_reference: `${m.setup_fee_reference}-REFUND`,
+  }).eq("id", m.id);
+
+  await logEvent(m.id, m.user_id, m.mandate_reference, "setup_fee_refunded", {
+    amount: MANDATE_SETUP_FEE, reason,
+  });
+  return { refunded: true };
+}
+
+/** Park a mandate for a human to look at instead of auto-expiring it. */
+async function flagForManualReview(m: Record<string, any>, reason: string, vfd: Record<string, unknown>) {
+  await db().from("mandates").update({
+    manual_review: true,
+    manual_review_reason: reason,
+    manual_review_at: new Date().toISOString(),
+    expiry_final_checked_at: new Date().toISOString(),
+    vfd_payload: vfd,
+  }).eq("id", m.id);
+  await logEvent(m.id, m.user_id, m.mandate_reference, "manual_review_flagged", { reason, vfd });
+}
+
+
 async function handleCreateMandate(userId: string, body: Record<string, unknown>) {
   const supabase = db();
   const productType = String(body.product_type || "");
@@ -345,15 +389,53 @@ async function markProductApproved(mandate: Record<string, any>, nowIso: string)
   }
 }
 
+/**
+ * Mirror a hard expiry onto the owning product row. Expired records are NEVER
+ * deleted — they move to a distinct, permanent `expired` state so history and
+ * ledger references stay intact.
+ */
+async function markProductExpired(mandate: Record<string, any>, reason: string) {
+  const supabase = db();
+  const nowIso = new Date().toISOString();
+  try {
+    if (mandate.product_type === "thrift") {
+      await supabase.from("vfd_sandbox_group_members")
+        .update({ mandate_status: "expired" })
+        .eq("group_id", mandate.product_reference).eq("user_id", mandate.user_id);
+    } else if (mandate.product_type === "target_ajo") {
+      await supabase.from("vfd_sandbox_target_members")
+        .update({ mandate_status: "expired" })
+        .eq("target_id", mandate.product_reference).eq("user_id", mandate.user_id);
+    } else {
+      await supabase.from("vestara_savings")
+        .update({
+          mandate_status: "expired",
+          activation_status: "expired",
+          expired_at: nowIso,
+          approval_notes: reason,
+        })
+        .eq("id", mandate.product_reference)
+        .in("activation_status", ["pending_mandate", "failed"]);
+      await supabase.from("vfd_savings_debit_schedule")
+        .update({ status: "skipped", failed_reason: reason })
+        .eq("savings_id", mandate.product_reference)
+        .eq("user_id", mandate.user_id)
+        .in("status", ["scheduled", "pending", "retrying"]);
+    }
+  } catch (e) {
+    console.error("[mandate-engine] product expiry flag failed", e);
+  }
+}
+
 async function handlePollPending(limit: number) {
   const supabase = db();
   const { data: pending } = await supabase.from("mandates")
-    .select("*").eq("status", "pending").order("created_at", { ascending: true }).limit(limit);
+    .select("*").eq("status", "pending").eq("manual_review", false)
+    .order("created_at", { ascending: true }).limit(limit);
 
   const results: Array<Record<string, unknown>> = [];
   for (const m of pending || []) {
     const nowIso = new Date().toISOString();
-    const expired = new Date(m.expires_at as string).getTime() <= Date.now();
 
     const approval = MANDATE_TEST_MODE
       ? { approved: true, rejected: false, status: "TEST_MODE_AUTO_APPROVED", raw: { test_mode: true }, http_status: 200 }
@@ -388,29 +470,108 @@ async function handlePollPending(limit: number) {
       continue;
     }
 
-    if (approval.rejected || expired) {
-      const status = approval.rejected ? "rejected" : "expired";
-      const reason = approval.rejected
-        ? `Bank rejected the mandate: ${approval.status}`
-        : `No bank approval within ${MANDATE_EXPIRY_DAYS} days`;
+    // An explicit bank rejection resolves immediately — the ₦100 setup fee is
+    // reversed because the mandate never activated.
+    if (approval.rejected) {
+      const reason = `Bank rejected the mandate: ${approval.status}`;
       await supabase.from("mandates").update({
-        status, resolved_at: nowIso, rejection_reason: reason, vfd_payload: approval.raw,
+        status: "rejected", resolved_at: nowIso, rejection_reason: reason, vfd_payload: approval.raw,
       }).eq("id", m.id).eq("status", "pending");
       await markProductFailed(m, reason);
-      await logEvent(m.id, m.user_id, m.mandate_reference, status, { reason, vfd: approval.raw });
-      await notify(m.user_id as string,
-        status === "rejected" ? "Direct Debit Mandate rejected" : "Direct Debit Mandate expired",
-        `${reason}. Your scheduled contribution could not be set up — please set up the mandate again from the app.`,
-        `mandate_${status}`);
-      results.push({ mandate_id: m.id, outcome: status });
+      const refund = await refundMandateSetupFee(m, reason);
+      await logEvent(m.id, m.user_id, m.mandate_reference, "rejected", { reason, vfd: approval.raw, refund });
+      await notify(m.user_id as string, "Direct Debit Mandate rejected",
+        `${reason}.${refund.refunded ? ` The ₦${MANDATE_SETUP_FEE} setup fee has been returned to your wallet.` : ""} You can set up a new mandate from the app.`,
+        "mandate_rejected");
+      results.push({ mandate_id: m.id, outcome: "rejected", refund });
       continue;
     }
 
+    // NOT expired here. VFD may approve at any point up to day 7, so nothing is
+    // cancelled on our side before the window closes — see handleExpirySweep.
     results.push({ mandate_id: m.id, outcome: "still_pending", bank_status: approval.status });
   }
 
   return json({ data: { polled: (pending || []).length, results } });
 }
+
+/**
+ * VFD's documented rule: the ₦50 NIBSS authentication must be funded within
+ * 7 days of mandate creation, after which VFD expires the mandate on their
+ * side. We never pre-empt that window. Once it closes we ask VFD one final
+ * time and act on THEIR answer:
+ *   - VFD says approved  -> activate (a late approval is still a valid one)
+ *   - VFD says expired/rejected -> mark expired here + refund the ₦100 fee
+ *   - VFD still says pending -> flag for manual review, never auto-expire
+ */
+async function handleExpirySweep(limit: number) {
+  const supabase = db();
+  const { data: due } = await supabase.from("mandates")
+    .select("*")
+    .eq("status", "pending")
+    .eq("manual_review", false)
+    .lte("expires_at", new Date().toISOString())
+    .order("expires_at", { ascending: true })
+    .limit(limit);
+
+  const results: Array<Record<string, unknown>> = [];
+  for (const m of due || []) {
+    const nowIso = new Date().toISOString();
+    const approval = await checkMandateApproval(m.mandate_reference as string);
+
+    await logEvent(m.id, m.user_id, m.mandate_reference, "expiry_final_check", {
+      status: approval.status, http_status: approval.http_status,
+    });
+
+    if (approval.approved) {
+      await supabase.from("mandates").update({
+        status: "bank_approved", bank_approved_at: nowIso, resolved_at: nowIso,
+        expiry_final_checked_at: nowIso, vfd_payload: approval.raw,
+      }).eq("id", m.id).eq("status", "pending");
+      await markProductApproved(m, nowIso);
+      await notifyMandateApproved(supabase, {
+        userId: m.user_id as string,
+        productType: String(m.product_type),
+        productReference: (m.product_reference as string) || null,
+        mandateReference: (m.mandate_reference as string) || null,
+      });
+      results.push({ mandate_id: m.id, outcome: "late_bank_approved" });
+      continue;
+    }
+
+    const vfdSaysGone = approval.rejected ||
+      /expire|lapsed|not\s*found|invalid\s*(mandate|reference)/i.test(approval.status || "");
+
+    if (!vfdSaysGone) {
+      // Still pending (or we couldn't read a definitive answer) past day 7 —
+      // do NOT auto-expire; a human decides.
+      await flagForManualReview(
+        m,
+        `Mandate still reported as "${approval.status}" by the bank ${MANDATE_EXPIRY_DAYS}+ days after creation`,
+        approval.raw,
+      );
+      results.push({ mandate_id: m.id, outcome: "manual_review", bank_status: approval.status });
+      continue;
+    }
+
+    const reason = `The ₦${MANDATE_NIBSS_SHARE} NIBSS verification payment was not completed within ${MANDATE_EXPIRY_DAYS} days, so the bank expired this mandate`;
+    await supabase.from("mandates").update({
+      status: "expired", resolved_at: nowIso, expiry_final_checked_at: nowIso,
+      rejection_reason: reason, vfd_payload: approval.raw,
+    }).eq("id", m.id).eq("status", "pending");
+    await markProductExpired(m, reason);
+    const refund = await refundMandateSetupFee(m, reason);
+    await logEvent(m.id, m.user_id, m.mandate_reference, "expired", { reason, vfd: approval.raw, refund });
+    await notify(m.user_id as string, "Direct Debit Mandate expired",
+      `${reason}.${refund.refunded ? ` Your ₦${MANDATE_SETUP_FEE} setup fee has been refunded to your wallet.` : ""} Tap "Try again" on the plan to start a fresh mandate.`,
+      "mandate_expired");
+    results.push({ mandate_id: m.id, outcome: "expired", refund });
+  }
+
+  return json({ data: { checked: (due || []).length, expiry_days: MANDATE_EXPIRY_DAYS, results } });
+}
+
+
 
 // ---------------------------------------------------------------------------
 // Stage 3 — scheduled debit
@@ -800,7 +961,7 @@ Deno.serve(async (req) => {
     const action = String(body.action || "");
 
     // Cron / service-to-service actions. Never client-triggered.
-    const CRON_ACTIONS = new Set(["poll_pending", "run_due_debits", "go_live_check", "live_probe", "raw_token_probe", "header_variant_probe", "credential_fingerprint", "credential_mint_probe"]);
+    const CRON_ACTIONS = new Set(["poll_pending", "expiry_sweep", "run_due_debits", "go_live_check", "live_probe", "raw_token_probe", "header_variant_probe", "credential_fingerprint", "credential_mint_probe"]);
     if (CRON_ACTIONS.has(action)) {
       if (!(await verifyCronToken(req, CRON_TOKEN_NAME))) {
         return json({ error: "Unauthorized" }, 401);
@@ -809,6 +970,7 @@ Deno.serve(async (req) => {
       if (action === "credential_mint_probe") return json({ data: await probeCredentialMint() });
       if (action === "credential_fingerprint") return await handleCredentialFingerprint();
       if (action === "poll_pending") return await handlePollPending(limit);
+      if (action === "expiry_sweep") return await handleExpirySweep(limit);
       if (action === "run_due_debits") return await handleRunDueDebits(limit);
       if (action === "live_probe") return await handleLiveProbe(body);
       if (action === "raw_token_probe") return await handleRawTokenProbe(body);

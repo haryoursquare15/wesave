@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import {
-  ChevronDown, TrendingUp, Unlock, Lock, CalendarClock, RefreshCw,
+  ChevronDown, TrendingUp, Unlock, Lock, CalendarClock, RefreshCw, Timer, RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -17,9 +17,14 @@ const naira = (v: number, dp = 0) =>
 const fmtDate = (d: string) =>
   new Date(d).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "2-digit" });
 
-export type PlanState = "pending" | "rejected" | "active" | "ready" | "matured" | "closed";
+export type PlanState = "pending" | "rejected" | "active" | "ready" | "matured" | "closed" | "expired";
+
+/** Plans in these states are historical — never mixed with live plans. */
+export const ARCHIVED_STATES: PlanState[] = ["matured", "closed", "rejected", "expired"];
 
 export function planState(s: VS): PlanState {
+  // Mandate verification window closed without bank approval — permanent state.
+  if (s.activation_status === "expired") return "expired";
   if (s.approval_status === "pending") return "pending";
   if (s.approval_status === "rejected") return "rejected";
   if (s.status === "matured") return "matured";
@@ -35,6 +40,7 @@ const STATE_META: Record<PlanState, { label: string; badge: string; accent: stri
   ready: { label: "Ready to withdraw", badge: "bg-success/10 text-success border-success/30", accent: "border-l-success/70" },
   matured: { label: "Matured", badge: "bg-success/10 text-success border-success/30", accent: "border-l-success/70" },
   closed: { label: "Closed", badge: "bg-muted text-muted-foreground border-border", accent: "border-l-border" },
+  expired: { label: "Expired", badge: "bg-muted text-muted-foreground border-border", accent: "border-l-muted-foreground/40" },
 };
 
 interface Props {
@@ -43,13 +49,15 @@ interface Props {
   busy?: boolean;
   onMature: (s: VS) => void;
   onEarlyWithdraw: (s: VS) => void;
+  /** Starts a brand-new plan/mandate — the expired record is never revived. */
+  onTryAgain?: (s: VS) => void;
 }
 
-export function SavingsPlanCard({ savings: s, mandate, busy, onMature, onEarlyWithdraw }: Props) {
+export function SavingsPlanCard({ savings: s, mandate, busy, onMature, onEarlyWithdraw, onTryAgain }: Props) {
   const [open, setOpen] = useState(false);
   const state = planState(s);
   const meta = STATE_META[state];
-  const isClosed = state === "closed" || state === "matured" || state === "rejected";
+  const isClosed = state === "closed" || state === "matured" || state === "rejected" || state === "expired";
 
   const principal = Number(s.principal || 0);
   const interest = Number(s.discounted_interest_paid || 0) > 0
@@ -71,6 +79,13 @@ export function SavingsPlanCard({ savings: s, mandate, busy, onMature, onEarlyWi
 
   const allowEarly = s.vestara_products?.allow_early_withdrawal ?? true;
   const awaitingMandate = s.activation_status === "pending_mandate";
+
+  // VFD gives 7 days from mandate creation to fund the ₦50 NIBSS verification.
+  const mandateExpiresAt = mandate?.expires_at || s.mandate_expires_at || null;
+  const mandatePending = awaitingMandate && (!mandate || mandate.status === "pending");
+  const verifyDaysLeft = mandatePending && mandateExpiresAt
+    ? Math.ceil((new Date(mandateExpiresAt).getTime() - Date.now()) / 86400000)
+    : null;
 
   return (
     <motion.div
@@ -130,6 +145,32 @@ export function SavingsPlanCard({ savings: s, mandate, busy, onMature, onEarlyWi
             <span className="text-destructive">Penalty {naira(s.penalty_amount, 2)}</span>
           )}
         </div>
+
+        {/* 7-day NIBSS verification countdown */}
+        {verifyDaysLeft !== null && verifyDaysLeft > 0 && (
+          <div className="rounded-lg border border-warning/30 bg-warning/5 px-2.5 py-2 flex items-start gap-2">
+            <Timer className="h-3.5 w-3.5 text-warning mt-0.5 shrink-0" />
+            <p className="text-[11px] leading-snug">
+              <span className="font-semibold">{verifyDaysLeft} day{verifyDaysLeft === 1 ? "" : "s"} left</span>{" "}
+              to complete your ₦50 verification payment. After that your bank expires the mandate and
+              this plan closes — your ₦100 setup fee is refunded automatically.
+            </p>
+          </div>
+        )}
+
+        {state === "expired" && (
+          <div className="rounded-lg border border-border bg-muted/40 px-2.5 py-2 space-y-1.5">
+            <p className="text-[11px] text-muted-foreground leading-snug">
+              The ₦50 verification payment wasn't completed within 7 days, so your bank expired the
+              mandate. This plan is kept for your records and any ₦100 setup fee was refunded.
+            </p>
+            {onTryAgain && (
+              <Button size="sm" variant="outline" className="h-7 text-[11px]" onClick={() => onTryAgain(s)}>
+                <RotateCcw className="h-3 w-3 mr-1.5" /> Try again with a new plan
+              </Button>
+            )}
+          </div>
+        )}
 
         {/* Actions + details toggle */}
         <div className="flex items-center justify-between gap-2 pt-0.5">

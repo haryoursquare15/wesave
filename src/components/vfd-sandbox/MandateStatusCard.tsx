@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import { ShieldCheck, Clock, AlertTriangle, CalendarDays } from "lucide-react";
+import { ShieldCheck, Clock, AlertTriangle, CalendarDays, Timer } from "lucide-react";
 import { mandateStatusMeta, type MandateRow } from "@/hooks/useMandates";
 
 const fmtMoney = (n: number | null | undefined) =>
@@ -49,6 +49,10 @@ export function MandateStatusCard({
 }) {
   if (!mandate) return null;
   const meta = mandateStatusMeta(mandate.status);
+  // VFD expires an unfunded mandate 7 days after creation.
+  const daysLeft = mandate.status === "pending" && mandate.expires_at
+    ? Math.ceil((new Date(mandate.expires_at).getTime() - Date.now()) / 86400000)
+    : null;
   const Icon = meta.tone === "success" ? ShieldCheck : meta.tone === "warning" ? Clock : AlertTriangle;
 
   return (
@@ -98,6 +102,16 @@ export function MandateStatusCard({
           </>
         )}
       </div>
+
+      {daysLeft !== null && daysLeft > 0 && (
+        <div className="flex items-start gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/5 px-2 py-1.5">
+          <Timer className="h-3 w-3 text-amber-600 mt-0.5 flex-none" />
+          <p className="text-[10px] leading-snug">
+            <span className="font-semibold">{daysLeft} day{daysLeft === 1 ? "" : "s"} left</span> to complete
+            your ₦50 verification payment, or your bank expires this mandate (setup fee auto-refunded).
+          </p>
+        </div>
+      )}
 
       <p className="text-[10px] text-muted-foreground">
         {mandate.rejection_reason ? mandate.rejection_reason : meta.hint}
