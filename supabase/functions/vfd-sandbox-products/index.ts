@@ -1273,7 +1273,18 @@ async function processAutoPayout(
       "payout_received", groupId);
   }
 
-  return { success: true, recipient_id: recipientId, net_amount: netAmount, platform_fee: feeCharged, withheld, recovered_outstanding: recovered, residual_owed: residual };
+  return {
+    success: true, recipient_id: recipientId,
+    expected_cycle_funding: funding.expected_cycle_funding,
+    confirmed_cycle_funding: funding.confirmed_cycle_funding,
+    gross_payout: grossAmount,
+    service_fee: feeCharged,
+    net_customer_payout: netAmount,
+    net_amount: netAmount, platform_fee: feeCharged,
+    withheld, recovered_outstanding: recovered, residual_owed: residual,
+    funding_report: funding,
+  };
+
 
 }
 
