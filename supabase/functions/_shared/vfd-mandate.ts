@@ -660,17 +660,31 @@ export async function collectMandateDebit(params: {
   purpose: string;
   productRef: string;
   scheduledDate: string;
+  /**
+   * Collection slot identity. Thrift passes a CYCLE tag (e.g. "c2") so a late
+   * or failed member cannot permanently offset the group by a calendar day.
+   * When omitted the slot is the calendar date (cadence-driven products).
+   */
+  slotKey?: string;
+  /** Minutes that must elapse before a failed attempt in this slot is re-armed. */
+  retryAfterMinutes?: number;
+  /** Max attempts (initial + retries) allowed inside one slot. */
+  maxAttempts?: number;
   idempotencyKey?: string;
 }): Promise<CollectDebitResult> {
   const { db } = params;
   const scheduledDate = params.scheduledDate.slice(0, 10);
-  const txRef = `vestara-ddm-debit-${params.mandateId}-${scheduledDate}`;
+  const slotKey = (params.slotKey || "").trim();
+  const txRef = `vestara-ddm-debit-${params.mandateId}-${slotKey || scheduledDate}`;
 
   const { data: claim, error: claimErr } = await db.rpc("claim_mandate_debit_attempt", {
     _mandate_id: params.mandateId,
     _scheduled_date: scheduledDate,
     _amount: Number(params.amount),
     _transaction_reference: txRef,
+    _slot_key: slotKey || null,
+    _retry_after_minutes: params.retryAfterMinutes ?? 60,
+    _max_attempts: params.maxAttempts ?? 3,
   });
   const claimResult = (claim || {}) as Record<string, any>;
   if (claimErr || !claimResult.claimed) {

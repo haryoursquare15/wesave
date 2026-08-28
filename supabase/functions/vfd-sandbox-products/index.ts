@@ -29,6 +29,7 @@ import {
   markSettlement,
   markSettlementLedgerPosted,
   allInboundConfirmed,
+  isSettlementConfirmed,
 } from "../_shared/settlement.ts";
 import {
   billCategoryRequiresValidation,
@@ -8899,7 +8900,8 @@ async function reconcileThriftSettlements(limit = 50): Promise<Record<string, un
     results.push({ reference: r.provider_reference, confirmed: true, posted, finalize });
   }
   const payouts = await reconcileStuckThriftPayouts(limit);
-  return { checked: (rows || []).length, results, payouts };
+  const swept = await sweepUnbankedThriftPayouts(limit);
+  return { checked: (rows || []).length, results, payouts, swept };
 }
 
 /**
@@ -9009,6 +9011,103 @@ async function reconcileStuckThriftPayouts(limit = 50): Promise<Record<string, u
   }
   return { checked: (stuck || []).length, results: out };
 }
+
+/**
+ * POOL-SWEEP RECOVERY.
+ *
+ * PAYOUT RULE (non-negotiable): every thrift payout leaves the CORPORATE POOL
+ * as a real VFD transfer to the recipient's own NUBAN. An internal wallet
+ * credit alone is never a payout — it silently breaks pool reconciliation.
+ *
+ * Legacy/backfilled rows exist that were stamped bank_status='confirmed'
+ * WITHOUT any bank leg (no vfd_reference, no settlement record, no VFD
+ * transaction). Those recipients hold a ledger credit while the cash is still
+ * sitting in the pool. This routine finds them, proves no transfer ever
+ * happened, then performs the missing pool -> customer transfer.
+ *
+ * Safety: a row is only swept when ALL of these hold —
+ *   net_amount > 0, vfd_reference IS NULL, no confirmed settlement leg, and a
+ *   TSQ on the deterministic reference returns nothing. The transfer itself is
+ *   idempotent (payoutFromPoolToCustomer replays instead of re-sending).
+ */
+async function sweepUnbankedThriftPayouts(limit = 50): Promise<Record<string, unknown>> {
+  const db = getSupabaseAdmin();
+  const { data: rows } = await db.from("vfd_sandbox_group_payouts")
+    .select("*")
+    .is("vfd_reference", null)
+    .gt("net_amount", 0)
+    .order("created_at", { ascending: true })
+    .limit(limit);
+
+  const out: Array<Record<string, unknown>> = [];
+  for (const p of (rows || [])) {
+    const payoutId = p.id as string;
+    const groupId = p.group_id as string;
+    const netAmount = Number(p.net_amount || 0);
+    const bankRef = p.cycle_id
+      ? bankPayoutReference(p.cycle_id as string)
+      : `AJO-PAYOUT-${String(payoutId).replace(/-/g, "").slice(0, 20)}`;
+
+    // Proof #1 — no settlement leg was ever confirmed for this reference.
+    if (await isSettlementConfirmed(db, bankRef)) {
+      await updatePayoutRow(payoutId, { vfd_reference: bankRef, bank_status: "confirmed" });
+      out.push({ id: payoutId, action: "reference_backfilled" });
+      continue;
+    }
+
+    // Proof #2 — the bank has no record of this transfer.
+    const prior = await verifyVfdTransfer(bankRef);
+    if (prior.confirmed) {
+      await updatePayoutRow(payoutId, {
+        vfd_reference: bankRef, bank_status: "confirmed",
+        bank_confirmed_at: new Date().toISOString(),
+      });
+      out.push({ id: payoutId, action: "reference_backfilled_from_tsq" });
+      continue;
+    }
+
+    // No bank leg exists — the money is still in the pool. Send it.
+    const bankPayout = await payoutFromPoolToCustomer({
+      userId: p.recipient_id as string,
+      amount: netAmount,
+      reference: bankRef,
+      remark: `Thrift payout cycle ${p.cycle_number}`,
+      productType: "thrift",
+      productReference: groupId,
+    });
+
+    if (!bankPayout.confirmed) {
+      await updatePayoutRow(payoutId, {
+        bank_status: "pending",
+        last_error: bankPayout.error || "Pool sweep not confirmed",
+        last_reconciled_at: new Date().toISOString(),
+        attempts: Number(p.attempts || 0) + 1,
+      });
+      out.push({ id: payoutId, action: "sweep_unconfirmed", code: bankPayout.code, error: bankPayout.error });
+      continue;
+    }
+
+    const ev = (bankPayout.evidence || {}) as Record<string, unknown>;
+    await updatePayoutRow(payoutId, {
+      vfd_reference: bankRef,
+      bank_status: "confirmed",
+      bank_confirmed_at: new Date().toISOString(),
+      vfd_session_id: String(ev.sessionId ?? ev.session_id ?? "") || null,
+      recipient_nuban: (ev.toAccount as string) || null,
+      last_error: null,
+      last_reconciled_at: new Date().toISOString(),
+      attempts: Number(p.attempts || 0) + 1,
+    });
+    await markSettlementLedgerPosted(db, bankRef, (p.payout_reference as string) || bankRef);
+    await sendNotification(p.recipient_id as string, "Payout Settled to Your Account",
+      `Your ₦${netAmount.toLocaleString()} thrift payout has now been transferred from Vestara to your bank account.`,
+      "payout_notification", groupId);
+    out.push({ id: payoutId, action: "swept_from_pool", amount: netAmount, reference: bankRef });
+  }
+  return { checked: (rows || []).length, results: out };
+}
+
+
 
 
 
@@ -9151,6 +9250,13 @@ async function performMandateDebitForMember(
     purpose: `Vestara thrift cycle ${cycleIndex} - ${group.name}`,
     productRef: groupId,
     scheduledDate: new Date().toISOString(),
+    // CYCLE-SCOPED slot: collection belongs to the cycle, not the calendar day.
+    // A member who failed yesterday is retried inside the SAME cycle instead of
+    // being locked out until the next date, so one late member can no longer
+    // stall the whole group.
+    slotKey: `${groupId.slice(0, 8)}-c${cycleIndex}`,
+    retryAfterMinutes: 60,
+    maxAttempts: 3,
   });
   const result = { ok: collection.collected, raw: collection.raw, http_status: 0 };
   if (collection.skipped) {
