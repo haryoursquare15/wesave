@@ -1275,49 +1275,121 @@ async function processAutoPayout(
     console.error(`[processAutoPayout] BLOCKED group=${groupId} cycle=${currentCycle} user=${recipientId} owed=₦${owed} > payout=₦${payoutBeforeRecovery}; withholding entire payout, residual ₦${residual}`);
   }
 
+  // ===========================================================
+  // ATOMIC PAYOUT CLAIM — group_id + cycle_number.
+  // Exactly one invocation may own payout processing; every other concurrent
+  // path (wallet pipeline, DDM settlement posting, sweep, reconciler) returns
+  // safely without initiating a second bank transfer.
+  // ===========================================================
+  const claim = await claimPayout({
+    groupId, cycleId: activeCycle.id as string, cycleNumber: currentCycle,
+    recipientId, grossAmount, fee: feeCharged, netAmount, recovered, withheld,
+  });
+  if (!claim.claimed) {
+    return {
+      success: claim.reason === "already_completed",
+      status: claim.reason,
+      already_processing: claim.reason === "already_processing",
+      cycle_number: currentCycle,
+    };
+  }
+  const payoutRowId = claim.row!.id as string;
+  const claimRow = claim.row as Record<string, unknown>;
+  const bankRef = bankPayoutReference(activeCycle.id as string);
+  const ledgerRef = ledgerPayoutReference(groupId, activeCycle.id as string);
+  let bankStatus = String(claimRow.bank_status || "not_sent");
+
   // Only touch the ledger when something is actually disbursed. When withheld,
   // the funds simply stay in the group's thrift pool (covering the shortfall
   // the member's missed contributions created).
   if (debitFromPool > 0) {
     // REAL money-out leg FIRST: corporate pool -> recipient's own NUBAN,
     // independently verified. The internal ledger only mirrors it afterwards.
-    if (netAmount > 0) {
-      const bankPayout = await payoutFromPoolToCustomer({
-        userId: recipientId,
-        amount: netAmount,
-        reference: `AJO-PAYOUT-${String(activeCycle.id).replace(/-/g, "").slice(0, 20)}`,
-        remark: `Thrift payout cycle ${currentCycle}`,
-        productType: "thrift",
-        productReference: groupId,
-      });
-      if (!bankPayout.confirmed) {
-        const err = bankPayout.error || "Bank payout not confirmed";
-        console.error(`[processAutoPayout] bank leg unconfirmed group=${groupId} cycle=${currentCycle}: ${bankPayout.code}`);
+    // If the bank leg is ALREADY confirmed (previous attempt crashed after the
+    // transfer), money must never move a second time — go straight to ledger.
+    if (netAmount > 0 && bankStatus !== "confirmed") {
+      const prior = await verifyVfdTransfer(bankRef);
+      let evidence: unknown = prior.evidence;
+      let confirmed = prior.confirmed;
+      let failCode: string | undefined;
+      let failErr: string | undefined;
+
+      if (!confirmed) {
+        const bankPayout = await payoutFromPoolToCustomer({
+          userId: recipientId,
+          amount: netAmount,
+          reference: bankRef,
+          remark: `Thrift payout cycle ${currentCycle}`,
+          productType: "thrift",
+          productReference: groupId,
+        });
+        confirmed = bankPayout.confirmed;
+        evidence = bankPayout.evidence;
+        failCode = bankPayout.code;
+        failErr = bankPayout.error;
+      }
+
+      if (!confirmed) {
+        const err = failErr || "Bank payout not confirmed";
+        console.error(`[processAutoPayout] bank leg unconfirmed group=${groupId} cycle=${currentCycle}: ${failCode}`);
+        // Unknown/pending -> stays recoverable; never re-sent blindly.
+        await updatePayoutRow(payoutRowId, {
+          payout_status: failCode === "PAYOUT_FAILED" ? "failed" : "processing",
+          bank_status: failCode === "PAYOUT_FAILED" ? "failed" : "pending",
+          last_error: err, last_reconciled_at: new Date().toISOString(),
+        });
         await sendNotification(recipientId, "Payout Processing",
           `Your ₦${netAmount.toLocaleString()} payout from ${group.name} has been submitted to the bank and is awaiting confirmation. It will reflect shortly.`,
           "payout_notification", groupId);
-        return { success: false, error: err, code: bankPayout.code, awaiting_settlement: true };
+        return { success: false, error: err, code: failCode, awaiting_settlement: true };
+      }
+
+      bankStatus = "confirmed";
+      const ev = (evidence || {}) as Record<string, unknown>;
+      await updatePayoutRow(payoutRowId, {
+        bank_status: "confirmed",
+        bank_confirmed_at: new Date().toISOString(),
+        payout_status: "bank_confirmed_ledger_pending",
+        vfd_session_id: String(ev.sessionId ?? ev.session_id ?? "") || null,
+      });
+    }
+
+    // LEDGER LEG — idempotent. A pre-existing transaction on this deterministic
+    // reference means the internal posting is already done, NOT a failure.
+    const alreadyPosted = await ledgerPayoutExists(ledgerRef);
+    if (!alreadyPosted) {
+      const payout = await creditVestaraThriftPayout(recipientId, groupId, debitFromPool, feeCharged, ledgerRef, {
+        cycle_id: activeCycle.id,
+        cycle_number: currentCycle,
+        source: "vfd_sandbox_ajo",
+        gross_pool_value: grossAmount,
+        recovered_outstanding: recovered,
+        residual_owed: residual,
+      });
+      const posted = payout.success || await ledgerPayoutExists(ledgerRef);
+      if (!posted) {
+        const err = payout.error || "Payout failed";
+        console.error(`[processAutoPayout] ledger leg failed group=${groupId} cycle=${currentCycle}:`, err);
+        // BANK MONEY IS ALREADY GONE when bankStatus === 'confirmed'. Recovery
+        // retries the INTERNAL step only — never another transfer.
+        await updatePayoutRow(payoutRowId, {
+          payout_status: bankStatus === "confirmed" ? "bank_confirmed_ledger_pending" : "failed",
+          ledger_status: "pending",
+          last_error: err, last_reconciled_at: new Date().toISOString(),
+        });
+        await postChatMessage(groupId, recipientId,
+          `⚠️ Auto-payout for cycle ${currentCycle} is completing: ${err}. Reconciliation will finish it.`, "contribution_failed");
+        await sendNotification(recipientId, "Payout Pending",
+          `Your payout for ${group.name} cycle ${currentCycle} is being finalised (${err}). Our team has been alerted.`,
+          "payout_notification", groupId);
+        return { success: false, error: err, bank_confirmed: bankStatus === "confirmed", ledger_posted: false };
       }
     }
-    const payout = await creditVestaraThriftPayout(recipientId, groupId, debitFromPool, feeCharged, `ajo-payout-${groupId}-${activeCycle.id}`, {
-      cycle_id: activeCycle.id,
-      cycle_number: currentCycle,
-      source: "vfd_sandbox_ajo",
-      gross_pool_value: grossAmount,
-      recovered_outstanding: recovered,
-      residual_owed: residual,
+    await updatePayoutRow(payoutRowId, {
+      ledger_status: "posted", ledger_posted_at: new Date().toISOString(),
     });
-    if (!payout.success) {
-      const err = payout.error || "Payout failed";
-      console.error(`[processAutoPayout] group=${groupId} cycle=${currentCycle} failed:`, err);
-      await postChatMessage(groupId, recipientId,
-        `⚠️ Auto-payout for cycle ${currentCycle} failed: ${err}. Admin will retry.`, "contribution_failed");
-      await sendNotification(recipientId, "Payout Pending",
-        `Your payout for ${group.name} cycle ${currentCycle} could not be processed (${err}). Our team has been alerted.`,
-        "payout_notification", groupId);
-      return { success: false, error: err };
-    }
   }
+
 
   if (recovered > 0 && recipientRow?.id) {
     await db.from("vfd_sandbox_group_members").update({
