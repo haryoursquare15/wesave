@@ -7663,6 +7663,18 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
       });
       continue;
     }
+    // GROUP FUNDING MODE IS AUTHORITATIVE — fail closed on any mixed state.
+    const sweepConsistency = await assertGroupFundingConsistency(group.id, group.funding_mode as string);
+    if (!sweepConsistency.ok) {
+      processed.push({
+        group_id: group.id, name: group.name, status: "blocked",
+        reason: "funding_method_mismatch",
+        funding_mode: sweepConsistency.funding_mode,
+        offending_members: sweepConsistency.offenders,
+      });
+      continue;
+    }
+    const groupIsDdm = sweepConsistency.funding_mode === "ddm";
 
 
     const { data: pending } = await db.from("vfd_sandbox_group_members")
