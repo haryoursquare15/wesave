@@ -3783,6 +3783,194 @@ async function verifyVfdTransfer(reference: string): Promise<{ confirmed: boolea
   }
 }
 
+// ===========================================================================
+// SETTLEMENT INTEGRITY (shared by every DDM / thrift money leg)
+//
+// A bank leg is only "settled" when VFD's own record says so. These helpers
+// wrap `settlement_records` so no product code can shortcut the rule.
+// ===========================================================================
+
+/**
+ * Re-verify a settlement leg against VFD and persist the outcome.
+ * Falls back to the pool statement when TSQ cannot resolve the reference
+ * (mandate collections land as a pool credit, not always a TSQ-able transfer).
+ */
+async function confirmSettlementLeg(providerReference: string, opts: {
+  amount: number;
+  poolAccount?: string;
+  maxAttemptsBeforeUnreconciled?: number;
+} ): Promise<{ confirmed: boolean; evidence: unknown }> {
+  const db = getSupabaseAdmin();
+  const tsq = await verifyVfdTransfer(providerReference);
+  if (tsq.confirmed) {
+    await markSettlement(db, providerReference, "confirmed", { evidence: tsq.evidence, bumpAttempt: true });
+    return { confirmed: true, evidence: tsq.evidence };
+  }
+
+  // Statement fallback: scan the destination pool account for a credit whose
+  // reference or session id matches this leg.
+  let statementEvidence: unknown = null;
+  try {
+    const account = opts.poolAccount || VFD_CORPORATE_POOL_NUBAN;
+    const today = new Date();
+    const from = new Date(today.getTime() - 3 * 86400_000);
+    const fmt = (d: Date) => d.toISOString().slice(0, 10);
+    const { data } = await walletRequest("/account/transactions", "GET", undefined, {
+      accountNo: account, startDate: fmt(from), endDate: fmt(today),
+    });
+    statementEvidence = data;
+    const rows = ((data?.data as Record<string, unknown>)?.content
+      ?? (data?.data as unknown[])
+      ?? []) as Array<Record<string, unknown>>;
+    const hit = (Array.isArray(rows) ? rows : []).find((r) => {
+      const ref = String(r.reference ?? r.transactionReference ?? r.paymentReference ?? "");
+      return ref && providerReference.includes(ref.slice(0, 12));
+    });
+    if (hit) {
+      await markSettlement(db, providerReference, "confirmed", { evidence: hit, bumpAttempt: true });
+      return { confirmed: true, evidence: hit };
+    }
+  } catch (e) {
+    statementEvidence = { error: e instanceof Error ? e.message : String(e) };
+  }
+
+  const { data: row } = await db.from("settlement_records")
+    .select("attempts").eq("provider", "vfd").eq("provider_reference", providerReference).maybeSingle();
+  const attempts = Number(row?.attempts || 0) + 1;
+  const limit = opts.maxAttemptsBeforeUnreconciled ?? 6;
+  await markSettlement(db, providerReference, attempts >= limit ? "unreconciled" : "pending", {
+    evidence: { tsq: tsq.evidence, statement: statementEvidence },
+    bumpAttempt: true,
+  });
+  return { confirmed: false, evidence: { tsq: tsq.evidence, statement: statementEvidence } };
+}
+
+/**
+ * REAL money-out leg: corporate pool -> customer NUBAN.
+ * Used for thrift payouts. Nothing internal may be credited before this
+ * returns confirmed:true (independently verified via /transactions?reference=).
+ */
+async function payoutFromPoolToCustomer(params: {
+  userId: string;
+  amount: number;
+  reference: string;
+  remark: string;
+  productType: string;
+  productReference: string;
+}): Promise<SettlementFunding> {
+  const db = getSupabaseAdmin();
+  const ref = params.reference;
+
+  // Replay guard: a previously confirmed leg must never be sent twice.
+  const prior = await verifyVfdTransfer(ref);
+  if (prior.confirmed) {
+    await markSettlement(db, ref, "confirmed", { evidence: prior.evidence });
+    return { confirmed: true, reference: ref, evidence: prior.evidence, replayed: true };
+  }
+
+  const { data: client } = await db.from("vfd_sandbox_clients")
+    .select("vfd_account_number, metadata, full_name").eq("user_id", params.userId).maybeSingle();
+  const customerNuban = (client?.vfd_account_number as string | null) || null;
+  if (!customerNuban || customerNuban === VFD_CORPORATE_POOL_NUBAN) {
+    return { confirmed: false, reference: ref, code: "PAYOUT_DEST_UNAVAILABLE", error: "Recipient bank account unavailable" };
+  }
+  if ((client?.metadata as Record<string, unknown> | null)?.virtual_nuban) {
+    return { confirmed: false, reference: ref, code: "PAYOUT_DEST_VIRTUAL", error: "Recipient is on a virtual account — payout must be settled manually" };
+  }
+
+  await openSettlement(db, {
+    productType: params.productType,
+    productReference: params.productReference,
+    userId: params.userId,
+    direction: "out",
+    amount: params.amount,
+    sourceAccount: VFD_CORPORATE_POOL_NUBAN,
+    destinationAccount: customerNuban,
+    providerReference: ref,
+    metadata: { remark: params.remark },
+  });
+
+  const firstNonEmpty = (...vals: unknown[]): string => {
+    for (const v of vals) {
+      const s = v === undefined || v === null ? "" : String(v).trim();
+      if (s) return s;
+    }
+    return "";
+  };
+
+  let { data: poolEnq, status: poolStatus } = await walletRequest(
+    "/account/enquiry", "GET", undefined, { accountNumber: VFD_CORPORATE_POOL_NUBAN },
+  );
+  if (poolStatus !== 200 || poolEnq?.status !== "00") {
+    const self = await walletRequest("/account/enquiry", "GET", undefined, {});
+    const selfEnv = (self.data?.data as Record<string, unknown>) || {};
+    const selfAcct = (selfEnv?.account as Record<string, unknown>) || selfEnv;
+    const selfNuban = String(selfEnv?.accountNo ?? selfAcct?.accountNo ?? "");
+    if (self.status === 200 && self.data?.status === "00" && (!selfNuban || selfNuban === VFD_CORPORATE_POOL_NUBAN)) {
+      poolEnq = self.data; poolStatus = self.status;
+    }
+  }
+  if (poolStatus !== 200 || poolEnq?.status !== "00") {
+    await markSettlement(db, ref, "pending", { evidence: poolEnq, bumpAttempt: true });
+    return { confirmed: false, reference: ref, code: "PAYOUT_SOURCE_ENQUIRY_FAILED", error: "Settlement account unreachable", evidence: poolEnq };
+  }
+
+  const { data: custEnq, status: custStatus } = await walletRequest(
+    "/account/enquiry", "GET", undefined, { accountNumber: customerNuban },
+  );
+  if (custStatus !== 200 || custEnq?.status !== "00") {
+    await markSettlement(db, ref, "pending", { evidence: custEnq, bumpAttempt: true });
+    return { confirmed: false, reference: ref, code: "PAYOUT_DEST_ENQUIRY_FAILED", error: "Recipient account unreachable", evidence: custEnq };
+  }
+
+  const pEnv = (poolEnq?.data as Record<string, unknown>) || {};
+  const pAcct = (pEnv?.account as Record<string, unknown>) || pEnv;
+  const cEnv = (custEnq?.data as Record<string, unknown>) || {};
+  const cAcct = (cEnv?.account as Record<string, unknown>) || cEnv;
+
+  const payload = {
+    fromAccount: VFD_CORPORATE_POOL_NUBAN,
+    fromClientId: firstNonEmpty(Deno.env.get("VFD_POOL_CLIENT_ID"), pEnv?.clientId, pAcct?.clientId),
+    fromClient: firstNonEmpty(Deno.env.get("VFD_POOL_CLIENT_NAME"), pEnv?.client, pAcct?.client, pEnv?.name),
+    fromSavingsId: firstNonEmpty(Deno.env.get("VFD_POOL_SAVINGS_ID"), pAcct?.id, pEnv?.accountId, pEnv?.id),
+    fromBvn: String(pEnv?.bvn ?? ""),
+    toAccount: customerNuban,
+    toBank: "999999",
+    toClient: firstNonEmpty(cEnv?.client, cAcct?.client, client?.full_name),
+    toClientId: firstNonEmpty(cEnv?.clientId, cAcct?.clientId),
+    toSavingsId: firstNonEmpty(cAcct?.id, cEnv?.accountId, cEnv?.id),
+    toSession: "",
+    toBvn: String(cEnv?.bvn ?? ""),
+    signature: await transferSignature(VFD_CORPORATE_POOL_NUBAN, customerNuban),
+    amount: String(params.amount),
+    remark: params.remark.slice(0, 60),
+    transferType: "intra",
+    reference: ref,
+  };
+  if (!payload.fromClientId || !payload.fromSavingsId || !payload.toSavingsId || !payload.toClientId) {
+    await markSettlement(db, ref, "pending", { evidence: { poolEnq, custEnq }, bumpAttempt: true });
+    return { confirmed: false, reference: ref, code: "PAYOUT_IDENTITY_MISSING", error: "Payout identities incomplete" };
+  }
+
+  console.log(`[payout][pool->customer][request] ${JSON.stringify(payload)}`);
+  const { data: transferResp } = await walletRequest("/transfer", "POST", payload);
+  const vfdMessage = String(transferResp?.message ?? "");
+  const duplicate = String(transferResp?.status ?? "") === "98" || /reference exist/i.test(vfdMessage);
+
+  const verified = await verifyVfdTransfer(ref);
+  if (!verified.confirmed) {
+    await markSettlement(db, ref, "pending", { evidence: { transfer: transferResp, tsq: verified.evidence }, bumpAttempt: true });
+    return {
+      confirmed: false, reference: ref,
+      code: duplicate ? "PAYOUT_UNCONFIRMED" : "PAYOUT_FAILED",
+      error: vfdMessage || "Payout transfer not confirmed at the bank",
+      evidence: { transfer: transferResp, tsq: verified.evidence },
+    };
+  }
+  await markSettlement(db, ref, "confirmed", { evidence: verified.evidence });
+  return { confirmed: true, reference: ref, evidence: verified.evidence, replayed: duplicate };
+}
+
 type SettlementFunding = {
   confirmed: boolean;
   reference: string;
