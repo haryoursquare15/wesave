@@ -7365,7 +7365,15 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
 
       // A same-day debit attempt already claimed for this mandate is NOT a new
       // failure — it must never increment retry_count or trigger a penalty.
-      if (!debit.success && (debit as any).code === "ALREADY_COLLECTED") {
+      // Nor is a collection that the bank has accepted but not yet settled:
+      // the settlement reconciler completes it, no penalty, no retry.
+      const softCode = (debit as any).code;
+      if (!debit.success && (softCode === "ALREADY_COLLECTED" || softCode === "AWAITING_SETTLEMENT")) {
+        if (softCode === "AWAITING_SETTLEMENT") {
+          await sendNotification(m.user_id, "Contribution Processing",
+            `Your ₦${amount.toLocaleString()} direct debit for ${group.name} was sent to your bank and is awaiting settlement confirmation. We'll confirm as soon as the funds land.`,
+            "contribution_pending", group.id);
+        }
         deferred++;
         continue;
       }
