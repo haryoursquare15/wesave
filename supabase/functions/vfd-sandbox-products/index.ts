@@ -7372,6 +7372,13 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
     console.error("[sandbox_auto_contribute] auto-start pass failed:", e);
   }
 
+  // Settle any collection the bank has since confirmed BEFORE attempting new
+  // debits, so a cycle can complete without waiting for the next window.
+  try {
+    await reconcileThriftSettlements(50);
+  } catch (e) {
+    console.error("[sandbox_auto_contribute] settlement reconcile pass failed:", e);
+  }
 
 
   // WAT = UTC+1
