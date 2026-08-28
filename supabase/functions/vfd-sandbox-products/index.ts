@@ -8664,6 +8664,80 @@ async function cycleCollectionsConfirmed(groupId: string, cycleNumber: number) {
   return await allInboundConfirmed(db, "thrift", groupId, `c${cycleNumber}`);
 }
 
+/**
+ * POSITIVE funding proof for a cycle.
+ *
+ * Configuration decides what MUST arrive (expected_contribution_per_member ×
+ * expected_member_count = expected_cycle_funding, which is also the gross
+ * payout). VFD settlement records only AUTHORIZE the payout — they never
+ * resize it. Validation is per member, so one member overpaying can never
+ * cover another member's missing contribution.
+ */
+async function verifyCycleFunding(
+  groupId: string,
+  cycleNumber: number,
+  expectedPerMember: number,
+  expectedMemberCount: number,
+) {
+  const db = getSupabaseAdmin();
+  const cycleTag = `c${cycleNumber}`;
+
+  const { data: memberRows } = await db.from("vfd_sandbox_group_members")
+    .select("user_id, status").eq("group_id", groupId).eq("status", "active");
+  const activeMembers = (memberRows || []).map((m: Record<string, unknown>) => String(m.user_id));
+
+  const { data: settleRows } = await db.from("settlement_records")
+    .select("user_id, amount, status, metadata, provider_reference")
+    .eq("product_type", "thrift")
+    .eq("product_reference", groupId)
+    .eq("direction", "in")
+    .eq("status", "confirmed");
+
+  const confirmedByMember = new Map<string, number>();
+  for (const r of (settleRows || []) as Array<Record<string, unknown>>) {
+    const tag = String((r.metadata as Record<string, unknown>)?.cycle_tag || "");
+    if (tag !== cycleTag) continue;
+    const uid = String(r.user_id || "");
+    if (!uid) continue;
+    confirmedByMember.set(uid, Math.round(((confirmedByMember.get(uid) || 0) + Number(r.amount || 0)) * 100) / 100);
+  }
+
+  const members = activeMembers.map((uid) => {
+    const confirmed = confirmedByMember.get(uid) || 0;
+    return {
+      user_id: uid,
+      expected: expectedPerMember,
+      confirmed,
+      shortfall: Math.max(0, Math.round((expectedPerMember - confirmed) * 100) / 100),
+      fully_funded: confirmed + 0.005 >= expectedPerMember,
+    };
+  });
+
+  const expectedCycleFunding = Math.round(expectedPerMember * expectedMemberCount * 100) / 100;
+  // Only count each member up to their expected amount — overpayment by one
+  // member must never mask another member's shortfall.
+  const confirmedCycleFunding = Math.round(
+    members.reduce((s, m) => s + Math.min(m.confirmed, m.expected), 0) * 100,
+  ) / 100;
+  const missingMembers = members.filter((m) => !m.fully_funded);
+  const memberCountOk = activeMembers.length >= expectedMemberCount;
+
+  return {
+    ok: memberCountOk && missingMembers.length === 0 && confirmedCycleFunding + 0.005 >= expectedCycleFunding,
+    cycle_number: cycleNumber,
+    expected_member_count: expectedMemberCount,
+    confirmed_member_count: members.filter((m) => m.fully_funded).length,
+    expected_contribution_per_member: expectedPerMember,
+    expected_cycle_funding: expectedCycleFunding,
+    confirmed_cycle_funding: confirmedCycleFunding,
+    outstanding_cycle_funding: Math.max(0, Math.round((expectedCycleFunding - confirmedCycleFunding) * 100) / 100),
+    members,
+    missing_members: missingMembers,
+  };
+}
+
+
+
 // Cycle-time mandate debit. Inserts a pending ledger entry, calls VFD,
 // then confirms or fails the entry and updates the pool ledger balance.
 // Returns a normalized result so it can be invoked both as an action and
