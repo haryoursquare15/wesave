@@ -7704,7 +7704,8 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
       }
 
       const amount = Number(group.contribution_amount);
-      const isDdmMember = m.contribution_method === "direct_debit";
+      // Never member-level: the group's mode decides the funding pipeline.
+      const isDdmMember = groupIsDdm;
       const debit = isDdmMember
         ? await (async () => {
             const r = await performMandateDebitForMember(group, m, Number(group.current_cycle));
