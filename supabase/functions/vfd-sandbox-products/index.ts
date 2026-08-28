@@ -9545,6 +9545,9 @@ Deno.serve(async (req) => {
       case "goalsave_v2_authorize_mandate": return await handleGoalsaveAuthorizeMandate(userId, body);
       case "goalsave_v2_check_mandate_status": return await handleGoalsaveCheckMandateStatus(userId, body);
       case "sandbox_auto_contribute": return (await isPlatformAdmin(userId)) ? await handleSandboxAutoContribute(userId, body) : forbidden("Admin only");
+      case "reconcile_settlements": return (await isPlatformAdmin(userId))
+        ? jsonResponse({ data: await reconcileThriftSettlements(Math.min(Number(body.limit ?? 50) || 50, 200)) })
+        : forbidden("Admin only");
 
       // In-app notifications
       case "list_notifications": return await handleListNotifications(userId);
