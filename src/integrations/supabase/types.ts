@@ -2252,6 +2252,78 @@ export type Database = {
         }
         Relationships: []
       }
+      settlement_records: {
+        Row: {
+          amount: number
+          attempts: number
+          confirmed_at: string | null
+          created_at: string
+          destination_account: string | null
+          direction: string
+          evidence: Json
+          id: string
+          last_checked_at: string | null
+          ledger_posted: boolean
+          ledger_reference: string | null
+          metadata: Json
+          product_reference: string
+          product_type: string
+          provider: string
+          provider_reference: string
+          provider_session_id: string | null
+          source_account: string | null
+          status: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          amount: number
+          attempts?: number
+          confirmed_at?: string | null
+          created_at?: string
+          destination_account?: string | null
+          direction: string
+          evidence?: Json
+          id?: string
+          last_checked_at?: string | null
+          ledger_posted?: boolean
+          ledger_reference?: string | null
+          metadata?: Json
+          product_reference: string
+          product_type: string
+          provider?: string
+          provider_reference: string
+          provider_session_id?: string | null
+          source_account?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          amount?: number
+          attempts?: number
+          confirmed_at?: string | null
+          created_at?: string
+          destination_account?: string | null
+          direction?: string
+          evidence?: Json
+          id?: string
+          last_checked_at?: string | null
+          ledger_posted?: boolean
+          ledger_reference?: string | null
+          metadata?: Json
+          product_reference?: string
+          product_type?: string
+          provider?: string
+          provider_reference?: string
+          provider_session_id?: string | null
+          source_account?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       split_participants: {
         Row: {
           amount_due: number

@@ -25,6 +25,12 @@ import {
   type MandatePayer,
 } from "../_shared/vfd-mandate.ts";
 import {
+  openSettlement,
+  markSettlement,
+  markSettlementLedgerPosted,
+  allInboundConfirmed,
+} from "../_shared/settlement.ts";
+import {
   billCategoryRequiresValidation,
   enforceBillCustomerValidation,
   type BillIdentity,
@@ -945,6 +951,17 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
     // via NIBSS into the Vestara corporate pool.
     const ddm = await performMandateDebitForMember(group, myMember, Number(group.current_cycle));
     if (!ddm.success) {
+      // Bank accepted the collection but settlement is not confirmed yet.
+      // Nothing internal is credited until it is — this is not an error.
+      if ((ddm.details as any)?.code === "AWAITING_SETTLEMENT") {
+        return jsonResponse({
+          data: {
+            success: true, contributed: false, awaiting_settlement: true, amount,
+            cycle: group.current_cycle, payment_source: "ddm",
+            message: "Your bank has been debited. We'll credit your contribution as soon as the funds are confirmed settled.",
+          },
+        });
+      }
       return jsonResponse({
         error: ddm.error || "Direct debit could not be collected. Please try again or contact support.",
         code: (ddm.details as any)?.code === "MANDATE_NOT_ACTIVE" ? "MANDATE_NOT_AUTHORIZED" : "MANDATE_DEBIT_FAILED",
@@ -953,6 +970,19 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
     }
   } else {
     const reference = `ajo-manual-${groupId}-${activeCycle.id}-${userId}`;
+    // REAL bank leg first: the member's own NUBAN -> corporate pool, verified
+    // at VFD. An internal ledger debit alone is never accepted as settlement.
+    const funding = await collectFromCustomerToPool({
+      userId, amount, reference,
+      productType: "thrift", productReference: groupId,
+      metadata: { cycle_tag: `c${group.current_cycle}`, cycle_id: activeCycle.id, source: "wallet" },
+    });
+    if (!funding.confirmed) {
+      return jsonResponse({
+        error: funding.error || "We could not move your funds to the group pool. Nothing was debited — please try again.",
+        code: funding.code || "SETTLEMENT_UNCONFIRMED",
+      }, 400);
+    }
     const debit = await debitVestaraForThrift(userId, groupId, amount, reference, {
       cycle_id: activeCycle.id,
       cycle_number: group.current_cycle,
@@ -1043,6 +1073,22 @@ async function processAutoPayout(
   const recipientId = payoutOrder[currentCycle - 1];
   if (!recipientId) return { success: false, error: "No recipient for this cycle" };
 
+  // ===========================================================
+  // SETTLEMENT GATE — no payout may leave the pool while ANY of this cycle's
+  // collections is still unconfirmed at the bank. Internal ledger entries are
+  // never accepted as evidence that the money is really there.
+  // ===========================================================
+  const collectionCheck = await cycleCollectionsConfirmed(groupId, currentCycle);
+  if (!collectionCheck.ok) {
+    console.error(`[processAutoPayout] HELD group=${groupId} cycle=${currentCycle} — ${collectionCheck.pending.length} unconfirmed collection(s)`);
+    return {
+      success: false,
+      held: true,
+      error: "Payout held — awaiting bank confirmation of every contribution in this cycle",
+      pending_settlements: collectionCheck.pending,
+    };
+  }
+
   const grossAmount = amount * memberCount;
   // PRODUCTION PARITY: Tiered fee structure
   const platformFee = calculatePlatformFee(grossAmount);
@@ -1080,6 +1126,26 @@ async function processAutoPayout(
   // the funds simply stay in the group's thrift pool (covering the shortfall
   // the member's missed contributions created).
   if (debitFromPool > 0) {
+    // REAL money-out leg FIRST: corporate pool -> recipient's own NUBAN,
+    // independently verified. The internal ledger only mirrors it afterwards.
+    if (netAmount > 0) {
+      const bankPayout = await payoutFromPoolToCustomer({
+        userId: recipientId,
+        amount: netAmount,
+        reference: `AJO-PAYOUT-${String(activeCycle.id).replace(/-/g, "").slice(0, 20)}`,
+        remark: `Thrift payout cycle ${currentCycle}`,
+        productType: "thrift",
+        productReference: groupId,
+      });
+      if (!bankPayout.confirmed) {
+        const err = bankPayout.error || "Bank payout not confirmed";
+        console.error(`[processAutoPayout] bank leg unconfirmed group=${groupId} cycle=${currentCycle}: ${bankPayout.code}`);
+        await sendNotification(recipientId, "Payout Processing",
+          `Your ₦${netAmount.toLocaleString()} payout from ${group.name} has been submitted to the bank and is awaiting confirmation. It will reflect shortly.`,
+          "payout_notification", groupId);
+        return { success: false, error: err, code: bankPayout.code, awaiting_settlement: true };
+      }
+    }
     const payout = await creditVestaraThriftPayout(recipientId, groupId, debitFromPool, feeCharged, `ajo-payout-${groupId}-${activeCycle.id}`, {
       cycle_id: activeCycle.id,
       cycle_number: currentCycle,
@@ -3775,6 +3841,232 @@ async function verifyVfdTransfer(reference: string): Promise<{ confirmed: boolea
   } catch (e) {
     return { confirmed: false, evidence: { error: e instanceof Error ? e.message : String(e) } };
   }
+}
+
+// ===========================================================================
+// SETTLEMENT INTEGRITY (shared by every DDM / thrift money leg)
+//
+// A bank leg is only "settled" when VFD's own record says so. These helpers
+// wrap `settlement_records` so no product code can shortcut the rule.
+// ===========================================================================
+
+/**
+ * Re-verify a settlement leg against VFD and persist the outcome.
+ * Falls back to the pool statement when TSQ cannot resolve the reference
+ * (mandate collections land as a pool credit, not always a TSQ-able transfer).
+ */
+async function confirmSettlementLeg(providerReference: string, opts: {
+  amount: number;
+  poolAccount?: string;
+  maxAttemptsBeforeUnreconciled?: number;
+} ): Promise<{ confirmed: boolean; evidence: unknown }> {
+  const db = getSupabaseAdmin();
+  const tsq = await verifyVfdTransfer(providerReference);
+  if (tsq.confirmed) {
+    await markSettlement(db, providerReference, "confirmed", { evidence: tsq.evidence, bumpAttempt: true });
+    return { confirmed: true, evidence: tsq.evidence };
+  }
+
+  // Statement fallback: scan the destination pool account for a credit whose
+  // reference or session id matches this leg.
+  let statementEvidence: unknown = null;
+  try {
+    const account = opts.poolAccount || VFD_CORPORATE_POOL_NUBAN;
+    const today = new Date();
+    const from = new Date(today.getTime() - 3 * 86400_000);
+    const fmt = (d: Date) => d.toISOString().slice(0, 10);
+    const { data } = await walletRequest("/account/transactions", "GET", undefined, {
+      accountNo: account, startDate: fmt(from), endDate: fmt(today),
+    });
+    statementEvidence = data;
+    const rows = ((data?.data as Record<string, unknown>)?.content
+      ?? (data?.data as unknown[])
+      ?? []) as Array<Record<string, unknown>>;
+    const hit = (Array.isArray(rows) ? rows : []).find((r) => {
+      const ref = String(r.reference ?? r.transactionReference ?? r.paymentReference ?? "");
+      return ref && providerReference.includes(ref.slice(0, 12));
+    });
+    if (hit) {
+      await markSettlement(db, providerReference, "confirmed", { evidence: hit, bumpAttempt: true });
+      return { confirmed: true, evidence: hit };
+    }
+  } catch (e) {
+    statementEvidence = { error: e instanceof Error ? e.message : String(e) };
+  }
+
+  const { data: row } = await db.from("settlement_records")
+    .select("attempts").eq("provider", "vfd").eq("provider_reference", providerReference).maybeSingle();
+  const attempts = Number(row?.attempts || 0) + 1;
+  const limit = opts.maxAttemptsBeforeUnreconciled ?? 6;
+  await markSettlement(db, providerReference, attempts >= limit ? "unreconciled" : "pending", {
+    evidence: { tsq: tsq.evidence, statement: statementEvidence },
+    bumpAttempt: true,
+  });
+  return { confirmed: false, evidence: { tsq: tsq.evidence, statement: statementEvidence } };
+}
+
+/**
+ * REAL money-out leg: corporate pool -> customer NUBAN.
+ * Used for thrift payouts. Nothing internal may be credited before this
+ * returns confirmed:true (independently verified via /transactions?reference=).
+ */
+async function payoutFromPoolToCustomer(params: {
+  userId: string;
+  amount: number;
+  reference: string;
+  remark: string;
+  productType: string;
+  productReference: string;
+}): Promise<SettlementFunding> {
+  const db = getSupabaseAdmin();
+  const ref = params.reference;
+
+  // Replay guard: a previously confirmed leg must never be sent twice.
+  const prior = await verifyVfdTransfer(ref);
+  if (prior.confirmed) {
+    await markSettlement(db, ref, "confirmed", { evidence: prior.evidence });
+    return { confirmed: true, reference: ref, evidence: prior.evidence, replayed: true };
+  }
+
+  const { data: client } = await db.from("vfd_sandbox_clients")
+    .select("vfd_account_number, metadata, full_name").eq("user_id", params.userId).maybeSingle();
+  const customerNuban = (client?.vfd_account_number as string | null) || null;
+  if (!customerNuban || customerNuban === VFD_CORPORATE_POOL_NUBAN) {
+    return { confirmed: false, reference: ref, code: "PAYOUT_DEST_UNAVAILABLE", error: "Recipient bank account unavailable" };
+  }
+  if ((client?.metadata as Record<string, unknown> | null)?.virtual_nuban) {
+    return { confirmed: false, reference: ref, code: "PAYOUT_DEST_VIRTUAL", error: "Recipient is on a virtual account — payout must be settled manually" };
+  }
+
+  await openSettlement(db, {
+    productType: params.productType,
+    productReference: params.productReference,
+    userId: params.userId,
+    direction: "out",
+    amount: params.amount,
+    sourceAccount: VFD_CORPORATE_POOL_NUBAN,
+    destinationAccount: customerNuban,
+    providerReference: ref,
+    metadata: { remark: params.remark },
+  });
+
+  const firstNonEmpty = (...vals: unknown[]): string => {
+    for (const v of vals) {
+      const s = v === undefined || v === null ? "" : String(v).trim();
+      if (s) return s;
+    }
+    return "";
+  };
+
+  let { data: poolEnq, status: poolStatus } = await walletRequest(
+    "/account/enquiry", "GET", undefined, { accountNumber: VFD_CORPORATE_POOL_NUBAN },
+  );
+  if (poolStatus !== 200 || poolEnq?.status !== "00") {
+    const self = await walletRequest("/account/enquiry", "GET", undefined, {});
+    const selfEnv = (self.data?.data as Record<string, unknown>) || {};
+    const selfAcct = (selfEnv?.account as Record<string, unknown>) || selfEnv;
+    const selfNuban = String(selfEnv?.accountNo ?? selfAcct?.accountNo ?? "");
+    if (self.status === 200 && self.data?.status === "00" && (!selfNuban || selfNuban === VFD_CORPORATE_POOL_NUBAN)) {
+      poolEnq = self.data; poolStatus = self.status;
+    }
+  }
+  if (poolStatus !== 200 || poolEnq?.status !== "00") {
+    await markSettlement(db, ref, "pending", { evidence: poolEnq, bumpAttempt: true });
+    return { confirmed: false, reference: ref, code: "PAYOUT_SOURCE_ENQUIRY_FAILED", error: "Settlement account unreachable", evidence: poolEnq };
+  }
+
+  const { data: custEnq, status: custStatus } = await walletRequest(
+    "/account/enquiry", "GET", undefined, { accountNumber: customerNuban },
+  );
+  if (custStatus !== 200 || custEnq?.status !== "00") {
+    await markSettlement(db, ref, "pending", { evidence: custEnq, bumpAttempt: true });
+    return { confirmed: false, reference: ref, code: "PAYOUT_DEST_ENQUIRY_FAILED", error: "Recipient account unreachable", evidence: custEnq };
+  }
+
+  const pEnv = (poolEnq?.data as Record<string, unknown>) || {};
+  const pAcct = (pEnv?.account as Record<string, unknown>) || pEnv;
+  const cEnv = (custEnq?.data as Record<string, unknown>) || {};
+  const cAcct = (cEnv?.account as Record<string, unknown>) || cEnv;
+
+  const payload = {
+    fromAccount: VFD_CORPORATE_POOL_NUBAN,
+    fromClientId: firstNonEmpty(Deno.env.get("VFD_POOL_CLIENT_ID"), pEnv?.clientId, pAcct?.clientId),
+    fromClient: firstNonEmpty(Deno.env.get("VFD_POOL_CLIENT_NAME"), pEnv?.client, pAcct?.client, pEnv?.name),
+    fromSavingsId: firstNonEmpty(Deno.env.get("VFD_POOL_SAVINGS_ID"), pAcct?.id, pEnv?.accountId, pEnv?.id),
+    fromBvn: String(pEnv?.bvn ?? ""),
+    toAccount: customerNuban,
+    toBank: "999999",
+    toClient: firstNonEmpty(cEnv?.client, cAcct?.client, client?.full_name),
+    toClientId: firstNonEmpty(cEnv?.clientId, cAcct?.clientId),
+    toSavingsId: firstNonEmpty(cAcct?.id, cEnv?.accountId, cEnv?.id),
+    toSession: "",
+    toBvn: String(cEnv?.bvn ?? ""),
+    signature: await transferSignature(VFD_CORPORATE_POOL_NUBAN, customerNuban),
+    amount: String(params.amount),
+    remark: params.remark.slice(0, 60),
+    transferType: "intra",
+    reference: ref,
+  };
+  if (!payload.fromClientId || !payload.fromSavingsId || !payload.toSavingsId || !payload.toClientId) {
+    await markSettlement(db, ref, "pending", { evidence: { poolEnq, custEnq }, bumpAttempt: true });
+    return { confirmed: false, reference: ref, code: "PAYOUT_IDENTITY_MISSING", error: "Payout identities incomplete" };
+  }
+
+  console.log(`[payout][pool->customer][request] ${JSON.stringify(payload)}`);
+  const { data: transferResp } = await walletRequest("/transfer", "POST", payload);
+  const vfdMessage = String(transferResp?.message ?? "");
+  const duplicate = String(transferResp?.status ?? "") === "98" || /reference exist/i.test(vfdMessage);
+
+  const verified = await verifyVfdTransfer(ref);
+  if (!verified.confirmed) {
+    await markSettlement(db, ref, "pending", { evidence: { transfer: transferResp, tsq: verified.evidence }, bumpAttempt: true });
+    return {
+      confirmed: false, reference: ref,
+      code: duplicate ? "PAYOUT_UNCONFIRMED" : "PAYOUT_FAILED",
+      error: vfdMessage || "Payout transfer not confirmed at the bank",
+      evidence: { transfer: transferResp, tsq: verified.evidence },
+    };
+  }
+  await markSettlement(db, ref, "confirmed", { evidence: verified.evidence });
+  return { confirmed: true, reference: ref, evidence: verified.evidence, replayed: duplicate };
+}
+
+/**
+ * REAL money-in leg for a WALLET-funded thrift contribution: the member's own
+ * VFD NUBAN is debited into the corporate pool and independently verified,
+ * before any internal ledger movement. Closes the "wallet bypass" where an
+ * internal debit alone was treated as settled money.
+ */
+async function collectFromCustomerToPool(params: {
+  userId: string;
+  amount: number;
+  reference: string;
+  productType: string;
+  productReference: string;
+  metadata?: Record<string, unknown>;
+}): Promise<SettlementFunding> {
+  const db = getSupabaseAdmin();
+  const legRef = `${params.reference}-FUND`;
+  await openSettlement(db, {
+    productType: params.productType,
+    productReference: params.productReference,
+    userId: params.userId,
+    direction: "in",
+    amount: params.amount,
+    destinationAccount: VFD_CORPORATE_POOL_NUBAN,
+    providerReference: legRef,
+    metadata: params.metadata || {},
+  });
+  const funding = await fundBillsSettlement({
+    reference: params.reference,
+    amount: params.amount,
+    userId: params.userId,
+    origin: params.productType,
+  });
+  await markSettlement(db, legRef, funding.confirmed ? "confirmed" : "pending", {
+    evidence: funding.evidence, bumpAttempt: true,
+  });
+  return funding;
 }
 
 type SettlementFunding = {
@@ -7080,6 +7372,13 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
     console.error("[sandbox_auto_contribute] auto-start pass failed:", e);
   }
 
+  // Settle any collection the bank has since confirmed BEFORE attempting new
+  // debits, so a cycle can complete without waiting for the next window.
+  try {
+    await reconcileThriftSettlements(50);
+  } catch (e) {
+    console.error("[sandbox_auto_contribute] settlement reconcile pass failed:", e);
+  }
 
 
   // WAT = UTC+1
@@ -7162,16 +7461,36 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
             const r = await performMandateDebitForMember(group, m, Number(group.current_cycle));
             return { success: r.success, error: r.error, code: (r as any)?.details?.code as string | undefined };
           })()
-        : await debitVestaraForThrift(m.user_id, group.id, amount, `ajo-auto-${group.id}-${activeCycle.id}-${m.user_id}`, {
-            cycle_id: activeCycle.id,
-            cycle_number: group.current_cycle,
-            source: "vfd_sandbox_auto_sweep",
-          });
+        : await (async () => {
+            const autoRef = `ajo-auto-${group.id}-${activeCycle.id}-${m.user_id}`;
+            // Real bank leg first (member NUBAN -> corporate pool), verified.
+            const funding = await collectFromCustomerToPool({
+              userId: m.user_id, amount, reference: autoRef,
+              productType: "thrift", productReference: group.id,
+              metadata: { cycle_tag: `c${group.current_cycle}`, cycle_id: activeCycle.id, source: "wallet_auto" },
+            });
+            if (!funding.confirmed) {
+              return { success: false, error: funding.error || "Bank settlement not confirmed", code: funding.code };
+            }
+            return await debitVestaraForThrift(m.user_id, group.id, amount, autoRef, {
+              cycle_id: activeCycle.id,
+              cycle_number: group.current_cycle,
+              source: "vfd_sandbox_auto_sweep",
+            });
+          })();
 
 
       // A same-day debit attempt already claimed for this mandate is NOT a new
       // failure — it must never increment retry_count or trigger a penalty.
-      if (!debit.success && (debit as any).code === "ALREADY_COLLECTED") {
+      // Nor is a collection that the bank has accepted but not yet settled:
+      // the settlement reconciler completes it, no penalty, no retry.
+      const softCode = (debit as any).code;
+      if (!debit.success && (softCode === "ALREADY_COLLECTED" || softCode === "AWAITING_SETTLEMENT")) {
+        if (softCode === "AWAITING_SETTLEMENT") {
+          await sendNotification(m.user_id, "Contribution Processing",
+            `Your ₦${amount.toLocaleString()} direct debit for ${group.name} was sent to your bank and is awaiting settlement confirmation. We'll confirm as soon as the funds land.`,
+            "contribution_pending", group.id);
+        }
         deferred++;
         continue;
       }
@@ -8156,6 +8475,195 @@ async function handleCheckCommencementReadiness(userId: string, body: Record<str
   return jsonResponse({ data: result });
 }
 
+// ===========================================================================
+// CONFIRMED-COLLECTION POSTING
+// Called ONLY once the bank leg has been independently confirmed. Idempotent:
+// the settlement record's ledger_posted flag is the single guard.
+// ===========================================================================
+async function postConfirmedThriftCollection(p: {
+  groupId: string;
+  userId: string;
+  amountNaira: number;
+  cycleIndex: number;
+  cycleRef: string;
+  settlementReference: string;
+  attemptId: string | null;
+  thriftLedgerEntryId: string | null;
+  sessionId?: string;
+  paymentRef?: string;
+  mandateReference?: string | null;
+  vfdRaw?: unknown;
+}): Promise<boolean> {
+  const db = getSupabaseAdmin();
+  const { data: settlement } = await db.from("settlement_records")
+    .select("id, status, ledger_posted")
+    .eq("provider", "vfd").eq("provider_reference", p.settlementReference).maybeSingle();
+  if (!settlement || settlement.status !== "confirmed") return false;
+  if (settlement.ledger_posted) return true;
+
+  const nowIso = new Date().toISOString();
+  const amountKobo = Math.round(p.amountNaira * 100);
+
+  if (p.thriftLedgerEntryId) {
+    await db.from("vfd_sandbox_thrift_ledger_entries").update({
+      status: "confirmed", confirmed_at: nowIso,
+      vfd_session_id: p.sessionId || null, vfd_payment_reference: p.paymentRef || p.cycleRef,
+      metadata: { mandate_reference: p.mandateReference, settlement_reference: p.settlementReference, vfd: p.vfdRaw },
+    }).eq("id", p.thriftLedgerEntryId);
+  }
+
+  const { data: g } = await db.from("vfd_sandbox_groups")
+    .select("pool_ledger_balance, total_contributed_kobo").eq("id", p.groupId).maybeSingle();
+  await db.from("vfd_sandbox_groups").update({
+    pool_ledger_balance: Number(g?.pool_ledger_balance || 0) + amountKobo,
+    total_contributed_kobo: Number(g?.total_contributed_kobo || 0) + amountKobo,
+    updated_at: nowIso,
+  }).eq("id", p.groupId);
+
+  await markAttemptLedgerPosted(db, p.attemptId, p.cycleRef, true);
+
+  try {
+    const { data: poolPost, error: poolErr } = await db.rpc("vestara_thrift_contribute_external", {
+      _user_id: p.userId,
+      _group_id: p.groupId,
+      _amount: p.amountNaira,
+      _reference: `ddm-${p.cycleRef}`,
+      _metadata: {
+        cycle_index: p.cycleIndex,
+        mandate_reference: p.mandateReference,
+        settlement_reference: p.settlementReference,
+      },
+    });
+    if (poolErr || (poolPost && (poolPost as any).success === false)) {
+      console.error(`[postConfirmedThriftCollection] pool ledger post failed group=${p.groupId} user=${p.userId}:`,
+        poolErr?.message || (poolPost as any)?.error);
+      return false;
+    }
+  } catch (e) {
+    console.error("[postConfirmedThriftCollection] pool ledger post threw:", e);
+    return false;
+  }
+
+  await markSettlementLedgerPosted(db, p.settlementReference, `ddm-${p.cycleRef}`);
+  return true;
+}
+
+/**
+ * Record a member's contribution for the current cycle once (and only once)
+ * the bank leg is confirmed AND the internal pool posting has landed.
+ * Safe to call repeatedly — every write is guarded.
+ */
+async function finalizeThriftContribution(p: {
+  groupId: string;
+  userId: string;
+  cycleNumber: number;
+  amount: number;
+  isDdm: boolean;
+}): Promise<{ recorded: boolean; payout?: unknown }> {
+  const db = getSupabaseAdmin();
+  const { data: group } = await db.from("vfd_sandbox_groups")
+    .select("*").eq("id", p.groupId).maybeSingle();
+  if (!group) return { recorded: false };
+
+  const { data: cycles } = await db.from("vfd_sandbox_contribution_cycles")
+    .select("*").eq("group_id", p.groupId).eq("status", "active")
+    .order("created_at", { ascending: true }).limit(1);
+  const activeCycle = cycles?.[0];
+  if (!activeCycle) return { recorded: false };
+
+  const { data: existing } = await db.from("vfd_sandbox_group_contributions")
+    .select("id").eq("group_id", p.groupId).eq("user_id", p.userId)
+    .eq("cycle_number", p.cycleNumber).maybeSingle();
+  if (!existing) {
+    await db.from("vfd_sandbox_group_contributions").insert({
+      group_id: p.groupId, user_id: p.userId, cycle_number: p.cycleNumber, amount: p.amount,
+    });
+  }
+
+  const { data: successAudit } = await db.from("vfd_sandbox_contribution_audit")
+    .select("id").eq("user_id", p.userId).eq("cycle_id", activeCycle.id).eq("status", "success").maybeSingle();
+  if (!successAudit) {
+    await db.from("vfd_sandbox_contribution_audit").insert({
+      user_id: p.userId, group_id: p.groupId, cycle_id: activeCycle.id,
+      amount: p.amount, contribution_type: p.isDdm ? "ddm_auto" : "auto", status: "success",
+    });
+  }
+
+  await db.from("vfd_sandbox_group_members").update({ has_contributed_current: true })
+    .eq("group_id", p.groupId).eq("user_id", p.userId);
+
+  const { count } = await db.from("vfd_sandbox_group_contributions")
+    .select("*", { count: "exact", head: true })
+    .eq("group_id", p.groupId).eq("cycle_number", p.cycleNumber);
+
+  let payout: unknown = null;
+  if (count && count >= Number(group.member_count)) {
+    payout = await processAutoPayout(db, group, activeCycle);
+  }
+  return { recorded: true, payout };
+}
+
+/**
+ * Settlement reconciler for thrift collections: re-checks every unconfirmed
+ * money-in leg against VFD and completes the internal posting the moment the
+ * bank confirms it. Nothing is credited on a guess.
+ */
+async function reconcileThriftSettlements(limit = 50): Promise<Record<string, unknown>> {
+  const db = getSupabaseAdmin();
+  const { data: rows } = await db.from("settlement_records")
+    .select("*")
+    .eq("product_type", "thrift").eq("direction", "in")
+    .in("status", ["pending", "unreconciled"])
+    .order("created_at", { ascending: true })
+    .limit(limit);
+
+  const results: Array<Record<string, unknown>> = [];
+  for (const r of (rows || [])) {
+    const meta = (r.metadata || {}) as Record<string, unknown>;
+    const check = await confirmSettlementLeg(r.provider_reference as string, { amount: Number(r.amount) });
+    if (!check.confirmed) {
+      results.push({ reference: r.provider_reference, confirmed: false });
+      continue;
+    }
+    const posted = await postConfirmedThriftCollection({
+      groupId: r.product_reference as string,
+      userId: r.user_id as string,
+      amountNaira: Number(r.amount),
+      cycleIndex: Number(meta.cycle_index || 0),
+      cycleRef: String(meta.cycle_ref || r.provider_reference),
+      settlementReference: r.provider_reference as string,
+      attemptId: (meta.attempt_id as string) || null,
+      thriftLedgerEntryId: (meta.thrift_ledger_entry_id as string) || null,
+      sessionId: (meta.vfd_session_id as string) || "",
+      paymentRef: (meta.vfd_payment_reference as string) || "",
+      mandateReference: (meta.mandate_reference as string) || null,
+    });
+    let finalize: unknown = null;
+    if (posted) {
+      finalize = await finalizeThriftContribution({
+        groupId: r.product_reference as string,
+        userId: r.user_id as string,
+        cycleNumber: Number(meta.cycle_index || 0),
+        amount: Number(r.amount),
+        isDdm: true,
+      });
+      await sendNotification(r.user_id as string, "Contribution Confirmed",
+        `Your ₦${Number(r.amount).toLocaleString()} direct debit has been confirmed by the bank and credited to your thrift group.`,
+        "contribution_success", r.product_reference as string);
+    }
+    results.push({ reference: r.provider_reference, confirmed: true, posted, finalize });
+  }
+  return { checked: (rows || []).length, results };
+}
+
+/**
+ * Payout gate: every money-in leg for this cycle must be bank-confirmed.
+ */
+async function cycleCollectionsConfirmed(groupId: string, cycleNumber: number) {
+  const db = getSupabaseAdmin();
+  return await allInboundConfirmed(db, "thrift", groupId, `c${cycleNumber}`);
+}
+
 // Cycle-time mandate debit. Inserts a pending ledger entry, calls VFD,
 // then confirms or fails the entry and updates the pool ledger balance.
 // Returns a normalized result so it can be invoked both as an action and
@@ -8224,39 +8732,61 @@ async function performMandateDebitForMember(
   if (result.ok) {
     const sessionId = String(((result.raw as any)?.response?.data?.sessionId) || "");
     const paymentRef = String(((result.raw as any)?.response?.data?.reference) || cycleRef);
-    if (ledgerEntry?.id) {
-      await db.from("vfd_sandbox_thrift_ledger_entries").update({
-        status: "confirmed", confirmed_at: nowIso, vfd_session_id: sessionId, vfd_payment_reference: paymentRef,
-        metadata: { mandate_reference: member.mandate_reference, vfd: result.raw },
-      }).eq("id", ledgerEntry.id);
+
+    // SETTLEMENT INTEGRITY: VFD accepting the debit is NOT proof the money has
+    // landed in the corporate pool. Open the settlement leg, then require an
+    // independent confirmation before ANY internal posting.
+    await openSettlement(db, {
+      productType: "thrift",
+      productReference: groupId,
+      userId: targetUserId,
+      direction: "in",
+      amount: amountNaira,
+      sourceAccount: (member.mandate_payer_account_number as string) || null,
+      destinationAccount: VFD_POOL_NUBAN,
+      providerReference: collection.transactionReference,
+      metadata: {
+        cycle_tag: `c${cycleIndex}`,
+        cycle_index: cycleIndex,
+        mandate_reference: member.mandate_reference,
+        thrift_ledger_entry_id: ledgerEntry?.id || null,
+        attempt_id: collection.attemptId,
+        cycle_ref: cycleRef,
+        vfd_session_id: sessionId,
+        vfd_payment_reference: paymentRef,
+      },
+    });
+
+    const settled = await confirmSettlementLeg(collection.transactionReference, { amount: amountNaira });
+    if (!settled.confirmed) {
+      await recordMandateEvent(groupId, targetUserId, member.mandate_reference as string, member.mandate_code as string,
+        "debit_awaiting_settlement", { cycle_index: cycleIndex, amount_naira: amountNaira, reference: collection.transactionReference });
+      // Money may well have moved — this is NOT a failure and must never be
+      // penalised or retried. The settlement reconciler completes it.
+      return {
+        success: false,
+        error: "Bank collection submitted — awaiting settlement confirmation",
+        details: { code: "AWAITING_SETTLEMENT", reference: collection.transactionReference },
+      };
     }
-    const { data: g } = await db.from("vfd_sandbox_groups")
-      .select("pool_ledger_balance, total_contributed_kobo").eq("id", groupId).maybeSingle();
-    await db.from("vfd_sandbox_groups").update({
-      pool_ledger_balance: Number(g?.pool_ledger_balance || 0) + amountKobo,
-      total_contributed_kobo: Number(g?.total_contributed_kobo || 0) + amountKobo,
-      updated_at: nowIso,
-    }).eq("id", groupId);
-    await markAttemptLedgerPosted(db, collection.attemptId, cycleRef, true);
-    // Post the bank-collected funds into the group's double-entry thrift pool
-    // (settlement -> thrift_pool) so cycle payouts can be disbursed.
-    try {
-      const { data: poolPost, error: poolErr } = await db.rpc("vestara_thrift_contribute_external", {
-        _user_id: targetUserId,
-        _group_id: groupId,
-        _amount: amountNaira,
-        _reference: `ddm-${cycleRef}`,
-        _metadata: { cycle_index: cycleIndex, mandate_reference: member.mandate_reference },
-      });
-      if (poolErr || (poolPost && (poolPost as any).success === false)) {
-        console.error(`[performMandateDebitForMember] pool ledger post failed group=${groupId} user=${targetUserId}:`,
-          poolErr?.message || (poolPost as any)?.error);
-      }
-    } catch (e) {
-      console.error("[performMandateDebitForMember] pool ledger post threw:", e);
-    }
+
+    await postConfirmedThriftCollection({
+      groupId,
+      userId: targetUserId,
+      amountNaira,
+      cycleIndex,
+      cycleRef,
+      settlementReference: collection.transactionReference,
+      attemptId: collection.attemptId,
+      thriftLedgerEntryId: ledgerEntry?.id || null,
+      sessionId,
+      paymentRef,
+      mandateReference: (member.mandate_reference as string) || null,
+      vfdRaw: result.raw,
+    });
+
     await recordMandateEvent(groupId, targetUserId, member.mandate_reference as string, member.mandate_code as string, "debit_success",
-      { cycle_index: cycleIndex, amount_naira: amountNaira, vfd: result.raw });
+      { cycle_index: cycleIndex, amount_naira: amountNaira, vfd: result.raw, settlement_confirmed: true });
     return { success: true, reference: cycleRef, amount_kobo: amountKobo };
   }
 
@@ -8953,6 +9483,14 @@ Deno.serve(async (req) => {
       return await handlePollPendingMandates();
     }
 
+    // Settlement reconciler: completes bank-confirmed DDM collections whose
+    // internal posting is still outstanding. Never credits on a guess.
+    if (action === "reconcile_settlements"
+      && (await assertCronToken(req, "thrift_sweep") || assertCronCaller(req))) {
+      const limit = Math.min(Number(body.limit ?? 50) || 50, 200);
+      return jsonResponse({ data: await reconcileThriftSettlements(limit) });
+    }
+
 
 
     if (action === "sweep_split_fee_cron" && assertCronCaller(req)) {
@@ -9014,6 +9552,9 @@ Deno.serve(async (req) => {
       case "goalsave_v2_authorize_mandate": return await handleGoalsaveAuthorizeMandate(userId, body);
       case "goalsave_v2_check_mandate_status": return await handleGoalsaveCheckMandateStatus(userId, body);
       case "sandbox_auto_contribute": return (await isPlatformAdmin(userId)) ? await handleSandboxAutoContribute(userId, body) : forbidden("Admin only");
+      case "reconcile_settlements": return (await isPlatformAdmin(userId))
+        ? jsonResponse({ data: await reconcileThriftSettlements(Math.min(Number(body.limit ?? 50) || 50, 200)) })
+        : forbidden("Admin only");
 
       // In-app notifications
       case "list_notifications": return await handleListNotifications(userId);
