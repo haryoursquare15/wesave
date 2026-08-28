@@ -3982,6 +3982,44 @@ async function payoutFromPoolToCustomer(params: {
   return { confirmed: true, reference: ref, evidence: verified.evidence, replayed: duplicate };
 }
 
+/**
+ * REAL money-in leg for a WALLET-funded thrift contribution: the member's own
+ * VFD NUBAN is debited into the corporate pool and independently verified,
+ * before any internal ledger movement. Closes the "wallet bypass" where an
+ * internal debit alone was treated as settled money.
+ */
+async function collectFromCustomerToPool(params: {
+  userId: string;
+  amount: number;
+  reference: string;
+  productType: string;
+  productReference: string;
+  metadata?: Record<string, unknown>;
+}): Promise<SettlementFunding> {
+  const db = getSupabaseAdmin();
+  const legRef = `${params.reference}-FUND`;
+  await openSettlement(db, {
+    productType: params.productType,
+    productReference: params.productReference,
+    userId: params.userId,
+    direction: "in",
+    amount: params.amount,
+    destinationAccount: VFD_CORPORATE_POOL_NUBAN,
+    providerReference: legRef,
+    metadata: params.metadata || {},
+  });
+  const funding = await fundBillsSettlement({
+    reference: params.reference,
+    amount: params.amount,
+    userId: params.userId,
+    origin: params.productType,
+  });
+  await markSettlement(db, legRef, funding.confirmed ? "confirmed" : "pending", {
+    evidence: funding.evidence, bumpAttempt: true,
+  });
+  return funding;
+}
+
 type SettlementFunding = {
   confirmed: boolean;
   reference: string;
