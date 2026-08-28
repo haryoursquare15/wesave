@@ -5176,42 +5176,87 @@ export type Database = {
       }
       vfd_sandbox_group_payouts: {
         Row: {
+          attempts: number
+          bank_confirmed_at: string | null
+          bank_status: string
+          completed_at: string | null
           created_at: string
+          cycle_id: string | null
           cycle_number: number
           gross_amount: number
           group_id: string
           id: string
+          last_error: string | null
+          last_reconciled_at: string | null
+          ledger_posted_at: string | null
+          ledger_status: string
           net_amount: number
+          payout_reference: string | null
+          payout_status: string
           platform_fee: number
           recipient_id: string
+          recipient_nuban: string | null
           recovered_outstanding: number
           status: string
+          updated_at: string
+          vfd_reference: string | null
+          vfd_session_id: string | null
           withheld: boolean
         }
         Insert: {
+          attempts?: number
+          bank_confirmed_at?: string | null
+          bank_status?: string
+          completed_at?: string | null
           created_at?: string
+          cycle_id?: string | null
           cycle_number: number
           gross_amount: number
           group_id: string
           id?: string
+          last_error?: string | null
+          last_reconciled_at?: string | null
+          ledger_posted_at?: string | null
+          ledger_status?: string
           net_amount: number
+          payout_reference?: string | null
+          payout_status?: string
           platform_fee?: number
           recipient_id: string
+          recipient_nuban?: string | null
           recovered_outstanding?: number
           status?: string
+          updated_at?: string
+          vfd_reference?: string | null
+          vfd_session_id?: string | null
           withheld?: boolean
         }
         Update: {
+          attempts?: number
+          bank_confirmed_at?: string | null
+          bank_status?: string
+          completed_at?: string | null
           created_at?: string
+          cycle_id?: string | null
           cycle_number?: number
           gross_amount?: number
           group_id?: string
           id?: string
+          last_error?: string | null
+          last_reconciled_at?: string | null
+          ledger_posted_at?: string | null
+          ledger_status?: string
           net_amount?: number
+          payout_reference?: string | null
+          payout_status?: string
           platform_fee?: number
           recipient_id?: string
+          recipient_nuban?: string | null
           recovered_outstanding?: number
           status?: string
+          updated_at?: string
+          vfd_reference?: string | null
+          vfd_session_id?: string | null
           withheld?: boolean
         }
         Relationships: [

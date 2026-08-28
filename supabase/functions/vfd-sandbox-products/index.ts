@@ -924,9 +924,21 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
     .select("id, user_id, contribution_method, mandate_status, mandate_code, mandate_reference")
     .eq("group_id", groupId).eq("user_id", userId).maybeSingle();
   const groupFundingMode = (group.funding_mode as string) || "wallet";
-  // An E-Mandate group funds EXCLUSIVELY through direct debit — wallet funding
-  // can never be used as a fallback or bypass.
-  const isDdm = groupFundingMode === "ddm" || (myMember?.contribution_method as string) === "direct_debit";
+  // GROUP FUNDING MODE IS AUTHORITATIVE. A DDM group funds exclusively through
+  // e-mandate; a wallet group funds exclusively from the Vestara wallet. Mixed
+  // funding is impossible, and an inconsistent member record fails closed.
+  const consistency = await assertGroupFundingConsistency(groupId, groupFundingMode);
+  if (!consistency.ok) {
+    return jsonResponse({
+      status: "blocked",
+      reason: "funding_method_mismatch",
+      error: "This group's funding method is inconsistent for one or more members. An admin must correct it before contributions can continue.",
+      funding_mode: consistency.funding_mode,
+      offending_members: consistency.offenders,
+    }, 409);
+  }
+  const isDdm = groupFundingMode === "ddm";
+
 
   if (isDdm) {
     const gate = await checkGroupMandateGate(groupId);
@@ -1057,7 +1069,128 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
   });
 }
 
+// =============================================
+// THRIFT FUNDING-MODE ENFORCEMENT
+// A group has exactly ONE funding method, decided at group level:
+//   funding_mode = 'ddm'    -> every active member funds by VFD e-mandate ONLY
+//   funding_mode = 'wallet' -> every active member funds from the Vestara wallet ONLY
+// Mixed funding is never permitted, and an inconsistent member record fails
+// closed (blocked / funding_method_mismatch) rather than being guessed at.
+// =============================================
+async function assertGroupFundingConsistency(
+  groupId: string,
+  fundingModeRaw?: string,
+): Promise<{ ok: boolean; funding_mode: string; offenders: Array<Record<string, unknown>> }> {
+  const db = getSupabaseAdmin();
+  let mode = (fundingModeRaw || "").trim();
+  if (!mode) {
+    const { data: g } = await db.from("vfd_sandbox_groups")
+      .select("funding_mode").eq("id", groupId).maybeSingle();
+    mode = (g?.funding_mode as string) || "wallet";
+  }
+  const expectedMethod = mode === "ddm" ? "direct_debit" : "wallet";
+
+  const { data: rows } = await db.from("vfd_sandbox_group_members")
+    .select("id, user_id, contribution_method, status")
+    .eq("group_id", groupId).eq("status", "active");
+
+  const offenders = ((rows || []) as Array<Record<string, unknown>>)
+    .filter((m) => {
+      const method = (m.contribution_method as string) || "";
+      // An unset legacy method inherits the group mode; anything explicitly set
+      // to the other method is a hard mismatch.
+      return method !== "" && method !== expectedMethod;
+    })
+    .map((m) => ({
+      member_id: m.id,
+      user_id: m.user_id,
+      contribution_method: m.contribution_method,
+      expected_contribution_method: expectedMethod,
+    }));
+
+  return { ok: offenders.length === 0, funding_mode: mode, offenders };
+}
+
+// Deterministic references — the single source of truth for recovery.
+function bankPayoutReference(cycleId: string): string {
+  return `AJO-PAYOUT-${String(cycleId).replace(/-/g, "").slice(0, 20)}`;
+}
+function ledgerPayoutReference(groupId: string, cycleId: string): string {
+  return `ajo-payout-${groupId}-${cycleId}`;
+}
+
+/** Has the internal ledger payout for this reference already been posted? */
+async function ledgerPayoutExists(reference: string): Promise<boolean> {
+  const db = getSupabaseAdmin();
+  const { data } = await db.from("vestara_transactions")
+    .select("id").eq("reference", reference).maybeSingle();
+  return !!data?.id;
+}
+
+type PayoutClaim = {
+  claimed: boolean;
+  reason?: "already_processing" | "already_completed";
+  row?: Record<string, unknown>;
+};
+
+/**
+ * Atomically claim payout processing for group_id + cycle_number.
+ * Backed by the unique index (group_id, cycle_number) on
+ * vfd_sandbox_group_payouts, so two concurrent invocations can never both own
+ * the payout. VFD's duplicate-reference protection remains a LAST line of
+ * defence, never the primary concurrency control.
+ */
+async function claimPayout(p: {
+  groupId: string; cycleId: string; cycleNumber: number; recipientId: string;
+  grossAmount: number; fee: number; netAmount: number; recovered: number; withheld: boolean;
+}): Promise<PayoutClaim> {
+  const db = getSupabaseAdmin();
+  const nowIso = new Date().toISOString();
+  const seed = {
+    group_id: p.groupId, recipient_id: p.recipientId, cycle_number: p.cycleNumber,
+    cycle_id: p.cycleId,
+    gross_amount: p.grossAmount, platform_fee: p.fee, net_amount: p.netAmount,
+    recovered_outstanding: p.recovered, withheld: p.withheld,
+    payout_reference: ledgerPayoutReference(p.groupId, p.cycleId),
+    vfd_reference: bankPayoutReference(p.cycleId),
+    payout_status: "processing", bank_status: p.netAmount > 0 ? "not_sent" : "not_required",
+    ledger_status: "pending", attempts: 1, updated_at: nowIso,
+  };
+
+  // First writer wins the insert; everyone else conflicts.
+  const { data: inserted } = await db.from("vfd_sandbox_group_payouts")
+    .insert(seed).select("*").maybeSingle();
+  if (inserted?.id) return { claimed: true, row: inserted as Record<string, unknown> };
+
+  const { data: existing } = await db.from("vfd_sandbox_group_payouts")
+    .select("*").eq("group_id", p.groupId).eq("cycle_number", p.cycleNumber).maybeSingle();
+  if (!existing) return { claimed: false, reason: "already_processing" };
+  if (existing.payout_status === "completed") return { claimed: false, reason: "already_completed", row: existing };
+
+  // Re-claim ONLY from a terminal-but-recoverable state. A row already in
+  // 'processing' belongs to another invocation.
+  const { data: reclaimed } = await db.from("vfd_sandbox_group_payouts")
+    .update({
+      payout_status: "processing",
+      attempts: Number(existing.attempts || 0) + 1,
+      updated_at: nowIso,
+    })
+    .eq("id", existing.id as string)
+    .in("payout_status", ["pending", "failed", "retryable", "bank_confirmed_ledger_pending"])
+    .select("*").maybeSingle();
+
+  if (!reclaimed?.id) return { claimed: false, reason: "already_processing", row: existing };
+  return { claimed: true, row: reclaimed as Record<string, unknown> };
+}
+
+async function updatePayoutRow(id: string, patch: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  await db.from("vfd_sandbox_group_payouts")
+    .update({ ...patch, updated_at: new Date().toISOString() }).eq("id", id);
+}
+
 // AUTO-PAYOUT (Production parity: tiered fee, credit recipient wallet, advance cycle)
+
 async function processAutoPayout(
   db: ReturnType<typeof createClient>,
   group: Record<string, unknown>,
@@ -1142,49 +1275,116 @@ async function processAutoPayout(
     console.error(`[processAutoPayout] BLOCKED group=${groupId} cycle=${currentCycle} user=${recipientId} owed=₦${owed} > payout=₦${payoutBeforeRecovery}; withholding entire payout, residual ₦${residual}`);
   }
 
+  // ===========================================================
+  // ATOMIC PAYOUT CLAIM — group_id + cycle_number.
+  // Exactly one invocation may own payout processing; every other concurrent
+  // path (wallet pipeline, DDM settlement posting, sweep, reconciler) returns
+  // safely without initiating a second bank transfer.
+  // ===========================================================
+  const claim = await claimPayout({
+    groupId, cycleId: activeCycle.id as string, cycleNumber: currentCycle,
+    recipientId, grossAmount, fee: feeCharged, netAmount, recovered, withheld,
+  });
+  if (!claim.claimed) {
+    return {
+      success: claim.reason === "already_completed",
+      status: claim.reason,
+      already_processing: claim.reason === "already_processing",
+      cycle_number: currentCycle,
+    };
+  }
+  const payoutRowId = claim.row!.id as string;
+  const claimRow = claim.row as Record<string, unknown>;
+  const bankRef = bankPayoutReference(activeCycle.id as string);
+  const ledgerRef = ledgerPayoutReference(groupId, activeCycle.id as string);
+  let bankStatus = String(claimRow.bank_status || "not_sent");
+
   // Only touch the ledger when something is actually disbursed. When withheld,
   // the funds simply stay in the group's thrift pool (covering the shortfall
   // the member's missed contributions created).
   if (debitFromPool > 0) {
     // REAL money-out leg FIRST: corporate pool -> recipient's own NUBAN,
     // independently verified. The internal ledger only mirrors it afterwards.
-    if (netAmount > 0) {
+    // If the bank leg is ALREADY confirmed (previous attempt crashed after the
+    // transfer), money must never move a second time — go straight to ledger.
+    if (netAmount > 0 && bankStatus !== "confirmed") {
+      // payoutFromPoolToCustomer TSQ-checks this deterministic reference first
+      // and returns replayed:true instead of sending a second transfer.
       const bankPayout = await payoutFromPoolToCustomer({
         userId: recipientId,
         amount: netAmount,
-        reference: `AJO-PAYOUT-${String(activeCycle.id).replace(/-/g, "").slice(0, 20)}`,
+        reference: bankRef,
         remark: `Thrift payout cycle ${currentCycle}`,
         productType: "thrift",
         productReference: groupId,
       });
-      if (!bankPayout.confirmed) {
-        const err = bankPayout.error || "Bank payout not confirmed";
-        console.error(`[processAutoPayout] bank leg unconfirmed group=${groupId} cycle=${currentCycle}: ${bankPayout.code}`);
+      const confirmed = bankPayout.confirmed;
+      const evidence = bankPayout.evidence;
+      const failCode = bankPayout.code;
+      const failErr = bankPayout.error;
+
+
+      if (!confirmed) {
+        const err = failErr || "Bank payout not confirmed";
+        console.error(`[processAutoPayout] bank leg unconfirmed group=${groupId} cycle=${currentCycle}: ${failCode}`);
+        // Unknown/pending -> stays recoverable; never re-sent blindly.
+        await updatePayoutRow(payoutRowId, {
+          payout_status: failCode === "PAYOUT_FAILED" ? "failed" : "processing",
+          bank_status: failCode === "PAYOUT_FAILED" ? "failed" : "pending",
+          last_error: err, last_reconciled_at: new Date().toISOString(),
+        });
         await sendNotification(recipientId, "Payout Processing",
           `Your ₦${netAmount.toLocaleString()} payout from ${group.name} has been submitted to the bank and is awaiting confirmation. It will reflect shortly.`,
           "payout_notification", groupId);
-        return { success: false, error: err, code: bankPayout.code, awaiting_settlement: true };
+        return { success: false, error: err, code: failCode, awaiting_settlement: true };
+      }
+
+      bankStatus = "confirmed";
+      const ev = (evidence || {}) as Record<string, unknown>;
+      await updatePayoutRow(payoutRowId, {
+        bank_status: "confirmed",
+        bank_confirmed_at: new Date().toISOString(),
+        payout_status: "bank_confirmed_ledger_pending",
+        vfd_session_id: String(ev.sessionId ?? ev.session_id ?? "") || null,
+      });
+    }
+
+    // LEDGER LEG — idempotent. A pre-existing transaction on this deterministic
+    // reference means the internal posting is already done, NOT a failure.
+    const alreadyPosted = await ledgerPayoutExists(ledgerRef);
+    if (!alreadyPosted) {
+      const payout = await creditVestaraThriftPayout(recipientId, groupId, debitFromPool, feeCharged, ledgerRef, {
+        cycle_id: activeCycle.id,
+        cycle_number: currentCycle,
+        source: "vfd_sandbox_ajo",
+        gross_pool_value: grossAmount,
+        recovered_outstanding: recovered,
+        residual_owed: residual,
+      });
+      const posted = payout.success || await ledgerPayoutExists(ledgerRef);
+      if (!posted) {
+        const err = payout.error || "Payout failed";
+        console.error(`[processAutoPayout] ledger leg failed group=${groupId} cycle=${currentCycle}:`, err);
+        // BANK MONEY IS ALREADY GONE when bankStatus === 'confirmed'. Recovery
+        // retries the INTERNAL step only — never another transfer.
+        await updatePayoutRow(payoutRowId, {
+          payout_status: bankStatus === "confirmed" ? "bank_confirmed_ledger_pending" : "failed",
+          ledger_status: "pending",
+          last_error: err, last_reconciled_at: new Date().toISOString(),
+        });
+        await postChatMessage(groupId, recipientId,
+          `⚠️ Auto-payout for cycle ${currentCycle} is completing: ${err}. Reconciliation will finish it.`, "contribution_failed");
+        await sendNotification(recipientId, "Payout Pending",
+          `Your payout for ${group.name} cycle ${currentCycle} is being finalised (${err}). Our team has been alerted.`,
+          "payout_notification", groupId);
+        return { success: false, error: err, bank_confirmed: bankStatus === "confirmed", ledger_posted: false };
       }
     }
-    const payout = await creditVestaraThriftPayout(recipientId, groupId, debitFromPool, feeCharged, `ajo-payout-${groupId}-${activeCycle.id}`, {
-      cycle_id: activeCycle.id,
-      cycle_number: currentCycle,
-      source: "vfd_sandbox_ajo",
-      gross_pool_value: grossAmount,
-      recovered_outstanding: recovered,
-      residual_owed: residual,
+    await updatePayoutRow(payoutRowId, {
+      ledger_status: "posted", ledger_posted_at: new Date().toISOString(),
     });
-    if (!payout.success) {
-      const err = payout.error || "Payout failed";
-      console.error(`[processAutoPayout] group=${groupId} cycle=${currentCycle} failed:`, err);
-      await postChatMessage(groupId, recipientId,
-        `⚠️ Auto-payout for cycle ${currentCycle} failed: ${err}. Admin will retry.`, "contribution_failed");
-      await sendNotification(recipientId, "Payout Pending",
-        `Your payout for ${group.name} cycle ${currentCycle} could not be processed (${err}). Our team has been alerted.`,
-        "payout_notification", groupId);
-      return { success: false, error: err };
-    }
   }
+
 
   if (recovered > 0 && recipientRow?.id) {
     await db.from("vfd_sandbox_group_members").update({
@@ -1221,20 +1421,21 @@ async function processAutoPayout(
     }
   }
 
-  await db.from("vfd_sandbox_group_payouts").insert({
-    group_id: groupId, recipient_id: recipientId,
-    cycle_number: currentCycle, gross_amount: grossAmount,
-    platform_fee: feeCharged, net_amount: netAmount,
+  // Payout row was created by the atomic claim — finalise it (idempotent).
+  await updatePayoutRow(payoutRowId, {
+    gross_amount: grossAmount, platform_fee: feeCharged, net_amount: netAmount,
     recovered_outstanding: recovered, withheld,
+    payout_status: "completed", completed_at: new Date().toISOString(),
+    last_error: null,
   });
 
-
-
+  // Cycle completion is idempotent — only an 'active' cycle transitions.
   await db.from("vfd_sandbox_contribution_cycles").update({
     status: "completed", payout_recipient_id: recipientId,
     payout_amount: netAmount, platform_fee: feeCharged,
     total_contributions: grossAmount, completed_at: new Date().toISOString(),
-  }).eq("id", activeCycle.id as string);
+  }).eq("id", activeCycle.id as string).eq("status", "active");
+
 
   await db.from("vfd_sandbox_group_members").update({ has_received_payout: true })
     .eq("group_id", groupId).eq("user_id", recipientId);
@@ -7457,6 +7658,18 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
       });
       continue;
     }
+    // GROUP FUNDING MODE IS AUTHORITATIVE — fail closed on any mixed state.
+    const sweepConsistency = await assertGroupFundingConsistency(group.id, group.funding_mode as string);
+    if (!sweepConsistency.ok) {
+      processed.push({
+        group_id: group.id, name: group.name, status: "blocked",
+        reason: "funding_method_mismatch",
+        funding_mode: sweepConsistency.funding_mode,
+        offending_members: sweepConsistency.offenders,
+      });
+      continue;
+    }
+    const groupIsDdm = sweepConsistency.funding_mode === "ddm";
 
 
     const { data: pending } = await db.from("vfd_sandbox_group_members")
@@ -7486,7 +7699,8 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
       }
 
       const amount = Number(group.contribution_amount);
-      const isDdmMember = m.contribution_method === "direct_debit";
+      // Never member-level: the group's mode decides the funding pipeline.
+      const isDdmMember = groupIsDdm;
       const debit = isDdmMember
         ? await (async () => {
             const r = await performMandateDebitForMember(group, m, Number(group.current_cycle));
@@ -8684,8 +8898,119 @@ async function reconcileThriftSettlements(limit = 50): Promise<Record<string, un
     }
     results.push({ reference: r.provider_reference, confirmed: true, posted, finalize });
   }
-  return { checked: (rows || []).length, results };
+  const payouts = await reconcileStuckThriftPayouts(limit);
+  return { checked: (rows || []).length, results, payouts };
 }
+
+/**
+ * PAYOUT RECOVERY.
+ *
+ * Handles the two dangerous half-states:
+ *   (a) VFD bank transfer confirmed, internal ledger payout missing.
+ *   (b) Bank + ledger both done, cycle never advanced.
+ *
+ * FINANCIAL SAFETY RULE: a confirmed bank transfer is final. This routine
+ * NEVER calls /transfer. It only verifies, posts the internal leg, and
+ * completes the cycle — all idempotently.
+ */
+async function reconcileStuckThriftPayouts(limit = 50): Promise<Record<string, unknown>> {
+  const db = getSupabaseAdmin();
+  const { data: stuck } = await db.from("vfd_sandbox_group_payouts")
+    .select("*")
+    .neq("payout_status", "completed")
+    .order("created_at", { ascending: true })
+    .limit(limit);
+
+  const out: Array<Record<string, unknown>> = [];
+  for (const p of (stuck || [])) {
+    const groupId = p.group_id as string;
+    const cycleId = p.cycle_id as string | null;
+    const nowIso = new Date().toISOString();
+    if (!cycleId) {
+      out.push({ id: p.id, skipped: "no_cycle_id" });
+      continue;
+    }
+    const bankRef = (p.vfd_reference as string) || bankPayoutReference(cycleId);
+    const ledgerRef = (p.payout_reference as string) || ledgerPayoutReference(groupId, cycleId);
+    const netAmount = Number(p.net_amount || 0);
+
+    // 1. Establish the real bank truth — verification only, never a re-send.
+    let bankOk = p.bank_status === "confirmed" || p.bank_status === "not_required" || netAmount <= 0;
+    if (!bankOk) {
+      const v = await verifyVfdTransfer(bankRef);
+      if (v.confirmed) {
+        bankOk = true;
+        await updatePayoutRow(p.id as string, {
+          bank_status: "confirmed", bank_confirmed_at: nowIso,
+          payout_status: "bank_confirmed_ledger_pending", last_reconciled_at: nowIso,
+        });
+      } else {
+        await updatePayoutRow(p.id as string, { last_reconciled_at: nowIso });
+        out.push({ id: p.id, group_id: groupId, bank_confirmed: false, action: "left_pending" });
+        continue;
+      }
+    }
+
+    // 2. Ensure the internal ledger leg exists (idempotent on the reference).
+    let ledgerOk = await ledgerPayoutExists(ledgerRef);
+    if (!ledgerOk && netAmount + Number(p.platform_fee || 0) > 0) {
+      const res = await creditVestaraThriftPayout(
+        p.recipient_id as string, groupId,
+        Math.round((netAmount + Number(p.platform_fee || 0)) * 100) / 100,
+        Number(p.platform_fee || 0), ledgerRef,
+        { cycle_id: cycleId, cycle_number: p.cycle_number, source: "thrift_payout_reconciler" },
+      );
+      ledgerOk = res.success || await ledgerPayoutExists(ledgerRef);
+      if (!ledgerOk) {
+        await updatePayoutRow(p.id as string, {
+          payout_status: "bank_confirmed_ledger_pending", ledger_status: "pending",
+          last_error: res.error || "ledger posting failed", last_reconciled_at: nowIso,
+        });
+        out.push({ id: p.id, group_id: groupId, bank_confirmed: true, ledger_posted: false });
+        continue;
+      }
+    }
+    await updatePayoutRow(p.id as string, {
+      ledger_status: "posted", ledger_posted_at: p.ledger_posted_at || nowIso,
+      payout_status: "completed", completed_at: p.completed_at || nowIso,
+      last_error: null, last_reconciled_at: nowIso,
+    });
+
+    // 3. Finish cycle advancement if it never happened (idempotent).
+    const { data: cyc } = await db.from("vfd_sandbox_contribution_cycles")
+      .select("id, status, cycle_number").eq("id", cycleId).maybeSingle();
+    let advanced = false;
+    if (cyc && cyc.status === "active") {
+      await db.from("vfd_sandbox_contribution_cycles").update({
+        status: "completed", payout_recipient_id: p.recipient_id,
+        payout_amount: netAmount, platform_fee: p.platform_fee,
+        total_contributions: p.gross_amount, completed_at: nowIso,
+      }).eq("id", cycleId).eq("status", "active");
+
+      await db.from("vfd_sandbox_group_members").update({ has_received_payout: true })
+        .eq("group_id", groupId).eq("user_id", p.recipient_id as string);
+
+      const { data: g } = await db.from("vfd_sandbox_groups")
+        .select("current_cycle, total_cycles").eq("id", groupId).maybeSingle();
+      const cur = Number(g?.current_cycle || 0);
+      if (g && cur === Number(p.cycle_number)) {
+        const next = cur + 1;
+        if (next > Number(g.total_cycles)) {
+          await db.from("vfd_sandbox_groups").update({ status: "completed", updated_at: nowIso }).eq("id", groupId);
+        } else {
+          await db.from("vfd_sandbox_groups").update({ current_cycle: next, updated_at: nowIso }).eq("id", groupId);
+          await db.from("vfd_sandbox_group_members").update({ has_contributed_current: false })
+            .eq("group_id", groupId).eq("status", "active");
+        }
+        advanced = true;
+      }
+    }
+    out.push({ id: p.id, group_id: groupId, bank_confirmed: true, ledger_posted: true, completed: true, cycle_advanced: advanced });
+  }
+  return { checked: (stuck || []).length, results: out };
+}
+
+
 
 /**
  * Payout gate: every money-in leg for this cycle must be bank-confirmed.
