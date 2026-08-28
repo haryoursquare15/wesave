@@ -8238,6 +8238,23 @@ async function performMandateDebitForMember(
       updated_at: nowIso,
     }).eq("id", groupId);
     await markAttemptLedgerPosted(db, collection.attemptId, cycleRef, true);
+    // Post the bank-collected funds into the group's double-entry thrift pool
+    // (settlement -> thrift_pool) so cycle payouts can be disbursed.
+    try {
+      const { data: poolPost, error: poolErr } = await db.rpc("vestara_thrift_contribute_external", {
+        _user_id: targetUserId,
+        _group_id: groupId,
+        _amount: amountNaira,
+        _reference: `ddm-${cycleRef}`,
+        _metadata: { cycle_index: cycleIndex, mandate_reference: member.mandate_reference },
+      });
+      if (poolErr || (poolPost && (poolPost as any).success === false)) {
+        console.error(`[performMandateDebitForMember] pool ledger post failed group=${groupId} user=${targetUserId}:`,
+          poolErr?.message || (poolPost as any)?.error);
+      }
+    } catch (e) {
+      console.error("[performMandateDebitForMember] pool ledger post threw:", e);
+    }
     await recordMandateEvent(groupId, targetUserId, member.mandate_reference as string, member.mandate_code as string, "debit_success",
       { cycle_index: cycleIndex, amount_naira: amountNaira, vfd: result.raw });
     return { success: true, reference: cycleRef, amount_kobo: amountKobo };
