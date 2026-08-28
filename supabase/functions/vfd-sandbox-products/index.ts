@@ -29,6 +29,7 @@ import {
   markSettlement,
   markSettlementLedgerPosted,
   allInboundConfirmed,
+  isSettlementConfirmed,
 } from "../_shared/settlement.ts";
 import {
   billCategoryRequiresValidation,
