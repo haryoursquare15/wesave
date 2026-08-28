@@ -25,6 +25,12 @@ import {
   type MandatePayer,
 } from "../_shared/vfd-mandate.ts";
 import {
+  openSettlement,
+  markSettlement,
+  markSettlementLedgerPosted,
+  allInboundConfirmed,
+} from "../_shared/settlement.ts";
+import {
   billCategoryRequiresValidation,
   enforceBillCustomerValidation,
   type BillIdentity,
