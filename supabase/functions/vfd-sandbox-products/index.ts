@@ -8418,39 +8418,61 @@ async function performMandateDebitForMember(
   if (result.ok) {
     const sessionId = String(((result.raw as any)?.response?.data?.sessionId) || "");
     const paymentRef = String(((result.raw as any)?.response?.data?.reference) || cycleRef);
-    if (ledgerEntry?.id) {
-      await db.from("vfd_sandbox_thrift_ledger_entries").update({
-        status: "confirmed", confirmed_at: nowIso, vfd_session_id: sessionId, vfd_payment_reference: paymentRef,
-        metadata: { mandate_reference: member.mandate_reference, vfd: result.raw },
-      }).eq("id", ledgerEntry.id);
+
+    // SETTLEMENT INTEGRITY: VFD accepting the debit is NOT proof the money has
+    // landed in the corporate pool. Open the settlement leg, then require an
+    // independent confirmation before ANY internal posting.
+    await openSettlement(db, {
+      productType: "thrift",
+      productReference: groupId,
+      userId: targetUserId,
+      direction: "in",
+      amount: amountNaira,
+      sourceAccount: (member.mandate_payer_account_number as string) || null,
+      destinationAccount: VFD_POOL_NUBAN,
+      providerReference: collection.transactionReference,
+      metadata: {
+        cycle_tag: `c${cycleIndex}`,
+        cycle_index: cycleIndex,
+        mandate_reference: member.mandate_reference,
+        thrift_ledger_entry_id: ledgerEntry?.id || null,
+        attempt_id: collection.attemptId,
+        cycle_ref: cycleRef,
+        vfd_session_id: sessionId,
+        vfd_payment_reference: paymentRef,
+      },
+    });
+
+    const settled = await confirmSettlementLeg(collection.transactionReference, { amount: amountNaira });
+    if (!settled.confirmed) {
+      await recordMandateEvent(groupId, targetUserId, member.mandate_reference as string, member.mandate_code as string,
+        "debit_awaiting_settlement", { cycle_index: cycleIndex, amount_naira: amountNaira, reference: collection.transactionReference });
+      // Money may well have moved — this is NOT a failure and must never be
+      // penalised or retried. The settlement reconciler completes it.
+      return {
+        success: false,
+        error: "Bank collection submitted — awaiting settlement confirmation",
+        details: { code: "AWAITING_SETTLEMENT", reference: collection.transactionReference },
+      };
     }
-    const { data: g } = await db.from("vfd_sandbox_groups")
-      .select("pool_ledger_balance, total_contributed_kobo").eq("id", groupId).maybeSingle();
-    await db.from("vfd_sandbox_groups").update({
-      pool_ledger_balance: Number(g?.pool_ledger_balance || 0) + amountKobo,
-      total_contributed_kobo: Number(g?.total_contributed_kobo || 0) + amountKobo,
-      updated_at: nowIso,
-    }).eq("id", groupId);
-    await markAttemptLedgerPosted(db, collection.attemptId, cycleRef, true);
-    // Post the bank-collected funds into the group's double-entry thrift pool
-    // (settlement -> thrift_pool) so cycle payouts can be disbursed.
-    try {
-      const { data: poolPost, error: poolErr } = await db.rpc("vestara_thrift_contribute_external", {
-        _user_id: targetUserId,
-        _group_id: groupId,
-        _amount: amountNaira,
-        _reference: `ddm-${cycleRef}`,
-        _metadata: { cycle_index: cycleIndex, mandate_reference: member.mandate_reference },
-      });
-      if (poolErr || (poolPost && (poolPost as any).success === false)) {
-        console.error(`[performMandateDebitForMember] pool ledger post failed group=${groupId} user=${targetUserId}:`,
-          poolErr?.message || (poolPost as any)?.error);
-      }
-    } catch (e) {
-      console.error("[performMandateDebitForMember] pool ledger post threw:", e);
-    }
+
+    await postConfirmedThriftCollection({
+      groupId,
+      userId: targetUserId,
+      amountNaira,
+      cycleIndex,
+      cycleRef,
+      settlementReference: collection.transactionReference,
+      attemptId: collection.attemptId,
+      thriftLedgerEntryId: ledgerEntry?.id || null,
+      sessionId,
+      paymentRef,
+      mandateReference: (member.mandate_reference as string) || null,
+      vfdRaw: result.raw,
+    });
+
     await recordMandateEvent(groupId, targetUserId, member.mandate_reference as string, member.mandate_code as string, "debit_success",
-      { cycle_index: cycleIndex, amount_naira: amountNaira, vfd: result.raw });
+      { cycle_index: cycleIndex, amount_naira: amountNaira, vfd: result.raw, settlement_confirmed: true });
     return { success: true, reference: cycleRef, amount_kobo: amountKobo };
   }
 
