@@ -1077,7 +1077,13 @@ async function processAutoPayout(
   // SETTLEMENT GATE — no payout may leave the pool while ANY of this cycle's
   // collections is still unconfirmed at the bank. Internal ledger entries are
   // never accepted as evidence that the money is really there.
+  //
+  // CONFIGURED EXPECTATION decides the amounts:
+  //   expected_cycle_funding = contribution_amount × member_count = GROSS PAYOUT
+  // VFD SETTLEMENT only authorizes release; it never resizes the payout.
   // ===========================================================
+  const grossAmount = Math.round(amount * memberCount * 100) / 100;
+
   const collectionCheck = await cycleCollectionsConfirmed(groupId, currentCycle);
   if (!collectionCheck.ok) {
     console.error(`[processAutoPayout] HELD group=${groupId} cycle=${currentCycle} — ${collectionCheck.pending.length} unconfirmed collection(s)`);
@@ -1089,9 +1095,23 @@ async function processAutoPayout(
     };
   }
 
-  const grossAmount = amount * memberCount;
+  // POSITIVE proof: every active member's configured contribution must be
+  // individually confirmed by VFD settlement for this cycle.
+  const funding = await verifyCycleFunding(groupId, currentCycle, amount, memberCount);
+  if (!funding.ok) {
+    console.error(`[processAutoPayout] BLOCKED group=${groupId} cycle=${currentCycle} — expected ₦${funding.expected_cycle_funding}, confirmed ₦${funding.confirmed_cycle_funding}, ${funding.missing_members.length} member(s) outstanding`);
+    return {
+      success: false,
+      held: true,
+      error: `PAYOUT BLOCKED — ₦${funding.outstanding_cycle_funding.toLocaleString()} CONTRIBUTION OUTSTANDING`,
+      gross_payout: grossAmount,
+      funding_report: funding,
+    };
+  }
+
   // PRODUCTION PARITY: Tiered fee structure
   const platformFee = calculatePlatformFee(grossAmount);
+
 
   // ===========================================================
   // PAYOUT ELIGIBILITY GATE (single choke point for every payout)
