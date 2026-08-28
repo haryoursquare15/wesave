@@ -1308,26 +1308,21 @@ async function processAutoPayout(
     // If the bank leg is ALREADY confirmed (previous attempt crashed after the
     // transfer), money must never move a second time — go straight to ledger.
     if (netAmount > 0 && bankStatus !== "confirmed") {
-      const prior = await verifyVfdTransfer(bankRef);
-      let evidence: unknown = prior.evidence;
-      let confirmed = prior.confirmed;
-      let failCode: string | undefined;
-      let failErr: string | undefined;
+      // payoutFromPoolToCustomer TSQ-checks this deterministic reference first
+      // and returns replayed:true instead of sending a second transfer.
+      const bankPayout = await payoutFromPoolToCustomer({
+        userId: recipientId,
+        amount: netAmount,
+        reference: bankRef,
+        remark: `Thrift payout cycle ${currentCycle}`,
+        productType: "thrift",
+        productReference: groupId,
+      });
+      const confirmed = bankPayout.confirmed;
+      const evidence = bankPayout.evidence;
+      const failCode = bankPayout.code;
+      const failErr = bankPayout.error;
 
-      if (!confirmed) {
-        const bankPayout = await payoutFromPoolToCustomer({
-          userId: recipientId,
-          amount: netAmount,
-          reference: bankRef,
-          remark: `Thrift payout cycle ${currentCycle}`,
-          productType: "thrift",
-          productReference: groupId,
-        });
-        confirmed = bankPayout.confirmed;
-        evidence = bankPayout.evidence;
-        failCode = bankPayout.code;
-        failErr = bankPayout.error;
-      }
 
       if (!confirmed) {
         const err = failErr || "Bank payout not confirmed";
