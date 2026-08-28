@@ -970,6 +970,19 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
     }
   } else {
     const reference = `ajo-manual-${groupId}-${activeCycle.id}-${userId}`;
+    // REAL bank leg first: the member's own NUBAN -> corporate pool, verified
+    // at VFD. An internal ledger debit alone is never accepted as settlement.
+    const funding = await collectFromCustomerToPool({
+      userId, amount, reference,
+      productType: "thrift", productReference: groupId,
+      metadata: { cycle_tag: `c${group.current_cycle}`, cycle_id: activeCycle.id, source: "wallet" },
+    });
+    if (!funding.confirmed) {
+      return jsonResponse({
+        error: funding.error || "We could not move your funds to the group pool. Nothing was debited — please try again.",
+        code: funding.code || "SETTLEMENT_UNCONFIRMED",
+      }, 400);
+    }
     const debit = await debitVestaraForThrift(userId, groupId, amount, reference, {
       cycle_id: activeCycle.id,
       cycle_number: group.current_cycle,
