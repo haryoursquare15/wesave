@@ -9476,6 +9476,14 @@ Deno.serve(async (req) => {
       return await handlePollPendingMandates();
     }
 
+    // Settlement reconciler: completes bank-confirmed DDM collections whose
+    // internal posting is still outstanding. Never credits on a guess.
+    if (action === "reconcile_settlements"
+      && (await assertCronToken(req, "thrift_sweep") || assertCronCaller(req))) {
+      const limit = Math.min(Number(body.limit ?? 50) || 50, 200);
+      return jsonResponse({ data: await reconcileThriftSettlements(limit) });
+    }
+
 
 
     if (action === "sweep_split_fee_cron" && assertCronCaller(req)) {
