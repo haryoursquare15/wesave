@@ -7724,6 +7724,16 @@ export type Database = {
         }
         Returns: Json
       }
+      vestara_thrift_contribute_external: {
+        Args: {
+          _amount: number
+          _group_id: string
+          _metadata?: Json
+          _reference: string
+          _user_id: string
+        }
+        Returns: Json
+      }
       vestara_thrift_payout: {
         Args: {
           _beneficiary_id: string

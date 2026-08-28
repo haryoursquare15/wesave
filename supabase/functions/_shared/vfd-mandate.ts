@@ -683,13 +683,23 @@ export async function collectMandateDebit(params: {
   }
 
   const attemptId = claimResult.attempt_id as string;
+  // VFD rejects a reused transaction id ("Transaction Id Exists", status 199),
+  // so the id sent to VFD is scoped to the CLAIM, not just the day. Same-day
+  // duplicate collection is still blocked by claim_mandate_debit_attempt; a
+  // legitimately re-armed retry gets a fresh, non-colliding id. The id stays
+  // stable across network retries of the same claim.
+  const vfdTxRef = attemptId ? `${txRef}-${String(attemptId).slice(0, 8)}` : txRef;
+  await db.from("mandate_debit_attempts")
+    .update({ transaction_reference: vfdTxRef })
+    .eq("id", attemptId);
   const debit = await debitMandate({
     mandateReference: params.mandateReference,
     amount: Number(params.amount),
     narration: params.purpose,
-    transactionReference: txRef,
-    idempotencyKey: params.idempotencyKey || (claimResult.idempotency_key as string) || txRef,
+    transactionReference: vfdTxRef,
+    idempotencyKey: params.idempotencyKey || (claimResult.idempotency_key as string) || vfdTxRef,
   });
+
 
   if (!debit.ok) {
     await db.from("mandate_debit_attempts").update({
@@ -714,7 +724,7 @@ export async function collectMandateDebit(params: {
 
     return {
       collected: false, skipped: false, reason: debit.message, attemptId,
-      transactionReference: txRef, failureClass: debit.failureClass, raw: debit.raw,
+      transactionReference: vfdTxRef, failureClass: debit.failureClass, raw: debit.raw,
     };
   }
 
@@ -722,14 +732,15 @@ export async function collectMandateDebit(params: {
   await db.from("mandate_debit_attempts").update({
     status: "succeeded",
     vfd_response: debit.raw,
-    ledger_reference: txRef,
+    ledger_reference: vfdTxRef,
     completed_at: new Date().toISOString(),
   }).eq("id", attemptId);
 
   return {
     collected: true, skipped: false, reason: "VFD confirmed (status 00)", attemptId,
-    transactionReference: txRef, failureClass: "none", raw: debit.raw,
+    transactionReference: vfdTxRef, failureClass: "none", raw: debit.raw,
   };
+
 }
 
 /** Mark the shared `mandates` registry row as ledger-posted for an attempt. */
