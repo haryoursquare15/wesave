@@ -924,9 +924,21 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
     .select("id, user_id, contribution_method, mandate_status, mandate_code, mandate_reference")
     .eq("group_id", groupId).eq("user_id", userId).maybeSingle();
   const groupFundingMode = (group.funding_mode as string) || "wallet";
-  // An E-Mandate group funds EXCLUSIVELY through direct debit — wallet funding
-  // can never be used as a fallback or bypass.
-  const isDdm = groupFundingMode === "ddm" || (myMember?.contribution_method as string) === "direct_debit";
+  // GROUP FUNDING MODE IS AUTHORITATIVE. A DDM group funds exclusively through
+  // e-mandate; a wallet group funds exclusively from the Vestara wallet. Mixed
+  // funding is impossible, and an inconsistent member record fails closed.
+  const consistency = await assertGroupFundingConsistency(groupId, groupFundingMode);
+  if (!consistency.ok) {
+    return jsonResponse({
+      status: "blocked",
+      reason: "funding_method_mismatch",
+      error: "This group's funding method is inconsistent for one or more members. An admin must correct it before contributions can continue.",
+      funding_mode: consistency.funding_mode,
+      offending_members: consistency.offenders,
+    }, 409);
+  }
+  const isDdm = groupFundingMode === "ddm";
+
 
   if (isDdm) {
     const gate = await checkGroupMandateGate(groupId);
