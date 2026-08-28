@@ -9151,6 +9151,13 @@ async function performMandateDebitForMember(
     purpose: `Vestara thrift cycle ${cycleIndex} - ${group.name}`,
     productRef: groupId,
     scheduledDate: new Date().toISOString(),
+    // CYCLE-SCOPED slot: collection belongs to the cycle, not the calendar day.
+    // A member who failed yesterday is retried inside the SAME cycle instead of
+    // being locked out until the next date, so one late member can no longer
+    // stall the whole group.
+    slotKey: `${groupId.slice(0, 8)}-c${cycleIndex}`,
+    retryAfterMinutes: 60,
+    maxAttempts: 3,
   });
   const result = { ok: collection.collected, raw: collection.raw, http_status: 0 };
   if (collection.skipped) {
