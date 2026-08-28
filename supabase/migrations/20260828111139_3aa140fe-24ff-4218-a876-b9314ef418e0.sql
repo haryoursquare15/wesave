@@ -1,0 +1,2 @@
+REVOKE EXECUTE ON FUNCTION public.vestara_thrift_contribute_external(UUID, UUID, NUMERIC, TEXT, JSONB) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.vestara_thrift_contribute_external(UUID, UUID, NUMERIC, TEXT, JSONB) TO service_role;
