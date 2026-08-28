@@ -8899,7 +8899,8 @@ async function reconcileThriftSettlements(limit = 50): Promise<Record<string, un
     results.push({ reference: r.provider_reference, confirmed: true, posted, finalize });
   }
   const payouts = await reconcileStuckThriftPayouts(limit);
-  return { checked: (rows || []).length, results, payouts };
+  const swept = await sweepUnbankedThriftPayouts(limit);
+  return { checked: (rows || []).length, results, payouts, swept };
 }
 
 /**
