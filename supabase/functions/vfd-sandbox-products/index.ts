@@ -7418,11 +7418,23 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
             const r = await performMandateDebitForMember(group, m, Number(group.current_cycle));
             return { success: r.success, error: r.error, code: (r as any)?.details?.code as string | undefined };
           })()
-        : await debitVestaraForThrift(m.user_id, group.id, amount, `ajo-auto-${group.id}-${activeCycle.id}-${m.user_id}`, {
-            cycle_id: activeCycle.id,
-            cycle_number: group.current_cycle,
-            source: "vfd_sandbox_auto_sweep",
-          });
+        : await (async () => {
+            const autoRef = `ajo-auto-${group.id}-${activeCycle.id}-${m.user_id}`;
+            // Real bank leg first (member NUBAN -> corporate pool), verified.
+            const funding = await collectFromCustomerToPool({
+              userId: m.user_id, amount, reference: autoRef,
+              productType: "thrift", productReference: group.id,
+              metadata: { cycle_tag: `c${group.current_cycle}`, cycle_id: activeCycle.id, source: "wallet_auto" },
+            });
+            if (!funding.confirmed) {
+              return { success: false, error: funding.error || "Bank settlement not confirmed", code: funding.code };
+            }
+            return await debitVestaraForThrift(m.user_id, group.id, amount, autoRef, {
+              cycle_id: activeCycle.id,
+              cycle_number: group.current_cycle,
+              source: "vfd_sandbox_auto_sweep",
+            });
+          })();
 
 
       // A same-day debit attempt already claimed for this mandate is NOT a new
