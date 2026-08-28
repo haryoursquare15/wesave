@@ -1426,20 +1426,21 @@ async function processAutoPayout(
     }
   }
 
-  await db.from("vfd_sandbox_group_payouts").insert({
-    group_id: groupId, recipient_id: recipientId,
-    cycle_number: currentCycle, gross_amount: grossAmount,
-    platform_fee: feeCharged, net_amount: netAmount,
+  // Payout row was created by the atomic claim — finalise it (idempotent).
+  await updatePayoutRow(payoutRowId, {
+    gross_amount: grossAmount, platform_fee: feeCharged, net_amount: netAmount,
     recovered_outstanding: recovered, withheld,
+    payout_status: "completed", completed_at: new Date().toISOString(),
+    last_error: null,
   });
 
-
-
+  // Cycle completion is idempotent — only an 'active' cycle transitions.
   await db.from("vfd_sandbox_contribution_cycles").update({
     status: "completed", payout_recipient_id: recipientId,
     payout_amount: netAmount, platform_fee: feeCharged,
     total_contributions: grossAmount, completed_at: new Date().toISOString(),
-  }).eq("id", activeCycle.id as string);
+  }).eq("id", activeCycle.id as string).eq("status", "active");
+
 
   await db.from("vfd_sandbox_group_members").update({ has_received_payout: true })
     .eq("group_id", groupId).eq("user_id", recipientId);
