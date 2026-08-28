@@ -7078,7 +7078,10 @@ export type Database = {
         Args: {
           _amount: number
           _mandate_id: string
+          _max_attempts?: number
+          _retry_after_minutes?: number
           _scheduled_date: string
+          _slot_key?: string
           _transaction_reference: string
         }
         Returns: Json
