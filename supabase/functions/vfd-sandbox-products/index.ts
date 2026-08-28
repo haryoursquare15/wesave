@@ -8903,8 +8903,119 @@ async function reconcileThriftSettlements(limit = 50): Promise<Record<string, un
     }
     results.push({ reference: r.provider_reference, confirmed: true, posted, finalize });
   }
-  return { checked: (rows || []).length, results };
+  const payouts = await reconcileStuckThriftPayouts(limit);
+  return { checked: (rows || []).length, results, payouts };
 }
+
+/**
+ * PAYOUT RECOVERY.
+ *
+ * Handles the two dangerous half-states:
+ *   (a) VFD bank transfer confirmed, internal ledger payout missing.
+ *   (b) Bank + ledger both done, cycle never advanced.
+ *
+ * FINANCIAL SAFETY RULE: a confirmed bank transfer is final. This routine
+ * NEVER calls /transfer. It only verifies, posts the internal leg, and
+ * completes the cycle — all idempotently.
+ */
+async function reconcileStuckThriftPayouts(limit = 50): Promise<Record<string, unknown>> {
+  const db = getSupabaseAdmin();
+  const { data: stuck } = await db.from("vfd_sandbox_group_payouts")
+    .select("*")
+    .neq("payout_status", "completed")
+    .order("created_at", { ascending: true })
+    .limit(limit);
+
+  const out: Array<Record<string, unknown>> = [];
+  for (const p of (stuck || [])) {
+    const groupId = p.group_id as string;
+    const cycleId = p.cycle_id as string | null;
+    const nowIso = new Date().toISOString();
+    if (!cycleId) {
+      out.push({ id: p.id, skipped: "no_cycle_id" });
+      continue;
+    }
+    const bankRef = (p.vfd_reference as string) || bankPayoutReference(cycleId);
+    const ledgerRef = (p.payout_reference as string) || ledgerPayoutReference(groupId, cycleId);
+    const netAmount = Number(p.net_amount || 0);
+
+    // 1. Establish the real bank truth — verification only, never a re-send.
+    let bankOk = p.bank_status === "confirmed" || p.bank_status === "not_required" || netAmount <= 0;
+    if (!bankOk) {
+      const v = await verifyVfdTransfer(bankRef);
+      if (v.confirmed) {
+        bankOk = true;
+        await updatePayoutRow(p.id as string, {
+          bank_status: "confirmed", bank_confirmed_at: nowIso,
+          payout_status: "bank_confirmed_ledger_pending", last_reconciled_at: nowIso,
+        });
+      } else {
+        await updatePayoutRow(p.id as string, { last_reconciled_at: nowIso });
+        out.push({ id: p.id, group_id: groupId, bank_confirmed: false, action: "left_pending" });
+        continue;
+      }
+    }
+
+    // 2. Ensure the internal ledger leg exists (idempotent on the reference).
+    let ledgerOk = await ledgerPayoutExists(ledgerRef);
+    if (!ledgerOk && netAmount + Number(p.platform_fee || 0) > 0) {
+      const res = await creditVestaraThriftPayout(
+        p.recipient_id as string, groupId,
+        Math.round((netAmount + Number(p.platform_fee || 0)) * 100) / 100,
+        Number(p.platform_fee || 0), ledgerRef,
+        { cycle_id: cycleId, cycle_number: p.cycle_number, source: "thrift_payout_reconciler" },
+      );
+      ledgerOk = res.success || await ledgerPayoutExists(ledgerRef);
+      if (!ledgerOk) {
+        await updatePayoutRow(p.id as string, {
+          payout_status: "bank_confirmed_ledger_pending", ledger_status: "pending",
+          last_error: res.error || "ledger posting failed", last_reconciled_at: nowIso,
+        });
+        out.push({ id: p.id, group_id: groupId, bank_confirmed: true, ledger_posted: false });
+        continue;
+      }
+    }
+    await updatePayoutRow(p.id as string, {
+      ledger_status: "posted", ledger_posted_at: p.ledger_posted_at || nowIso,
+      payout_status: "completed", completed_at: p.completed_at || nowIso,
+      last_error: null, last_reconciled_at: nowIso,
+    });
+
+    // 3. Finish cycle advancement if it never happened (idempotent).
+    const { data: cyc } = await db.from("vfd_sandbox_contribution_cycles")
+      .select("id, status, cycle_number").eq("id", cycleId).maybeSingle();
+    let advanced = false;
+    if (cyc && cyc.status === "active") {
+      await db.from("vfd_sandbox_contribution_cycles").update({
+        status: "completed", payout_recipient_id: p.recipient_id,
+        payout_amount: netAmount, platform_fee: p.platform_fee,
+        total_contributions: p.gross_amount, completed_at: nowIso,
+      }).eq("id", cycleId).eq("status", "active");
+
+      await db.from("vfd_sandbox_group_members").update({ has_received_payout: true })
+        .eq("group_id", groupId).eq("user_id", p.recipient_id as string);
+
+      const { data: g } = await db.from("vfd_sandbox_groups")
+        .select("current_cycle, total_cycles").eq("id", groupId).maybeSingle();
+      const cur = Number(g?.current_cycle || 0);
+      if (g && cur === Number(p.cycle_number)) {
+        const next = cur + 1;
+        if (next > Number(g.total_cycles)) {
+          await db.from("vfd_sandbox_groups").update({ status: "completed", updated_at: nowIso }).eq("id", groupId);
+        } else {
+          await db.from("vfd_sandbox_groups").update({ current_cycle: next, updated_at: nowIso }).eq("id", groupId);
+          await db.from("vfd_sandbox_group_members").update({ has_contributed_current: false })
+            .eq("group_id", groupId).eq("status", "active");
+        }
+        advanced = true;
+      }
+    }
+    out.push({ id: p.id, group_id: groupId, bank_confirmed: true, ledger_posted: true, completed: true, cycle_advanced: advanced });
+  }
+  return { checked: (stuck || []).length, results: out };
+}
+
+
 
 /**
  * Payout gate: every money-in leg for this cycle must be bank-confirmed.
