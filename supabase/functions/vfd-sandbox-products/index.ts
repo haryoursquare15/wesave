@@ -1077,7 +1077,13 @@ async function processAutoPayout(
   // SETTLEMENT GATE — no payout may leave the pool while ANY of this cycle's
   // collections is still unconfirmed at the bank. Internal ledger entries are
   // never accepted as evidence that the money is really there.
+  //
+  // CONFIGURED EXPECTATION decides the amounts:
+  //   expected_cycle_funding = contribution_amount × member_count = GROSS PAYOUT
+  // VFD SETTLEMENT only authorizes release; it never resizes the payout.
   // ===========================================================
+  const grossAmount = Math.round(amount * memberCount * 100) / 100;
+
   const collectionCheck = await cycleCollectionsConfirmed(groupId, currentCycle);
   if (!collectionCheck.ok) {
     console.error(`[processAutoPayout] HELD group=${groupId} cycle=${currentCycle} — ${collectionCheck.pending.length} unconfirmed collection(s)`);
@@ -1089,9 +1095,23 @@ async function processAutoPayout(
     };
   }
 
-  const grossAmount = amount * memberCount;
+  // POSITIVE proof: every active member's configured contribution must be
+  // individually confirmed by VFD settlement for this cycle.
+  const funding = await verifyCycleFunding(groupId, currentCycle, amount, memberCount);
+  if (!funding.ok) {
+    console.error(`[processAutoPayout] BLOCKED group=${groupId} cycle=${currentCycle} — expected ₦${funding.expected_cycle_funding}, confirmed ₦${funding.confirmed_cycle_funding}, ${funding.missing_members.length} member(s) outstanding`);
+    return {
+      success: false,
+      held: true,
+      error: `PAYOUT BLOCKED — ₦${funding.outstanding_cycle_funding.toLocaleString()} CONTRIBUTION OUTSTANDING`,
+      gross_payout: grossAmount,
+      funding_report: funding,
+    };
+  }
+
   // PRODUCTION PARITY: Tiered fee structure
   const platformFee = calculatePlatformFee(grossAmount);
+
 
   // ===========================================================
   // PAYOUT ELIGIBILITY GATE (single choke point for every payout)
@@ -1253,7 +1273,18 @@ async function processAutoPayout(
       "payout_received", groupId);
   }
 
-  return { success: true, recipient_id: recipientId, net_amount: netAmount, platform_fee: feeCharged, withheld, recovered_outstanding: recovered, residual_owed: residual };
+  return {
+    success: true, recipient_id: recipientId,
+    expected_cycle_funding: funding.expected_cycle_funding,
+    confirmed_cycle_funding: funding.confirmed_cycle_funding,
+    gross_payout: grossAmount,
+    service_fee: feeCharged,
+    net_customer_payout: netAmount,
+    net_amount: netAmount, platform_fee: feeCharged,
+    withheld, recovered_outstanding: recovered, residual_owed: residual,
+    funding_report: funding,
+  };
+
 
 }
 
@@ -8663,6 +8694,80 @@ async function cycleCollectionsConfirmed(groupId: string, cycleNumber: number) {
   const db = getSupabaseAdmin();
   return await allInboundConfirmed(db, "thrift", groupId, `c${cycleNumber}`);
 }
+
+/**
+ * POSITIVE funding proof for a cycle.
+ *
+ * Configuration decides what MUST arrive (expected_contribution_per_member ×
+ * expected_member_count = expected_cycle_funding, which is also the gross
+ * payout). VFD settlement records only AUTHORIZE the payout — they never
+ * resize it. Validation is per member, so one member overpaying can never
+ * cover another member's missing contribution.
+ */
+async function verifyCycleFunding(
+  groupId: string,
+  cycleNumber: number,
+  expectedPerMember: number,
+  expectedMemberCount: number,
+) {
+  const db = getSupabaseAdmin();
+  const cycleTag = `c${cycleNumber}`;
+
+  const { data: memberRows } = await db.from("vfd_sandbox_group_members")
+    .select("user_id, status").eq("group_id", groupId).eq("status", "active");
+  const activeMembers = (memberRows || []).map((m: Record<string, unknown>) => String(m.user_id));
+
+  const { data: settleRows } = await db.from("settlement_records")
+    .select("user_id, amount, status, metadata, provider_reference")
+    .eq("product_type", "thrift")
+    .eq("product_reference", groupId)
+    .eq("direction", "in")
+    .eq("status", "confirmed");
+
+  const confirmedByMember = new Map<string, number>();
+  for (const r of (settleRows || []) as Array<Record<string, unknown>>) {
+    const tag = String((r.metadata as Record<string, unknown>)?.cycle_tag || "");
+    if (tag !== cycleTag) continue;
+    const uid = String(r.user_id || "");
+    if (!uid) continue;
+    confirmedByMember.set(uid, Math.round(((confirmedByMember.get(uid) || 0) + Number(r.amount || 0)) * 100) / 100);
+  }
+
+  const members = activeMembers.map((uid) => {
+    const confirmed = confirmedByMember.get(uid) || 0;
+    return {
+      user_id: uid,
+      expected: expectedPerMember,
+      confirmed,
+      shortfall: Math.max(0, Math.round((expectedPerMember - confirmed) * 100) / 100),
+      fully_funded: confirmed + 0.005 >= expectedPerMember,
+    };
+  });
+
+  const expectedCycleFunding = Math.round(expectedPerMember * expectedMemberCount * 100) / 100;
+  // Only count each member up to their expected amount — overpayment by one
+  // member must never mask another member's shortfall.
+  const confirmedCycleFunding = Math.round(
+    members.reduce((s, m) => s + Math.min(m.confirmed, m.expected), 0) * 100,
+  ) / 100;
+  const missingMembers = members.filter((m) => !m.fully_funded);
+  const memberCountOk = activeMembers.length >= expectedMemberCount;
+
+  return {
+    ok: memberCountOk && missingMembers.length === 0 && confirmedCycleFunding + 0.005 >= expectedCycleFunding,
+    cycle_number: cycleNumber,
+    expected_member_count: expectedMemberCount,
+    confirmed_member_count: members.filter((m) => m.fully_funded).length,
+    expected_contribution_per_member: expectedPerMember,
+    expected_cycle_funding: expectedCycleFunding,
+    confirmed_cycle_funding: confirmedCycleFunding,
+    outstanding_cycle_funding: Math.max(0, Math.round((expectedCycleFunding - confirmedCycleFunding) * 100) / 100),
+    members,
+    missing_members: missingMembers,
+  };
+}
+
+
 
 // Cycle-time mandate debit. Inserts a pending ledger entry, calls VFD,
 // then confirms or fails the entry and updates the pool ledger balance.
