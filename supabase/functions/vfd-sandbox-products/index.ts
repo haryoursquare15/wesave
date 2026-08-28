@@ -1069,7 +1069,128 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
   });
 }
 
+// =============================================
+// THRIFT FUNDING-MODE ENFORCEMENT
+// A group has exactly ONE funding method, decided at group level:
+//   funding_mode = 'ddm'    -> every active member funds by VFD e-mandate ONLY
+//   funding_mode = 'wallet' -> every active member funds from the Vestara wallet ONLY
+// Mixed funding is never permitted, and an inconsistent member record fails
+// closed (blocked / funding_method_mismatch) rather than being guessed at.
+// =============================================
+async function assertGroupFundingConsistency(
+  groupId: string,
+  fundingModeRaw?: string,
+): Promise<{ ok: boolean; funding_mode: string; offenders: Array<Record<string, unknown>> }> {
+  const db = getSupabaseAdmin();
+  let mode = (fundingModeRaw || "").trim();
+  if (!mode) {
+    const { data: g } = await db.from("vfd_sandbox_groups")
+      .select("funding_mode").eq("id", groupId).maybeSingle();
+    mode = (g?.funding_mode as string) || "wallet";
+  }
+  const expectedMethod = mode === "ddm" ? "direct_debit" : "wallet";
+
+  const { data: rows } = await db.from("vfd_sandbox_group_members")
+    .select("id, user_id, contribution_method, status")
+    .eq("group_id", groupId).eq("status", "active");
+
+  const offenders = ((rows || []) as Array<Record<string, unknown>>)
+    .filter((m) => {
+      const method = (m.contribution_method as string) || "";
+      // An unset legacy method inherits the group mode; anything explicitly set
+      // to the other method is a hard mismatch.
+      return method !== "" && method !== expectedMethod;
+    })
+    .map((m) => ({
+      member_id: m.id,
+      user_id: m.user_id,
+      contribution_method: m.contribution_method,
+      expected_contribution_method: expectedMethod,
+    }));
+
+  return { ok: offenders.length === 0, funding_mode: mode, offenders };
+}
+
+// Deterministic references — the single source of truth for recovery.
+function bankPayoutReference(cycleId: string): string {
+  return `AJO-PAYOUT-${String(cycleId).replace(/-/g, "").slice(0, 20)}`;
+}
+function ledgerPayoutReference(groupId: string, cycleId: string): string {
+  return `ajo-payout-${groupId}-${cycleId}`;
+}
+
+/** Has the internal ledger payout for this reference already been posted? */
+async function ledgerPayoutExists(reference: string): Promise<boolean> {
+  const db = getSupabaseAdmin();
+  const { data } = await db.from("vestara_transactions")
+    .select("id").eq("reference", reference).maybeSingle();
+  return !!data?.id;
+}
+
+type PayoutClaim = {
+  claimed: boolean;
+  reason?: "already_processing" | "already_completed";
+  row?: Record<string, unknown>;
+};
+
+/**
+ * Atomically claim payout processing for group_id + cycle_number.
+ * Backed by the unique index (group_id, cycle_number) on
+ * vfd_sandbox_group_payouts, so two concurrent invocations can never both own
+ * the payout. VFD's duplicate-reference protection remains a LAST line of
+ * defence, never the primary concurrency control.
+ */
+async function claimPayout(p: {
+  groupId: string; cycleId: string; cycleNumber: number; recipientId: string;
+  grossAmount: number; fee: number; netAmount: number; recovered: number; withheld: boolean;
+}): Promise<PayoutClaim> {
+  const db = getSupabaseAdmin();
+  const nowIso = new Date().toISOString();
+  const seed = {
+    group_id: p.groupId, recipient_id: p.recipientId, cycle_number: p.cycleNumber,
+    cycle_id: p.cycleId,
+    gross_amount: p.grossAmount, platform_fee: p.fee, net_amount: p.netAmount,
+    recovered_outstanding: p.recovered, withheld: p.withheld,
+    payout_reference: ledgerPayoutReference(p.groupId, p.cycleId),
+    vfd_reference: bankPayoutReference(p.cycleId),
+    payout_status: "processing", bank_status: p.netAmount > 0 ? "not_sent" : "not_required",
+    ledger_status: "pending", attempts: 1, updated_at: nowIso,
+  };
+
+  // First writer wins the insert; everyone else conflicts.
+  const { data: inserted } = await db.from("vfd_sandbox_group_payouts")
+    .insert(seed).select("*").maybeSingle();
+  if (inserted?.id) return { claimed: true, row: inserted as Record<string, unknown> };
+
+  const { data: existing } = await db.from("vfd_sandbox_group_payouts")
+    .select("*").eq("group_id", p.groupId).eq("cycle_number", p.cycleNumber).maybeSingle();
+  if (!existing) return { claimed: false, reason: "already_processing" };
+  if (existing.payout_status === "completed") return { claimed: false, reason: "already_completed", row: existing };
+
+  // Re-claim ONLY from a terminal-but-recoverable state. A row already in
+  // 'processing' belongs to another invocation.
+  const { data: reclaimed } = await db.from("vfd_sandbox_group_payouts")
+    .update({
+      payout_status: "processing",
+      attempts: Number(existing.attempts || 0) + 1,
+      updated_at: nowIso,
+    })
+    .eq("id", existing.id as string)
+    .in("payout_status", ["pending", "failed", "retryable", "bank_confirmed_ledger_pending"])
+    .select("*").maybeSingle();
+
+  if (!reclaimed?.id) return { claimed: false, reason: "already_processing", row: existing };
+  return { claimed: true, row: reclaimed as Record<string, unknown> };
+}
+
+async function updatePayoutRow(id: string, patch: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  await db.from("vfd_sandbox_group_payouts")
+    .update({ ...patch, updated_at: new Date().toISOString() }).eq("id", id);
+}
+
 // AUTO-PAYOUT (Production parity: tiered fee, credit recipient wallet, advance cycle)
+
 async function processAutoPayout(
   db: ReturnType<typeof createClient>,
   group: Record<string, unknown>,
