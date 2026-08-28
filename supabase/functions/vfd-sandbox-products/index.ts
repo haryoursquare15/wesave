@@ -951,6 +951,17 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
     // via NIBSS into the Vestara corporate pool.
     const ddm = await performMandateDebitForMember(group, myMember, Number(group.current_cycle));
     if (!ddm.success) {
+      // Bank accepted the collection but settlement is not confirmed yet.
+      // Nothing internal is credited until it is — this is not an error.
+      if ((ddm.details as any)?.code === "AWAITING_SETTLEMENT") {
+        return jsonResponse({
+          data: {
+            success: true, contributed: false, awaiting_settlement: true, amount,
+            cycle: group.current_cycle, payment_source: "ddm",
+            message: "Your bank has been debited. We'll credit your contribution as soon as the funds are confirmed settled.",
+          },
+        });
+      }
       return jsonResponse({
         error: ddm.error || "Direct debit could not be collected. Please try again or contact support.",
         code: (ddm.details as any)?.code === "MANDATE_NOT_ACTIVE" ? "MANDATE_NOT_AUTHORIZED" : "MANDATE_DEBIT_FAILED",
