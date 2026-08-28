@@ -1126,6 +1126,26 @@ async function processAutoPayout(
   // the funds simply stay in the group's thrift pool (covering the shortfall
   // the member's missed contributions created).
   if (debitFromPool > 0) {
+    // REAL money-out leg FIRST: corporate pool -> recipient's own NUBAN,
+    // independently verified. The internal ledger only mirrors it afterwards.
+    if (netAmount > 0) {
+      const bankPayout = await payoutFromPoolToCustomer({
+        userId: recipientId,
+        amount: netAmount,
+        reference: `AJO-PAYOUT-${String(activeCycle.id).replace(/-/g, "").slice(0, 20)}`,
+        remark: `Thrift payout cycle ${currentCycle}`,
+        productType: "thrift",
+        productReference: groupId,
+      });
+      if (!bankPayout.confirmed) {
+        const err = bankPayout.error || "Bank payout not confirmed";
+        console.error(`[processAutoPayout] bank leg unconfirmed group=${groupId} cycle=${currentCycle}: ${bankPayout.code}`);
+        await sendNotification(recipientId, "Payout Processing",
+          `Your ₦${netAmount.toLocaleString()} payout from ${group.name} has been submitted to the bank and is awaiting confirmation. It will reflect shortly.`,
+          "payout_notification", groupId);
+        return { success: false, error: err, code: bankPayout.code, awaiting_settlement: true };
+      }
+    }
     const payout = await creditVestaraThriftPayout(recipientId, groupId, debitFromPool, feeCharged, `ajo-payout-${groupId}-${activeCycle.id}`, {
       cycle_id: activeCycle.id,
       cycle_number: currentCycle,
