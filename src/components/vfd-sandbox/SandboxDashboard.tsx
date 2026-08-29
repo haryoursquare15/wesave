@@ -207,7 +207,7 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
   const [copied, setCopied] = useState(false);
   const [activeBanner, setActiveBanner] = useState(0);
   const [openCategory, setOpenCategory] = useState<string | null>(null);
-  const // Per-product aggregate holdings (product_code → { total, count }) shown on
+  // Per-product aggregate holdings (product_code → { total, count }) shown on
   // each product banner so users can see what they already have at a glance.
   const [holdings, setHoldings] = useState<Record<string, { total: number; count: number }>>({});
   const bannerRef = useRef<HTMLDivElement>(null);
