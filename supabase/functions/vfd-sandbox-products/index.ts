@@ -7903,23 +7903,28 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
     const MAX_RETRIES = 3;
     const RETRY_INTERVAL_MS = 30 * 60 * 1000;
     let succeeded = 0, failed = 0, deferred = 0, penalized = 0;
+    // Per-member outcome trace so an operator can see WHY a member was skipped
+    // instead of only seeing an aggregate "deferred" count.
+    const memberResults: Array<Record<string, unknown>> = [];
 
     for (const m of (pending || [])) {
       const { data: successAudit } = await db.from("vfd_sandbox_contribution_audit")
         .select("id").eq("user_id", m.user_id).eq("cycle_id", activeCycle.id)
         .eq("status", "success").maybeSingle();
-      if (successAudit) continue;
+      if (successAudit) { memberResults.push({ user_id: m.user_id, outcome: "already_success" }); continue; }
 
       const { data: existingFailed } = await db.from("vfd_sandbox_contribution_audit")
         .select("id, retry_count, next_retry_at, penalty_served")
         .eq("user_id", m.user_id).eq("cycle_id", activeCycle.id)
         .eq("status", "failed").maybeSingle();
 
-      if (existingFailed?.penalty_served) continue;
+      if (existingFailed?.penalty_served) { memberResults.push({ user_id: m.user_id, outcome: "penalty_served" }); continue; }
       if (!forceGroupId && existingFailed?.next_retry_at && new Date(existingFailed.next_retry_at) > now) {
         deferred++;
+        memberResults.push({ user_id: m.user_id, outcome: "deferred", reason: "retry_cooldown", next_retry_at: existingFailed.next_retry_at });
         continue;
       }
+
 
       const amount = Number(group.contribution_amount);
       // Never member-level: the group's mode decides the funding pipeline.
@@ -7998,8 +8003,10 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
             "contribution_pending", group.id);
         }
         deferred++;
+        memberResults.push({ user_id: m.user_id, outcome: "deferred", reason: softCode, detail: (debit as any).error });
         continue;
       }
+
 
       if (debit.success) {
         await db.from("vfd_sandbox_group_contributions").insert({
@@ -8101,7 +8108,7 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
       await processAutoPayout(db, group, activeCycle);
     }
 
-    processed.push({ group_id: group.id, name: group.name, succeeded, failed, deferred, penalized });
+    processed.push({ group_id: group.id, name: group.name, succeeded, failed, deferred, penalized, members: memberResults });
   }
 
   return jsonResponse({ data: { processed_count: processed.length, processed } });
@@ -9521,7 +9528,12 @@ async function performMandateDebitForMember(
   const result = { ok: collection.collected, raw: collection.raw, http_status: 0 };
   if (collection.skipped) {
     if (ledgerEntry?.id) await db.from("vfd_sandbox_thrift_ledger_entries").delete().eq("id", ledgerEntry.id);
-    return { success: false, error: "Already collected for this cycle", details: { code: "ALREADY_COLLECTED" } };
+    return {
+      success: false,
+      error: `Already collected for this cycle (${collection.reason || "already_claimed"})`,
+      details: { code: "ALREADY_COLLECTED", claim_reason: collection.reason },
+    };
+
   }
 
   const nowIso = new Date().toISOString();
