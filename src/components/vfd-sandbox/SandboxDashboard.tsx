@@ -207,8 +207,37 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
   const [copied, setCopied] = useState(false);
   const [activeBanner, setActiveBanner] = useState(0);
   const [openCategory, setOpenCategory] = useState<string | null>(null);
+  const // Per-product aggregate holdings (product_code → { total, count }) shown on
+  // each product banner so users can see what they already have at a glance.
+  const [holdings, setHoldings] = useState<Record<string, { total: number; count: number }>>({});
   const bannerRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || cancelled) return;
+      const { data } = await supabase
+        .from("vestara_savings")
+        .select("product_code, principal, status, approval_status")
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .neq("approval_status", "pending");
+      if (cancelled || !data) return;
+      const agg: Record<string, { total: number; count: number }> = {};
+      for (const row of data) {
+        const code = (row as any).product_code as string;
+        if (!code) continue;
+        const prev = agg[code] || { total: 0, count: 0 };
+        prev.total += Number((row as any).principal || 0);
+        prev.count += 1;
+        agg[code] = prev;
+      }
+      setHoldings(agg);
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Auto-scroll banners
   useEffect(() => {
