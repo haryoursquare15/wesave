@@ -10317,6 +10317,7 @@ Deno.serve(async (req) => {
       case "get_group_detail": return await handleGetGroupDetail(userId, body);
       case "request_swap": return await handleRequestSwap(userId, body);
       case "settle_member_outstanding": return await handleSettleMemberOutstanding(userId, body);
+      case "clear_missed_contribution": return await handleClearMissedContribution(userId, body);
       case "respond_swap": return await handleRespondSwap(userId, body);
       case "exit_group": return await handleExitGroup(userId, body);
       case "confirm_continue": return await handleConfirmContinue(userId, body);
