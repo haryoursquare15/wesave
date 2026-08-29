@@ -7588,6 +7588,189 @@ async function handleListGroupChat(userId: string, body: Record<string, unknown>
   return jsonResponse({ data: attachNames(chat, names) });
 }
 
+// ============================================================================
+// ELAPSED-MANDATE WALLET RECOVERY
+// A mandate that has elapsed (expired / failed / cancelled at the bank) must
+// NEVER be re-presented to VFD/NIBSS. Instead the defaulting member clears the
+// missed cycle from their Vestara wallet: contribution amount + penal charge.
+// - Wallet must hold the FULL amount (contribution + penalty) — otherwise it is
+//   treated as insufficient funds and the member is asked to fund their wallet.
+// - The contribution leg lands in the corporate pool so the payout order is
+//   honoured; the penal charge is booked as platform penalty revenue.
+// ============================================================================
+
+const MANDATE_ELAPSED_STATUSES = new Set(["expired", "failed", "cancelled", "revoked"]);
+
+/**
+ * Is this member's mandate still presentable to the bank for this cycle?
+ * Uses the canonical `mandates` registry (bank truth) plus the member mirror.
+ */
+async function isMandatePresentable(
+  groupId: string,
+  userId: string,
+  memberMandateStatus: string | null,
+): Promise<{ presentable: boolean; reason: string }> {
+  const db = getSupabaseAdmin();
+  const mirror = String(memberMandateStatus || "");
+  const { data: canonRows } = await db.from("mandates")
+    .select("status, expires_at, created_at")
+    .eq("product_type", "thrift").eq("product_reference", groupId).eq("user_id", userId)
+    .order("created_at", { ascending: false });
+  const rows = canonRows || [];
+  const canon = rows.find((r: any) => r.status === "bank_approved") || rows[0];
+  const canonStatus = String(canon?.status || "");
+
+  if (MANDATE_ELAPSED_STATUSES.has(mirror)) return { presentable: false, reason: `mandate_${mirror}` };
+  if (MANDATE_ELAPSED_STATUSES.has(canonStatus)) return { presentable: false, reason: `mandate_${canonStatus}` };
+  if (canon?.expires_at && new Date(canon.expires_at as string).getTime() < Date.now()) {
+    return { presentable: false, reason: "mandate_elapsed" };
+  }
+  return { presentable: true, reason: "ok" };
+}
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * Sweep contribution + penal charge from the defaulting member's wallet.
+ * Idempotent: stable references, guarded by the cycle's contribution row.
+ */
+async function settleMissedContributionFromWallet(
+  group: Record<string, any>,
+  member: Record<string, any>,
+  activeCycle: Record<string, any>,
+  reason: string,
+): Promise<{
+  success: boolean; code?: string; error?: string;
+  amount?: number; penalty?: number; total?: number; shortfall?: number;
+}> {
+  const db = getSupabaseAdmin();
+  const groupId = group.id as string;
+  const userId = member.user_id as string;
+  const amount = Number(group.contribution_amount) || 0;
+  const penalty = calculateContributionPenalty(amount);
+  const total = round2(amount + penalty);
+
+  const { data: existingContribution } = await db.from("vfd_sandbox_group_contributions")
+    .select("id").eq("group_id", groupId).eq("user_id", userId)
+    .eq("cycle_number", Number(group.current_cycle)).maybeSingle();
+  if (existingContribution) return { success: true, code: "ALREADY_SETTLED", amount, penalty, total };
+
+  // FULL amount rule — contribution AND penal charge must both be available.
+  const walletBalance = await getVestaraWalletBalance(userId);
+  if (walletBalance + 0.005 < total) {
+    const shortfall = round2(total - walletBalance);
+    await sendNotification(userId, "Fund Your Wallet to Clear Missed Contribution",
+      `Your direct debit mandate for ${group.name} has elapsed, so we can no longer debit your bank for cycle ${group.current_cycle}. Fund your Vestara wallet with ₦${shortfall.toLocaleString()} more (₦${total.toLocaleString()} total = ₦${amount.toLocaleString()} contribution + ₦${penalty.toLocaleString()} penal charge) and we'll clear it automatically so the cycle can continue.`,
+      "contribution_failed", groupId);
+    return {
+      success: false, code: "INSUFFICIENT_WALLET_FUNDS",
+      error: `Insufficient wallet balance — ₦${total.toLocaleString()} required (contribution + penal charge)`,
+      amount, penalty, total, shortfall,
+    };
+  }
+
+  // Real bank leg: member NUBAN -> corporate pool for the FULL swept amount.
+  const recoveryRef = `ajo-wallet-recovery-${groupId}-${activeCycle.id}-${userId}`;
+  const funding = await collectFromCustomerToPool({
+    userId, amount: total, reference: recoveryRef,
+    productType: "thrift", productReference: groupId,
+    metadata: {
+      cycle_tag: `c${group.current_cycle}`, cycle_id: activeCycle.id,
+      source: "elapsed_mandate_wallet_recovery", reason,
+      contribution_amount: amount, penal_charge: penalty,
+    },
+  });
+  if (!funding.confirmed) {
+    return {
+      success: false, code: funding.code || "SETTLEMENT_UNCONFIRMED",
+      error: funding.error || "Bank settlement not confirmed", amount, penalty, total,
+    };
+  }
+
+  // Internal leg 1 — contribution into the group pool (honours payout order).
+  const contrib = await debitVestaraForThrift(userId, groupId, amount, `${recoveryRef}-CONTRIB`, {
+    cycle_id: activeCycle.id, cycle_number: group.current_cycle,
+    source: "elapsed_mandate_wallet_recovery", reason, settlement_reference: `${recoveryRef}-FUND`,
+  });
+  if (contrib && (contrib as any).success === false) {
+    return { success: false, code: "LEDGER_POST_FAILED", error: (contrib as any).error, amount, penalty, total };
+  }
+
+  // Internal leg 2 — penal charge booked as platform penalty revenue.
+  const { error: penErr } = await db.rpc("vestara_withdraw", {
+    _user_id: userId, _amount: penalty, _reference: `${recoveryRef}-PENALTY`,
+    _metadata: {
+      purpose: "thrift_missed_ddm_penalty", group_id: groupId,
+      cycle_id: activeCycle.id, cycle_number: group.current_cycle, reason,
+    },
+  });
+  if (!penErr) {
+    await db.rpc("record_platform_fee", {
+      _amount: penalty, _source_type: "thrift_missed_ddm_penalty",
+      _source_id: `${recoveryRef}-PENALTY`, _source_user_id: userId, _source_group_id: groupId,
+    });
+  } else {
+    console.error("[wallet_recovery] penalty posting failed:", penErr.message);
+  }
+
+  // Penal charge is settled at source — nothing is left outstanding.
+  await db.from("vfd_sandbox_penalties")
+    .update({ recovered_at: new Date().toISOString() })
+    .eq("group_id", groupId).eq("user_id", userId).eq("cycle_id", activeCycle.id).is("recovered_at", null);
+
+  await finalizeThriftContribution({
+    groupId, userId, cycleNumber: Number(group.current_cycle), amount, isDdm: true,
+  });
+
+  await postChatMessage(groupId, userId,
+    `✅ Missed direct debit cleared from wallet — ₦${amount.toLocaleString()} contribution + ₦${penalty.toLocaleString()} penal charge (mandate elapsed).`,
+    "contribution_status");
+  await sendNotification(userId, "Missed Contribution Cleared",
+    `₦${total.toLocaleString()} was swept from your Vestara wallet for ${group.name} — ₦${amount.toLocaleString()} contribution (now in the group pool) and ₦${penalty.toLocaleString()} penal charge.`,
+    "contribution_success", groupId);
+
+  return { success: true, amount, penalty, total };
+}
+
+/**
+ * Customer-facing: clear a missed direct debit from wallet once the mandate
+ * has elapsed. Same rules as the automatic sweep.
+ */
+async function handleClearMissedContribution(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const groupId = body.group_id as string;
+  if (!groupId) return jsonResponse({ error: "group_id required" }, 400);
+
+  const { data: member } = await db.from("vfd_sandbox_group_members")
+    .select("id, user_id, contribution_method, mandate_status, mandate_code, mandate_reference, has_contributed_current")
+    .eq("group_id", groupId).eq("user_id", userId).eq("status", "active").maybeSingle();
+  if (!member) return jsonResponse({ error: "You are not an active member of this group" }, 403);
+
+  const { data: group } = await db.from("vfd_sandbox_groups").select("*").eq("id", groupId).maybeSingle();
+  if (!group || group.status !== "active") return jsonResponse({ error: "This group is not active" }, 400);
+
+  const { data: cycles } = await db.from("vfd_sandbox_contribution_cycles")
+    .select("*").eq("group_id", groupId).eq("status", "active")
+    .order("created_at", { ascending: true }).limit(1);
+  const activeCycle = cycles?.[0];
+  if (!activeCycle) return jsonResponse({ error: "No active cycle to clear" }, 400);
+  if (member.has_contributed_current) {
+    return jsonResponse({ error: "You have already contributed for this cycle" }, 400);
+  }
+
+  const presentable = await isMandatePresentable(groupId, userId, member.mandate_status as string);
+  if (presentable.presentable && (group.funding_mode as string) === "ddm") {
+    return jsonResponse({
+      error: "Your mandate is still active — this cycle will be debited from your bank automatically.",
+      code: "MANDATE_STILL_ACTIVE",
+    }, 400);
+  }
+
+  const result = await settleMissedContributionFromWallet(group, member, activeCycle, presentable.reason);
+  if (!result.success) return jsonResponse({ error: result.error, code: result.code, ...result }, 400);
+  return jsonResponse({ data: { success: true, ...result } });
+}
+
 // =============================================
 // AUTO-CONTRIBUTION SWEEP (cron-driven, wallet-only)
 // Mirrors production: daily/weekly/monthly at scheduled WAT hour:minute,
