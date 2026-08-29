@@ -7924,6 +7924,44 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
       const amount = Number(group.contribution_amount);
       // Never member-level: the group's mode decides the funding pipeline.
       const isDdmMember = groupIsDdm;
+
+      // ELAPSED MANDATE: do NOT re-present to VFD/NIBSS. Sweep the amount due
+      // plus the penal charge from the defaulting member's wallet instead.
+      if (isDdmMember) {
+        const presentable = await isMandatePresentable(group.id, m.user_id, m.mandate_status as string);
+        if (!presentable.presentable) {
+          const recovery = await settleMissedContributionFromWallet(group, m, activeCycle, presentable.reason);
+          if (recovery.success) {
+            if (existingFailed) {
+              await db.from("vfd_sandbox_contribution_audit").update({
+                error_message: null, next_retry_at: null,
+              }).eq("id", existingFailed.id);
+            }
+            succeeded++;
+          } else {
+            const walletErr = recovery.error || "Wallet recovery failed";
+            const nextRetry = new Date(Date.now() + RETRY_INTERVAL_MS).toISOString();
+            if (existingFailed) {
+              await db.from("vfd_sandbox_contribution_audit").update({
+                error_message: walletErr, next_retry_at: nextRetry, penalty_served: false,
+              }).eq("id", existingFailed.id);
+            } else {
+              await db.from("vfd_sandbox_contribution_audit").insert({
+                user_id: m.user_id, group_id: group.id, cycle_id: activeCycle.id,
+                amount, contribution_type: "wallet_recovery", status: "failed",
+                retry_count: 0, next_retry_at: nextRetry,
+                error_message: walletErr, penalty_served: false,
+              });
+            }
+            await postChatMessage(group.id, m.user_id,
+              `⚠️ Mandate elapsed — ₦${(recovery.total || amount).toLocaleString()} (contribution + penal charge) could not be swept from wallet: ${walletErr}.`,
+              "contribution_failed");
+            failed++;
+          }
+          continue;
+        }
+      }
+
       const debit = isDdmMember
         ? await (async () => {
             const r = await performMandateDebitForMember(group, m, Number(group.current_cycle));
