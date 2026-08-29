@@ -543,34 +543,22 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
                 <div className={`absolute top-3 right-3 w-16 h-16 rounded-2xl ${banner.accent} flex items-center justify-center`}>
                   <banner.icon className="h-8 w-8 text-white/80" />
                 </div>
-                <div className="relative z-10">
-                  <h4 className="text-base font-bold text-white mb-1">{banner.title}</h4>
-                  <p className="text-xs text-white/80 mb-3 max-w-[75%] leading-relaxed">{banner.subtitle}</p>
-
-                  {/* Customer's aggregate holding in this product — clear & distinct */}
-                  <div className="mb-4 inline-flex flex-col rounded-xl bg-white/15 backdrop-blur-sm border border-white/25 px-3 py-2">
-                    <span className="text-[9px] font-semibold uppercase tracking-widest text-white/70">
-                      Your {banner.title}
-                    </span>
-                    {holding && showBalance ? (
-                      <span className="text-sm font-extrabold text-white leading-tight">
-                        ₦{holding.total.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                        <span className="ml-1.5 text-[10px] font-medium text-white/75">
-                          · {holding.count} plan{holding.count === 1 ? "" : "s"}
-                        </span>
-                      </span>
-                    ) : holding ? (
-                      <span className="text-sm font-extrabold text-white leading-tight">••••</span>
-                    ) : (
-                      <span className="text-[11px] font-semibold text-white/80 leading-tight">
-                        No active plan yet
-                      </span>
-                    )}
+                <div className="relative z-10 min-h-[132px] flex flex-col justify-between">
+                  <div>
+                    <h4 className="text-base font-bold text-white mb-1">{banner.title}</h4>
+                    <p className="text-xs text-white/80 max-w-[75%] leading-relaxed">{banner.subtitle}</p>
                   </div>
 
-                  <div>
+                  <div className="flex items-end justify-between">
                     <span className="inline-block text-xs font-semibold text-white bg-white/20 px-3 py-1.5 rounded-full backdrop-blur-sm">
                       {banner.cta}
+                    </span>
+                    <span className="text-[11px] font-semibold text-white/90 tabular-nums">
+                      {holding && showBalance
+                        ? `₦${holding.total.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+                        : holding && !showBalance
+                        ? "••••"
+                        : "₦0"}
                     </span>
                   </div>
                 </div>
