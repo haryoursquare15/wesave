@@ -7860,18 +7860,27 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
 
     // ALL-OR-NOTHING: for an E-Mandate group, no member is debited unless every
     // active member's mandate is bank-approved. Never debit partially.
+    // EXCEPTION: a mandate that has ELAPSED (expired/failed at the bank) is not
+    // a "pending authorization" — it is a default. Those members are recovered
+    // from their wallet (contribution + penal charge) instead of stalling a
+    // running cycle for everyone.
     const sweepGate = await checkGroupMandateGate(group.id);
     if (!sweepGate.ok) {
-      await db.from("vfd_sandbox_groups").update({
-        commencement_status: "pending_mandate_auth", updated_at: new Date().toISOString(),
-      }).eq("id", group.id);
-      processed.push({
-        group_id: group.id, name: group.name, skipped: "MANDATES_PENDING",
-        approved_count: sweepGate.approved_count, total_members: sweepGate.total_members,
-        blocking_members: sweepGate.blocking_members.map((b) => ({ name: b.name, mandate_status: b.mandate_status })),
-      });
-      continue;
+      const elapsedOnly = sweepGate.blocking_members.length > 0
+        && sweepGate.blocking_members.every((b) => b.mandate_status === "expired" || b.mandate_status === "failed");
+      if (!elapsedOnly) {
+        await db.from("vfd_sandbox_groups").update({
+          commencement_status: "pending_mandate_auth", updated_at: new Date().toISOString(),
+        }).eq("id", group.id);
+        processed.push({
+          group_id: group.id, name: group.name, skipped: "MANDATES_PENDING",
+          approved_count: sweepGate.approved_count, total_members: sweepGate.total_members,
+          blocking_members: sweepGate.blocking_members.map((b) => ({ name: b.name, mandate_status: b.mandate_status })),
+        });
+        continue;
+      }
     }
+
     // GROUP FUNDING MODE IS AUTHORITATIVE — fail closed on any mixed state.
     const sweepConsistency = await assertGroupFundingConsistency(group.id, group.funding_mode as string);
     if (!sweepConsistency.ok) {
