@@ -532,24 +532,51 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
             }
           }}
         >
-          {productBanners.map((banner) => (
-            <button
-              key={banner.key}
-              onClick={() => onNavigate(banner.routeKey)}
-              className={`flex-none w-[80%] min-w-[260px] snap-center rounded-2xl bg-gradient-to-br ${banner.gradient} p-5 text-left relative overflow-hidden active:scale-[0.99] transition-transform`}
-            >
-              <div className={`absolute top-3 right-3 w-16 h-16 rounded-2xl ${banner.accent} flex items-center justify-center`}>
-                <banner.icon className="h-8 w-8 text-white/80" />
-              </div>
-              <div className="relative z-10">
-                <h4 className="text-base font-bold text-white mb-1">{banner.title}</h4>
-                <p className="text-xs text-white/80 mb-4 max-w-[75%] leading-relaxed">{banner.subtitle}</p>
-                <span className="inline-block text-xs font-semibold text-white bg-white/20 px-3 py-1.5 rounded-full backdrop-blur-sm">
-                  {banner.cta}
-                </span>
-              </div>
-            </button>
-          ))}
+          {productBanners.map((banner) => {
+            const holding = holdings[banner.key];
+            return (
+              <button
+                key={banner.key}
+                onClick={() => onNavigate(banner.routeKey)}
+                className={`flex-none w-[80%] min-w-[260px] snap-center rounded-2xl bg-gradient-to-br ${banner.gradient} p-5 text-left relative overflow-hidden active:scale-[0.99] transition-transform`}
+              >
+                <div className={`absolute top-3 right-3 w-16 h-16 rounded-2xl ${banner.accent} flex items-center justify-center`}>
+                  <banner.icon className="h-8 w-8 text-white/80" />
+                </div>
+                <div className="relative z-10">
+                  <h4 className="text-base font-bold text-white mb-1">{banner.title}</h4>
+                  <p className="text-xs text-white/80 mb-3 max-w-[75%] leading-relaxed">{banner.subtitle}</p>
+
+                  {/* Customer's aggregate holding in this product — clear & distinct */}
+                  <div className="mb-4 inline-flex flex-col rounded-xl bg-white/15 backdrop-blur-sm border border-white/25 px-3 py-2">
+                    <span className="text-[9px] font-semibold uppercase tracking-widest text-white/70">
+                      Your {banner.title}
+                    </span>
+                    {holding && showBalance ? (
+                      <span className="text-sm font-extrabold text-white leading-tight">
+                        ₦{holding.total.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                        <span className="ml-1.5 text-[10px] font-medium text-white/75">
+                          · {holding.count} plan{holding.count === 1 ? "" : "s"}
+                        </span>
+                      </span>
+                    ) : holding ? (
+                      <span className="text-sm font-extrabold text-white leading-tight">••••</span>
+                    ) : (
+                      <span className="text-[11px] font-semibold text-white/80 leading-tight">
+                        No active plan yet
+                      </span>
+                    )}
+                  </div>
+
+                  <div>
+                    <span className="inline-block text-xs font-semibold text-white bg-white/20 px-3 py-1.5 rounded-full backdrop-blur-sm">
+                      {banner.cta}
+                    </span>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
         </div>
 
       </motion.div>
