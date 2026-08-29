@@ -1,0 +1,1 @@
+ALTER TABLE public.mandate_debit_attempts DROP CONSTRAINT IF EXISTS mandate_debit_attempts_unique_cycle;
