@@ -7624,19 +7624,47 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
   const dayOfWeek = wat.getUTCDay();
   const dayOfMonth = wat.getUTCDate();
 
-  let q = db.from("vfd_sandbox_groups").select("*").eq("status", "active").eq("auto_debit", true);
-  if (forceGroupId) q = q.eq("id", forceGroupId);
-  else q = q.eq("contribution_hour", watHour);
+  let groups: Array<Record<string, any>> = [];
+  if (forceGroupId) {
+    const { data } = await db.from("vfd_sandbox_groups").select("*")
+      .eq("status", "active").eq("auto_debit", true).eq("id", forceGroupId);
+    groups = data || [];
+  } else {
+    // Scheduled collections and overdue retries are separate queues. A failed
+    // member must be reconsidered when next_retry_at arrives even when the
+    // group's original contribution hour has passed. This prevents one missed
+    // half-hour window from stalling an active cycle until the following day.
+    const [{ data: scheduledGroups }, { data: retryRows }] = await Promise.all([
+      db.from("vfd_sandbox_groups").select("*")
+        .eq("status", "active").eq("auto_debit", true).eq("contribution_hour", watHour),
+      db.from("vfd_sandbox_contribution_audit").select("group_id")
+        .eq("status", "failed").eq("penalty_served", false)
+        .lte("next_retry_at", now.toISOString())
+        .order("next_retry_at", { ascending: true }).limit(500),
+    ]);
 
-  const { data: groups } = await q;
+    const retryGroupIds = [...new Set((retryRows || []).map((r: { group_id: string }) => r.group_id))];
+    let retryGroups: Array<Record<string, any>> = [];
+    if (retryGroupIds.length > 0) {
+      const { data } = await db.from("vfd_sandbox_groups").select("*")
+        .eq("status", "active").eq("auto_debit", true).in("id", retryGroupIds);
+      retryGroups = data || [];
+    }
+
+    const byId = new Map<string, Record<string, any>>();
+    for (const group of [...(scheduledGroups || []), ...retryGroups]) byId.set(group.id, group);
+    groups = [...byId.values()];
+  }
   const processed: Array<Record<string, unknown>> = [];
 
   for (const group of (groups || [])) {
     if (!forceGroupId) {
-      // Filter by minute slot + period day match
-      if ((group.contribution_minute ?? 0) !== minuteSlot) continue;
-      if (group.period === "weekly" && (group.contribution_day_of_week ?? 1) !== dayOfWeek) continue;
-      if (group.period === "monthly" && (group.contribution_day_of_month ?? 1) !== dayOfMonth) continue;
+      const isScheduledWindow = group.contribution_hour === watHour
+        && (group.contribution_minute ?? 0) === minuteSlot
+        && (group.period !== "weekly" || (group.contribution_day_of_week ?? 1) === dayOfWeek)
+        && (group.period !== "monthly" || (group.contribution_day_of_month ?? 1) === dayOfMonth);
+      const hasDueRetry = retryGroupIds.includes(group.id);
+      if (!isScheduledWindow && !hasDueRetry) continue;
     }
 
     const { data: cycles } = await db.from("vfd_sandbox_contribution_cycles")
