@@ -7625,6 +7625,7 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
   const dayOfMonth = wat.getUTCDate();
 
   let groups: Array<Record<string, any>> = [];
+  let dueRetryGroupIds = new Set<string>();
   if (forceGroupId) {
     const { data } = await db.from("vfd_sandbox_groups").select("*")
       .eq("status", "active").eq("auto_debit", true).eq("id", forceGroupId);
@@ -7644,6 +7645,7 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
     ]);
 
     const retryGroupIds = [...new Set((retryRows || []).map((r: { group_id: string }) => r.group_id))];
+    dueRetryGroupIds = new Set(retryGroupIds);
     let retryGroups: Array<Record<string, any>> = [];
     if (retryGroupIds.length > 0) {
       const { data } = await db.from("vfd_sandbox_groups").select("*")
@@ -7663,7 +7665,7 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
         && (group.contribution_minute ?? 0) === minuteSlot
         && (group.period !== "weekly" || (group.contribution_day_of_week ?? 1) === dayOfWeek)
         && (group.period !== "monthly" || (group.contribution_day_of_month ?? 1) === dayOfMonth);
-      const hasDueRetry = retryGroupIds.includes(group.id);
+      const hasDueRetry = dueRetryGroupIds.has(group.id);
       if (!isScheduledWindow && !hasDueRetry) continue;
     }
 
@@ -9283,7 +9285,7 @@ async function performMandateDebitForMember(
     // being locked out until the next date, so one late member can no longer
     // stall the whole group.
     slotKey: `${groupId.slice(0, 8)}-c${cycleIndex}`,
-    retryAfterMinutes: 60,
+    retryAfterMinutes: 30,
     maxAttempts: 3,
   });
   const result = { ok: collection.collected, raw: collection.raw, http_status: 0 };
