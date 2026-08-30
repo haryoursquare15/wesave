@@ -9194,11 +9194,22 @@ async function reconcileThriftSettlements(limit = 50): Promise<Record<string, un
   const results: Array<Record<string, unknown>> = [];
   for (const r of (rows || [])) {
     const meta = (r.metadata || {}) as Record<string, unknown>;
+    let attemptPaymentRef = "";
+    let attemptSessionId = "";
+    if (meta.attempt_id) {
+      const { data: attempt } = await db.from("mandate_debit_attempts")
+        .select("vfd_response").eq("id", String(meta.attempt_id)).maybeSingle();
+      const attemptData = (attempt?.vfd_response as any)?.response?.data || {};
+      attemptPaymentRef = String(attemptData.paymentReference || attemptData.reference || "");
+      attemptSessionId = String(attemptData.sessionId || attemptData.session_id || "");
+    }
     const check = r.status === "confirmed"
       ? { confirmed: true, evidence: r.evidence }
       : await confirmSettlementLeg(r.provider_reference as string, {
         amount: Number(r.amount),
         alternateReferences: [
+          attemptPaymentRef,
+          attemptSessionId,
           String(meta.vfd_payment_reference || ""),
           String(meta.vfd_session_id || ""),
           String(meta.cycle_ref || ""),
@@ -9217,8 +9228,8 @@ async function reconcileThriftSettlements(limit = 50): Promise<Record<string, un
       settlementReference: r.provider_reference as string,
       attemptId: (meta.attempt_id as string) || null,
       thriftLedgerEntryId: (meta.thrift_ledger_entry_id as string) || null,
-      sessionId: (meta.vfd_session_id as string) || "",
-      paymentRef: (meta.vfd_payment_reference as string) || "",
+      sessionId: attemptSessionId || (meta.vfd_session_id as string) || "",
+      paymentRef: attemptPaymentRef || (meta.vfd_payment_reference as string) || "",
       mandateReference: (meta.mandate_reference as string) || null,
     });
     let finalize: unknown = null;
