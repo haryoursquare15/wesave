@@ -651,6 +651,20 @@ async function maybeEnterSwapWindow(
     .select("user_id").eq("group_id", groupId).eq("status", "active");
   if (!members || members.length !== group.max_members) return;
 
+  // ORDER OF OPERATIONS (authoritative):
+  //   1. every member's e-mandate is authorized by their bank
+  //   2. payout positions are randomized
+  //   3. swap window opens
+  // A full group with outstanding mandates stays "pending" — no randomization,
+  // no swap window — until the last bank approval lands.
+  const gate = await checkGroupMandateGate(groupId);
+  if (!gate.ok) {
+    await checkGroupCommencementReadiness(groupId);
+    return;
+  }
+
+
+
   const memberIds = members.map((m: { user_id: string }) => m.user_id);
   const payoutOrder = fisherYatesShuffle(memberIds);
 
