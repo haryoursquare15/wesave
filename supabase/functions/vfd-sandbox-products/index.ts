@@ -9095,10 +9095,11 @@ async function postConfirmedThriftCollection(p: {
   }
 
   try {
-    const { data: poolPost, error: poolErr } = await db.rpc("vestara_thrift_contribute_external", {
+    const { data: poolPost, error: poolErr } = await db.rpc("vestara_post_confirmed_thrift_collection", {
       _user_id: p.userId,
       _group_id: p.groupId,
       _amount: p.amountNaira,
+      _amount_kobo: amountKobo,
       _reference: `ddm-${p.cycleRef}`,
       _metadata: {
         cycle_index: p.cycleIndex,
@@ -9115,16 +9116,6 @@ async function postConfirmedThriftCollection(p: {
     console.error("[postConfirmedThriftCollection] pool ledger post threw:", e);
     return false;
   }
-
-  // The immutable, uniquely referenced ledger transaction above is the
-  // idempotency gate. Update display caches only after that posting succeeds.
-  const { data: g } = await db.from("vfd_sandbox_groups")
-    .select("pool_ledger_balance, total_contributed_kobo").eq("id", p.groupId).maybeSingle();
-  await db.from("vfd_sandbox_groups").update({
-    pool_ledger_balance: Number(g?.pool_ledger_balance || 0) + amountKobo,
-    total_contributed_kobo: Number(g?.total_contributed_kobo || 0) + amountKobo,
-    updated_at: nowIso,
-  }).eq("id", p.groupId);
 
   await markAttemptLedgerPosted(db, p.attemptId, p.cycleRef, true);
   await markSettlementLedgerPosted(db, p.settlementReference, `ddm-${p.cycleRef}`);
