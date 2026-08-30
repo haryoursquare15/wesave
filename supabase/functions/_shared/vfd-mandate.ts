@@ -489,41 +489,64 @@ export async function debitMandate(params: {
   transactionReference: string;
   idempotencyKey: string;
 }): Promise<MandateDebitResult> {
-  const accessToken = await getMandateAccessToken();
   const payload = {
     amount: String(params.amount),
     narration: params.narration,
     mandateReference: params.mandateReference,
     transactionReference: params.transactionReference,
   };
-  if (!accessToken) {
+
+  // Order the tokens so the one that most recently passed the probe is tried
+  // first, then fail over to the remaining credential pairs. A 401/403
+  // "Invalid wallet token" proves VFD rejected the call BEFORE touching the
+  // payer's bank, so re-presenting with another token cannot double-debit.
+  const candidates = await getMandateTokenCandidates();
+  const probed = await getMandateAccessToken();
+  const ordered = probed
+    ? [{ source: lastTokenSource || "probed", token: probed },
+       ...candidates.filter((c) => c.token !== probed)]
+    : candidates;
+
+  if (ordered.length === 0) {
     return { ok: false, raw: { request: payload, error: "MANDATE_AUTH_FAILED" }, http_status: 0,
       failureClass: "auth", message: "Mandate provider authentication failed" };
   }
-  try {
-    const res = await vfdFetch(`${VFD_MANDATE_BASE}/account/debit`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", AccessToken: accessToken },
-      body: JSON.stringify(payload),
-      idempotencyKey: params.idempotencyKey,
-    });
-    const json = await res.json().catch(() => ({} as Record<string, unknown>));
-    const status = String((json as Record<string, any>)?.status || "");
-    const message = String((json as Record<string, any>)?.message || (json as Record<string, any>)?.error || "");
-    // Only an explicit VFD success code counts as a confirmed debit.
-    const ok = status === "00";
-    return {
-      ok,
-      raw: { request: payload, response: json, http_status: res.status },
-      http_status: res.status,
-      failureClass: ok ? "none" : classifyDebitFailure(message, res.status),
-      message: message || (ok ? "Successful" : "Debit not confirmed by VFD"),
-    };
-  } catch (e) {
-    return { ok: false, raw: { request: payload, error: e instanceof Error ? e.message : String(e) }, http_status: 0,
-      failureClass: "bank_error", message: e instanceof Error ? e.message : String(e) };
+
+  let last: MandateDebitResult | null = null;
+  for (let i = 0; i < ordered.length; i++) {
+    const c = ordered[i];
+    try {
+      const res = await vfdFetch(`${VFD_MANDATE_BASE}/account/debit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", AccessToken: c.token },
+        body: JSON.stringify(payload),
+        // Distinct gateway key per token attempt, otherwise the gateway replays
+        // the stored 403 instead of forwarding the retry.
+        idempotencyKey: i === 0 ? params.idempotencyKey : `${params.idempotencyKey}-t${i}`,
+      });
+      const json = await res.json().catch(() => ({} as Record<string, unknown>));
+      const status = String((json as Record<string, any>)?.status || "");
+      const message = String((json as Record<string, any>)?.message || (json as Record<string, any>)?.error || "");
+      const ok = status === "00";
+      last = {
+        ok,
+        raw: { request: payload, response: json, http_status: res.status, token_source: c.source, attempt: i + 1 },
+        http_status: res.status,
+        failureClass: ok ? "none" : classifyDebitFailure(message, res.status),
+        message: message || (ok ? "Successful" : "Debit not confirmed by VFD"),
+      };
+      // Only an auth rejection is safe (and worth) retrying with another token.
+      if (ok || !isInvalidTokenResponse(res.status, json as Record<string, unknown>)) return last;
+      console.warn(`[mandate-debit] token source=${c.source} rejected (${res.status}) — trying next`);
+    } catch (e) {
+      last = { ok: false, raw: { request: payload, error: e instanceof Error ? e.message : String(e) }, http_status: 0,
+        failureClass: "bank_error", message: e instanceof Error ? e.message : String(e) };
+      return last;
+    }
   }
+  return last!;
 }
+
 
 // ---------------------------------------------------------------------------
 // SHARED HELPERS — the single implementation every product must use.
