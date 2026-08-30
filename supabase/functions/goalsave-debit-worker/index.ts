@@ -14,6 +14,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { verifyCronToken, unauthorized } from "../_shared/cron-auth.ts";
 import { collectMandateDebit, markAttemptLedgerPosted } from "../_shared/vfd-mandate.ts";
+import { sweepPoolToProductSubaccount } from "../_shared/vfd-pool-sweep.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
