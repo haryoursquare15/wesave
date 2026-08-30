@@ -551,6 +551,56 @@ function fisherYatesShuffle(arr: string[]): string[] {
   return shuffled;
 }
 
+// ---------------------------------------------------------------
+// CYCLE SCHEDULING — a new cycle is NOT immediately collectable.
+// Each cycle opens at the group's next configured slot (daily /
+// weekly / monthly at contribution_hour:contribution_minute WAT).
+// Without this, a payout that completes cycle N would open cycle
+// N+1 and the very next cron pass would debit members again on the
+// same calendar day, collapsing a 3-day thrift into 3 sweeps.
+// ---------------------------------------------------------------
+function computeCycleDueAt(
+  group: Record<string, unknown>,
+  from: Date = new Date(),
+  opts: { allowToday?: boolean } = {},
+): string {
+  const hour = Number(group.contribution_hour ?? 16);
+  const minute = Number(group.contribution_minute ?? 0);
+  const period = String(group.period || "daily");
+
+  // Work in WAT (UTC+1), then convert back to UTC on return.
+  const wat = new Date(from.getTime() + 60 * 60 * 1000);
+  const candidate = new Date(Date.UTC(
+    wat.getUTCFullYear(), wat.getUTCMonth(), wat.getUTCDate(), hour, minute, 0, 0,
+  ));
+
+  const advance = () => {
+    if (period === "weekly") candidate.setUTCDate(candidate.getUTCDate() + 7);
+    else if (period === "monthly") candidate.setUTCMonth(candidate.getUTCMonth() + 1);
+    else candidate.setUTCDate(candidate.getUTCDate() + 1);
+  };
+
+  // Same-day slot only counts when it is still ahead of us and the
+  // caller explicitly allows it (group commencement).
+  if (!opts.allowToday || candidate.getTime() <= wat.getTime()) advance();
+
+  if (period === "weekly") {
+    const targetDow = Number(group.contribution_day_of_week ?? 1);
+    let guard = 0;
+    while (candidate.getUTCDay() !== targetDow && guard++ < 8) {
+      candidate.setUTCDate(candidate.getUTCDate() + 1);
+    }
+  } else if (period === "monthly") {
+    const targetDom = Number(group.contribution_day_of_month ?? 1);
+    candidate.setUTCDate(Math.min(targetDom, 28));
+    if (candidate.getTime() <= wat.getTime()) candidate.setUTCMonth(candidate.getUTCMonth() + 1);
+  }
+
+  return new Date(candidate.getTime() - 60 * 60 * 1000).toISOString();
+}
+
+
+
 // =============================================
 // THRIFT GROUPS (AJO) — PRODUCTION-PARITY LOGIC
 // =============================================
