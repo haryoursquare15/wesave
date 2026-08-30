@@ -447,14 +447,18 @@ async function ensureBalanceRow(
   // figure show money that VFD does not actually hold, so transfers failed with
   // "51 Insufficient Balance" after the user had already been shown the funds.
   // Only fall back to internal figures when the enquiry itself failed.
+  // total_balance is the WHOLE balance sheet (spendable + locked + savings);
+  // available_balance is derived from it. Locked/savings sit in product
+  // sub-accounts, so the live bank figure is the spendable leg only.
   const totalBalance = liveOk
-    ? liveBalance
+    ? liveBalance + lockedBalance + savingsBalance
     : Math.max(
       recordedBalance,
       lockedBalance + savingsBalance,
       preserveExisting ? existingTotal : 0,
     );
   const availableBalance = Math.max(totalBalance - lockedBalance - savingsBalance, 0);
+
 
   const timestamp = new Date().toISOString();
 
