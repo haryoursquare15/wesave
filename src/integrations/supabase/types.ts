@@ -6420,6 +6420,8 @@ export type Database = {
           scheduled_at: string
           seq: number
           status: string
+          subaccount_sweep_ref: string | null
+          swept_to_subaccount_at: string | null
           updated_at: string
           user_id: string
           vfd_reference: string | null
@@ -6435,6 +6437,8 @@ export type Database = {
           scheduled_at: string
           seq: number
           status?: string
+          subaccount_sweep_ref?: string | null
+          swept_to_subaccount_at?: string | null
           updated_at?: string
           user_id: string
           vfd_reference?: string | null
@@ -6450,6 +6454,8 @@ export type Database = {
           scheduled_at?: string
           seq?: number
           status?: string
+          subaccount_sweep_ref?: string | null
+          swept_to_subaccount_at?: string | null
           updated_at?: string
           user_id?: string
           vfd_reference?: string | null
