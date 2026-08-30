@@ -1559,9 +1559,15 @@ async function processAutoPayout(
       payout_recipient_id: nextRecipientId,
     });
 
+    // Always read the authoritative schedule fields so the next cycle opens on
+    // the group's real configured slot, not a default.
+    const { data: sched } = await db.from("vfd_sandbox_groups")
+      .select("period, contribution_hour, contribution_minute, contribution_day_of_week, contribution_day_of_month")
+      .eq("id", groupId).maybeSingle();
+
     await db.from("vfd_sandbox_groups").update({
       current_cycle: nextCycle,
-      next_contribution_date: computeCycleDueAt(group, new Date()),
+      next_contribution_date: computeCycleDueAt(sched || group, new Date()),
       updated_at: new Date().toISOString(),
     }).eq("id", groupId);
 
