@@ -14,6 +14,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { verifyCronToken, unauthorized } from "../_shared/cron-auth.ts";
 import { collectMandateDebit, markAttemptLedgerPosted } from "../_shared/vfd-mandate.ts";
+import { sweepPoolToProductSubaccount } from "../_shared/vfd-pool-sweep.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -38,6 +39,47 @@ interface DebitRow {
   amount: number;
   attempt_count: number;
 }
+
+/**
+ * PERMANENT RULE: every naira a DDM pulls into the Vestara corporate pool for a
+ * Goal Savings contract is swept straight out of the pool into the Goal Savings
+ * VFD sub-account. Idempotent per (savings_id, seq) — safe to retry forever.
+ */
+// deno-lint-ignore no-explicit-any
+async function sweepInstallmentToSubaccount(db: any, row: {
+  savings_id: string; user_id: string; seq: number; amount: number;
+}) {
+  const result = await sweepPoolToProductSubaccount({
+    db,
+    productCode: "goalsave",
+    savingsId: row.savings_id,
+    userId: row.user_id,
+    amount: Number(row.amount),
+    seq: row.seq,
+    remark: `Goal Savings installment ${row.seq}`,
+  });
+
+  if (result.confirmed) {
+    const nowIso = new Date().toISOString();
+    await db.from("vestara_savings").update({
+      sub_account_nuban: result.subAccountNuban ?? undefined,
+      sub_account_transfer_ref: result.reference,
+      sub_account_transferred_at: nowIso,
+      subaccount_funded_at: nowIso,
+    }).eq("id", row.savings_id);
+    await db.from("vfd_savings_debit_schedule")
+      .update({ swept_to_subaccount_at: nowIso, subaccount_sweep_ref: result.reference })
+      .eq("savings_id", row.savings_id).eq("seq", row.seq)
+      .then(() => {}, () => {});
+  } else {
+    console.error(
+      `[goalsave][sweep] unswept savings=${row.savings_id} seq=${row.seq} ` +
+      `ref=${result.reference} code=${result.code} error=${result.error}`,
+    );
+  }
+  return result;
+}
+
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -84,7 +126,7 @@ Deno.serve(async (req) => {
   }
 
   const rows = (due ?? []) as DebitRow[];
-  let succeeded = 0, failed = 0, skipped = 0;
+  let succeeded = 0, failed = 0, skipped = 0, swept = 0, sweepPending = 0;
 
   for (const r of rows) {
     try {
@@ -259,6 +301,12 @@ Deno.serve(async (req) => {
 
       await supabase.from("vestara_savings").update(updates).eq("id", r.savings_id);
 
+      // IMMEDIATE SWEEP: pool -> Goal Savings sub-account, same run.
+      const sweep = await sweepInstallmentToSubaccount(supabase, {
+        savings_id: r.savings_id, user_id: r.user_id, seq: r.seq, amount: Number(r.amount),
+      });
+      if (sweep.confirmed) swept++; else sweepPending++;
+
       await supabase.from("user_notifications").insert({
         user_id: r.user_id,
         title: "Goal Savings contribution collected",
@@ -267,6 +315,7 @@ Deno.serve(async (req) => {
       }).then(() => {}, () => {});
 
       succeeded++;
+
     } catch (e) {
       failed++;
       const reason = e instanceof Error ? e.message : String(e);
@@ -276,8 +325,42 @@ Deno.serve(async (req) => {
     }
   }
 
+  // ---- RECOVERY PASS -------------------------------------------------------
+  // Any Goal Savings installment already collected into the pool but not yet
+  // confirmed inside the Goal Savings sub-account is retried every run, so a
+  // failed/uncertain sweep can never leave customer money parked in the pool.
+  let recovered = 0, stillPending = 0;
+  try {
+    const { data: collected } = await supabase
+      .from("vfd_savings_debit_schedule")
+      .select("savings_id, user_id, seq, amount, vestara_savings!inner(product_code)")
+      .eq("status", "succeeded")
+      .eq("vestara_savings.product_code", "goalsave")
+      .order("collected_at", { ascending: true })
+      .limit(200);
+
+    for (const c of (collected ?? []) as Array<{ savings_id: string; user_id: string; seq: number; amount: number }>) {
+      const ref = `SWEEP-GOALSAVE-${c.savings_id.replace(/-/g, "").slice(0, 16)}-${c.seq}`;
+      const { data: rec } = await supabase.from("settlement_records")
+        .select("status").eq("provider", "vfd").eq("provider_reference", ref).maybeSingle();
+      if (rec?.status === "confirmed") continue;
+
+      const res = await sweepInstallmentToSubaccount(supabase, {
+        savings_id: c.savings_id, user_id: c.user_id, seq: c.seq, amount: Number(c.amount),
+      });
+      if (res.confirmed) recovered++; else stillPending++;
+    }
+  } catch (e) {
+    console.error("[goalsave][sweep-recovery]", e instanceof Error ? e.message : String(e));
+  }
+
   return new Response(
-    JSON.stringify({ processed: rows.length, succeeded, failed, skipped, ran_at: now }),
+    JSON.stringify({
+      processed: rows.length, succeeded, failed, skipped,
+      swept, sweep_pending: sweepPending, sweep_recovered: recovered, sweep_still_pending: stillPending,
+      ran_at: now,
+    }),
     { headers: { ...corsHeaders, "Content-Type": "application/json" } },
   );
 });
+
