@@ -257,16 +257,15 @@ async function ensureBalanceRow(userId: string, forceSync = false): Promise<{ to
   const live = await fetchVfdLiveBalance(userId);
   const locked = data ? Number(data.locked_balance) : 0;
   const savings = data ? Number(data.savings_balance) : 0;
-  const existingTotal = data ? Number(data.total_balance) : 0;
-  // The bank is the source of truth. When the live enquiry succeeds we take it
-  // verbatim — Math.max(live, internal) let a stale/optimistic internal figure
-  // authorise spending against money VFD does not actually hold, so real
-  // transfers failed with "51 Insufficient Balance" after the customer had
-  // already been told they could afford it. Only fall back to internal figures
-  // when the enquiry itself failed.
+  // total_balance is the WHOLE balance sheet (spendable + locked + savings).
+  // The live bank figure is the SPENDABLE leg only — locked/savings money has
+  // already left the customer NUBAN for the product sub-accounts. Storing the
+  // bare live figure as total_balance double-subtracted the locks in the
+  // generated available_balance column and produced negative balances.
   const totalBalance = live.ok
-    ? live.balance
+    ? live.balance + locked + savings
     : Math.max(existingTotal, locked + savings);
+
 
   await db.from("vfd_user_balances").upsert({
     user_id: userId, total_balance: totalBalance, locked_balance: locked, savings_balance: savings,
