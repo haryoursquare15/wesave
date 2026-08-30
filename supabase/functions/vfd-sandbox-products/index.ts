@@ -9728,6 +9728,7 @@ async function handlePollPendingMandates() {
       await recordMandateEvent(m.group_id as string, m.user_id as string, m.mandate_reference, m.mandate_code, "authorized",
         { source: "poll", raw: approval.raw });
       await checkGroupCommencementReadiness(m.group_id as string);
+      await maybeEnterSwapWindow(db, m.group_id as string);
       await sendNotification(m.user_id as string, "Mandate Approved",
         "Your direct debit mandate has been approved.", "ddm_mandate_authorized", m.group_id as string);
       activated++;
