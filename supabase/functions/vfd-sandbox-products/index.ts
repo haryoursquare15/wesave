@@ -9579,8 +9579,10 @@ async function performMandateDebitForMember(
     // being locked out until the next date, so one late member can no longer
     // stall the whole group.
     slotKey: `${groupId.slice(0, 8)}-c${cycleIndex}`,
-    retryAfterMinutes: 30,
-    maxAttempts: 3,
+    // Ops-forced retrigger (force_group_id) re-arms the slot immediately and
+    // widens the budget; normal scheduling keeps 30-minute / 3-attempt limits.
+    retryAfterMinutes: opts.force ? 0 : 30,
+    maxAttempts: opts.force ? 12 : 3,
   });
   const result = { ok: collection.collected, raw: collection.raw, http_status: 0 };
   if (collection.skipped) {
