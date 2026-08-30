@@ -6,6 +6,7 @@ import { ThriftGroupCard } from "@/components/ThriftGroupCard";
 import { UserBadge } from "@/components/UserBadge";
 import { Button } from "@/components/ui/button";
 import { BottomNav } from "@/components/BottomNav";
+import { AppMenuDrawer } from "@/components/AppMenuDrawer";
 import { PendingInvitesNotification } from "@/components/PendingInvitesNotification";
 import { PushNotificationPrompt } from "@/components/PushNotificationPrompt";
 import { useAuth } from "@/contexts/AuthContext";
