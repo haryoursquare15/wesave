@@ -257,6 +257,8 @@ async function ensureBalanceRow(userId: string, forceSync = false): Promise<{ to
   const live = await fetchVfdLiveBalance(userId);
   const locked = data ? Number(data.locked_balance) : 0;
   const savings = data ? Number(data.savings_balance) : 0;
+  const existingTotal = data ? Number(data.total_balance) : 0;
+
   // total_balance is the WHOLE balance sheet (spendable + locked + savings).
   // The live bank figure is the SPENDABLE leg only — locked/savings money has
   // already left the customer NUBAN for the product sub-accounts. Storing the
