@@ -40,6 +40,47 @@ interface DebitRow {
   attempt_count: number;
 }
 
+/**
+ * PERMANENT RULE: every naira a DDM pulls into the Vestara corporate pool for a
+ * Goal Savings contract is swept straight out of the pool into the Goal Savings
+ * VFD sub-account. Idempotent per (savings_id, seq) — safe to retry forever.
+ */
+// deno-lint-ignore no-explicit-any
+async function sweepInstallmentToSubaccount(db: any, row: {
+  savings_id: string; user_id: string; seq: number; amount: number;
+}) {
+  const result = await sweepPoolToProductSubaccount({
+    db,
+    productCode: "goalsave",
+    savingsId: row.savings_id,
+    userId: row.user_id,
+    amount: Number(row.amount),
+    seq: row.seq,
+    remark: `Goal Savings installment ${row.seq}`,
+  });
+
+  if (result.confirmed) {
+    const nowIso = new Date().toISOString();
+    await db.from("vestara_savings").update({
+      sub_account_nuban: result.subAccountNuban ?? undefined,
+      sub_account_transfer_ref: result.reference,
+      sub_account_transferred_at: nowIso,
+      subaccount_funded_at: nowIso,
+    }).eq("id", row.savings_id);
+    await db.from("vfd_savings_debit_schedule")
+      .update({ swept_to_subaccount_at: nowIso, subaccount_sweep_ref: result.reference })
+      .eq("savings_id", row.savings_id).eq("seq", row.seq)
+      .then(() => {}, () => {});
+  } else {
+    console.error(
+      `[goalsave][sweep] unswept savings=${row.savings_id} seq=${row.seq} ` +
+      `ref=${result.reference} code=${result.code} error=${result.error}`,
+    );
+  }
+  return result;
+}
+
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
