@@ -25,6 +25,7 @@ export function SandboxHeader() {
   return (
     <div className="sticky top-0 z-20 bg-background/80 backdrop-blur-md border-b border-border/50">
       <div className="max-w-lg mx-auto px-4 py-3 flex items-center gap-2">
+        <AppMenuDrawer />
         <Button variant="ghost" size="icon" onClick={handleBack} className="shrink-0">
           <ArrowLeft className="h-5 w-5" />
         </Button>
