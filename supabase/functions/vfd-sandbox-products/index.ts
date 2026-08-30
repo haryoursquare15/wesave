@@ -4203,6 +4203,54 @@ async function confirmSettlementLeg(providerReference: string, opts: {
 }
 
 /**
+ * Confirm a mandate collection from the authoritative VFD /account/debit
+ * response already persisted on the claimed attempt. Mandate debits are not
+ * wallet transfers, so their payment/session references are not guaranteed to
+ * appear in wallet TSQ or the pool sub-account statement endpoint.
+ */
+async function confirmMandateDebitSettlement(
+  settlementReference: string,
+  attemptId: string,
+  expectedAmount: number,
+): Promise<{ confirmed: boolean; evidence?: Record<string, unknown> }> {
+  const db = getSupabaseAdmin();
+  const { data: attempt } = await db.from("mandate_debit_attempts")
+    .select("id, status, amount, transaction_reference, vfd_response")
+    .eq("id", attemptId).maybeSingle();
+  if (!attempt || attempt.status !== "succeeded") return { confirmed: false };
+
+  const raw = (attempt.vfd_response || {}) as Record<string, any>;
+  const response = (raw.response || {}) as Record<string, any>;
+  const responseData = (response.data || {}) as Record<string, unknown>;
+  const amountMatches = Math.abs(Number(attempt.amount || 0) - expectedAmount) < 0.005;
+  const referenceMatches = String(attempt.transaction_reference || "") === settlementReference;
+  const providerApproved = String(response.status || "") === "00"
+    && Number(raw.http_status || 0) >= 200
+    && Number(raw.http_status || 0) < 300
+    && Boolean(responseData.paymentReference)
+    && Boolean(responseData.sessionId);
+
+  if (!amountMatches || !referenceMatches || !providerApproved) return { confirmed: false };
+
+  const evidence = {
+    source: "vfd_mandate_account_debit",
+    attempt_id: attempt.id,
+    transaction_reference: attempt.transaction_reference,
+    payment_reference: responseData.paymentReference,
+    session_id: responseData.sessionId,
+    provider_status: response.status,
+    provider_message: response.message,
+    confirmed_at: new Date().toISOString(),
+  };
+  await markSettlement(db, settlementReference, "confirmed", {
+    evidence,
+    sessionId: String(responseData.sessionId),
+    bumpAttempt: true,
+  });
+  return { confirmed: true, evidence };
+}
+
+/**
  * REAL money-out leg: corporate pool -> customer NUBAN.
  * Used for thrift payouts. Nothing internal may be credited before this
  * returns confirmed:true (independently verified via /transactions?reference=).
@@ -9196,15 +9244,23 @@ async function reconcileThriftSettlements(limit = 50): Promise<Record<string, un
     const meta = (r.metadata || {}) as Record<string, unknown>;
     let attemptPaymentRef = "";
     let attemptSessionId = "";
+    let mandateConfirmation: { confirmed: boolean; evidence?: Record<string, unknown> } = { confirmed: false };
     if (meta.attempt_id) {
       const { data: attempt } = await db.from("mandate_debit_attempts")
         .select("vfd_response").eq("id", String(meta.attempt_id)).maybeSingle();
       const attemptData = (attempt?.vfd_response as any)?.response?.data || {};
       attemptPaymentRef = String(attemptData.paymentReference || attemptData.reference || "");
       attemptSessionId = String(attemptData.sessionId || attemptData.session_id || "");
+      mandateConfirmation = await confirmMandateDebitSettlement(
+        r.provider_reference as string,
+        String(meta.attempt_id),
+        Number(r.amount),
+      );
     }
     const check = r.status === "confirmed"
       ? { confirmed: true, evidence: r.evidence }
+      : mandateConfirmation.confirmed
+      ? mandateConfirmation
       : await confirmSettlementLeg(r.provider_reference as string, {
         amount: Number(r.amount),
         alternateReferences: [
@@ -9653,10 +9709,12 @@ async function performMandateDebitForMember(
       },
     });
 
-    const settled = await confirmSettlementLeg(collection.transactionReference, {
-      amount: amountNaira,
-      alternateReferences: [paymentRef, sessionId, cycleRef],
-    });
+    // VFD's successful /account/debit response is the authoritative proof for
+    // a mandate collection. Unlike wallet transfers, mandate debit references
+    // are not reliably exposed by wallet TSQ/statement APIs.
+    const settled = collection.attemptId
+      ? await confirmMandateDebitSettlement(collection.transactionReference, collection.attemptId, amountNaira)
+      : { confirmed: false };
     if (!settled.confirmed) {
       await recordMandateEvent(groupId, targetUserId, member.mandate_reference as string, member.mandate_code as string,
         "debit_awaiting_settlement", { cycle_index: cycleIndex, amount_naira: amountNaira, reference: collection.transactionReference });
