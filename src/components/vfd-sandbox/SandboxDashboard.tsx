@@ -215,29 +215,37 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
 
   useEffect(() => {
     let cancelled = false;
+    const uid = session?.user?.id;
+    if (!uid) { setHoldings({}); return; }
     (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user || cancelled) return;
-      const { data } = await supabase
+      const { data } = await client
         .from("vestara_savings")
-        .select("product_code, principal, status, approval_status")
-        .eq("user_id", user.id)
-        .eq("status", "active")
+        .select("product_code, principal, original_principal, commitment_amount, accrued_interest, status, approval_status")
+        .eq("user_id", uid)
+        .in("status", ["active", "matured"])
         .neq("approval_status", "pending");
       if (cancelled || !data) return;
       const agg: Record<string, { total: number; count: number }> = {};
-      for (const row of data) {
-        const code = (row as any).product_code as string;
+      for (const row of data as any[]) {
+        const code = row.product_code as string;
         if (!code) continue;
+        // Principal can be 0 on DDM-funded plans until the first debit lands,
+        // so fall back to the original principal / committed amount so the
+        // banner never understates what the user actually holds.
+        const base =
+          Number(row.principal || 0) ||
+          Number(row.original_principal || 0) ||
+          Number(row.commitment_amount || 0);
         const prev = agg[code] || { total: 0, count: 0 };
-        prev.total += Number((row as any).principal || 0);
+        prev.total += base + Number(row.accrued_interest || 0);
         prev.count += 1;
         agg[code] = prev;
       }
       setHoldings(agg);
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [client, session?.user?.id]);
+
 
   // Auto-scroll banners
   useEffect(() => {
