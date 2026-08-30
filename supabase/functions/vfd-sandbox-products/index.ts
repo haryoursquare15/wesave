@@ -8020,7 +8020,7 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
 
       const debit = isDdmMember
         ? await (async () => {
-            const r = await performMandateDebitForMember(group, m, Number(group.current_cycle));
+            const r = await performMandateDebitForMember(group, m, Number(group.current_cycle), { force: !!forceGroupId });
             return { success: r.success, error: r.error, code: (r as any)?.details?.code as string | undefined };
           })()
         : await (async () => {
