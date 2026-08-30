@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { SandboxAuthProvider, useSandboxAuth } from "@/contexts/SandboxAuthContext";
 import { SandboxModeContext } from "@/hooks/useSandboxAwareAuth";
 import { useVfdBanking } from "@/hooks/useVfdBanking";
@@ -52,8 +52,11 @@ function ProductWrapper({ children, onBack }: { children: React.ReactNode; onBac
   );
 }
 
+const VALID_VIEWS: View[] = ["dashboard", "fund", "transfer", "lock", "history", "ajo", "target", "goal", "split", "association", "bills", "card", "kyc", "mandates"];
+
 function VfdSandboxInner() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user, session, loading: authLoading, signOut } = useSandboxAuth();
   const { toast } = useToast();
   const vfd = useVfdBanking();
@@ -69,6 +72,18 @@ function VfdSandboxInner() {
   const [currentView, setCurrentView] = useState<View>("dashboard");
   const [initialSavingsProduct, setInitialSavingsProduct] = useState<string | null>(null);
   const [banks, setBanks] = useState<Array<{ code: string; name: string }>>([]);
+
+  // Deep-link support: /app?view=lock (or ajo|target|split|...) opens that
+  // section directly so menu links land on the right screen.
+  useEffect(() => {
+    const v = searchParams.get("view") as View | null;
+    if (v && VALID_VIEWS.includes(v)) {
+      const product = searchParams.get("product");
+      if (product) setInitialSavingsProduct(product);
+      setCurrentView(v);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   // Inactivity sign-out (2m foreground / 5m background) → /signin
   useSandboxSessionEnforcement({ enabled: !!user });
