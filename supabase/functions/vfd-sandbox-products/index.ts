@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { vfdFetch, getGatewayAccessToken } from "../_shared/vfd-gateway.ts";
 import { notifyMandateApproved } from "../_shared/mandate-notify.ts";
+import { sendBrandedEmail } from "../_shared/send-branded-email.ts";
 import {
   MANDATE_SETUP_FEE,
   MANDATE_MIN_AMOUNT,
@@ -479,10 +480,45 @@ async function postChatMessage(groupId: string, userId: string, message: string,
   await db.from("vfd_sandbox_chat_messages").insert({ group_id: groupId, user_id: userId, message, message_type: messageType });
 }
 
+// Notification types that are purely informational chatter — in-app only.
+const EMAIL_SUPPRESSED_NOTIFICATION_TYPES = new Set([
+  "member_joined",
+  "chat_message",
+  "group_chat",
+  "swap_requested",
+]);
+
+/**
+ * Single notification entry point: writes the in-app notification AND, for every
+ * material platform event (mandates, commencement, contributions, outstanding
+ * payments, payouts, withdrawals, savings), emails the user a branded copy.
+ */
 async function sendNotification(userId: string, title: string, message: string, notificationType: string, groupId?: string) {
   const db = getSupabaseAdmin();
-  await db.from("vfd_sandbox_notifications").insert({ user_id: userId, title, message, notification_type: notificationType, group_id: groupId || null });
+  const { data: inserted } = await db.from("vfd_sandbox_notifications")
+    .insert({ user_id: userId, title, message, notification_type: notificationType, group_id: groupId || null })
+    .select("id").maybeSingle();
+
+  if (EMAIL_SUPPRESSED_NOTIFICATION_TYPES.has(notificationType)) return;
+
+  try {
+    const { data: profile } = await db.from("profiles")
+      .select("email, full_name").eq("id", userId).maybeSingle();
+    if (!profile?.email) return;
+    await sendBrandedEmail({
+      recipientEmail: profile.email as string,
+      recipientName: (profile.full_name as string) || undefined,
+      title,
+      message,
+      actionUrl: groupId ? "https://app.vestara.ng/app" : "https://app.vestara.ng/app",
+      actionLabel: "Open Vestara",
+      idempotencyKey: `sandbox-notif-${inserted?.id || `${userId}-${notificationType}-${Date.now()}`}`,
+    });
+  } catch (err) {
+    console.error("sendNotification email failed:", err instanceof Error ? err.message : String(err));
+  }
 }
+
 
 // =============================================
 // PLATFORM FEE (Production Parity)
@@ -614,6 +650,20 @@ async function maybeEnterSwapWindow(
   const { data: members } = await db.from("vfd_sandbox_group_members")
     .select("user_id").eq("group_id", groupId).eq("status", "active");
   if (!members || members.length !== group.max_members) return;
+
+  // ORDER OF OPERATIONS (authoritative):
+  //   1. every member's e-mandate is authorized by their bank
+  //   2. payout positions are randomized
+  //   3. swap window opens
+  // A full group with outstanding mandates stays "pending" — no randomization,
+  // no swap window — until the last bank approval lands.
+  const gate = await checkGroupMandateGate(groupId);
+  if (!gate.ok) {
+    await checkGroupCommencementReadiness(groupId);
+    return;
+  }
+
+
 
   const memberIds = members.map((m: { user_id: string }) => m.user_id);
   const payoutOrder = fisherYatesShuffle(memberIds);
@@ -8775,6 +8825,7 @@ async function handleCheckGroupMandateStatus(userId: string, body: Record<string
     }).eq("id", member.id);
     await recordMandateEvent(groupId, userId, member.mandate_reference, member.mandate_code, "authorized", { testModeOverride: true });
     await checkGroupCommencementReadiness(groupId);
+    await maybeEnterSwapWindow(db, groupId);
     await sendNotification(userId, "Mandate Approved (Test Mode)",
       `Your Direct Debit Mandate for ${group.name} is authorized.`, "ddm_mandate_authorized", groupId);
     return jsonResponse({ data: { success: true, mandate_status: "authorized", bank_approved: true, test_mode: true } });
@@ -8815,7 +8866,11 @@ async function handleCheckGroupMandateStatus(userId: string, body: Record<string
       userId, productType: "thrift", productReference: groupId,
       mandateReference: member.mandate_reference as string, subjectName: group.name as string,
     });
+    await checkGroupCommencementReadiness(groupId);
+    // Randomization + swap window only open once every mandate is bank-approved.
+    await maybeEnterSwapWindow(db, groupId);
   }
+
 
   return jsonResponse({
     data: {
@@ -9677,6 +9732,7 @@ async function handlePollPendingMandates() {
       await recordMandateEvent(m.group_id as string, m.user_id as string, m.mandate_reference, m.mandate_code, "authorized",
         { source: "poll", raw: approval.raw });
       await checkGroupCommencementReadiness(m.group_id as string);
+      await maybeEnterSwapWindow(db, m.group_id as string);
       await sendNotification(m.user_id as string, "Mandate Approved",
         "Your direct debit mandate has been approved.", "ddm_mandate_authorized", m.group_id as string);
       activated++;
