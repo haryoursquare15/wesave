@@ -479,10 +479,45 @@ async function postChatMessage(groupId: string, userId: string, message: string,
   await db.from("vfd_sandbox_chat_messages").insert({ group_id: groupId, user_id: userId, message, message_type: messageType });
 }
 
+// Notification types that are purely informational chatter — in-app only.
+const EMAIL_SUPPRESSED_NOTIFICATION_TYPES = new Set([
+  "member_joined",
+  "chat_message",
+  "group_chat",
+  "swap_requested",
+]);
+
+/**
+ * Single notification entry point: writes the in-app notification AND, for every
+ * material platform event (mandates, commencement, contributions, outstanding
+ * payments, payouts, withdrawals, savings), emails the user a branded copy.
+ */
 async function sendNotification(userId: string, title: string, message: string, notificationType: string, groupId?: string) {
   const db = getSupabaseAdmin();
-  await db.from("vfd_sandbox_notifications").insert({ user_id: userId, title, message, notification_type: notificationType, group_id: groupId || null });
+  const { data: inserted } = await db.from("vfd_sandbox_notifications")
+    .insert({ user_id: userId, title, message, notification_type: notificationType, group_id: groupId || null })
+    .select("id").maybeSingle();
+
+  if (EMAIL_SUPPRESSED_NOTIFICATION_TYPES.has(notificationType)) return;
+
+  try {
+    const { data: profile } = await db.from("profiles")
+      .select("email, full_name").eq("id", userId).maybeSingle();
+    if (!profile?.email) return;
+    await sendBrandedEmail({
+      recipientEmail: profile.email as string,
+      recipientName: (profile.full_name as string) || undefined,
+      title,
+      message,
+      actionUrl: groupId ? "https://app.vestara.ng/app" : "https://app.vestara.ng/app",
+      actionLabel: "Open Vestara",
+      idempotencyKey: `sandbox-notif-${inserted?.id || `${userId}-${notificationType}-${Date.now()}`}`,
+    });
+  } catch (err) {
+    console.error("sendNotification email failed:", err instanceof Error ? err.message : String(err));
+  }
 }
+
 
 // =============================================
 // PLATFORM FEE (Production Parity)
