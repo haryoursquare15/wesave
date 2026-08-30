@@ -9094,16 +9094,6 @@ async function postConfirmedThriftCollection(p: {
     }).eq("id", p.thriftLedgerEntryId);
   }
 
-  const { data: g } = await db.from("vfd_sandbox_groups")
-    .select("pool_ledger_balance, total_contributed_kobo").eq("id", p.groupId).maybeSingle();
-  await db.from("vfd_sandbox_groups").update({
-    pool_ledger_balance: Number(g?.pool_ledger_balance || 0) + amountKobo,
-    total_contributed_kobo: Number(g?.total_contributed_kobo || 0) + amountKobo,
-    updated_at: nowIso,
-  }).eq("id", p.groupId);
-
-  await markAttemptLedgerPosted(db, p.attemptId, p.cycleRef, true);
-
   try {
     const { data: poolPost, error: poolErr } = await db.rpc("vestara_thrift_contribute_external", {
       _user_id: p.userId,
@@ -9126,6 +9116,17 @@ async function postConfirmedThriftCollection(p: {
     return false;
   }
 
+  // The immutable, uniquely referenced ledger transaction above is the
+  // idempotency gate. Update display caches only after that posting succeeds.
+  const { data: g } = await db.from("vfd_sandbox_groups")
+    .select("pool_ledger_balance, total_contributed_kobo").eq("id", p.groupId).maybeSingle();
+  await db.from("vfd_sandbox_groups").update({
+    pool_ledger_balance: Number(g?.pool_ledger_balance || 0) + amountKobo,
+    total_contributed_kobo: Number(g?.total_contributed_kobo || 0) + amountKobo,
+    updated_at: nowIso,
+  }).eq("id", p.groupId);
+
+  await markAttemptLedgerPosted(db, p.attemptId, p.cycleRef, true);
   await markSettlementLedgerPosted(db, p.settlementReference, `ddm-${p.cycleRef}`);
   return true;
 }
@@ -9195,21 +9196,23 @@ async function reconcileThriftSettlements(limit = 50): Promise<Record<string, un
   const { data: rows } = await db.from("settlement_records")
     .select("*")
     .eq("product_type", "thrift").eq("direction", "in")
-    .in("status", ["pending", "unreconciled"])
+    .or("status.in.(pending,unreconciled),and(status.eq.confirmed,ledger_posted.eq.false)")
     .order("created_at", { ascending: true })
     .limit(limit);
 
   const results: Array<Record<string, unknown>> = [];
   for (const r of (rows || [])) {
     const meta = (r.metadata || {}) as Record<string, unknown>;
-    const check = await confirmSettlementLeg(r.provider_reference as string, {
-      amount: Number(r.amount),
-      alternateReferences: [
-        String(meta.vfd_payment_reference || ""),
-        String(meta.vfd_session_id || ""),
-        String(meta.cycle_ref || ""),
-      ],
-    });
+    const check = r.status === "confirmed"
+      ? { confirmed: true, evidence: r.evidence }
+      : await confirmSettlementLeg(r.provider_reference as string, {
+        amount: Number(r.amount),
+        alternateReferences: [
+          String(meta.vfd_payment_reference || ""),
+          String(meta.vfd_session_id || ""),
+          String(meta.cycle_ref || ""),
+        ],
+      });
     if (!check.confirmed) {
       results.push({ reference: r.provider_reference, confirmed: false });
       continue;
