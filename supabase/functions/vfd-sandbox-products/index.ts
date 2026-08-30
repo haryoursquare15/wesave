@@ -8866,7 +8866,11 @@ async function handleCheckGroupMandateStatus(userId: string, body: Record<string
       userId, productType: "thrift", productReference: groupId,
       mandateReference: member.mandate_reference as string, subjectName: group.name as string,
     });
+    await checkGroupCommencementReadiness(groupId);
+    // Randomization + swap window only open once every mandate is bank-approved.
+    await maybeEnterSwapWindow(db, groupId);
   }
+
 
   return jsonResponse({
     data: {
