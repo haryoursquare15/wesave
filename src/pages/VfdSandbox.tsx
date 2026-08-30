@@ -150,11 +150,10 @@ function VfdSandboxInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, user, session?.access_token]);
 
-  /* ─── Balance: VFD live wallet + Vestara locked/interest ───
-   * We force-refresh from VFD /account/enquiry on every call so the
-   * dashboard never shows a stale cached figure. For users without a real
-   * VFD account (virtual NUBAN or no NUBAN at all) the backend returns
-   * `no_vfd_account: true` and we show ₦0.
+  /* ─── Balance: Vestara ledger wallet + locked savings/interest ───
+   * The backend returns the ledger-derived wallet balance as the display
+   * truth for every user (real or virtual NUBAN). `no_vfd_account` is only
+   * informational — it must NOT zero out the balance.
    */
   const refreshVestaraBalance = useCallback(async () => {
     const vfdRes = await getVfdUserBalance();
@@ -166,10 +165,10 @@ function VfdSandboxInner() {
 
     const noVfdAccount = !!vfdData?.no_vfd_account;
     const stale = !!vfdData?.stale;
-    const vfdWallet = noVfdAccount ? 0 : Number(vfdData?.available_balance ?? 0);
+    const vfdWallet = Math.max(Number(vfdData?.available_balance ?? 0), 0);
 
     // Vestara still owns locked savings + accrued interest (VFD doesn't model these).
-    const summary = noVfdAccount ? null : await getVestaraBalanceSummary();
+    const summary = await getVestaraBalanceSummary();
     const locked = Number(summary?.locked_savings ?? 0);
     const interest = Number(summary?.accrued_interest ?? 0);
 
@@ -182,6 +181,7 @@ function VfdSandboxInner() {
       stale,
     });
   }, [getVestaraBalanceSummary, getVfdUserBalance]);
+
 
   /* ─── Vestara Locked Funds ─── */
   const refreshVestaraLockedFunds = useCallback(async () => {
