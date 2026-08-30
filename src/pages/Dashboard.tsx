@@ -6,6 +6,7 @@ import { ThriftGroupCard } from "@/components/ThriftGroupCard";
 import { UserBadge } from "@/components/UserBadge";
 import { Button } from "@/components/ui/button";
 import { BottomNav } from "@/components/BottomNav";
+import { AppMenuDrawer } from "@/components/AppMenuDrawer";
 import { PendingInvitesNotification } from "@/components/PendingInvitesNotification";
 import { PushNotificationPrompt } from "@/components/PushNotificationPrompt";
 import { useAuth } from "@/contexts/AuthContext";
@@ -55,6 +56,7 @@ export default function Dashboard() {
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
+              <AppMenuDrawer />
               <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center text-primary-foreground font-semibold">
                 {getInitials(profile?.full_name)}
               </div>
