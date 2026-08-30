@@ -2873,8 +2873,16 @@ async function handleGetUserBalance(userId: string) {
     }
   }
 
-  const totalBalance = ledgerWalletBalance;
-  const availableBalance = Math.max(totalBalance - lockedBalance - savingsBalance, 0);
+  // CACHE SEMANTICS (single definition across the platform):
+  //   total_balance     = spendable + locked + savings  (whole balance sheet)
+  //   available_balance = total - locked - savings      (generated column)
+  // Locked/savings money physically sits in product sub-accounts, so writing
+  // only the spendable figure into total_balance double-subtracted the locks
+  // and produced negative available balances (and false wallet_vs_cache drift).
+  const spendableBalance = ledgerWalletBalance;
+  const totalBalance = spendableBalance + lockedBalance + savingsBalance;
+  const availableBalance = Math.max(spendableBalance, 0);
+
   const timestamp = new Date().toISOString();
 
   // Persist cache (ledger-truth) for fast follow-up reads.
