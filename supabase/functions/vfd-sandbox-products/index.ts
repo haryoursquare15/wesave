@@ -860,6 +860,7 @@ async function handleCommenceGroup(userId: string, body: Record<string, unknown>
     status: "active", current_cycle: 1, payout_order: payoutOrder,
     current_payout_position: 1,
     commenced_at: new Date().toISOString(),
+    next_contribution_date: computeCycleDueAt(group, new Date(), { allowToday: true }),
     updated_at: new Date().toISOString(),
   }).eq("id", groupId).eq("status", "pending").select("id");
   if (!claimed || claimed.length !== 1) {
@@ -1559,7 +1560,9 @@ async function processAutoPayout(
     });
 
     await db.from("vfd_sandbox_groups").update({
-      current_cycle: nextCycle, updated_at: new Date().toISOString(),
+      current_cycle: nextCycle,
+      next_contribution_date: computeCycleDueAt(group, new Date()),
+      updated_at: new Date().toISOString(),
     }).eq("id", groupId);
 
     // Reset contribution flags
@@ -1792,6 +1795,7 @@ async function handleRestartGroup(userId: string, body: Record<string, unknown>)
     status: "active", current_cycle: 1, payout_order: newPayoutOrder,
     current_payout_position: 1, total_cycles: activeMembers.length,
     member_count: activeMembers.length, max_members: activeMembers.length,
+    next_contribution_date: computeCycleDueAt(group, new Date(), { allowToday: true }),
     updated_at: new Date().toISOString(),
   }).eq("id", groupId);
 
@@ -7685,6 +7689,7 @@ async function handleAutoStartPendingGroups(_userId: string, body: Record<string
       total_cycles: payoutOrder.length,
       commencement_status: "ready",
       commenced_at: new Date().toISOString(),
+      next_contribution_date: computeCycleDueAt(group, new Date(), { allowToday: true }),
       updated_at: new Date().toISOString(),
     }).eq("id", group.id).eq("status", "swap_window").select("id");
     if (!claimed || claimed.length !== 1) continue;
