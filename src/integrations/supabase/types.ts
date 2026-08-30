@@ -7734,6 +7734,17 @@ export type Database = {
         }
         Returns: Json
       }
+      vestara_post_confirmed_thrift_collection: {
+        Args: {
+          _amount: number
+          _amount_kobo: number
+          _group_id: string
+          _metadata?: Json
+          _reference: string
+          _user_id: string
+        }
+        Returns: Json
+      }
       vestara_post_transaction: {
         Args: {
           _amount: number
