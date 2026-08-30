@@ -4142,13 +4142,24 @@ async function verifyVfdTransfer(reference: string): Promise<{ confirmed: boolea
 async function confirmSettlementLeg(providerReference: string, opts: {
   amount: number;
   poolAccount?: string;
+  alternateReferences?: string[];
   maxAttemptsBeforeUnreconciled?: number;
 } ): Promise<{ confirmed: boolean; evidence: unknown }> {
   const db = getSupabaseAdmin();
-  const tsq = await verifyVfdTransfer(providerReference);
-  if (tsq.confirmed) {
-    await markSettlement(db, providerReference, "confirmed", { evidence: tsq.evidence, bumpAttempt: true });
-    return { confirmed: true, evidence: tsq.evidence };
+  const references = [...new Set([
+    providerReference,
+    ...(opts.alternateReferences || []),
+  ].map((ref) => String(ref || "").trim()).filter(Boolean))];
+  const tsqEvidence: Array<{ reference: string; evidence: unknown }> = [];
+  for (const reference of references) {
+    const tsq = await verifyVfdTransfer(reference);
+    tsqEvidence.push({ reference, evidence: tsq.evidence });
+    if (tsq.confirmed) {
+      await markSettlement(db, providerReference, "confirmed", {
+        evidence: { matched_reference: reference, tsq: tsq.evidence }, bumpAttempt: true,
+      });
+      return { confirmed: true, evidence: tsq.evidence };
+    }
   }
 
   // Statement fallback: scan the destination pool account for a credit whose
@@ -4160,15 +4171,17 @@ async function confirmSettlementLeg(providerReference: string, opts: {
     const from = new Date(today.getTime() - 3 * 86400_000);
     const fmt = (d: Date) => d.toISOString().slice(0, 10);
     const { data } = await walletRequest("/account/transactions", "GET", undefined, {
-      accountNo: account, startDate: fmt(from), endDate: fmt(today),
+      accountNo: account, transactionType: "wallet",
+      startDate: `${fmt(from)} 00:00:00`, endDate: `${fmt(today)} 23:59:59`,
+      page: "0", size: "100",
     });
     statementEvidence = data;
     const rows = ((data?.data as Record<string, unknown>)?.content
       ?? (data?.data as unknown[])
       ?? []) as Array<Record<string, unknown>>;
     const hit = (Array.isArray(rows) ? rows : []).find((r) => {
-      const ref = String(r.reference ?? r.transactionReference ?? r.paymentReference ?? "");
-      return ref && providerReference.includes(ref.slice(0, 12));
+      const searchable = JSON.stringify(r);
+      return references.some((ref) => ref.length >= 8 && searchable.includes(ref));
     });
     if (hit) {
       await markSettlement(db, providerReference, "confirmed", { evidence: hit, bumpAttempt: true });
@@ -4183,10 +4196,10 @@ async function confirmSettlementLeg(providerReference: string, opts: {
   const attempts = Number(row?.attempts || 0) + 1;
   const limit = opts.maxAttemptsBeforeUnreconciled ?? 6;
   await markSettlement(db, providerReference, attempts >= limit ? "unreconciled" : "pending", {
-    evidence: { tsq: tsq.evidence, statement: statementEvidence },
+    evidence: { tsq: tsqEvidence, statement: statementEvidence },
     bumpAttempt: true,
   });
-  return { confirmed: false, evidence: { tsq: tsq.evidence, statement: statementEvidence } };
+  return { confirmed: false, evidence: { tsq: tsqEvidence, statement: statementEvidence } };
 }
 
 /**
@@ -9189,7 +9202,14 @@ async function reconcileThriftSettlements(limit = 50): Promise<Record<string, un
   const results: Array<Record<string, unknown>> = [];
   for (const r of (rows || [])) {
     const meta = (r.metadata || {}) as Record<string, unknown>;
-    const check = await confirmSettlementLeg(r.provider_reference as string, { amount: Number(r.amount) });
+    const check = await confirmSettlementLeg(r.provider_reference as string, {
+      amount: Number(r.amount),
+      alternateReferences: [
+        String(meta.vfd_payment_reference || ""),
+        String(meta.vfd_session_id || ""),
+        String(meta.cycle_ref || ""),
+      ],
+    });
     if (!check.confirmed) {
       results.push({ reference: r.provider_reference, confirmed: false });
       continue;
@@ -9598,7 +9618,11 @@ async function performMandateDebitForMember(
   const nowIso = new Date().toISOString();
   if (result.ok) {
     const sessionId = String(((result.raw as any)?.response?.data?.sessionId) || "");
-    const paymentRef = String(((result.raw as any)?.response?.data?.reference) || cycleRef);
+    const paymentRef = String(
+      ((result.raw as any)?.response?.data?.paymentReference)
+      || ((result.raw as any)?.response?.data?.reference)
+      || cycleRef,
+    );
 
     // SETTLEMENT INTEGRITY: VFD accepting the debit is NOT proof the money has
     // landed in the corporate pool. Open the settlement leg, then require an
@@ -9624,7 +9648,10 @@ async function performMandateDebitForMember(
       },
     });
 
-    const settled = await confirmSettlementLeg(collection.transactionReference, { amount: amountNaira });
+    const settled = await confirmSettlementLeg(collection.transactionReference, {
+      amount: amountNaira,
+      alternateReferences: [paymentRef, sessionId, cycleRef],
+    });
     if (!settled.confirmed) {
       await recordMandateEvent(groupId, targetUserId, member.mandate_reference as string, member.mandate_code as string,
         "debit_awaiting_settlement", { cycle_index: cycleIndex, amount_naira: amountNaira, reference: collection.transactionReference });
@@ -9637,7 +9664,7 @@ async function performMandateDebitForMember(
       };
     }
 
-    await postConfirmedThriftCollection({
+    const posted = await postConfirmedThriftCollection({
       groupId,
       userId: targetUserId,
       amountNaira,
@@ -9650,6 +9677,24 @@ async function performMandateDebitForMember(
       paymentRef,
       mandateReference: (member.mandate_reference as string) || null,
       vfdRaw: result.raw,
+    });
+    if (!posted) {
+      return {
+        success: false,
+        error: "Bank collection confirmed — group posting is awaiting reconciliation",
+        details: { code: "AWAITING_SETTLEMENT", reference: collection.transactionReference },
+      };
+    }
+
+    // A synchronously confirmed bank leg must complete the same idempotent
+    // group-finalization path as the background reconciler. Without this call,
+    // the money reached the pool but the member and cycle stayed unchanged.
+    await finalizeThriftContribution({
+      groupId,
+      userId: targetUserId,
+      cycleNumber: cycleIndex,
+      amount: amountNaira,
+      isDdm: true,
     });
 
     await recordMandateEvent(groupId, targetUserId, member.mandate_reference as string, member.mandate_code as string, "debit_success",
