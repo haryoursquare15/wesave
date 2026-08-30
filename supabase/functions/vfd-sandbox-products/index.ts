@@ -551,6 +551,56 @@ function fisherYatesShuffle(arr: string[]): string[] {
   return shuffled;
 }
 
+// ---------------------------------------------------------------
+// CYCLE SCHEDULING — a new cycle is NOT immediately collectable.
+// Each cycle opens at the group's next configured slot (daily /
+// weekly / monthly at contribution_hour:contribution_minute WAT).
+// Without this, a payout that completes cycle N would open cycle
+// N+1 and the very next cron pass would debit members again on the
+// same calendar day, collapsing a 3-day thrift into 3 sweeps.
+// ---------------------------------------------------------------
+function computeCycleDueAt(
+  group: Record<string, unknown>,
+  from: Date = new Date(),
+  opts: { allowToday?: boolean } = {},
+): string {
+  const hour = Number(group.contribution_hour ?? 16);
+  const minute = Number(group.contribution_minute ?? 0);
+  const period = String(group.period || "daily");
+
+  // Work in WAT (UTC+1), then convert back to UTC on return.
+  const wat = new Date(from.getTime() + 60 * 60 * 1000);
+  const candidate = new Date(Date.UTC(
+    wat.getUTCFullYear(), wat.getUTCMonth(), wat.getUTCDate(), hour, minute, 0, 0,
+  ));
+
+  const advance = () => {
+    if (period === "weekly") candidate.setUTCDate(candidate.getUTCDate() + 7);
+    else if (period === "monthly") candidate.setUTCMonth(candidate.getUTCMonth() + 1);
+    else candidate.setUTCDate(candidate.getUTCDate() + 1);
+  };
+
+  // Same-day slot only counts when it is still ahead of us and the
+  // caller explicitly allows it (group commencement).
+  if (!opts.allowToday || candidate.getTime() <= wat.getTime()) advance();
+
+  if (period === "weekly") {
+    const targetDow = Number(group.contribution_day_of_week ?? 1);
+    let guard = 0;
+    while (candidate.getUTCDay() !== targetDow && guard++ < 8) {
+      candidate.setUTCDate(candidate.getUTCDate() + 1);
+    }
+  } else if (period === "monthly") {
+    const targetDom = Number(group.contribution_day_of_month ?? 1);
+    candidate.setUTCDate(Math.min(targetDom, 28));
+    if (candidate.getTime() <= wat.getTime()) candidate.setUTCMonth(candidate.getUTCMonth() + 1);
+  }
+
+  return new Date(candidate.getTime() - 60 * 60 * 1000).toISOString();
+}
+
+
+
 // =============================================
 // THRIFT GROUPS (AJO) — PRODUCTION-PARITY LOGIC
 // =============================================
@@ -810,6 +860,7 @@ async function handleCommenceGroup(userId: string, body: Record<string, unknown>
     status: "active", current_cycle: 1, payout_order: payoutOrder,
     current_payout_position: 1,
     commenced_at: new Date().toISOString(),
+    next_contribution_date: computeCycleDueAt(group, new Date(), { allowToday: true }),
     updated_at: new Date().toISOString(),
   }).eq("id", groupId).eq("status", "pending").select("id");
   if (!claimed || claimed.length !== 1) {
@@ -1508,8 +1559,16 @@ async function processAutoPayout(
       payout_recipient_id: nextRecipientId,
     });
 
+    // Always read the authoritative schedule fields so the next cycle opens on
+    // the group's real configured slot, not a default.
+    const { data: sched } = await db.from("vfd_sandbox_groups")
+      .select("period, contribution_hour, contribution_minute, contribution_day_of_week, contribution_day_of_month")
+      .eq("id", groupId).maybeSingle();
+
     await db.from("vfd_sandbox_groups").update({
-      current_cycle: nextCycle, updated_at: new Date().toISOString(),
+      current_cycle: nextCycle,
+      next_contribution_date: computeCycleDueAt(sched || group, new Date()),
+      updated_at: new Date().toISOString(),
     }).eq("id", groupId);
 
     // Reset contribution flags
@@ -1742,6 +1801,7 @@ async function handleRestartGroup(userId: string, body: Record<string, unknown>)
     status: "active", current_cycle: 1, payout_order: newPayoutOrder,
     current_payout_position: 1, total_cycles: activeMembers.length,
     member_count: activeMembers.length, max_members: activeMembers.length,
+    next_contribution_date: computeCycleDueAt(group, new Date(), { allowToday: true }),
     updated_at: new Date().toISOString(),
   }).eq("id", groupId);
 
@@ -7635,6 +7695,7 @@ async function handleAutoStartPendingGroups(_userId: string, body: Record<string
       total_cycles: payoutOrder.length,
       commencement_status: "ready",
       commenced_at: new Date().toISOString(),
+      next_contribution_date: computeCycleDueAt(group, new Date(), { allowToday: true }),
       updated_at: new Date().toISOString(),
     }).eq("id", group.id).eq("status", "swap_window").select("id");
     if (!claimed || claimed.length !== 1) continue;
@@ -7956,6 +8017,18 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
 
   for (const group of (groups || [])) {
     if (!forceGroupId) {
+      // HARD SCHEDULE GATE: the current cycle cannot be collected before its
+      // configured opening slot, even via the retry queue. A completed cycle
+      // opens the next one at the NEXT daily/weekly/monthly slot — never the
+      // same day.
+      if (group.next_contribution_date && new Date(group.next_contribution_date) > now) {
+        processed.push({
+          group_id: group.id, name: group.name, skipped: "NOT_DUE_YET",
+          next_contribution_date: group.next_contribution_date,
+        });
+        continue;
+      }
+
       const isScheduledWindow = group.contribution_hour === watHour
         && (group.contribution_minute ?? 0) === minuteSlot
         && (group.period !== "weekly" || (group.contribution_day_of_week ?? 1) === dayOfWeek)
