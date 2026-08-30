@@ -222,28 +222,29 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
     (async () => {
       const { data } = await client
         .from("vestara_savings")
-        .select("product_code, principal, original_principal, commitment_amount, accrued_interest, status, approval_status")
+        .select("product_code, principal, accrued_interest, status, approval_status, activation_status")
         .eq("user_id", uid)
         .in("status", ["active", "matured"])
-        .neq("approval_status", "pending");
+        .eq("approval_status", "approved")
+        .eq("activation_status", "active");
       if (cancelled || !data) return;
       const agg: Record<string, { total: number; count: number }> = {};
       for (const row of data as any[]) {
         const code = row.product_code as string;
         if (!code) continue;
-        // Principal can be 0 on DDM-funded plans until the first debit lands,
-        // so fall back to the original principal / committed amount so the
-        // banner never understates what the user actually holds.
-        const base =
-          Number(row.principal || 0) ||
-          Number(row.original_principal || 0) ||
-          Number(row.commitment_amount || 0);
+        // Only money that has ACTUALLY moved counts. `principal` is written
+        // when funds land in the product sub-account; commitment / original
+        // amounts are just intentions on a mandate and must never be shown as
+        // holdings (that is what inflated the goal card to NGN 21,000).
+        const funded = Number(row.principal || 0);
+        if (funded <= 0) continue;
         const prev = agg[code] || { total: 0, count: 0 };
-        prev.total += base + Number(row.accrued_interest || 0);
+        prev.total += funded + Number(row.accrued_interest || 0);
         prev.count += 1;
         agg[code] = prev;
       }
       setHoldings(agg);
+
     })();
     return () => { cancelled = true; };
   }, [client, session?.user?.id]);
