@@ -21,17 +21,17 @@ const sections: { label: string; items: { icon: any; label: string; path: string
   {
     label: "Save & Invest",
     items: [
-      { icon: PiggyBank, label: "My Savings", path: "/app" },
-      { icon: Users, label: "Thrift (Ajo)", path: "/groups" },
-      { icon: Landmark, label: "Target Ajo", path: "/target-ajo" },
+      { icon: PiggyBank, label: "My Savings", path: "/app?view=lock" },
+      { icon: Users, label: "Thrift (Ajo)", path: "/app?view=ajo" },
+      { icon: Landmark, label: "Target Ajo", path: "/app?view=target" },
       { icon: Target, label: "Goal Funding", path: "/goal-funding" },
-      { icon: Sparkles, label: "Associations", path: "/associations", comingSoon: true },
+      { icon: Sparkles, label: "Associations", path: "/app?view=association", comingSoon: true },
     ],
   },
   {
     label: "Payments & More",
     items: [
-      { icon: Receipt, label: "SplitPay", path: "/split-pay" },
+      { icon: Receipt, label: "SplitPay", path: "/app?view=split" },
       { icon: Gift, label: "Referrals", path: "/referrals" },
       { icon: Settings, label: "Settings", path: "/settings" },
       { icon: LifeBuoy, label: "Help & Support", path: "/help" },
@@ -41,7 +41,7 @@ const sections: { label: string; items: { icon: any; label: string; path: string
 
 export function AppMenuDrawer() {
   const [open, setOpen] = useState(false);
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -67,7 +67,7 @@ export function AppMenuDrawer() {
               </p>
               <div className="space-y-0.5">
                 {section.items.map((item) => {
-                  const active = pathname === item.path;
+                  const active = `${pathname}${search}` === item.path || (!item.path.includes("?") && !search && pathname === item.path);
                   return (
                     <Link
                       key={item.label}
