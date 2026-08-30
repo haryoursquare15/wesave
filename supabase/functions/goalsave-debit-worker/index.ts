@@ -301,6 +301,12 @@ Deno.serve(async (req) => {
 
       await supabase.from("vestara_savings").update(updates).eq("id", r.savings_id);
 
+      // IMMEDIATE SWEEP: pool -> Goal Savings sub-account, same run.
+      const sweep = await sweepInstallmentToSubaccount(supabase, {
+        savings_id: r.savings_id, user_id: r.user_id, seq: r.seq, amount: Number(r.amount),
+      });
+      if (sweep.confirmed) swept++; else sweepPending++;
+
       await supabase.from("user_notifications").insert({
         user_id: r.user_id,
         title: "Goal Savings contribution collected",
@@ -309,6 +315,7 @@ Deno.serve(async (req) => {
       }).then(() => {}, () => {});
 
       succeeded++;
+
     } catch (e) {
       failed++;
       const reason = e instanceof Error ? e.message : String(e);
