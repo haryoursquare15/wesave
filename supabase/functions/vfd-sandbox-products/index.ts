@@ -8825,6 +8825,7 @@ async function handleCheckGroupMandateStatus(userId: string, body: Record<string
     }).eq("id", member.id);
     await recordMandateEvent(groupId, userId, member.mandate_reference, member.mandate_code, "authorized", { testModeOverride: true });
     await checkGroupCommencementReadiness(groupId);
+    await maybeEnterSwapWindow(db, groupId);
     await sendNotification(userId, "Mandate Approved (Test Mode)",
       `Your Direct Debit Mandate for ${group.name} is authorized.`, "ddm_mandate_authorized", groupId);
     return jsonResponse({ data: { success: true, mandate_status: "authorized", bank_approved: true, test_mode: true } });
