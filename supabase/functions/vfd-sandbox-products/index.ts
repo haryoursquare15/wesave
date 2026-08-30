@@ -8011,6 +8011,18 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
 
   for (const group of (groups || [])) {
     if (!forceGroupId) {
+      // HARD SCHEDULE GATE: the current cycle cannot be collected before its
+      // configured opening slot, even via the retry queue. A completed cycle
+      // opens the next one at the NEXT daily/weekly/monthly slot — never the
+      // same day.
+      if (group.next_contribution_date && new Date(group.next_contribution_date) > now) {
+        processed.push({
+          group_id: group.id, name: group.name, skipped: "NOT_DUE_YET",
+          next_contribution_date: group.next_contribution_date,
+        });
+        continue;
+      }
+
       const isScheduledWindow = group.contribution_hour === watHour
         && (group.contribution_minute ?? 0) === minuteSlot
         && (group.period !== "weekly" || (group.contribution_day_of_week ?? 1) === dayOfWeek)
