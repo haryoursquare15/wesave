@@ -447,14 +447,18 @@ async function ensureBalanceRow(
   // figure show money that VFD does not actually hold, so transfers failed with
   // "51 Insufficient Balance" after the user had already been shown the funds.
   // Only fall back to internal figures when the enquiry itself failed.
+  // total_balance is the WHOLE balance sheet (spendable + locked + savings);
+  // available_balance is derived from it. Locked/savings sit in product
+  // sub-accounts, so the live bank figure is the spendable leg only.
   const totalBalance = liveOk
-    ? liveBalance
+    ? liveBalance + lockedBalance + savingsBalance
     : Math.max(
       recordedBalance,
       lockedBalance + savingsBalance,
       preserveExisting ? existingTotal : 0,
     );
   const availableBalance = Math.max(totalBalance - lockedBalance - savingsBalance, 0);
+
 
   const timestamp = new Date().toISOString();
 
@@ -2873,8 +2877,16 @@ async function handleGetUserBalance(userId: string) {
     }
   }
 
-  const totalBalance = ledgerWalletBalance;
-  const availableBalance = Math.max(totalBalance - lockedBalance - savingsBalance, 0);
+  // CACHE SEMANTICS (single definition across the platform):
+  //   total_balance     = spendable + locked + savings  (whole balance sheet)
+  //   available_balance = total - locked - savings      (generated column)
+  // Locked/savings money physically sits in product sub-accounts, so writing
+  // only the spendable figure into total_balance double-subtracted the locks
+  // and produced negative available balances (and false wallet_vs_cache drift).
+  const spendableBalance = ledgerWalletBalance;
+  const totalBalance = spendableBalance + lockedBalance + savingsBalance;
+  const availableBalance = Math.max(spendableBalance, 0);
+
   const timestamp = new Date().toISOString();
 
   // Persist cache (ledger-truth) for fast follow-up reads.
