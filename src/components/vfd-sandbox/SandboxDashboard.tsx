@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import vestaraBadge from "@/assets/vestara-badge.jpg";
 import { describeTransaction } from "@/lib/transactionLabels";
 import { supabase } from "@/integrations/supabase/client";
+import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
 
 interface BalanceData {
   totalBalance: number;
@@ -212,6 +213,7 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
   const [holdings, setHoldings] = useState<Record<string, { total: number; count: number }>>({});
   const bannerRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+  const { client, session } = useSandboxAwareAuth();
 
   useEffect(() => {
     let cancelled = false;
