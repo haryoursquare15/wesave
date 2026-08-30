@@ -9524,6 +9524,7 @@ async function performMandateDebitForMember(
   group: Record<string, unknown>,
   member: Record<string, unknown>,
   cycleIndex: number,
+  opts: { force?: boolean } = {},
 ): Promise<{ success: boolean; reference?: string; amount_kobo?: number; error?: string; details?: unknown }> {
   const db = getSupabaseAdmin();
   const groupId = group.id as string;
