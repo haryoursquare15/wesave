@@ -16,6 +16,7 @@ Interbank transfer fee tiers (by sender wallet balance at time of transfer):
 - Intra-Vestara transfers (bank code 999999 OR recipient NUBAN starts with "9"): no fee, no stamp duty.
 - Counter `transfer_fee_counters(user_id, month_key, inter_count)` increments per successful interbank transfer; month_key is WAT `YYYY-MM`.
 - All fees recorded in `vestara_fee_ledger(user_id, fee_type, amount, reference, tx_reference)`. fee_type ∈ {`transfer_fee`,`stamp_duty`}.
+- Daily transfer caps per KYC tier (vfd-banking `TIER_DAILY_CAP` / `TIER_DAILY_CAP_T`): tier1 ₦30,000, tier2 ₦100,000, tier3 ₦5,000,000 per 24h.
 - Implementation lives in `supabase/functions/vfd-banking/index.ts`:
   - `quoteTransferFees()` → returns the full quote (used by `quote_transfer` action + the preview modal).
   - `chargeTransferFees()` → debits sender via `vestara_withdraw` after VFD confirms success.
