@@ -1475,7 +1475,7 @@ async function handleTransfer(
     const TIER_DAILY_CAP_T: Record<string, number> = {
       tier1: 30_000,
       tier2: 100_000,
-      tier3: Number.POSITIVE_INFINITY,
+      tier3: 5_000_000,
     };
     const dailyCapT = TIER_DAILY_CAP_T[tierT] ?? 30_000;
     const tierLabel = tierT.replace("tier", "Tier ");
@@ -1783,7 +1783,7 @@ async function handleTransfer(
     const TIER_DAILY_CAP: Record<string, number> = {
       tier1: 30_000,
       tier2: 100_000,
-      tier3: Number.POSITIVE_INFINITY,
+      tier3: 5_000_000,
     };
     const dailyCap = TIER_DAILY_CAP[tier] ?? 30_000;
 
