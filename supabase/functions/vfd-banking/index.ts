@@ -1057,15 +1057,23 @@ async function applyApprovedTierUpgrade(userId: string) {
   const vfdData = data as Record<string, unknown>;
   console.log("[tier upgrade apply] response:", JSON.stringify(vfdData));
 
-  if (status !== 200 || vfdData?.status !== "00") {
+  // The bank reports an already-upgraded account as a non-"00" status. That is not a
+  // failure — the customer is already at (or above) the requested tier, so treat it as done.
+  const message = vfdData?.message?.toString() || "";
+  const alreadyTierMatch = message.match(/already\s+in\s+tier\s*(\d+)/i);
+
+  if (status !== 200 || (vfdData?.status !== "00" && !alreadyTierMatch)) {
     return jsonResponse(
-      { error: vfdData?.message?.toString() || "The upgrade could not be completed with the bank" },
+      { error: message || "The upgrade could not be completed with the bank" },
       502,
     );
   }
 
   const innerData = (vfdData?.data || {}) as Record<string, unknown>;
-  const providerTier = Number(innerData?.currentTier) || Number(client.kyc_requested_tier) || 2;
+  const providerTier = alreadyTierMatch
+    ? Number(alreadyTierMatch[1])
+    : Number(innerData?.currentTier) || Number(client.kyc_requested_tier) || 2;
+
 
   await supabaseAdmin
     .from("vfd_sandbox_clients")
