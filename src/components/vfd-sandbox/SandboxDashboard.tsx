@@ -46,7 +46,7 @@ interface SandboxDashboardProps {
 const TIER_INFO: Record<string, { label: string; daily: string; color: string }> = {
   tier1: { label: "Tier 1 — Starter", daily: "₦30,000 daily", color: "bg-blue-500/25 text-blue-50 border-blue-300/50" },
   tier2: { label: "Tier 2 — Standard", daily: "₦100,000 daily", color: "bg-amber-500/25 text-amber-50 border-amber-300/50" },
-  tier3: { label: "Tier 3 — Premium", daily: "No daily cap", color: "bg-emerald-500/25 text-emerald-50 border-emerald-300/50" },
+  tier3: { label: "Tier 3 — Premium", daily: "₦5,000,000 daily", color: "bg-emerald-500/25 text-emerald-50 border-emerald-300/50" },
 };
 
 /* ─── Animated Counter ─── */
