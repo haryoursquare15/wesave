@@ -1062,7 +1062,8 @@ async function applyApprovedTierUpgrade(userId: string) {
   const message = vfdData?.message?.toString() || "";
   const alreadyTierMatch = message.match(/already\s+in\s+tier\s*(\d+)/i);
 
-  if (status !== 200 || (vfdData?.status !== "00" && !alreadyTierMatch)) {
+  // "Already in tier N" is a success regardless of the HTTP status the bank returns.
+  if (!alreadyTierMatch && (status !== 200 || vfdData?.status !== "00")) {
     return jsonResponse(
       { error: message || "The upgrade could not be completed with the bank" },
       502,
