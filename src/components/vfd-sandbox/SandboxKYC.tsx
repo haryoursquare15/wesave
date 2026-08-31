@@ -24,7 +24,7 @@ function formatDobForVfd(dateStr: string): string {
 // Limits per VFD Microfinance Bank official policy
 // Tier 1: ₦30,000 daily cumulative
 // Tier 2: ₦100,000 daily cumulative
-// Tier 3: Above ₦100,000 (no fixed daily cap; per-txn capped at ₦5,000,000 by VFD)
+// Tier 3: ₦5,000,000 daily cumulative (per-txn capped at ₦5,000,000)
 const TIERS = [
   {
     level: 1,
@@ -54,7 +54,7 @@ const TIERS = [
     icon: Crown,
     color: "from-gold to-amber-500",
     badge: "bg-gold/10 text-gold border-gold/20",
-    dailyLimit: "Above ₦100,000",
+    dailyLimit: "₦5,000,000",
     txnLimit: "₦5,000,000",
     requirements: ["BVN + NIN", "DOB", "Address (or Utility Bill / Bank Statement)"],
     description: "Premium account — no daily cap, up to ₦5M per transfer",
