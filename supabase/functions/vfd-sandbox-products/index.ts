@@ -8080,10 +8080,29 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
     const groupIsDdm = sweepConsistency.funding_mode === "ddm";
 
 
-    const { data: pending } = await db.from("vfd_sandbox_group_members")
+    // CYCLE-AUTHORITATIVE PENDING SET.
+    // `has_contributed_current` is a cache that can be stamped AFTER a cycle
+    // advances (collection finishing just after payout resets the flags), which
+    // silently marks a member as paid for a cycle they never funded and
+    // deadlocks the payout gate. The real source of truth is a contribution row
+    // for the ACTIVE cycle number, so derive the pending set from that.
+    const { data: allActiveMembers } = await db.from("vfd_sandbox_group_members")
       .select("id, user_id, contribution_method, mandate_status, mandate_code, mandate_reference")
-      .eq("group_id", group.id).eq("status", "active")
-      .eq("has_contributed_current", false);
+      .eq("group_id", group.id).eq("status", "active");
+
+    const { data: cycleContribRows } = await db.from("vfd_sandbox_group_contributions")
+      .select("user_id").eq("group_id", group.id).eq("cycle_number", group.current_cycle);
+    const fundedThisCycle = new Set((cycleContribRows || []).map((r) => r.user_id as string));
+
+    const pending = (allActiveMembers || []).filter((m) => !fundedThisCycle.has(m.user_id as string));
+
+    // Self-heal the cache so the UI and any flag-based reader agree with truth.
+    for (const m of (allActiveMembers || [])) {
+      await db.from("vfd_sandbox_group_members")
+        .update({ has_contributed_current: fundedThisCycle.has(m.user_id as string) })
+        .eq("id", m.id);
+    }
+
 
     const MAX_RETRIES = 3;
     const RETRY_INTERVAL_MS = 30 * 60 * 1000;

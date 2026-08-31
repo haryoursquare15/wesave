@@ -535,6 +535,9 @@ export async function debitMandate(params: {
         failureClass: ok ? "none" : classifyDebitFailure(message, res.status),
         message: message || (ok ? "Successful" : "Debit not confirmed by VFD"),
       };
+      if (!ok) {
+        console.warn(`[mandate-debit] ref=${params.transactionReference} mandate=${params.mandateReference} http=${res.status} status=${status} message=${message}`);
+      }
       // Only an auth rejection is safe (and worth) retrying with another token.
       if (ok || !isInvalidTokenResponse(res.status, json as Record<string, unknown>)) return last;
       console.warn(`[mandate-debit] token source=${c.source} rejected (${res.status}) — trying next`);
