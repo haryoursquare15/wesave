@@ -25,9 +25,11 @@ interface Transaction {
   session_id?: string | null;
   description: string | null;
   created_at: string;
-  source: "sandbox" | "legacy";
+  source: "sandbox" | "legacy" | "bills" | "ledger";
   user_name?: string;
   username?: string;
+  category?: string;
+  label?: string;
 }
 
 export function TransactionExplorerTab() {
