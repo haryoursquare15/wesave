@@ -289,7 +289,13 @@ export function TransactionExplorerTab() {
                     <TableCell className="font-mono text-xs max-w-[200px] truncate">
                       {tx.reference || tx.id}
                     </TableCell>
-                    <TableCell><Badge variant="outline">{tx.type}</Badge></TableCell>
+                    <TableCell className="max-w-[240px]">
+                      <div className="text-sm font-medium truncate">{tx.label || tx.description || "—"}</div>
+                      {tx.category && (
+                        <Badge variant="secondary" className="text-[10px] mt-0.5">{tx.category}</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell><Badge variant="outline">{tx.type?.replace(/_/g, " ")}</Badge></TableCell>
                     <TableCell className="font-medium">₦{tx.amount.toLocaleString()}</TableCell>
                     <TableCell>{getStatusBadge(tx.status)}</TableCell>
                     <TableCell><Badge variant="secondary" className="text-[10px]">{tx.source}</Badge></TableCell>
