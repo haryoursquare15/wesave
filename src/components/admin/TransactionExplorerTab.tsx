@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { Search, RefreshCw, Eye, Download } from "lucide-react";
 import { exportToCSV } from "@/lib/exportUtils";
+import { describeTransaction } from "@/lib/transactionLabels";
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
