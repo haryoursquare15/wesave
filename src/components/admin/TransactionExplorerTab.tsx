@@ -270,6 +270,7 @@ export function TransactionExplorerTab() {
                 <TableRow>
                   <TableHead>Customer</TableHead>
                   <TableHead>Reference</TableHead>
+                  <TableHead>Description</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Amount</TableHead>
                   <TableHead>Status</TableHead>
