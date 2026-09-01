@@ -156,6 +156,9 @@ export function TransactionExplorerTab() {
       tx.user_name?.toLowerCase().includes(s) ||
       tx.username?.toLowerCase().includes(s) ||
       tx.description?.toLowerCase().includes(s) ||
+      tx.label?.toLowerCase().includes(s) ||
+      tx.category?.toLowerCase().includes(s) ||
+      tx.type?.toLowerCase().includes(s) ||
       tx.id.toLowerCase().includes(s)
     );
   });
