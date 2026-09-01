@@ -328,10 +328,11 @@ function UserDetailsRow({ userId }: UserDetailsRowProps) {
               <div className="text-sm space-y-1 max-h-32 overflow-y-auto">
                 {data.groups.map((membership: any) => (
                   <div key={membership.id} className="flex justify-between items-center">
-                    <span>{membership.thrift_groups?.name || "Unknown"}</span>
-                    <Badge variant="outline" className="text-xs capitalize">{membership.thrift_groups?.status}</Badge>
+                    <span>{membership.vfd_sandbox_groups?.name || "Unknown"}</span>
+                    <Badge variant="outline" className="text-xs capitalize">{membership.vfd_sandbox_groups?.status}</Badge>
                   </div>
                 ))}
+
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">Not in any groups</p>
