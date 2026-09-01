@@ -4458,3 +4458,82 @@ async function handleReverseSavingsSubaccount(
 
 }
 
+
+// =============================================
+// ADMIN: product sub-account balances
+// Live VFD balance for the corporate pool + every product sub-account,
+// alongside the internally-held principal for that product.
+// =============================================
+async function handleAdminProductAccountBalances(userId: string) {
+  const db = getSupabaseAdmin();
+  const { data: isAdmin } = await db.rpc("is_any_admin", { _user_id: userId });
+  if (isAdmin !== true) return jsonResponse({ error: "Admin access required" }, 403);
+
+  const poolNuban = Deno.env.get("VFD_CORPORATE_POOL_NUBAN") || "1047279595";
+
+  const { data: products } = await db
+    .from("vestara_products")
+    .select("code, name, sub_account_nuban, is_active")
+    .order("code");
+
+  // Internal principal + accrued interest held per product (live contracts only)
+  const { data: savings } = await db
+    .from("vestara_savings")
+    .select("product_code, principal, accrued_interest, status, approval_status")
+    .eq("status", "active");
+
+  const internal = new Map<string, { principal: number; interest: number; count: number }>();
+  for (const s of savings ?? []) {
+    if (String(s.approval_status || "") === "pending") continue;
+    const key = String(s.product_code);
+    const cur = internal.get(key) ?? { principal: 0, interest: 0, count: 0 };
+    cur.principal += toNumber(s.principal);
+    cur.interest += toNumber(s.accrued_interest);
+    cur.count += 1;
+    internal.set(key, cur);
+  }
+
+  const enquire = async (accountNo: string) => {
+    try {
+      const { data, status } = await vfdRequest("/account/enquiry", "GET", undefined, {
+        accountNumber: accountNo,
+      });
+      if (status >= 400) return { balance: null as number | null, error: `VFD ${status}` };
+      return { balance: extractVfdBalance(data), error: null as string | null };
+    } catch (e) {
+      return { balance: null as number | null, error: e instanceof Error ? e.message : String(e) };
+    }
+  };
+
+  const pool = await enquire(poolNuban);
+
+  const accounts = [];
+  for (const p of products ?? []) {
+    const nuban = (p.sub_account_nuban as string | null) || null;
+    const live = nuban ? await enquire(nuban) : { balance: null, error: "No sub-account configured" };
+    const held = internal.get(String(p.code)) ?? { principal: 0, interest: 0, count: 0 };
+    accounts.push({
+      code: p.code,
+      name: p.name,
+      account_number: nuban,
+      is_active: p.is_active,
+      live_balance: live.balance,
+      error: live.error,
+      internal_principal: Number(held.principal.toFixed(2)),
+      internal_interest: Number(held.interest.toFixed(2)),
+      active_contracts: held.count,
+      drift: live.balance === null ? null : Number((live.balance - held.principal).toFixed(2)),
+    });
+  }
+
+  return jsonResponse({
+    fetched_at: new Date().toISOString(),
+    pool: {
+      name: "Vestara Corporate Pool",
+      account_number: poolNuban,
+      live_balance: pool.balance,
+      error: pool.error,
+    },
+    accounts,
+  });
+}
