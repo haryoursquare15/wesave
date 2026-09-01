@@ -232,7 +232,11 @@ export function AdminOverviewTab() {
         </div>
       </div>
 
+      {/* Investment sub-account balances */}
+      <ProductAccountsPanel />
+
       {/* User Wallets Table */}
+
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
