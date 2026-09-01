@@ -360,12 +360,10 @@ export function UserManagementTab() {
       .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => {
         refetch();
       })
-      .on("postgres_changes", { event: "*", schema: "public", table: "wallets" }, () => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "vfd_user_balances" }, () => {
         refetch();
       })
-      .on("postgres_changes", { event: "*", schema: "public", table: "group_memberships" }, () => {
-        refetch();
-      })
+
       .subscribe();
 
     return () => {
