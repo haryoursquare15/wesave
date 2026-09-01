@@ -138,8 +138,13 @@ export function TransactionExplorerTab() {
 
   useEffect(() => { fetchTransactions(); }, []);
 
+  const availableTypes = [...new Set(transactions.map(t => t.type).filter(Boolean))].sort();
+  const availableCategories = [...new Set(transactions.map(t => t.category).filter(Boolean) as string[])].sort();
+
   const filteredTransactions = transactions.filter(tx => {
     if (typeFilter !== "all" && tx.type !== typeFilter) return false;
+    if (categoryFilter !== "all" && tx.category !== categoryFilter) return false;
+    if (sourceFilter !== "all" && tx.source !== sourceFilter) return false;
     if (statusFilter !== "all" && tx.status !== statusFilter) return false;
     if (!search.trim()) return true;
     const s = search.toLowerCase();
