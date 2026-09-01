@@ -39,6 +39,8 @@ export function TransactionExplorerTab() {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [sourceFilter, setSourceFilter] = useState<string>("all");
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
 
   const fetchTransactions = async () => {
