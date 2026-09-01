@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { Search, RefreshCw, Eye, Download } from "lucide-react";
 import { exportToCSV } from "@/lib/exportUtils";
+import { describeTransaction } from "@/lib/transactionLabels";
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
@@ -25,9 +26,11 @@ interface Transaction {
   session_id?: string | null;
   description: string | null;
   created_at: string;
-  source: "sandbox" | "legacy";
+  source: "sandbox" | "legacy" | "bills" | "ledger";
   user_name?: string;
   username?: string;
+  category?: string;
+  label?: string;
 }
 
 export function TransactionExplorerTab() {
@@ -36,12 +39,14 @@ export function TransactionExplorerTab() {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [sourceFilter, setSourceFilter] = useState<string>("all");
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
 
   const fetchTransactions = async () => {
     setLoading(true);
     try {
-      const [sandbox, legacy] = await Promise.all([
+      const [sandbox, legacy, bills, ledger] = await Promise.all([
         supabase
           .from("vfd_sandbox_transactions")
           .select("id,user_id,transaction_type,amount,status,reference,vfd_reference,session_id,description,created_at")
@@ -50,6 +55,16 @@ export function TransactionExplorerTab() {
         supabase
           .from("transactions")
           .select("id,user_id,type,amount,status,reference,description,created_at")
+          .order("created_at", { ascending: false })
+          .limit(200),
+        supabase
+          .from("vfd_sandbox_bill_receipts")
+          .select("id,user_id,reference,category,biller_name,payment_item_name,customer_id,phone_number,amount,convenience_fee,status,created_at")
+          .order("created_at", { ascending: false })
+          .limit(200),
+        supabase
+          .from("vestara_transactions")
+          .select("id,initiated_by,type,amount,status,reference,metadata,created_at")
           .order("created_at", { ascending: false })
           .limit(200),
       ]);
@@ -66,6 +81,28 @@ export function TransactionExplorerTab() {
         status: r.status, reference: r.reference, description: r.description,
         created_at: r.created_at, source: "legacy",
       }));
+      (bills.data ?? []).forEach((r: any) => rows.push({
+        id: r.id,
+        user_id: r.user_id,
+        type: "bill_payment",
+        amount: Number(r.amount) + Number(r.convenience_fee || 0),
+        status: r.status === "successful" ? "completed" : r.status,
+        reference: r.reference,
+        description: `Bill Payment: ${r.biller_name || r.category || "Bill"} - ${r.customer_id || r.phone_number || ""}${r.payment_item_name ? ` (${r.payment_item_name})` : ""}`,
+        created_at: r.created_at,
+        source: "bills",
+      }));
+      (ledger.data ?? []).forEach((r: any) => rows.push({
+        id: r.id,
+        user_id: r.initiated_by,
+        type: r.type,
+        amount: Number(r.amount),
+        status: r.status,
+        reference: r.reference,
+        description: (r.metadata?.description as string) || (r.metadata?.note as string) || String(r.type || "").replace(/_/g, " "),
+        created_at: r.created_at,
+        source: "ledger",
+      }));
       const userIds = [...new Set(rows.map(r => r.user_id).filter(Boolean))];
       if (userIds.length) {
         const { data: profiles } = await supabase
@@ -80,6 +117,16 @@ export function TransactionExplorerTab() {
         });
       }
 
+      rows.forEach(r => {
+        const info = describeTransaction({
+          transaction_type: r.type,
+          description: r.description,
+          reference: r.reference,
+        });
+        r.category = info.category;
+        r.label = info.title;
+      });
+
       rows.sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at));
       setTransactions(rows);
     } catch (err) {
@@ -91,8 +138,13 @@ export function TransactionExplorerTab() {
 
   useEffect(() => { fetchTransactions(); }, []);
 
+  const availableTypes = [...new Set(transactions.map(t => t.type).filter(Boolean))].sort();
+  const availableCategories = [...new Set(transactions.map(t => t.category).filter(Boolean) as string[])].sort();
+
   const filteredTransactions = transactions.filter(tx => {
     if (typeFilter !== "all" && tx.type !== typeFilter) return false;
+    if (categoryFilter !== "all" && tx.category !== categoryFilter) return false;
+    if (sourceFilter !== "all" && tx.source !== sourceFilter) return false;
     if (statusFilter !== "all" && tx.status !== statusFilter) return false;
     if (!search.trim()) return true;
     const s = search.toLowerCase();
@@ -104,6 +156,9 @@ export function TransactionExplorerTab() {
       tx.user_name?.toLowerCase().includes(s) ||
       tx.username?.toLowerCase().includes(s) ||
       tx.description?.toLowerCase().includes(s) ||
+      tx.label?.toLowerCase().includes(s) ||
+      tx.category?.toLowerCase().includes(s) ||
+      tx.type?.toLowerCase().includes(s) ||
       tx.id.toLowerCase().includes(s)
     );
   });
@@ -127,7 +182,7 @@ export function TransactionExplorerTab() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <CardTitle>Transaction Explorer</CardTitle>
-            <CardDescription>Sandbox wallet + legacy platform transactions</CardDescription>
+            <CardDescription>Wallet, bill payments, savings, thrift, split &amp; ledger transactions</CardDescription>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={fetchTransactions}>
@@ -140,6 +195,8 @@ export function TransactionExplorerTab() {
                 Reference: tx.reference || tx.id,
                 "VFD Ref": tx.vfd_reference || "",
                 "NIBSS Session": tx.session_id || "",
+                Label: tx.label || "",
+                Category: tx.category || "",
                 Type: tx.type,
                 Amount: tx.amount,
                 Status: tx.status,
@@ -165,18 +222,32 @@ export function TransactionExplorerTab() {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="w-44"><SelectValue placeholder="Category" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Categories</SelectItem>
+              {availableCategories.map(c => (
+                <SelectItem key={c} value={c}>{c}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Select value={typeFilter} onValueChange={setTypeFilter}>
             <SelectTrigger className="w-40"><SelectValue placeholder="Type" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Types</SelectItem>
-              <SelectItem value="transfer">Transfer</SelectItem>
-              <SelectItem value="credit">Credit</SelectItem>
-              <SelectItem value="debit">Debit</SelectItem>
-              <SelectItem value="contribution">Contribution</SelectItem>
-              <SelectItem value="payout">Payout</SelectItem>
-              <SelectItem value="funding">Funding</SelectItem>
-              <SelectItem value="withdrawal">Withdrawal</SelectItem>
-              <SelectItem value="service_fee">Service Fee</SelectItem>
+              {availableTypes.map(t => (
+                <SelectItem key={t} value={t}>{t.replace(/_/g, " ")}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={sourceFilter} onValueChange={setSourceFilter}>
+            <SelectTrigger className="w-36"><SelectValue placeholder="Source" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Sources</SelectItem>
+              <SelectItem value="sandbox">Wallet</SelectItem>
+              <SelectItem value="bills">Bill payments</SelectItem>
+              <SelectItem value="ledger">Vestara ledger</SelectItem>
+              <SelectItem value="legacy">Legacy</SelectItem>
             </SelectContent>
           </Select>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -201,6 +272,7 @@ export function TransactionExplorerTab() {
                 <TableRow>
                   <TableHead>Customer</TableHead>
                   <TableHead>Reference</TableHead>
+                  <TableHead>Description</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Amount</TableHead>
                   <TableHead>Status</TableHead>
@@ -219,7 +291,13 @@ export function TransactionExplorerTab() {
                     <TableCell className="font-mono text-xs max-w-[200px] truncate">
                       {tx.reference || tx.id}
                     </TableCell>
-                    <TableCell><Badge variant="outline">{tx.type}</Badge></TableCell>
+                    <TableCell className="max-w-[240px]">
+                      <div className="text-sm font-medium truncate">{tx.label || tx.description || "—"}</div>
+                      {tx.category && (
+                        <Badge variant="secondary" className="text-[10px] mt-0.5">{tx.category}</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell><Badge variant="outline">{tx.type?.replace(/_/g, " ")}</Badge></TableCell>
                     <TableCell className="font-medium">₦{tx.amount.toLocaleString()}</TableCell>
                     <TableCell>{getStatusBadge(tx.status)}</TableCell>
                     <TableCell><Badge variant="secondary" className="text-[10px]">{tx.source}</Badge></TableCell>
