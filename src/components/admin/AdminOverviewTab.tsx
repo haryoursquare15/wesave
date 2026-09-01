@@ -104,18 +104,20 @@ export function AdminOverviewTab() {
         merged.set(w.user_id, cur);
       });
 
-      const userIds = Array.from(merged.keys());
-      if (!userIds.length) { setUserWallets([]); return; }
-
+      // Include every profile (even zero-balance users) so admins can search
+      // any customer by name and still see their wallet position.
       const { data: profiles } = await supabase
         .from("profiles")
         .select("id, full_name, username, email")
-        .in("id", userIds);
+        .limit(2000);
 
-      const profileMap = new Map((profiles || []).map(p => [p.id, p]));
-      const rows: UserWalletRow[] = userIds.map(uid => {
+      const ids = new Set<string>([...merged.keys(), ...(profiles || []).map((p: any) => p.id)]);
+      if (!ids.size) { setUserWallets([]); return; }
+
+      const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+      const rows: UserWalletRow[] = Array.from(ids).map(uid => {
         const p = profileMap.get(uid);
-        const bal = merged.get(uid)!;
+        const bal = merged.get(uid) ?? { available: 0, locked: 0 };
         return {
           id: uid,
           full_name: p?.full_name || null,
@@ -124,8 +126,9 @@ export function AdminOverviewTab() {
           available_balance: bal.available,
           locked_balance: bal.locked,
         };
-      }).sort((a, b) => b.available_balance - a.available_balance);
+      }).sort((a, b) => (b.available_balance + b.locked_balance) - (a.available_balance + a.locked_balance));
       setUserWallets(rows);
+
     } catch (err) {
       console.error("Error fetching user wallets:", err);
     } finally {
