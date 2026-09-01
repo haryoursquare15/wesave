@@ -114,6 +114,16 @@ export function TransactionExplorerTab() {
         });
       }
 
+      rows.forEach(r => {
+        const info = describeTransaction({
+          transaction_type: r.type,
+          description: r.description,
+          reference: r.reference,
+        });
+        r.category = info.category;
+        r.label = info.title;
+      });
+
       rows.sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at));
       setTransactions(rows);
     } catch (err) {
