@@ -220,18 +220,32 @@ export function TransactionExplorerTab() {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="w-44"><SelectValue placeholder="Category" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Categories</SelectItem>
+              {availableCategories.map(c => (
+                <SelectItem key={c} value={c}>{c}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Select value={typeFilter} onValueChange={setTypeFilter}>
             <SelectTrigger className="w-40"><SelectValue placeholder="Type" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Types</SelectItem>
-              <SelectItem value="transfer">Transfer</SelectItem>
-              <SelectItem value="credit">Credit</SelectItem>
-              <SelectItem value="debit">Debit</SelectItem>
-              <SelectItem value="contribution">Contribution</SelectItem>
-              <SelectItem value="payout">Payout</SelectItem>
-              <SelectItem value="funding">Funding</SelectItem>
-              <SelectItem value="withdrawal">Withdrawal</SelectItem>
-              <SelectItem value="service_fee">Service Fee</SelectItem>
+              {availableTypes.map(t => (
+                <SelectItem key={t} value={t}>{t.replace(/_/g, " ")}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={sourceFilter} onValueChange={setSourceFilter}>
+            <SelectTrigger className="w-36"><SelectValue placeholder="Source" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Sources</SelectItem>
+              <SelectItem value="sandbox">Wallet</SelectItem>
+              <SelectItem value="bills">Bill payments</SelectItem>
+              <SelectItem value="ledger">Vestara ledger</SelectItem>
+              <SelectItem value="legacy">Legacy</SelectItem>
             </SelectContent>
           </Select>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
