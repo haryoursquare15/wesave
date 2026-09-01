@@ -195,6 +195,8 @@ export function TransactionExplorerTab() {
                 Reference: tx.reference || tx.id,
                 "VFD Ref": tx.vfd_reference || "",
                 "NIBSS Session": tx.session_id || "",
+                Label: tx.label || "",
+                Category: tx.category || "",
                 Type: tx.type,
                 Amount: tx.amount,
                 Status: tx.status,
