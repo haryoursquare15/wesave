@@ -182,7 +182,7 @@ export function TransactionExplorerTab() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <CardTitle>Transaction Explorer</CardTitle>
-            <CardDescription>Sandbox wallet + legacy platform transactions</CardDescription>
+            <CardDescription>Wallet, bill payments, savings, thrift, split &amp; ledger transactions</CardDescription>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={fetchTransactions}>
