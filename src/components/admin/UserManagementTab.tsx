@@ -278,13 +278,17 @@ function UserDetailsRow({ userId }: UserDetailsRowProps) {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [walletRes, groupsRes] = await Promise.all([
+        const [balRes, legacyWalletRes, groupsRes] = await Promise.all([
+          supabase.from("vfd_user_balances").select("*").eq("user_id", userId).maybeSingle(),
           supabase.from("wallets").select("*").eq("user_id", userId).maybeSingle(),
-          supabase.from("group_memberships")
-            .select("*, thrift_groups(name, status, contribution_amount)")
+          supabase.from("vfd_sandbox_group_members")
+            .select("id, status, vfd_sandbox_groups(name, status, contribution_amount)")
             .eq("user_id", userId)
         ]);
-        setData({ wallet: walletRes.data, groups: groupsRes.data || [] });
+        setData({
+          wallet: balRes.data || legacyWalletRes.data || null,
+          groups: groupsRes.data || [],
+        });
       } catch (err) {
         console.error("Error fetching user details:", err);
       } finally {
@@ -293,6 +297,7 @@ function UserDetailsRow({ userId }: UserDetailsRowProps) {
     };
     fetchData();
   }, [userId]);
+
 
   if (loading) {
     return (
