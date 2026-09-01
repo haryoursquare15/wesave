@@ -278,13 +278,17 @@ function UserDetailsRow({ userId }: UserDetailsRowProps) {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [walletRes, groupsRes] = await Promise.all([
+        const [balRes, legacyWalletRes, groupsRes] = await Promise.all([
+          supabase.from("vfd_user_balances").select("*").eq("user_id", userId).maybeSingle(),
           supabase.from("wallets").select("*").eq("user_id", userId).maybeSingle(),
-          supabase.from("group_memberships")
-            .select("*, thrift_groups(name, status, contribution_amount)")
+          supabase.from("vfd_sandbox_group_members")
+            .select("id, status, vfd_sandbox_groups(name, status, contribution_amount)")
             .eq("user_id", userId)
         ]);
-        setData({ wallet: walletRes.data, groups: groupsRes.data || [] });
+        setData({
+          wallet: balRes.data || legacyWalletRes.data || null,
+          groups: groupsRes.data || [],
+        });
       } catch (err) {
         console.error("Error fetching user details:", err);
       } finally {
@@ -293,6 +297,7 @@ function UserDetailsRow({ userId }: UserDetailsRowProps) {
     };
     fetchData();
   }, [userId]);
+
 
   if (loading) {
     return (
@@ -323,10 +328,11 @@ function UserDetailsRow({ userId }: UserDetailsRowProps) {
               <div className="text-sm space-y-1 max-h-32 overflow-y-auto">
                 {data.groups.map((membership: any) => (
                   <div key={membership.id} className="flex justify-between items-center">
-                    <span>{membership.thrift_groups?.name || "Unknown"}</span>
-                    <Badge variant="outline" className="text-xs capitalize">{membership.thrift_groups?.status}</Badge>
+                    <span>{membership.vfd_sandbox_groups?.name || "Unknown"}</span>
+                    <Badge variant="outline" className="text-xs capitalize">{membership.vfd_sandbox_groups?.status}</Badge>
                   </div>
                 ))}
+
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">Not in any groups</p>
@@ -354,12 +360,10 @@ export function UserManagementTab() {
       .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => {
         refetch();
       })
-      .on("postgres_changes", { event: "*", schema: "public", table: "wallets" }, () => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "vfd_user_balances" }, () => {
         refetch();
       })
-      .on("postgres_changes", { event: "*", schema: "public", table: "group_memberships" }, () => {
-        refetch();
-      })
+
       .subscribe();
 
     return () => {
