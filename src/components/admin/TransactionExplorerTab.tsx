@@ -43,7 +43,7 @@ export function TransactionExplorerTab() {
   const fetchTransactions = async () => {
     setLoading(true);
     try {
-      const [sandbox, legacy] = await Promise.all([
+      const [sandbox, legacy, bills, ledger] = await Promise.all([
         supabase
           .from("vfd_sandbox_transactions")
           .select("id,user_id,transaction_type,amount,status,reference,vfd_reference,session_id,description,created_at")
@@ -52,6 +52,16 @@ export function TransactionExplorerTab() {
         supabase
           .from("transactions")
           .select("id,user_id,type,amount,status,reference,description,created_at")
+          .order("created_at", { ascending: false })
+          .limit(200),
+        supabase
+          .from("vfd_sandbox_bill_receipts")
+          .select("id,user_id,reference,category,biller_name,payment_item_name,customer_id,phone_number,amount,convenience_fee,status,created_at")
+          .order("created_at", { ascending: false })
+          .limit(200),
+        supabase
+          .from("vestara_transactions")
+          .select("id,initiated_by,type,amount,status,reference,metadata,created_at")
           .order("created_at", { ascending: false })
           .limit(200),
       ]);
@@ -67,6 +77,28 @@ export function TransactionExplorerTab() {
         id: r.id, user_id: r.user_id, type: r.type, amount: Number(r.amount),
         status: r.status, reference: r.reference, description: r.description,
         created_at: r.created_at, source: "legacy",
+      }));
+      (bills.data ?? []).forEach((r: any) => rows.push({
+        id: r.id,
+        user_id: r.user_id,
+        type: "bill_payment",
+        amount: Number(r.amount) + Number(r.convenience_fee || 0),
+        status: r.status === "successful" ? "completed" : r.status,
+        reference: r.reference,
+        description: `Bill Payment: ${r.biller_name || r.category || "Bill"} - ${r.customer_id || r.phone_number || ""}${r.payment_item_name ? ` (${r.payment_item_name})` : ""}`,
+        created_at: r.created_at,
+        source: "bills",
+      }));
+      (ledger.data ?? []).forEach((r: any) => rows.push({
+        id: r.id,
+        user_id: r.initiated_by,
+        type: r.type,
+        amount: Number(r.amount),
+        status: r.status,
+        reference: r.reference,
+        description: (r.metadata?.description as string) || (r.metadata?.note as string) || String(r.type || "").replace(/_/g, " "),
+        created_at: r.created_at,
+        source: "ledger",
       }));
       const userIds = [...new Set(rows.map(r => r.user_id).filter(Boolean))];
       if (userIds.length) {
