@@ -244,7 +244,7 @@ export function AdminOverviewTab() {
             <div className="flex gap-2">
               <div className="relative flex-1 sm:w-64">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input placeholder="Search by name or username..." className="pl-9" value={walletSearch} onChange={(e) => setWalletSearch(e.target.value)} />
+                <Input placeholder="Search by name, username or email..." className="pl-9" value={walletSearch} onChange={(e) => setWalletSearch(e.target.value)} />
               </div>
               <Button variant="outline" size="sm" onClick={handleExportWallets} disabled={!filteredWallets.length}>
                 <Download className="h-4 w-4 mr-1" /> Export
