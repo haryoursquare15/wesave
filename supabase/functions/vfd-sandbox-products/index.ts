@@ -8191,24 +8191,37 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
             succeeded++;
           } else {
             const walletErr = recovery.error || "Wallet recovery failed";
-            const nextRetry = new Date(Date.now() + RETRY_INTERVAL_MS).toISOString();
+            // Wallet recovery gets more attempts than a bank debit, but it is
+            // NOT unlimited — once exhausted the member is marked a defaulter
+            // so the cycle can close instead of stalling the whole group.
+            const prevCount = existingFailed?.retry_count ?? 0;
+            const newCount = prevCount + 1;
+            const reachedLimit = newCount >= MAX_RECOVERY_ATTEMPTS;
+            const nextRetry = reachedLimit ? null : new Date(Date.now() + RETRY_INTERVAL_MS).toISOString();
             if (existingFailed) {
               await db.from("vfd_sandbox_contribution_audit").update({
-                error_message: walletErr, next_retry_at: nextRetry, penalty_served: false,
+                retry_count: newCount, error_message: walletErr,
+                next_retry_at: nextRetry, penalty_served: reachedLimit,
               }).eq("id", existingFailed.id);
             } else {
               await db.from("vfd_sandbox_contribution_audit").insert({
                 user_id: m.user_id, group_id: group.id, cycle_id: activeCycle.id,
                 amount, contribution_type: "wallet_recovery", status: "failed",
-                retry_count: 0, next_retry_at: nextRetry,
-                error_message: walletErr, penalty_served: false,
+                retry_count: newCount, next_retry_at: nextRetry,
+                error_message: walletErr, penalty_served: reachedLimit,
               });
             }
-            await postChatMessage(group.id, m.user_id,
-              `⚠️ Mandate elapsed — ₦${(recovery.total || amount).toLocaleString()} (contribution + penal charge) could not be swept from wallet: ${walletErr}.`,
-              "contribution_failed");
-            failed++;
+            if (reachedLimit) {
+              await recordContributionDefault(group, m.user_id as string, activeCycle.id as string, amount, walletErr);
+              penalized++;
+            } else {
+              await postChatMessage(group.id, m.user_id,
+                `⚠️ Mandate elapsed — ₦${(recovery.total || amount).toLocaleString()} (contribution + penal charge) could not be swept from wallet: ${walletErr}.`,
+                "contribution_failed");
+              failed++;
+            }
           }
+
           continue;
         }
       }
