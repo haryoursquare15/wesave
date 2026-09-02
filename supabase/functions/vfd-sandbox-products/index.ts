@@ -8147,7 +8147,9 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
 
 
     const MAX_RETRIES = 3;
+    const MAX_RECOVERY_ATTEMPTS = 6;
     const RETRY_INTERVAL_MS = 30 * 60 * 1000;
+
     let succeeded = 0, failed = 0, deferred = 0, penalized = 0;
     // Per-member outcome trace so an operator can see WHY a member was skipped
     // instead of only seeing an aggregate "deferred" count.
