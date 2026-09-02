@@ -1292,7 +1292,34 @@ async function updatePayoutRow(id: string, patch: Record<string, unknown>) {
     .update({ ...patch, updated_at: new Date().toISOString() }).eq("id", id);
 }
 
+/**
+ * Members whose collection for this cycle has definitively failed: retries
+ * exhausted and the penalty already served (outstanding recorded against
+ * them). They are excluded from the cycle's funding expectation so a single
+ * defaulter can never stall an active group indefinitely.
+ * A member who actually funded the cycle is never treated as a defaulter.
+ */
+async function getCycleDefaulters(groupId: string, cycleId: string): Promise<string[]> {
+  const db = getSupabaseAdmin();
+  const [{ data: failedRows }, { data: successRows }] = await Promise.all([
+    db.from("vfd_sandbox_contribution_audit")
+      .select("user_id").eq("group_id", groupId).eq("cycle_id", cycleId)
+      .eq("status", "failed").eq("penalty_served", true),
+    db.from("vfd_sandbox_contribution_audit")
+      .select("user_id").eq("group_id", groupId).eq("cycle_id", cycleId)
+      .eq("status", "success"),
+  ]);
+  const funded = new Set((successRows || []).map((r: Record<string, unknown>) => String(r.user_id)));
+  const defaulters = new Set(
+    (failedRows || [])
+      .map((r: Record<string, unknown>) => String(r.user_id))
+      .filter((uid) => !funded.has(uid)),
+  );
+  return [...defaulters];
+}
+
 // AUTO-PAYOUT (Production parity: tiered fee, credit recipient wallet, advance cycle)
+
 
 async function processAutoPayout(
   db: ReturnType<typeof createClient>,
