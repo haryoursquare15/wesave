@@ -1157,10 +1157,12 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
   let allContributed = false;
   let payoutResult = null;
 
-  if (count && count >= group.member_count) {
+  const cycleDefaulters = await getCycleDefaulters(groupId, activeCycle.id as string);
+  if ((count || 0) + cycleDefaulters.length >= Number(group.member_count)) {
     allContributed = true;
     payoutResult = await processAutoPayout(db, group, activeCycle);
   }
+
 
   return jsonResponse({
     data: {
@@ -1292,7 +1294,34 @@ async function updatePayoutRow(id: string, patch: Record<string, unknown>) {
     .update({ ...patch, updated_at: new Date().toISOString() }).eq("id", id);
 }
 
+/**
+ * Members whose collection for this cycle has definitively failed: retries
+ * exhausted and the penalty already served (outstanding recorded against
+ * them). They are excluded from the cycle's funding expectation so a single
+ * defaulter can never stall an active group indefinitely.
+ * A member who actually funded the cycle is never treated as a defaulter.
+ */
+async function getCycleDefaulters(groupId: string, cycleId: string): Promise<string[]> {
+  const db = getSupabaseAdmin();
+  const [{ data: failedRows }, { data: successRows }] = await Promise.all([
+    db.from("vfd_sandbox_contribution_audit")
+      .select("user_id").eq("group_id", groupId).eq("cycle_id", cycleId)
+      .eq("status", "failed").eq("penalty_served", true),
+    db.from("vfd_sandbox_contribution_audit")
+      .select("user_id").eq("group_id", groupId).eq("cycle_id", cycleId)
+      .eq("status", "success"),
+  ]);
+  const funded = new Set((successRows || []).map((r: Record<string, unknown>) => String(r.user_id)));
+  const defaulters = new Set(
+    (failedRows || [])
+      .map((r: Record<string, unknown>) => String(r.user_id))
+      .filter((uid) => !funded.has(uid)),
+  );
+  return [...defaulters];
+}
+
 // AUTO-PAYOUT (Production parity: tiered fee, credit recipient wallet, advance cycle)
+
 
 async function processAutoPayout(
   db: ReturnType<typeof createClient>,
@@ -1310,15 +1339,27 @@ async function processAutoPayout(
   if (!recipientId) return { success: false, error: "No recipient for this cycle" };
 
   // ===========================================================
+  // DEFAULT-ADJUSTED CYCLE CLOSURE.
+  // A member whose collection has definitively failed (retries exhausted,
+  // penalty served, outstanding recorded against them) must NOT freeze the
+  // cycle forever. Their contribution is excluded from the cycle's expected
+  // funding and from the gross payout — the group only ever disburses money
+  // that VFD actually settled into the pool. The defaulter still owes the
+  // group and stays payout-blocked until it is recovered.
+  // ===========================================================
+  const defaulters = await getCycleDefaulters(groupId, activeCycle.id as string);
+  const fundingMemberCount = Math.max(1, memberCount - defaulters.length);
+
+  // ===========================================================
   // SETTLEMENT GATE — no payout may leave the pool while ANY of this cycle's
   // collections is still unconfirmed at the bank. Internal ledger entries are
   // never accepted as evidence that the money is really there.
   //
   // CONFIGURED EXPECTATION decides the amounts:
-  //   expected_cycle_funding = contribution_amount × member_count = GROSS PAYOUT
+  //   expected_cycle_funding = contribution_amount × funding member count
   // VFD SETTLEMENT only authorizes release; it never resizes the payout.
   // ===========================================================
-  const grossAmount = Math.round(amount * memberCount * 100) / 100;
+  const grossAmount = Math.round(amount * fundingMemberCount * 100) / 100;
 
   const collectionCheck = await cycleCollectionsConfirmed(groupId, currentCycle);
   if (!collectionCheck.ok) {
@@ -1331,9 +1372,9 @@ async function processAutoPayout(
     };
   }
 
-  // POSITIVE proof: every active member's configured contribution must be
-  // individually confirmed by VFD settlement for this cycle.
-  const funding = await verifyCycleFunding(groupId, currentCycle, amount, memberCount);
+  // POSITIVE proof: every non-defaulting member's configured contribution must
+  // be individually confirmed by VFD settlement for this cycle.
+  const funding = await verifyCycleFunding(groupId, currentCycle, amount, fundingMemberCount, defaulters);
   if (!funding.ok) {
     console.error(`[processAutoPayout] BLOCKED group=${groupId} cycle=${currentCycle} — expected ₦${funding.expected_cycle_funding}, confirmed ₦${funding.confirmed_cycle_funding}, ${funding.missing_members.length} member(s) outstanding`);
     return {
@@ -1344,6 +1385,7 @@ async function processAutoPayout(
       funding_report: funding,
     };
   }
+
 
   // PRODUCTION PARITY: Tiered fee structure
   const platformFee = calculatePlatformFee(grossAmount);
@@ -8105,7 +8147,9 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
 
 
     const MAX_RETRIES = 3;
+    const MAX_RECOVERY_ATTEMPTS = 6;
     const RETRY_INTERVAL_MS = 30 * 60 * 1000;
+
     let succeeded = 0, failed = 0, deferred = 0, penalized = 0;
     // Per-member outcome trace so an operator can see WHY a member was skipped
     // instead of only seeing an aggregate "deferred" count.
@@ -8149,24 +8193,37 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
             succeeded++;
           } else {
             const walletErr = recovery.error || "Wallet recovery failed";
-            const nextRetry = new Date(Date.now() + RETRY_INTERVAL_MS).toISOString();
+            // Wallet recovery gets more attempts than a bank debit, but it is
+            // NOT unlimited — once exhausted the member is marked a defaulter
+            // so the cycle can close instead of stalling the whole group.
+            const prevCount = existingFailed?.retry_count ?? 0;
+            const newCount = prevCount + 1;
+            const reachedLimit = newCount >= MAX_RECOVERY_ATTEMPTS;
+            const nextRetry = reachedLimit ? null : new Date(Date.now() + RETRY_INTERVAL_MS).toISOString();
             if (existingFailed) {
               await db.from("vfd_sandbox_contribution_audit").update({
-                error_message: walletErr, next_retry_at: nextRetry, penalty_served: false,
+                retry_count: newCount, error_message: walletErr,
+                next_retry_at: nextRetry, penalty_served: reachedLimit,
               }).eq("id", existingFailed.id);
             } else {
               await db.from("vfd_sandbox_contribution_audit").insert({
                 user_id: m.user_id, group_id: group.id, cycle_id: activeCycle.id,
                 amount, contribution_type: "wallet_recovery", status: "failed",
-                retry_count: 0, next_retry_at: nextRetry,
-                error_message: walletErr, penalty_served: false,
+                retry_count: newCount, next_retry_at: nextRetry,
+                error_message: walletErr, penalty_served: reachedLimit,
               });
             }
-            await postChatMessage(group.id, m.user_id,
-              `⚠️ Mandate elapsed — ₦${(recovery.total || amount).toLocaleString()} (contribution + penal charge) could not be swept from wallet: ${walletErr}.`,
-              "contribution_failed");
-            failed++;
+            if (reachedLimit) {
+              await recordContributionDefault(group, m.user_id as string, activeCycle.id as string, amount, walletErr);
+              penalized++;
+            } else {
+              await postChatMessage(group.id, m.user_id,
+                `⚠️ Mandate elapsed — ₦${(recovery.total || amount).toLocaleString()} (contribution + penal charge) could not be swept from wallet: ${walletErr}.`,
+                "contribution_failed");
+              failed++;
+            }
           }
+
           continue;
         }
       }
@@ -8304,15 +8361,23 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
 
     }
 
-    // After sweep, see if cycle should auto-payout
+    // After sweep, see if cycle should auto-payout. Members who definitively
+    // defaulted (retries exhausted, penalty served) count as resolved so the
+    // cycle closes on what actually settled instead of stalling forever.
     const { count } = await db.from("vfd_sandbox_group_contributions")
       .select("*", { count: "exact", head: true })
       .eq("group_id", group.id).eq("cycle_number", group.current_cycle);
-    if (count && count >= group.member_count) {
-      await processAutoPayout(db, group, activeCycle);
+    const cycleDefaulters = await getCycleDefaulters(group.id as string, activeCycle.id as string);
+    let payoutOutcome: unknown = null;
+    if ((count || 0) + cycleDefaulters.length >= Number(group.member_count)) {
+      payoutOutcome = await processAutoPayout(db, group, activeCycle);
     }
 
-    processed.push({ group_id: group.id, name: group.name, succeeded, failed, deferred, penalized, members: memberResults });
+    processed.push({
+      group_id: group.id, name: group.name, succeeded, failed, deferred, penalized,
+      defaulted: cycleDefaulters.length, payout: payoutOutcome, members: memberResults,
+    });
+
   }
 
   return jsonResponse({ data: { processed_count: processed.length, processed } });
@@ -9629,13 +9694,18 @@ async function verifyCycleFunding(
   cycleNumber: number,
   expectedPerMember: number,
   expectedMemberCount: number,
+  excludeUserIds: string[] = [],
 ) {
   const db = getSupabaseAdmin();
   const cycleTag = `c${cycleNumber}`;
+  const excluded = new Set(excludeUserIds.map(String));
 
   const { data: memberRows } = await db.from("vfd_sandbox_group_members")
     .select("user_id, status").eq("group_id", groupId).eq("status", "active");
-  const activeMembers = (memberRows || []).map((m: Record<string, unknown>) => String(m.user_id));
+  const activeMembers = (memberRows || [])
+    .map((m: Record<string, unknown>) => String(m.user_id))
+    .filter((uid) => !excluded.has(uid));
+
 
   const { data: settleRows } = await db.from("settlement_records")
     .select("user_id, amount, status, metadata, provider_reference")
