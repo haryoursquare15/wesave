@@ -9629,13 +9629,18 @@ async function verifyCycleFunding(
   cycleNumber: number,
   expectedPerMember: number,
   expectedMemberCount: number,
+  excludeUserIds: string[] = [],
 ) {
   const db = getSupabaseAdmin();
   const cycleTag = `c${cycleNumber}`;
+  const excluded = new Set(excludeUserIds.map(String));
 
   const { data: memberRows } = await db.from("vfd_sandbox_group_members")
     .select("user_id, status").eq("group_id", groupId).eq("status", "active");
-  const activeMembers = (memberRows || []).map((m: Record<string, unknown>) => String(m.user_id));
+  const activeMembers = (memberRows || [])
+    .map((m: Record<string, unknown>) => String(m.user_id))
+    .filter((uid) => !excluded.has(uid));
+
 
   const { data: settleRows } = await db.from("settlement_records")
     .select("user_id, amount, status, metadata, provider_reference")
