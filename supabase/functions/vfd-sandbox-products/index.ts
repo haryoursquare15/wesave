@@ -1157,10 +1157,12 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
   let allContributed = false;
   let payoutResult = null;
 
-  if (count && count >= group.member_count) {
+  const cycleDefaulters = await getCycleDefaulters(groupId, activeCycle.id as string);
+  if ((count || 0) + cycleDefaulters.length >= Number(group.member_count)) {
     allContributed = true;
     payoutResult = await processAutoPayout(db, group, activeCycle);
   }
+
 
   return jsonResponse({
     data: {
