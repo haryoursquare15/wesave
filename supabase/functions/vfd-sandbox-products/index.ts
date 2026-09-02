@@ -8346,15 +8346,23 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
 
     }
 
-    // After sweep, see if cycle should auto-payout
+    // After sweep, see if cycle should auto-payout. Members who definitively
+    // defaulted (retries exhausted, penalty served) count as resolved so the
+    // cycle closes on what actually settled instead of stalling forever.
     const { count } = await db.from("vfd_sandbox_group_contributions")
       .select("*", { count: "exact", head: true })
       .eq("group_id", group.id).eq("cycle_number", group.current_cycle);
-    if (count && count >= group.member_count) {
-      await processAutoPayout(db, group, activeCycle);
+    const cycleDefaulters = await getCycleDefaulters(group.id as string, activeCycle.id as string);
+    let payoutOutcome: unknown = null;
+    if ((count || 0) + cycleDefaulters.length >= Number(group.member_count)) {
+      payoutOutcome = await processAutoPayout(db, group, activeCycle);
     }
 
-    processed.push({ group_id: group.id, name: group.name, succeeded, failed, deferred, penalized, members: memberResults });
+    processed.push({
+      group_id: group.id, name: group.name, succeeded, failed, deferred, penalized,
+      defaulted: cycleDefaulters.length, payout: payoutOutcome, members: memberResults,
+    });
+
   }
 
   return jsonResponse({ data: { processed_count: processed.length, processed } });
