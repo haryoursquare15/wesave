@@ -1310,15 +1310,27 @@ async function processAutoPayout(
   if (!recipientId) return { success: false, error: "No recipient for this cycle" };
 
   // ===========================================================
+  // DEFAULT-ADJUSTED CYCLE CLOSURE.
+  // A member whose collection has definitively failed (retries exhausted,
+  // penalty served, outstanding recorded against them) must NOT freeze the
+  // cycle forever. Their contribution is excluded from the cycle's expected
+  // funding and from the gross payout — the group only ever disburses money
+  // that VFD actually settled into the pool. The defaulter still owes the
+  // group and stays payout-blocked until it is recovered.
+  // ===========================================================
+  const defaulters = await getCycleDefaulters(groupId, activeCycle.id as string);
+  const fundingMemberCount = Math.max(1, memberCount - defaulters.length);
+
+  // ===========================================================
   // SETTLEMENT GATE — no payout may leave the pool while ANY of this cycle's
   // collections is still unconfirmed at the bank. Internal ledger entries are
   // never accepted as evidence that the money is really there.
   //
   // CONFIGURED EXPECTATION decides the amounts:
-  //   expected_cycle_funding = contribution_amount × member_count = GROSS PAYOUT
+  //   expected_cycle_funding = contribution_amount × funding member count
   // VFD SETTLEMENT only authorizes release; it never resizes the payout.
   // ===========================================================
-  const grossAmount = Math.round(amount * memberCount * 100) / 100;
+  const grossAmount = Math.round(amount * fundingMemberCount * 100) / 100;
 
   const collectionCheck = await cycleCollectionsConfirmed(groupId, currentCycle);
   if (!collectionCheck.ok) {
@@ -1331,9 +1343,9 @@ async function processAutoPayout(
     };
   }
 
-  // POSITIVE proof: every active member's configured contribution must be
-  // individually confirmed by VFD settlement for this cycle.
-  const funding = await verifyCycleFunding(groupId, currentCycle, amount, memberCount);
+  // POSITIVE proof: every non-defaulting member's configured contribution must
+  // be individually confirmed by VFD settlement for this cycle.
+  const funding = await verifyCycleFunding(groupId, currentCycle, amount, fundingMemberCount, defaulters);
   if (!funding.ok) {
     console.error(`[processAutoPayout] BLOCKED group=${groupId} cycle=${currentCycle} — expected ₦${funding.expected_cycle_funding}, confirmed ₦${funding.confirmed_cycle_funding}, ${funding.missing_members.length} member(s) outstanding`);
     return {
@@ -1344,6 +1356,7 @@ async function processAutoPayout(
       funding_report: funding,
     };
   }
+
 
   // PRODUCTION PARITY: Tiered fee structure
   const platformFee = calculatePlatformFee(grossAmount);
