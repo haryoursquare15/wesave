@@ -1320,6 +1320,46 @@ async function getCycleDefaulters(groupId: string, cycleId: string): Promise<str
   return [...defaulters];
 }
 
+/**
+ * Record a definitive contribution default: penalty row + outstanding owed on
+ * the member, with chat + notification. Idempotent per (group, user, cycle).
+ */
+async function recordContributionDefault(
+  group: Record<string, unknown>,
+  userId: string,
+  cycleId: string,
+  amount: number,
+  reason: string,
+) {
+  const db = getSupabaseAdmin();
+  const groupId = group.id as string;
+  const { data: existingPenalty } = await db.from("vfd_sandbox_penalties")
+    .select("id").eq("group_id", groupId).eq("user_id", userId).eq("cycle_id", cycleId).maybeSingle();
+  if (existingPenalty?.id) return;
+
+  const penaltyFee = calculateContributionPenalty(amount);
+  const owedDelta = Math.round((amount + penaltyFee) * 100) / 100;
+  await db.from("vfd_sandbox_penalties").insert({
+    user_id: userId, group_id: groupId, cycle_id: cycleId,
+    amount: owedDelta, penalty_fee: penaltyFee, missed_amount: amount,
+    reason: `Contribution default — ${reason}`,
+  });
+  const { data: memberRow } = await db.from("vfd_sandbox_group_members")
+    .select("id, outstanding_owed").eq("group_id", groupId).eq("user_id", userId).maybeSingle();
+  if (memberRow?.id) {
+    await db.from("vfd_sandbox_group_members").update({
+      outstanding_owed: Math.round((Number(memberRow.outstanding_owed || 0) + owedDelta) * 100) / 100,
+    }).eq("id", memberRow.id as string);
+  }
+  await postChatMessage(groupId, userId,
+    `🚫 Contribution default — ₦${owedDelta.toLocaleString()} (₦${amount.toLocaleString()} missed + ₦${penaltyFee.toLocaleString()} penalty) is now outstanding. The cycle continues without this contribution.`,
+    "contribution_failed");
+  await sendNotification(userId, "Contribution Default",
+    `Your contribution for ${group.name} could not be collected (${reason}). ₦${owedDelta.toLocaleString()} is now outstanding and will be recovered from your payout.`,
+    "contribution_failed", groupId);
+}
+
+
 // AUTO-PAYOUT (Production parity: tiered fee, credit recipient wallet, advance cycle)
 
 
