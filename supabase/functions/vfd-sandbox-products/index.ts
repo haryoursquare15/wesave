@@ -4406,7 +4406,7 @@ async function payoutFromPoolToCustomer(params: {
   productReference: string;
 }): Promise<SettlementFunding> {
   const db = getSupabaseAdmin();
-  const ref = params.reference;
+  let ref = params.reference;
 
   // Replay guard: a previously confirmed leg must never be sent twice.
   const prior = await verifyVfdTransfer(ref);
@@ -4414,6 +4414,27 @@ async function payoutFromPoolToCustomer(params: {
     await markSettlement(db, ref, "confirmed", { evidence: prior.evidence });
     return { confirmed: true, reference: ref, evidence: prior.evidence, replayed: true };
   }
+
+  // Reference rotation. VFD sometimes parks a reference in "Pending State"
+  // permanently while TSQ answers 108 / "No Transaction!" — proof that nothing
+  // exists under it, so re-sending under a fresh reference cannot double-spend.
+  // Only rotate on that explicit evidence, never on an unknown/failed TSQ.
+  const priorEv = (prior.evidence ?? {}) as Record<string, unknown>;
+  const noTxn = String(priorEv.status ?? "") === "108"
+    || /no transaction/i.test(String(priorEv.message ?? ""));
+  if (noTxn) {
+    const { data: stuck } = await db.from("settlement_records")
+      .select("attempts").eq("provider_reference", ref).maybeSingle();
+    const attempts = Number(stuck?.attempts ?? 0);
+    if (attempts >= 3) {
+      await markSettlement(db, ref, "failed", {
+        evidence: { rotated: true, tsq: prior.evidence },
+      });
+      ref = `${params.reference.slice(0, 26)}-R${attempts}`;
+      console.log(`[payout][pool->customer] rotating stuck reference ${params.reference} -> ${ref}`);
+    }
+  }
+
 
   const { data: client } = await db.from("vfd_sandbox_clients")
     .select("vfd_account_number, metadata, full_name").eq("user_id", params.userId).maybeSingle();
