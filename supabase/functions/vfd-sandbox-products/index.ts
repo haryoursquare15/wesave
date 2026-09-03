@@ -1516,8 +1516,11 @@ async function processAutoPayout(
         await updatePayoutRow(payoutRowId, {
           payout_status: failCode === "PAYOUT_FAILED" ? "failed" : "processing",
           bank_status: failCode === "PAYOUT_FAILED" ? "failed" : "pending",
+          // Track the reference actually used at the bank (may be rotated).
+          vfd_reference: bankPayout.reference || bankRef,
           last_error: err, last_reconciled_at: new Date().toISOString(),
         });
+
         await sendNotification(recipientId, "Payout Processing",
           `Your ₦${netAmount.toLocaleString()} payout from ${group.name} has been submitted to the bank and is awaiting confirmation. It will reflect shortly.`,
           "payout_notification", groupId);
