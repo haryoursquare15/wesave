@@ -1320,6 +1320,46 @@ async function getCycleDefaulters(groupId: string, cycleId: string): Promise<str
   return [...defaulters];
 }
 
+/**
+ * Record a definitive contribution default: penalty row + outstanding owed on
+ * the member, with chat + notification. Idempotent per (group, user, cycle).
+ */
+async function recordContributionDefault(
+  group: Record<string, unknown>,
+  userId: string,
+  cycleId: string,
+  amount: number,
+  reason: string,
+) {
+  const db = getSupabaseAdmin();
+  const groupId = group.id as string;
+  const { data: existingPenalty } = await db.from("vfd_sandbox_penalties")
+    .select("id").eq("group_id", groupId).eq("user_id", userId).eq("cycle_id", cycleId).maybeSingle();
+  if (existingPenalty?.id) return;
+
+  const penaltyFee = calculateContributionPenalty(amount);
+  const owedDelta = Math.round((amount + penaltyFee) * 100) / 100;
+  await db.from("vfd_sandbox_penalties").insert({
+    user_id: userId, group_id: groupId, cycle_id: cycleId,
+    amount: owedDelta, penalty_fee: penaltyFee, missed_amount: amount,
+    reason: `Contribution default — ${reason}`,
+  });
+  const { data: memberRow } = await db.from("vfd_sandbox_group_members")
+    .select("id, outstanding_owed").eq("group_id", groupId).eq("user_id", userId).maybeSingle();
+  if (memberRow?.id) {
+    await db.from("vfd_sandbox_group_members").update({
+      outstanding_owed: Math.round((Number(memberRow.outstanding_owed || 0) + owedDelta) * 100) / 100,
+    }).eq("id", memberRow.id as string);
+  }
+  await postChatMessage(groupId, userId,
+    `🚫 Contribution default — ₦${owedDelta.toLocaleString()} (₦${amount.toLocaleString()} missed + ₦${penaltyFee.toLocaleString()} penalty) is now outstanding. The cycle continues without this contribution.`,
+    "contribution_failed");
+  await sendNotification(userId, "Contribution Default",
+    `Your contribution for ${group.name} could not be collected (${reason}). ₦${owedDelta.toLocaleString()} is now outstanding and will be recovered from your payout.`,
+    "contribution_failed", groupId);
+}
+
+
 // AUTO-PAYOUT (Production parity: tiered fee, credit recipient wallet, advance cycle)
 
 
@@ -1476,8 +1516,11 @@ async function processAutoPayout(
         await updatePayoutRow(payoutRowId, {
           payout_status: failCode === "PAYOUT_FAILED" ? "failed" : "processing",
           bank_status: failCode === "PAYOUT_FAILED" ? "failed" : "pending",
+          // Track the reference actually used at the bank (may be rotated).
+          vfd_reference: bankPayout.reference || bankRef,
           last_error: err, last_reconciled_at: new Date().toISOString(),
         });
+
         await sendNotification(recipientId, "Payout Processing",
           `Your ₦${netAmount.toLocaleString()} payout from ${group.name} has been submitted to the bank and is awaiting confirmation. It will reflect shortly.`,
           "payout_notification", groupId);
@@ -4366,7 +4409,7 @@ async function payoutFromPoolToCustomer(params: {
   productReference: string;
 }): Promise<SettlementFunding> {
   const db = getSupabaseAdmin();
-  const ref = params.reference;
+  let ref = params.reference;
 
   // Replay guard: a previously confirmed leg must never be sent twice.
   const prior = await verifyVfdTransfer(ref);
@@ -4374,6 +4417,27 @@ async function payoutFromPoolToCustomer(params: {
     await markSettlement(db, ref, "confirmed", { evidence: prior.evidence });
     return { confirmed: true, reference: ref, evidence: prior.evidence, replayed: true };
   }
+
+  // Reference rotation. VFD sometimes parks a reference in "Pending State"
+  // permanently while TSQ answers 108 / "No Transaction!" — proof that nothing
+  // exists under it, so re-sending under a fresh reference cannot double-spend.
+  // Only rotate on that explicit evidence, never on an unknown/failed TSQ.
+  const priorEv = (prior.evidence ?? {}) as Record<string, unknown>;
+  const noTxn = String(priorEv.status ?? "") === "108"
+    || /no transaction/i.test(String(priorEv.message ?? ""));
+  if (noTxn) {
+    const { data: stuck } = await db.from("settlement_records")
+      .select("attempts").eq("provider_reference", ref).maybeSingle();
+    const attempts = Number(stuck?.attempts ?? 0);
+    if (attempts >= 3) {
+      await markSettlement(db, ref, "failed", {
+        evidence: { rotated: true, tsq: prior.evidence },
+      });
+      ref = `${params.reference.slice(0, 26)}-R${attempts}`;
+      console.log(`[payout][pool->customer] rotating stuck reference ${params.reference} -> ${ref}`);
+    }
+  }
+
 
   const { data: client } = await db.from("vfd_sandbox_clients")
     .select("vfd_account_number, metadata, full_name").eq("user_id", params.userId).maybeSingle();
@@ -4440,14 +4504,17 @@ async function payoutFromPoolToCustomer(params: {
     fromClientId: firstNonEmpty(Deno.env.get("VFD_POOL_CLIENT_ID"), pEnv?.clientId, pAcct?.clientId),
     fromClient: firstNonEmpty(Deno.env.get("VFD_POOL_CLIENT_NAME"), pEnv?.client, pAcct?.client, pEnv?.name),
     fromSavingsId: firstNonEmpty(Deno.env.get("VFD_POOL_SAVINGS_ID"), pAcct?.id, pEnv?.accountId, pEnv?.id),
-    fromBvn: String(pEnv?.bvn ?? ""),
+    // VFD parks a transfer in "Pending State" when a BVN field carries a
+    // non-numeric placeholder. Only send real 11-digit BVNs.
+    fromBvn: /^\d{11}$/.test(String(pEnv?.bvn ?? "")) ? String(pEnv?.bvn) : "",
     toAccount: customerNuban,
     toBank: "999999",
     toClient: firstNonEmpty(cEnv?.client, cAcct?.client, client?.full_name),
     toClientId: firstNonEmpty(cEnv?.clientId, cAcct?.clientId),
     toSavingsId: firstNonEmpty(cAcct?.id, cEnv?.accountId, cEnv?.id),
     toSession: "",
-    toBvn: String(cEnv?.bvn ?? ""),
+    toBvn: /^\d{11}$/.test(String(cEnv?.bvn ?? "")) ? String(cEnv?.bvn) : "",
+
     signature: await transferSignature(VFD_CORPORATE_POOL_NUBAN, customerNuban),
     amount: String(params.amount),
     remark: params.remark.slice(0, 60),
