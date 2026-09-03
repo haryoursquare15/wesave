@@ -4480,14 +4480,17 @@ async function payoutFromPoolToCustomer(params: {
     fromClientId: firstNonEmpty(Deno.env.get("VFD_POOL_CLIENT_ID"), pEnv?.clientId, pAcct?.clientId),
     fromClient: firstNonEmpty(Deno.env.get("VFD_POOL_CLIENT_NAME"), pEnv?.client, pAcct?.client, pEnv?.name),
     fromSavingsId: firstNonEmpty(Deno.env.get("VFD_POOL_SAVINGS_ID"), pAcct?.id, pEnv?.accountId, pEnv?.id),
-    fromBvn: String(pEnv?.bvn ?? ""),
+    // VFD parks a transfer in "Pending State" when a BVN field carries a
+    // non-numeric placeholder. Only send real 11-digit BVNs.
+    fromBvn: /^\d{11}$/.test(String(pEnv?.bvn ?? "")) ? String(pEnv?.bvn) : "",
     toAccount: customerNuban,
     toBank: "999999",
     toClient: firstNonEmpty(cEnv?.client, cAcct?.client, client?.full_name),
     toClientId: firstNonEmpty(cEnv?.clientId, cAcct?.clientId),
     toSavingsId: firstNonEmpty(cAcct?.id, cEnv?.accountId, cEnv?.id),
     toSession: "",
-    toBvn: String(cEnv?.bvn ?? ""),
+    toBvn: /^\d{11}$/.test(String(cEnv?.bvn ?? "")) ? String(cEnv?.bvn) : "",
+
     signature: await transferSignature(VFD_CORPORATE_POOL_NUBAN, customerNuban),
     amount: String(params.amount),
     remark: params.remark.slice(0, 60),
