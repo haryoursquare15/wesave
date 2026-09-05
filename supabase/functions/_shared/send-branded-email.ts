@@ -16,6 +16,8 @@ export interface BrandedEmailInput {
   recipientName?: string;
   title: string;
   message: string;
+  /** Optional pre-sanitised rich HTML body; replaces the plain message block. */
+  messageHtml?: string;
   details?: BrandedEmailDetail[];
   actionUrl?: string;
   actionLabel?: string;
@@ -51,6 +53,7 @@ export async function sendBrandedEmail(input: BrandedEmailInput): Promise<{ ok: 
           recipientName: input.recipientName?.split(' ')[0] || 'there',
           title: input.title,
           message: input.message,
+          messageHtml: input.messageHtml,
           details: input.details,
           actionUrl: input.actionUrl,
           actionLabel: input.actionLabel,

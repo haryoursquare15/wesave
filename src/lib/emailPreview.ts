@@ -49,6 +49,8 @@ const emphasise = (line: string) =>
 export interface EmailPreviewOptions {
   title: string;
   message: string;
+  /** Rich HTML body from the admin composer; replaces the plain message. */
+  messageHtml?: string;
   greetingName?: string;
   actionUrl?: string;
   actionLabel?: string;
@@ -66,6 +68,7 @@ export interface EmailPreviewOptions {
 export function buildEmailPreviewHtml({
   title,
   message,
+  messageHtml,
   greetingName = "John",
   actionUrl,
   actionLabel,
@@ -74,7 +77,11 @@ export function buildEmailPreviewHtml({
   showAppBadges = false,
   unsubscribeUrl,
 }: EmailPreviewOptions): string {
-  const paragraphs = (message || "Your message here...")
+  const richBody = messageHtml?.trim()
+    ? `<div style="font-size:15px;line-height:1.7;color:${EMAIL_BRAND.body};">${messageHtml}</div>`
+    : "";
+
+  const plainParagraphs = (message || "Your message here...")
     .split(/\n{2,}/)
     .map((block) => block.trim())
     .filter(Boolean)
@@ -86,6 +93,8 @@ export function buildEmailPreviewHtml({
           .join("<br/>")}</p>`
     )
     .join("");
+
+  const paragraphs = richBody || plainParagraphs;
 
   const cta =
     actionUrl && actionLabel

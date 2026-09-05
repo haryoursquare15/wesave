@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -11,6 +10,18 @@ import { Mail, Send, Eye, Loader2, Users, UserX, UserCheck, Globe } from "lucide
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { buildEmailPreviewHtml, EMAIL_APP_URL, GROUP_REMINDER_PREVIEW } from "@/lib/emailPreview";
+import { RichEmailEditor } from "./RichEmailEditor";
+
+/** Strip tags so we always ship a readable plain-text fallback alongside the HTML. */
+const htmlToText = (html: string) =>
+  html
+    .replace(/<\s*br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|li|h[1-4]|blockquote)>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 
 type Audience = "pending" | "no_group" | "active" | "all";
 type EmailType = "reminder" | "custom";
@@ -33,7 +44,8 @@ export function AdminEmailTab() {
   const { toast } = useToast();
 
   const handleSend = async () => {
-    if (emailType === "custom" && (!customSubject.trim() || !customBody.trim())) {
+    const plainBody = htmlToText(customBody);
+    if (emailType === "custom" && (!customSubject.trim() || !plainBody)) {
       toast({ title: "Missing Fields", description: "Subject and body are required for custom emails.", variant: "destructive" });
       return;
     }
@@ -44,7 +56,8 @@ export function AdminEmailTab() {
       const payload: Record<string, string> = { audience, type: emailType };
       if (emailType === "custom") {
         payload.subject = customSubject;
-        payload.body = customBody;
+        payload.body = plainBody;
+        payload.bodyHtml = customBody;
       }
 
       const { data, error } = await supabase.functions.invoke("group-join-reminder", { body: payload });
@@ -65,7 +78,8 @@ export function AdminEmailTab() {
     emailType === "custom"
       ? {
           title: customSubject.trim() || "Subject line",
-          message: customBody.trim() || "Your message here...",
+          message: "",
+          messageHtml: customBody.trim() || "<p>Your message here...</p>",
           actionUrl: EMAIL_APP_URL,
           actionLabel: "Open Vestara",
         }
@@ -101,7 +115,14 @@ export function AdminEmailTab() {
                 </div>
                 <div className="space-y-2">
                   <Label>Body</Label>
-                  <Textarea placeholder="Email body content..." rows={6} value={customBody} onChange={(e) => setCustomBody(e.target.value)} />
+                  <RichEmailEditor
+                    value={customBody}
+                    onChange={setCustomBody}
+                    placeholder="Write your message, add images, links and formatting..."
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Use the toolbar to format text or add an image. Images are hosted automatically so they show up in inboxes.
+                  </p>
                 </div>
               </>
             )}
