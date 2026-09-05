@@ -14,6 +14,8 @@ interface Props {
   recipientName?: string
   title?: string
   message?: string
+  /** Pre-sanitised rich HTML body. Takes precedence over `message`. */
+  messageHtml?: string
   actionUrl?: string
   actionLabel?: string
   details?: { label?: string; value?: string }[]
@@ -70,6 +72,7 @@ const Notification = ({
   recipientName = 'there',
   title = 'You have a new update',
   message = 'You have a new notification from Vestara.',
+  messageHtml,
   actionUrl,
   actionLabel = 'Open Vestara',
   details,
@@ -89,7 +92,14 @@ const Notification = ({
     unsubscribeUrl={unsubscribeUrl}
   >
     <EmailHeading>{title}</EmailHeading>
-    <Bodycopy message={message} />
+    {messageHtml ? (
+      <div
+        style={{ fontSize: '15px', lineHeight: '1.7', color: '#4a5568' }}
+        dangerouslySetInnerHTML={{ __html: messageHtml }}
+      />
+    ) : (
+      <Bodycopy message={message} />
+    )}
     {highlightValue ? (
       <EmailHighlight label={highlightLabel} value={highlightValue} />
     ) : null}
