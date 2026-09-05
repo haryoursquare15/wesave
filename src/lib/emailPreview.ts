@@ -81,7 +81,7 @@ export function buildEmailPreviewHtml({
     ? `<div style="font-size:15px;line-height:1.7;color:${EMAIL_BRAND.body};">${messageHtml}</div>`
     : "";
 
-  const paragraphs = richBody || (message || "Your message here...")
+  const plainParagraphs = (message || "Your message here...")
     .split(/\n{2,}/)
     .map((block) => block.trim())
     .filter(Boolean)
@@ -92,7 +92,9 @@ export function buildEmailPreviewHtml({
           .map(emphasise)
           .join("<br/>")}</p>`
     )
-    .join(""));
+    .join("");
+
+  const paragraphs = richBody || plainParagraphs;
 
   const cta =
     actionUrl && actionLabel
