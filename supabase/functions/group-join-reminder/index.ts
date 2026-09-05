@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { sendBrandedEmail } from "../_shared/send-branded-email.ts";
 import { verifyCronToken, requireAdminJwt, unauthorized } from "../_shared/cron-auth.ts";
+import { sanitizeEmailHtml, htmlToPlainText } from "../_shared/html-sanitize.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -24,6 +25,7 @@ serve(async (req) => {
     let audience = 'pending'; // default: users without groups
     let customSubject = '';
     let customBody = '';
+    let customBodyHtml = '';
     let emailType = 'reminder'; // 'reminder' or 'custom'
 
     try {
@@ -31,6 +33,7 @@ serve(async (req) => {
       if (body.audience) audience = body.audience;
       if (body.subject) customSubject = body.subject;
       if (body.body) customBody = body.body;
+      if (body.bodyHtml) customBodyHtml = String(body.bodyHtml);
       if (body.type) emailType = body.type;
     } catch {
       // No body = default behavior (pending users, reminder email)
@@ -56,7 +59,11 @@ serve(async (req) => {
           { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
         );
       }
-      if (!customSubject || !customBody) {
+      customBodyHtml = sanitizeEmailHtml(customBodyHtml);
+      if (customBodyHtml && !customBody.trim()) {
+        customBody = htmlToPlainText(customBodyHtml);
+      }
+      if (!customSubject || (!customBody && !customBodyHtml)) {
         return new Response(
           JSON.stringify({ error: 'subject and body are required for custom messages' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
@@ -73,6 +80,7 @@ serve(async (req) => {
       emailType = 'reminder';
       customSubject = '';
       customBody = '';
+      customBodyHtml = '';
     }
 
 
@@ -159,6 +167,7 @@ serve(async (req) => {
           recipientName: String(user.full_name || '').trim().split(/\s+/)[0] || undefined,
           title: subject.replace(/^[^A-Za-z0-9]+/, '').replace(/^Vestara\s*[—-]\s*/, ''),
           message: plainText,
+          messageHtml: isCustom && customBodyHtml ? customBodyHtml : undefined,
           actionUrl: 'https://app.vestara.ng',
           actionLabel: 'Open Vestara',
         });
