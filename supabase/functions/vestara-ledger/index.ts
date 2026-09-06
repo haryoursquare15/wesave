@@ -9,6 +9,9 @@ import {
   MANDATE_EXPIRY_DAYS,
   VFD_POOL_BANK_CODE,
 } from "../_shared/vfd-mandate.ts";
+import { payoutSavingsToUser } from "../_shared/vfd-savings-payout.ts";
+import { markSettlementLedgerPosted } from "../_shared/settlement.ts";
+
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1148,28 +1151,105 @@ serve(async (req) => {
       }
 
 
-      case "mature_savings": {
-        const { savings_id } = params;
-        if (!savings_id) return err("savings_id is required");
-        const { data, error: e } = await supabase.rpc("vestara_mature_savings", {
-          _savings_id: savings_id,
-        });
-        if (e) return err(e.message);
-        result = data;
-        break;
-      }
-
+      case "mature_savings":
       case "early_withdraw_savings": {
         const { savings_id } = params;
         if (!savings_id) return err("savings_id is required");
-        const { data, error: e } = await supabase.rpc(
-          "vestara_early_withdraw_savings",
-          { _user_id: userId, _savings_id: savings_id }
+        const isEarly = action === "early_withdraw_savings";
+
+        const { data: sav } = await supabase.from("vestara_savings")
+          .select("id, user_id, product_code, status")
+          .eq("id", savings_id).maybeSingle();
+        if (!sav) return err("Savings not found", 404);
+        if (isEarly && sav.user_id !== userId) return err("Unauthorized", 403);
+        if (sav.status !== "active") return err(`Savings is already ${sav.status}`);
+
+        // 1. Work out exactly what is owed (single source of truth in SQL).
+        const { data: preview, error: pe } = await supabase.rpc(
+          "vestara_savings_payout_preview", { _savings_id: savings_id },
         );
+        if (pe) return err(pe.message);
+        const pv = (preview ?? {}) as Record<string, unknown>;
+        if (pv.success === false) return err(String(pv.error || "Payout preview failed"));
+        const payable = Number(isEarly ? pv.early_payout : pv.maturity_payout);
+        if (!Number.isFinite(payable) || payable <= 0) return err("Nothing to pay out");
+
+        // 2. MOVE THE REAL MONEY FIRST. The ledger is never allowed to invent a
+        //    balance: unless the bank confirms cash reached the customer's own
+        //    NUBAN, nothing at all is posted internally.
+        const leg = await payoutSavingsToUser({
+          db: supabase,
+          productCode: String(sav.product_code),
+          savingsId: String(savings_id),
+          userId: String(sav.user_id),
+          amount: payable,
+          seq: isEarly ? "early" : "maturity",
+          remark: isEarly ? "Vestara early withdrawal" : "Vestara savings maturity",
+        });
+        if (!leg.confirmed) {
+          console.error(`[savings-payout] blocked savings=${savings_id} code=${leg.code} error=${leg.error}`);
+          return err(
+            leg.code === "PAYOUT_INSUFFICIENT_SOURCE"
+              ? "We can't release this payout yet — the settled funds are still clearing. Please try again shortly."
+              : "Your payout has been queued with the bank and will land shortly. Nothing has been deducted twice.",
+            409,
+          );
+        }
+
+        // 3. Bank leg proven — now mirror it on the internal ledger.
+        const { data, error: e } = isEarly
+          ? await supabase.rpc("vestara_early_withdraw_savings", { _user_id: userId, _savings_id: savings_id })
+          : await supabase.rpc("vestara_mature_savings", { _savings_id: savings_id });
         if (e) return err(e.message);
-        result = data;
+        await markSettlementLedgerPosted(supabase, leg.reference, `${isEarly ? "ewd" : "mature"}-${savings_id}`);
+        result = { ...(data as Record<string, unknown> ?? {}), bank_reference: leg.reference, paid_to: leg.destinationAccount };
         break;
       }
+
+      // Recovery: savings that were closed before the bank leg existed (or whose
+      // leg never confirmed) — pay the cash out now. Ledger is already posted for
+      // these, so this only completes the missing money movement.
+      case "reconcile_savings_payouts": {
+        if (!(await callerIsCronOrAdmin())) return err("Forbidden", 403);
+        const { data: closed } = await supabase.from("vestara_savings")
+          .select("id, user_id, product_code, status, matured_at, withdrawn_at")
+          .in("status", ["matured", "early_withdrawn"])
+          .order("created_at", { ascending: false })
+          .limit(200);
+
+        const processed: Array<Record<string, unknown>> = [];
+        for (const s of (closed ?? []) as Array<Record<string, unknown>>) {
+          const isEarly = s.status === "early_withdrawn";
+          const seq = isEarly ? "early" : "maturity";
+          const ref = `PAYOUT-${String(s.product_code).toUpperCase()}-${String(s.id).replace(/-/g, "").slice(0, 16)}-${seq}`;
+          const { data: settled } = await supabase.from("settlement_records")
+            .select("status").eq("provider", "vfd").eq("provider_reference", ref).maybeSingle();
+          if (settled?.status === "confirmed") continue;
+
+          // The amount actually credited to the customer's ledger at closure.
+          const { data: tx } = await supabase.from("vestara_transactions")
+            .select("amount").eq("reference", `${isEarly ? "ewd" : "mature"}-${s.id}`).maybeSingle();
+          const amount = Number(tx?.amount || 0);
+          if (!(amount > 0)) continue;
+
+          const leg = await payoutSavingsToUser({
+            db: supabase,
+            productCode: String(s.product_code),
+            savingsId: String(s.id),
+            userId: String(s.user_id),
+            amount,
+            seq,
+            remark: isEarly ? "Vestara early withdrawal" : "Vestara savings maturity",
+          });
+          if (leg.confirmed) {
+            await markSettlementLedgerPosted(supabase, leg.reference, `${isEarly ? "ewd" : "mature"}-${s.id}`);
+          }
+          processed.push({ savings_id: s.id, amount, confirmed: leg.confirmed, code: leg.code ?? null, error: leg.error ?? null, reference: leg.reference });
+        }
+        result = { success: true, checked: (closed ?? []).length, processed };
+        break;
+      }
+
 
       // ─────────── Cron jobs ───────────
       case "accrue_daily_interest": {
