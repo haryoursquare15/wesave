@@ -7788,6 +7788,10 @@ export type Database = {
         Returns: Json
       }
       vestara_run_reconciliation: { Args: never; Returns: Json }
+      vestara_savings_payout_preview: {
+        Args: { _savings_id: string }
+        Returns: Json
+      }
       vestara_split_distribute: {
         Args: {
           _initiated_by: string
