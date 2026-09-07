@@ -261,6 +261,8 @@ serve(async (req) => {
         req.headers.get("x-cron-secret") ||
         (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
       if (cronSecret && provided === cronSecret) return true;
+      if (await cronTokenValid()) return true;
+
       let uid = userId;
       if (!uid && provided) {
         const { data: { user } } = await supabase.auth.getUser(provided);
