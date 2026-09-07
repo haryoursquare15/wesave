@@ -216,10 +216,9 @@ serve(async (req) => {
     // Authenticate user (except for webhook and cron actions)
     let userId: string | null = null;
     const noAuthActions = [
-      // `reconcile_savings_payouts` guards itself via callerIsCronOrAdmin so it
-      // can run either from cron (x-cron-secret) or from an admin session.
-      "deposit_webhook", "reconcile_savings_payouts", ...cronActions,
+      "deposit_webhook", ...cronActions,
     ];
+
 
     if (!noAuthActions.includes(action)) {
       const authHeader = req.headers.get("Authorization");
