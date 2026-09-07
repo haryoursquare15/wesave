@@ -216,8 +216,11 @@ serve(async (req) => {
     // Authenticate user (except for webhook and cron actions)
     let userId: string | null = null;
     const noAuthActions = [
-      "deposit_webhook", ...cronActions,
+      // `reconcile_savings_payouts` guards itself via callerIsCronOrAdmin, which
+      // accepts either the cron secret or a super-admin session.
+      "deposit_webhook", "reconcile_savings_payouts", ...cronActions,
     ];
+
 
 
     if (!noAuthActions.includes(action)) {
