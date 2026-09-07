@@ -196,28 +196,45 @@ serve(async (req) => {
     const { action, ...params } = JSON.parse(rawBody);
     console.log(`vestara-ledger action: ${action}`);
 
-    // Cron-only actions (system jobs) — require CRON_SECRET in either the
-    // Authorization Bearer header or the x-cron-secret header. Refuse the
-    // request if the secret is not configured at all.
+    // Cron-only actions (system jobs) — accept either CRON_SECRET (Authorization
+    // Bearer / x-cron-secret) or the internal `vestara_ledger_cron` token in
+    // x-cron-token. The token path exists because pg_cron callers cannot read
+    // edge-function env secrets.
     const cronActions = [
       "accrue_interest_batch", "reconcile",
       "accrue_daily_interest", "auto_mature_due", "run_savings_reconciliation",
     ];
-    const isCronAction = cronActions.includes(action);
-    if (isCronAction) {
+    async function cronTokenValid(): Promise<boolean> {
+      const token = req.headers.get("x-cron-token");
+      if (!token) return false;
+      const { data } = await supabase.from("internal_cron_tokens")
+        .select("token").eq("name", "vestara_ledger_cron").maybeSingle();
+      return !!data?.token && data.token === token;
+    }
+    function cronSecretValid(): boolean {
       const cronSecret = Deno.env.get("CRON_SECRET");
-      if (!cronSecret) return err("Server cron secret not configured", 503);
+      if (!cronSecret) return false;
       const provided =
         req.headers.get("x-cron-secret") ||
         (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
-      if (provided !== cronSecret) return err("Forbidden", 403);
+      return provided === cronSecret;
     }
+    const isCronAction = cronActions.includes(action);
+    if (isCronAction && !cronSecretValid() && !(await cronTokenValid())) {
+      return err("Forbidden", 403);
+    }
+
 
     // Authenticate user (except for webhook and cron actions)
     let userId: string | null = null;
     const noAuthActions = [
-      "deposit_webhook", ...cronActions,
+      // `reconcile_savings_payouts` guards itself via callerIsCronOrAdmin, which
+      // accepts either the cron secret or a super-admin session.
+      "deposit_webhook", "reconcile_savings_payouts", ...cronActions,
     ];
+
+
+
     if (!noAuthActions.includes(action)) {
       const authHeader = req.headers.get("Authorization");
       if (!authHeader) return err("Unauthorized", 401);
@@ -244,8 +261,16 @@ serve(async (req) => {
         req.headers.get("x-cron-secret") ||
         (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
       if (cronSecret && provided === cronSecret) return true;
-      if (!userId) return false;
-      return await requireSuperAdmin(userId);
+      if (await cronTokenValid()) return true;
+
+      let uid = userId;
+      if (!uid && provided) {
+        const { data: { user } } = await supabase.auth.getUser(provided);
+        uid = user?.id ?? null;
+      }
+      if (!uid) return false;
+      return await requireSuperAdmin(uid);
+
     }
 
     // Helper: ensure user has a wallet account

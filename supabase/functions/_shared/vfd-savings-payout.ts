@@ -134,8 +134,9 @@ export async function payoutSavingsToUser(p: SavingsPayoutParams): Promise<Savin
 
   // Destination — the customer's own VFD NUBAN.
   const { data: client } = await db.from("vfd_sandbox_clients")
-    .select("vfd_account_number, full_name, first_name, last_name")
+    .select("vfd_account_number, vfd_client_id, full_name, bvn")
     .eq("user_id", p.userId).maybeSingle();
+
   const destination = (client?.vfd_account_number as string | null) || null;
   if (!destination) {
     return { confirmed: false, reference, code: "PAYOUT_NO_CUSTOMER_NUBAN", error: "Customer has no bank account yet" };
