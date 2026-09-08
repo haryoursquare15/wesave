@@ -169,40 +169,55 @@ export async function sweepPoolToProductSubaccount(p: PoolSweepParams): Promise<
     metadata: { seq: p.seq, product_code: productCode, remark: p.remark || null },
   });
 
-  const { data: poolEnq, status: poolStatus } = await walletRequest(
-    "/account/enquiry", "GET", undefined, { accountNumber: VFD_CORPORATE_POOL_NUBAN },
-  );
-  if (poolStatus !== 200 || poolEnq?.status !== "00") {
-    await markSettlement(db, reference, "pending", { evidence: poolEnq, bumpAttempt: true });
-    return { confirmed: false, reference, subAccountNuban, code: "SWEEP_SOURCE_ENQUIRY_FAILED", error: "Pool account unreachable", evidence: poolEnq };
+  // The credential-scoped /account/enquiry does not reliably resolve the
+  // corporate pool or the product sub-accounts (they are separate VFD clients).
+  // The intra-bank name enquiry resolves any VFD account, so use it first.
+  const resolve = async (nuban: string) => {
+    const { data: rec, status } = await walletRequest(
+      "/transfer/recipient", "GET", undefined,
+      { accountNo: nuban, bank: "999999", transfer_type: "intra" },
+    );
+    if (status === 200 && rec?.status === "00") {
+      const d = (rec.data as Record<string, unknown>) || {};
+      const acct = (d.account as Record<string, unknown>) || {};
+      return { ok: true, clientId: String(d?.clientId ?? ""), savingsId: String(acct?.id ?? ""), name: String(d?.name ?? ""), bvn: String(d?.bvn ?? ""), raw: rec };
+    }
+    const { data: enq, status: enqStatus } = await walletRequest(
+      "/account/enquiry", "GET", undefined, { accountNumber: nuban },
+    );
+    if (enqStatus === 200 && enq?.status === "00") {
+      const env = (enq?.data as Record<string, unknown>) || {};
+      const acct = (env?.account as Record<string, unknown>) || env;
+      return { ok: true, clientId: String(env?.clientId ?? acct?.clientId ?? ""), savingsId: String(acct?.id ?? env?.accountId ?? env?.id ?? ""), name: String(env?.client ?? acct?.client ?? ""), bvn: String(env?.bvn ?? ""), raw: enq };
+    }
+    return { ok: false, clientId: "", savingsId: "", name: "", bvn: "", raw: { recipient: rec, enquiry: enq } };
+  };
+
+  const poolInfo = await resolve(VFD_CORPORATE_POOL_NUBAN);
+  if (!poolInfo.ok) {
+    await markSettlement(db, reference, "pending", { evidence: poolInfo.raw, bumpAttempt: true });
+    return { confirmed: false, reference, subAccountNuban, code: "SWEEP_SOURCE_ENQUIRY_FAILED", error: "Pool account unreachable", evidence: poolInfo.raw };
   }
 
-  const { data: subEnq, status: subStatus } = await walletRequest(
-    "/account/enquiry", "GET", undefined, { accountNumber: subAccountNuban },
-  );
-  if (subStatus !== 200 || subEnq?.status !== "00") {
-    await markSettlement(db, reference, "pending", { evidence: subEnq, bumpAttempt: true });
-    return { confirmed: false, reference, subAccountNuban, code: "SWEEP_DEST_ENQUIRY_FAILED", error: "Product sub-account unreachable", evidence: subEnq };
+  const subInfo = await resolve(subAccountNuban);
+  if (!subInfo.ok) {
+    await markSettlement(db, reference, "pending", { evidence: subInfo.raw, bumpAttempt: true });
+    return { confirmed: false, reference, subAccountNuban, code: "SWEEP_DEST_ENQUIRY_FAILED", error: "Product sub-account unreachable", evidence: subInfo.raw };
   }
-
-  const pEnv = (poolEnq?.data as Record<string, unknown>) || {};
-  const pAcct = (pEnv?.account as Record<string, unknown>) || pEnv;
-  const sEnv = (subEnq?.data as Record<string, unknown>) || {};
-  const sAcct = (sEnv?.account as Record<string, unknown>) || sEnv;
 
   const payload = {
     fromAccount: VFD_CORPORATE_POOL_NUBAN,
-    fromClientId: firstNonEmpty(Deno.env.get("VFD_POOL_CLIENT_ID"), pEnv?.clientId, pAcct?.clientId),
-    fromClient: firstNonEmpty(Deno.env.get("VFD_POOL_CLIENT_NAME"), pEnv?.client, pAcct?.client, pEnv?.name),
-    fromSavingsId: firstNonEmpty(Deno.env.get("VFD_POOL_SAVINGS_ID"), pAcct?.id, pEnv?.accountId, pEnv?.id),
-    fromBvn: String(pEnv?.bvn ?? ""),
+    fromClientId: firstNonEmpty(Deno.env.get("VFD_POOL_CLIENT_ID"), poolInfo.clientId),
+    fromClient: firstNonEmpty(Deno.env.get("VFD_POOL_CLIENT_NAME"), poolInfo.name),
+    fromSavingsId: firstNonEmpty(Deno.env.get("VFD_POOL_SAVINGS_ID"), poolInfo.savingsId),
+    fromBvn: poolInfo.bvn,
     toAccount: subAccountNuban,
     toBank: "999999",
-    toClient: firstNonEmpty(sEnv?.client, sAcct?.client, product?.name, "Vestara Product Pool"),
-    toClientId: firstNonEmpty(sEnv?.clientId, sAcct?.clientId),
-    toSavingsId: firstNonEmpty(sAcct?.id, sEnv?.accountId, sEnv?.id),
+    toClient: firstNonEmpty(subInfo.name, product?.name, "Vestara Product Pool"),
+    toClientId: subInfo.clientId,
+    toSavingsId: subInfo.savingsId,
     toSession: "",
-    toBvn: String(sEnv?.bvn ?? ""),
+    toBvn: subInfo.bvn,
     signature: await transferSignature(VFD_CORPORATE_POOL_NUBAN, subAccountNuban),
     amount: String(amount),
     remark: (p.remark || `${product?.name || productCode} funding`).slice(0, 60),
@@ -211,9 +226,10 @@ export async function sweepPoolToProductSubaccount(p: PoolSweepParams): Promise<
   };
 
   if (!payload.fromClientId || !payload.fromSavingsId || !payload.toSavingsId || !payload.toClientId) {
-    await markSettlement(db, reference, "pending", { evidence: { poolEnq, subEnq }, bumpAttempt: true });
+    await markSettlement(db, reference, "pending", { evidence: { pool: poolInfo.raw, sub: subInfo.raw }, bumpAttempt: true });
     return { confirmed: false, reference, subAccountNuban, code: "SWEEP_IDENTITY_MISSING", error: "Sweep identities incomplete" };
   }
+
 
   console.log(`[sweep][pool->${productCode}] ${JSON.stringify(payload)}`);
   const { data: transferResp } = await walletRequest("/transfer", "POST", payload);
