@@ -181,18 +181,34 @@ export async function payoutSavingsToUser(p: SavingsPayoutParams): Promise<Savin
   if (!srcEnq) {
     const { data: enq, status } = await walletRequest("/account/enquiry", "GET", undefined, { accountNumber: VFD_CORPORATE_POOL_NUBAN });
     await openLeg(VFD_CORPORATE_POOL_NUBAN);
-    if (status !== 200 || enq?.status !== "00") {
-      await markSettlement(db, reference, "pending", { evidence: enq, bumpAttempt: true });
-      return { confirmed: false, reference, sourceAccount: source, destinationAccount: destination, code: "PAYOUT_SOURCE_ENQUIRY_FAILED", error: "Funding account unreachable", evidence: enq };
+    if (status === 200 && enq?.status === "00") {
+      if (readBalance(enq) < amount) {
+        await markSettlement(db, reference, "pending", { evidence: enq, bumpAttempt: true });
+        return { confirmed: false, reference, sourceAccount: source, destinationAccount: destination, code: "PAYOUT_INSUFFICIENT_SOURCE", error: "Not enough settled cash to release this payout", evidence: enq };
+      }
+      srcEnq = enq;
+    } else {
+      // The credential-scoped enquiry does not always see the corporate pool.
+      // Resolve its identity through the intra-bank name enquiry instead; the
+      // bank still rejects the transfer if the pool is short, and nothing is
+      // credited internally until TSQ confirms the movement.
+      const { data: rec, status: recStatus } = await walletRequest(
+        "/transfer/recipient", "GET", undefined,
+        { accountNo: VFD_CORPORATE_POOL_NUBAN, bank: "999999", transfer_type: "intra" },
+      );
+      if (recStatus === 200 && rec?.status === "00") {
+        const d = (rec.data as Record<string, unknown>) || {};
+        const acct = (d.account as Record<string, unknown>) || {};
+        srcEnq = { data: { clientId: d?.clientId, client: d?.name, bvn: d?.bvn, account: { id: acct?.id } } } as Record<string, unknown>;
+      } else {
+        await markSettlement(db, reference, "pending", { evidence: { enquiry: enq, recipient: rec }, bumpAttempt: true });
+        return { confirmed: false, reference, sourceAccount: source, destinationAccount: destination, code: "PAYOUT_SOURCE_ENQUIRY_FAILED", error: "Funding account unreachable", evidence: { enquiry: enq, recipient: rec } };
+      }
     }
-    if (readBalance(enq) < amount) {
-      await markSettlement(db, reference, "pending", { evidence: enq, bumpAttempt: true });
-      return { confirmed: false, reference, sourceAccount: source, destinationAccount: destination, code: "PAYOUT_INSUFFICIENT_SOURCE", error: "Not enough settled cash to release this payout", evidence: enq };
-    }
-    srcEnq = enq;
   } else {
     await openLeg(source);
   }
+
 
   // Destination identity: the credential-scoped /account/enquiry only sees our
   // own wallet accounts, so resolve the customer through the intra-bank name
