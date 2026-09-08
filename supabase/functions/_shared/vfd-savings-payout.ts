@@ -248,11 +248,12 @@ export async function payoutSavingsToUser(p: SavingsPayoutParams): Promise<Savin
   const sAcct = (sEnv?.account as Record<string, unknown>) || sEnv;
 
   const isPoolSource = source === VFD_CORPORATE_POOL_NUBAN;
-  const payload = {
+  const fromSavingsId = firstNonEmpty(isPoolSource ? Deno.env.get("VFD_POOL_SAVINGS_ID") : "", sAcct?.id, sEnv?.accountId, sEnv?.id);
+  const payload: Record<string, unknown> = {
     fromAccount: source,
     fromClientId: firstNonEmpty(isPoolSource ? Deno.env.get("VFD_POOL_CLIENT_ID") : "", sEnv?.clientId, sAcct?.clientId),
     fromClient: firstNonEmpty(isPoolSource ? Deno.env.get("VFD_POOL_CLIENT_NAME") : "", sEnv?.client, sAcct?.client, sEnv?.name, product?.name),
-    fromSavingsId: firstNonEmpty(isPoolSource ? Deno.env.get("VFD_POOL_SAVINGS_ID") : "", sAcct?.id, sEnv?.accountId, sEnv?.id),
+    fromSavingsId,
     fromBvn: String(sEnv?.bvn ?? ""),
     toAccount: destination,
     toBank: "999999",
@@ -266,8 +267,11 @@ export async function payoutSavingsToUser(p: SavingsPayoutParams): Promise<Savin
     remark: (p.remark || `${product?.name || productCode} payout`).slice(0, 60),
     transferType: "intra",
     reference,
-    uniqueSenderAccountId: source,
   };
+  // VFD rejects uniqueSenderAccountId when the corporate pool itself is the
+  // sender; for sub-account senders it must be the savings id, not the NUBAN.
+  if (!isPoolSource && fromSavingsId) payload.uniqueSenderAccountId = fromSavingsId;
+
 
   if (!payload.fromClientId || !payload.fromSavingsId) {
     await markSettlement(db, reference, "pending", { evidence: { srcEnq }, bumpAttempt: true });
