@@ -194,16 +194,42 @@ export async function payoutSavingsToUser(p: SavingsPayoutParams): Promise<Savin
     await openLeg(source);
   }
 
-  const { data: destEnq, status: destStatus } = await walletRequest("/account/enquiry", "GET", undefined, { accountNumber: destination });
-  if (destStatus !== 200 || destEnq?.status !== "00") {
-    await markSettlement(db, reference, "pending", { evidence: destEnq, bumpAttempt: true });
-    return { confirmed: false, reference, sourceAccount: source, destinationAccount: destination, code: "PAYOUT_DEST_ENQUIRY_FAILED", error: "Customer account unreachable", evidence: destEnq };
+  // Destination identity: the credential-scoped /account/enquiry only sees our
+  // own wallet accounts, so resolve the customer through the intra-bank name
+  // enquiry first (works for any VFD account) and fall back to enquiry.
+  let dClientId = "", dSavingsId = "", dClientName = "", dBvn = "";
+  const { data: rec, status: recStatus } = await walletRequest(
+    "/transfer/recipient", "GET", undefined,
+    { accountNo: destination, bank: "999999", transfer_type: "intra" },
+  );
+  if (recStatus === 200 && rec?.status === "00") {
+    const d = (rec.data as Record<string, unknown>) || {};
+    const acct = (d.account as Record<string, unknown>) || {};
+    dSavingsId = String(acct?.id ?? "");
+    dClientId = String(d?.clientId ?? "");
+    dClientName = String(d?.name ?? "");
+    dBvn = String(d?.bvn ?? "");
+  }
+  let destEnq: Record<string, unknown> | null = null;
+  if (!dClientId || !dSavingsId) {
+    const { data: enq, status: destStatus } = await walletRequest("/account/enquiry", "GET", undefined, { accountNumber: destination });
+    destEnq = enq;
+    if (destStatus === 200 && enq?.status === "00") {
+      const dEnv = (enq?.data as Record<string, unknown>) || {};
+      const dAcct = (dEnv?.account as Record<string, unknown>) || dEnv;
+      dSavingsId = dSavingsId || String(dAcct?.id ?? dEnv?.accountId ?? dEnv?.id ?? "");
+      dClientId = dClientId || String(dEnv?.clientId ?? dAcct?.clientId ?? "");
+      dClientName = dClientName || String(dEnv?.client ?? dAcct?.client ?? "");
+      dBvn = dBvn || String(dEnv?.bvn ?? "");
+    }
+  }
+  if (!dClientId || !dSavingsId) {
+    await markSettlement(db, reference, "pending", { evidence: { recipient: rec, enquiry: destEnq }, bumpAttempt: true });
+    return { confirmed: false, reference, sourceAccount: source, destinationAccount: destination, code: "PAYOUT_DEST_ENQUIRY_FAILED", error: "Customer account unreachable", evidence: { recipient: rec, enquiry: destEnq } };
   }
 
   const sEnv = (srcEnq?.data as Record<string, unknown>) || {};
   const sAcct = (sEnv?.account as Record<string, unknown>) || sEnv;
-  const dEnv = (destEnq?.data as Record<string, unknown>) || {};
-  const dAcct = (dEnv?.account as Record<string, unknown>) || dEnv;
 
   const isPoolSource = source === VFD_CORPORATE_POOL_NUBAN;
   const payload = {
@@ -214,11 +240,11 @@ export async function payoutSavingsToUser(p: SavingsPayoutParams): Promise<Savin
     fromBvn: String(sEnv?.bvn ?? ""),
     toAccount: destination,
     toBank: "999999",
-    toClient: firstNonEmpty(dEnv?.client, dAcct?.client, client?.full_name, "Vestara Customer"),
-    toClientId: firstNonEmpty(dEnv?.clientId, dAcct?.clientId),
-    toSavingsId: firstNonEmpty(dAcct?.id, dEnv?.accountId, dEnv?.id),
+    toClient: firstNonEmpty(dClientName, client?.full_name, "Vestara Customer"),
+    toClientId: dClientId,
+    toSavingsId: dSavingsId,
     toSession: "",
-    toBvn: String(dEnv?.bvn ?? ""),
+    toBvn: dBvn,
     signature: await transferSignature(source, destination),
     amount: String(amount),
     remark: (p.remark || `${product?.name || productCode} payout`).slice(0, 60),
@@ -227,10 +253,11 @@ export async function payoutSavingsToUser(p: SavingsPayoutParams): Promise<Savin
     uniqueSenderAccountId: source,
   };
 
-  if (!payload.fromClientId || !payload.fromSavingsId || !payload.toSavingsId || !payload.toClientId) {
-    await markSettlement(db, reference, "pending", { evidence: { srcEnq, destEnq }, bumpAttempt: true });
+  if (!payload.fromClientId || !payload.fromSavingsId) {
+    await markSettlement(db, reference, "pending", { evidence: { srcEnq }, bumpAttempt: true });
     return { confirmed: false, reference, sourceAccount: source, destinationAccount: destination, code: "PAYOUT_IDENTITY_MISSING", error: "Payout identities incomplete" };
   }
+
 
   console.log(`[savings-payout][${productCode}] ${source} -> ${destination} amount=${amount} ref=${reference}`);
   const { data: transferResp } = await walletRequest("/transfer", "POST", payload);
