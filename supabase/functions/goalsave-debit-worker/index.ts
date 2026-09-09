@@ -333,9 +333,13 @@ Deno.serve(async (req) => {
   try {
     const { data: collected } = await supabase
       .from("vfd_savings_debit_schedule")
-      .select("savings_id, user_id, seq, amount, vestara_savings!inner(product_code)")
+      .select("savings_id, user_id, seq, amount, vestara_savings!inner(product_code, status)")
       .eq("status", "succeeded")
       .eq("vestara_savings.product_code", "goalsave")
+      // A plan that has already matured or been withdrawn was paid out of the
+      // pool to the customer — sweeping it into the sub-account now would move
+      // money that has already left.
+      .eq("vestara_savings.status", "active")
       .order("collected_at", { ascending: true })
       .limit(200);
 
@@ -344,6 +348,7 @@ Deno.serve(async (req) => {
       const { data: rec } = await supabase.from("settlement_records")
         .select("status").eq("provider", "vfd").eq("provider_reference", ref).maybeSingle();
       if (rec?.status === "confirmed") continue;
+
 
       const res = await sweepInstallmentToSubaccount(supabase, {
         savings_id: c.savings_id, user_id: c.user_id, seq: c.seq, amount: Number(c.amount),
