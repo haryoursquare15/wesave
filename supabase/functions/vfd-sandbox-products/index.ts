@@ -1137,6 +1137,15 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
     }
   } else {
     const reference = `ajo-manual-${groupId}-${activeCycle.id}-${userId}`;
+    // Sufficiency is checked BEFORE any real money moves, so a short wallet
+    // never leaves cash stranded in the corporate pool.
+    const cover = await walletCanCoverContribution(userId, amount);
+    if (!cover.ok) {
+      return jsonResponse({
+        error: cover.error, code: cover.code,
+        required: amount, available: cover.available, shortfall: cover.shortfall,
+      }, 400);
+    }
     // REAL bank leg first: the member's own NUBAN -> corporate pool, verified
     // at VFD. An internal ledger debit alone is never accepted as settlement.
     const funding = await collectFromCustomerToPool({
@@ -1158,25 +1167,18 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
     if (!debit.success) {
       const available = await getVestaraWalletBalance(userId);
       const rawErr = (debit.error || "").toString();
-      const isInsufficient = available < amount || /insufficient/i.test(rawErr);
-      if (isInsufficient) {
-        const shortfall = Math.max(0, amount - available);
-        return jsonResponse({
-          error: `Insufficient wallet balance. You need ₦${amount.toLocaleString()} but have ₦${available.toLocaleString()} available. Please fund your wallet with at least ₦${shortfall.toLocaleString()}.`,
-          code: "INSUFFICIENT_BALANCE",
-          required: amount,
-          available,
-          shortfall,
-        }, 400);
-      }
-      console.error(`[handleContributeGroup] debit failed group=${groupId} user=${userId} amount=${amount} available=${available} err=${rawErr}`);
+      console.error(`[handleContributeGroup] debit failed AFTER confirmed bank leg group=${groupId} user=${userId} amount=${amount} available=${available} err=${rawErr}`);
+      await flagUnpostedWalletCollection({
+        userId, groupId, cycleId: activeCycle.id as string, amount, reference, error: rawErr,
+      });
       return jsonResponse({
-        error: rawErr || "Contribution failed. Please try again.",
-        code: "CONTRIBUTION_FAILED",
+        error: "Your money reached the group pool but the contribution record could not be completed. We are reconciling it now — no further action is needed and you will not be debited again.",
+        code: "CONTRIBUTION_POSTING_PENDING",
         required: amount,
         available,
-      }, 400);
+      }, 202);
     }
+
   }
 
 
