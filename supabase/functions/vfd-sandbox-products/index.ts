@@ -439,6 +439,58 @@ async function getVestaraWalletBalance(userId: string): Promise<number> {
   return Number(data?.balance || 0);
 }
 
+/**
+ * WALLET-FUNDED THRIFT PRE-FLIGHT.
+ * The wallet path moves REAL money (member NUBAN -> corporate pool) before the
+ * internal ledger is touched. If the internal wallet cannot cover the amount we
+ * must fail BEFORE the bank leg, otherwise cash leaves the member's account
+ * while the contribution can never be posted.
+ */
+async function walletCanCoverContribution(
+  userId: string,
+  amount: number,
+): Promise<{ ok: boolean; available: number; shortfall: number; error?: string; code?: string }> {
+  const available = await getVestaraWalletBalance(userId);
+  if (available >= amount) return { ok: true, available, shortfall: 0 };
+  const shortfall = Math.max(0, amount - available);
+  return {
+    ok: false,
+    available,
+    shortfall,
+    code: "INSUFFICIENT_BALANCE",
+    error: `Insufficient wallet balance. You need ₦${amount.toLocaleString()} but have ₦${available.toLocaleString()} available. Please fund your wallet with at least ₦${shortfall.toLocaleString()}.`,
+  };
+}
+
+/**
+ * The bank leg confirmed but the internal posting failed — the member's money
+ * is already in the corporate pool. Never report this as "nothing was debited";
+ * flag it so reconciliation/support can complete it.
+ */
+async function flagUnpostedWalletCollection(params: {
+  userId: string; groupId: string; cycleId: string; amount: number; reference: string; error: string;
+}) {
+  const db = getSupabaseAdmin();
+  try {
+    await db.from("vfd_transaction_events").insert({
+      event_type: "thrift_wallet_collection_unposted",
+      actor: "system",
+      user_id: params.userId,
+      reference: `${params.reference}-FUND`,
+      payload: {
+        group_id: params.groupId,
+        cycle_id: params.cycleId,
+        amount: params.amount,
+        error: params.error,
+        note: "Bank leg confirmed into corporate pool but internal thrift contribution posting failed",
+      },
+    });
+  } catch (e) {
+    console.error("[flagUnpostedWalletCollection]", e);
+  }
+}
+
+
 async function debitVestaraForThrift(userId: string, groupId: string, amount: number, reference: string, metadata: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const { data, error } = await db.rpc("vestara_thrift_contribute", {
