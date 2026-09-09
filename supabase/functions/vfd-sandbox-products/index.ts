@@ -8356,6 +8356,11 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
           })()
         : await (async () => {
             const autoRef = `ajo-auto-${group.id}-${activeCycle.id}-${m.user_id}`;
+            // Never touch the bank unless the wallet actually covers the amount.
+            const cover = await walletCanCoverContribution(m.user_id as string, amount);
+            if (!cover.ok) {
+              return { success: false, error: cover.error, code: cover.code };
+            }
             // Real bank leg first (member NUBAN -> corporate pool), verified.
             const funding = await collectFromCustomerToPool({
               userId: m.user_id, amount, reference: autoRef,
@@ -8365,12 +8370,21 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
             if (!funding.confirmed) {
               return { success: false, error: funding.error || "Bank settlement not confirmed", code: funding.code };
             }
-            return await debitVestaraForThrift(m.user_id, group.id, amount, autoRef, {
+            const posted = await debitVestaraForThrift(m.user_id, group.id, amount, autoRef, {
               cycle_id: activeCycle.id,
               cycle_number: group.current_cycle,
               source: "vfd_sandbox_auto_sweep",
             });
+            if (!posted.success) {
+              await flagUnpostedWalletCollection({
+                userId: m.user_id as string, groupId: group.id as string,
+                cycleId: activeCycle.id as string, amount, reference: autoRef,
+                error: (posted.error || "").toString(),
+              });
+            }
+            return posted;
           })();
+
 
 
       // A same-day debit attempt already claimed for this mandate is NOT a new
