@@ -439,6 +439,58 @@ async function getVestaraWalletBalance(userId: string): Promise<number> {
   return Number(data?.balance || 0);
 }
 
+/**
+ * WALLET-FUNDED THRIFT PRE-FLIGHT.
+ * The wallet path moves REAL money (member NUBAN -> corporate pool) before the
+ * internal ledger is touched. If the internal wallet cannot cover the amount we
+ * must fail BEFORE the bank leg, otherwise cash leaves the member's account
+ * while the contribution can never be posted.
+ */
+async function walletCanCoverContribution(
+  userId: string,
+  amount: number,
+): Promise<{ ok: boolean; available: number; shortfall: number; error?: string; code?: string }> {
+  const available = await getVestaraWalletBalance(userId);
+  if (available >= amount) return { ok: true, available, shortfall: 0 };
+  const shortfall = Math.max(0, amount - available);
+  return {
+    ok: false,
+    available,
+    shortfall,
+    code: "INSUFFICIENT_BALANCE",
+    error: `Insufficient wallet balance. You need ₦${amount.toLocaleString()} but have ₦${available.toLocaleString()} available. Please fund your wallet with at least ₦${shortfall.toLocaleString()}.`,
+  };
+}
+
+/**
+ * The bank leg confirmed but the internal posting failed — the member's money
+ * is already in the corporate pool. Never report this as "nothing was debited";
+ * flag it so reconciliation/support can complete it.
+ */
+async function flagUnpostedWalletCollection(params: {
+  userId: string; groupId: string; cycleId: string; amount: number; reference: string; error: string;
+}) {
+  const db = getSupabaseAdmin();
+  try {
+    await db.from("vfd_transaction_events").insert({
+      event_type: "thrift_wallet_collection_unposted",
+      actor: "system",
+      user_id: params.userId,
+      reference: `${params.reference}-FUND`,
+      payload: {
+        group_id: params.groupId,
+        cycle_id: params.cycleId,
+        amount: params.amount,
+        error: params.error,
+        note: "Bank leg confirmed into corporate pool but internal thrift contribution posting failed",
+      },
+    });
+  } catch (e) {
+    console.error("[flagUnpostedWalletCollection]", e);
+  }
+}
+
+
 async function debitVestaraForThrift(userId: string, groupId: string, amount: number, reference: string, metadata: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const { data, error } = await db.rpc("vestara_thrift_contribute", {
@@ -1085,6 +1137,15 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
     }
   } else {
     const reference = `ajo-manual-${groupId}-${activeCycle.id}-${userId}`;
+    // Sufficiency is checked BEFORE any real money moves, so a short wallet
+    // never leaves cash stranded in the corporate pool.
+    const cover = await walletCanCoverContribution(userId, amount);
+    if (!cover.ok) {
+      return jsonResponse({
+        error: cover.error, code: cover.code,
+        required: amount, available: cover.available, shortfall: cover.shortfall,
+      }, 400);
+    }
     // REAL bank leg first: the member's own NUBAN -> corporate pool, verified
     // at VFD. An internal ledger debit alone is never accepted as settlement.
     const funding = await collectFromCustomerToPool({
@@ -1106,25 +1167,18 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
     if (!debit.success) {
       const available = await getVestaraWalletBalance(userId);
       const rawErr = (debit.error || "").toString();
-      const isInsufficient = available < amount || /insufficient/i.test(rawErr);
-      if (isInsufficient) {
-        const shortfall = Math.max(0, amount - available);
-        return jsonResponse({
-          error: `Insufficient wallet balance. You need ₦${amount.toLocaleString()} but have ₦${available.toLocaleString()} available. Please fund your wallet with at least ₦${shortfall.toLocaleString()}.`,
-          code: "INSUFFICIENT_BALANCE",
-          required: amount,
-          available,
-          shortfall,
-        }, 400);
-      }
-      console.error(`[handleContributeGroup] debit failed group=${groupId} user=${userId} amount=${amount} available=${available} err=${rawErr}`);
+      console.error(`[handleContributeGroup] debit failed AFTER confirmed bank leg group=${groupId} user=${userId} amount=${amount} available=${available} err=${rawErr}`);
+      await flagUnpostedWalletCollection({
+        userId, groupId, cycleId: activeCycle.id as string, amount, reference, error: rawErr,
+      });
       return jsonResponse({
-        error: rawErr || "Contribution failed. Please try again.",
-        code: "CONTRIBUTION_FAILED",
+        error: "Your money reached the group pool but the contribution record could not be completed. We are reconciling it now — no further action is needed and you will not be debited again.",
+        code: "CONTRIBUTION_POSTING_PENDING",
         required: amount,
         available,
-      }, 400);
+      }, 202);
     }
+
   }
 
 
@@ -8302,6 +8356,11 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
           })()
         : await (async () => {
             const autoRef = `ajo-auto-${group.id}-${activeCycle.id}-${m.user_id}`;
+            // Never touch the bank unless the wallet actually covers the amount.
+            const cover = await walletCanCoverContribution(m.user_id as string, amount);
+            if (!cover.ok) {
+              return { success: false, error: cover.error, code: cover.code };
+            }
             // Real bank leg first (member NUBAN -> corporate pool), verified.
             const funding = await collectFromCustomerToPool({
               userId: m.user_id, amount, reference: autoRef,
@@ -8311,12 +8370,21 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
             if (!funding.confirmed) {
               return { success: false, error: funding.error || "Bank settlement not confirmed", code: funding.code };
             }
-            return await debitVestaraForThrift(m.user_id, group.id, amount, autoRef, {
+            const posted = await debitVestaraForThrift(m.user_id, group.id, amount, autoRef, {
               cycle_id: activeCycle.id,
               cycle_number: group.current_cycle,
               source: "vfd_sandbox_auto_sweep",
             });
+            if (!posted.success) {
+              await flagUnpostedWalletCollection({
+                userId: m.user_id as string, groupId: group.id as string,
+                cycleId: activeCycle.id as string, amount, reference: autoRef,
+                error: (posted.error || "").toString(),
+              });
+            }
+            return posted;
           })();
+
 
 
       // A same-day debit attempt already claimed for this mandate is NOT a new
