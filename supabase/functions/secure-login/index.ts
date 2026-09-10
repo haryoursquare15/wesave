@@ -23,6 +23,23 @@ function json(body: unknown, status = 200) {
   });
 }
 
+// Only these auth errors mean the credentials were actually wrong.
+function isCredentialError(error: { status?: number; code?: string; message?: string }) {
+  const status = error.status ?? 0;
+  const code = (error.code ?? "").toLowerCase();
+  const msg = (error.message ?? "").toLowerCase();
+  if (status >= 500 || status === 0) return false;
+  if (msg.includes("fetch failed") || msg.includes("network") || msg.includes("timeout")) return false;
+  return (
+    status === 400 ||
+    status === 401 ||
+    code.includes("invalid_credentials") ||
+    code.includes("email_not_confirmed") ||
+    msg.includes("invalid login credentials") ||
+    msg.includes("email not confirmed")
+  );
+}
+
 function clientIp(req: Request) {
   const fwd = req.headers.get("x-forwarded-for") || "";
   return fwd.split(",")[0].trim() || req.headers.get("cf-connecting-ip") || "unknown";
