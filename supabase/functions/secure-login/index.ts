@@ -89,6 +89,16 @@ Deno.serve(async (req) => {
     });
     const { data, error } = await authClient.auth.signInWithPassword({ email, password });
 
+    // Distinguish genuine bad credentials from backend/service problems.
+    // A service outage must NOT be reported as "Incorrect email or password"
+    // and must NOT count against the user's lockout budget.
+    if (error && !isCredentialError(error)) {
+      return json({
+        error: "Sign-in is temporarily unavailable. Please try again in a moment.",
+        transient: true,
+      }, 503);
+    }
+
     if (error || !data.session) {
       await db.from("login_attempts").insert({
         email, ip_address: ip, device_fingerprint: deviceFingerprint,
