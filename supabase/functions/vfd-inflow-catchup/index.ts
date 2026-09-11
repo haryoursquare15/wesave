@@ -186,6 +186,8 @@ Deno.serve(async (req) => {
 
   const accountNo = str(body.accountNo);
   const dryRun = body.dryRun === true;
+  // Diagnostics: return the raw VFD statement payload (shape varies by tenant).
+  const debug = body.debug === true;
   const days = Math.min(Number(body.days) || 7, 90);
 
   let q = db.from("vfd_sandbox_clients").select("user_id, vfd_account_number, full_name")
