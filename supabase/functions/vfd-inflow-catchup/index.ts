@@ -212,6 +212,8 @@ Deno.serve(async (req) => {
       scanned.push({ account: nuban, error: "statement_unavailable", vfd_status: status, body: stmt });
       continue;
     }
+    if (debug) scanned.push({ account: nuban, raw_statement: stmt, parsed: parseStatement(stmt) });
+
 
     for (const row of parseStatement(stmt)) {
       const internal = isInternalSettlement(row.payerAccount, row.payerName, row.narration);
