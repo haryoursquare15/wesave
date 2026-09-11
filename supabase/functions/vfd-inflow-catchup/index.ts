@@ -102,8 +102,14 @@ interface StatementRow {
   raw: Record<string, unknown>;
 }
 
-/** VFD statement payloads vary by endpoint version — parse defensively. */
-function parseStatement(data: Record<string, unknown>): StatementRow[] {
+/**
+ * VFD statement payloads vary by endpoint version — parse defensively.
+ * The live wallet2 shape is:
+ *   { transactionType: "INFLOW"|"OUTFLOW", amount, fromAccountNo, toAccountNo,
+ *     sessionId, transactionId, time, transactionResponse }
+ * Only money landing ON this NUBAN (INFLOW / credit, response 00) counts.
+ */
+function parseStatement(data: Record<string, unknown>, accountNo: string): StatementRow[] {
   const env = (data?.data as Record<string, unknown>) || {};
   const candidates = [env.content, env.transactions, env.items, env.data, data.content, env];
   let list: unknown[] = [];
@@ -113,19 +119,29 @@ function parseStatement(data: Record<string, unknown>): StatementRow[] {
   return list.filter((r) => r && typeof r === "object").map((r) => {
     const t = r as Record<string, unknown>;
     const typeTag = str(t.transactionType ?? t.type ?? t.drCr ?? t.transactionIndicator).toUpperCase();
-    const creditFlag = /^C/.test(typeTag) || /credit/i.test(typeTag);
+    const toAccount = str(t.toAccountNo ?? t.toAccount ?? t.creditAccount);
+    const fromAccount = str(
+      t.fromAccountNo ?? t.fromAccount ?? t.originatorAccountNumber ??
+      t.originator_account_number ?? t.senderAccountNumber,
+    );
     const credAmt = Number(String(str(t.creditAmount ?? "")).replace(/,/g, ""));
     const amtRaw = str(t.amount ?? t.transactionAmount ?? t.creditAmount ?? t.txnAmount);
     const amount = Number(String(amtRaw).replace(/,/g, "")) || (Number.isFinite(credAmt) ? credAmt : 0);
+    const response = str(t.transactionResponse ?? t.responseCode ?? "00");
+    const isCredit = /INFLOW|^C$|CREDIT/.test(typeTag)
+      ? true
+      : (typeTag ? false : (toAccount === accountNo || credAmt > 0));
     return {
       amount: Number.isFinite(amount) ? amount : 0,
-      isCredit: creditFlag || (!typeTag && credAmt > 0),
+      // Guard against OUTFLOW legs and failed rows being treated as money-in.
+      isCredit: isCredit && response === "00" && (!toAccount || toAccount === accountNo) &&
+        fromAccount !== accountNo,
       sessionId: str(t.sessionId ?? t.session_id ?? t.instrumentNo ?? t.instrumentNumber ?? t.uniqueId),
-      reference: str(t.referenceNumber ?? t.reference ?? t.transactionRef ?? t.txnRef),
-      narration: str(t.narration ?? t.transactionSummary ?? t.description ?? t.remarks),
-      payerAccount: str(t.originatorAccountNumber ?? t.originator_account_number ?? t.senderAccountNumber ?? t.fromAccount),
-      payerName: str(t.originatorAccountName ?? t.originatorName ?? t.senderName ?? t.fromClient),
-      date: str(t.transactionDate ?? t.date ?? t.createdAt ?? t.transactionTime),
+      reference: str(t.transactionId ?? t.referenceNumber ?? t.reference ?? t.transactionRef ?? t.txnRef),
+      narration: str(t.narration ?? t.transactionSummary ?? t.description ?? t.remarks ?? t.transactionId),
+      payerAccount: fromAccount,
+      payerName: str(t.fromClient ?? t.originatorAccountName ?? t.originatorName ?? t.senderName),
+      date: str(t.time ?? t.transactionDate ?? t.date ?? t.createdAt ?? t.transactionTime),
       raw: t,
     };
   }).filter((r) => r.amount > 0 && r.isCredit);
