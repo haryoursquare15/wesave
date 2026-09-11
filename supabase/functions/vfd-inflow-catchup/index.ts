@@ -234,7 +234,7 @@ Deno.serve(async (req) => {
     }
 
 
-    for (const row of parseStatement(stmt)) {
+    for (const row of parseStatement(stmt, nuban)) {
       const internal = isInternalSettlement(row.payerAccount, row.payerName, row.narration);
       if (internal) { skipped++; continue; }
 
