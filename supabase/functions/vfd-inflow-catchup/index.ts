@@ -230,7 +230,7 @@ Deno.serve(async (req) => {
     }
     if (debug) {
       console.log(`[catchup][debug] ${nuban}`, JSON.stringify(stmt).slice(0, 4000));
-      scanned.push({ account: nuban, raw_statement: stmt, parsed: parseStatement(stmt) });
+      scanned.push({ account: nuban, raw_statement: stmt, parsed: parseStatement(stmt, nuban) });
     }
 
 
