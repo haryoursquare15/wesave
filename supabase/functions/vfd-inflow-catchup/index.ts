@@ -212,7 +212,10 @@ Deno.serve(async (req) => {
       scanned.push({ account: nuban, error: "statement_unavailable", vfd_status: status, body: stmt });
       continue;
     }
-    if (debug) scanned.push({ account: nuban, raw_statement: stmt, parsed: parseStatement(stmt) });
+    if (debug) {
+      console.log(`[catchup][debug] ${nuban}`, JSON.stringify(stmt).slice(0, 4000));
+      scanned.push({ account: nuban, raw_statement: stmt, parsed: parseStatement(stmt) });
+    }
 
 
     for (const row of parseStatement(stmt)) {
