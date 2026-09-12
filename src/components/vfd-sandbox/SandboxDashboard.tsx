@@ -13,6 +13,7 @@ import vestaraBadge from "@/assets/vestara-badge.jpg";
 import { describeTransaction } from "@/lib/transactionLabels";
 import { supabase } from "@/integrations/supabase/client";
 import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
+import { SpendLockCard } from "@/components/vfd-sandbox/SpendLockCard";
 
 interface BalanceData {
   totalBalance: number;
@@ -451,6 +452,9 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
           </div>
         </div>
       </motion.div>
+
+      {/* ═══ SPENDLOCK ═══ */}
+      <SpendLockCard />
 
       {/* ═══ KYC TIER BANNER ═══ */}
       {(() => {
