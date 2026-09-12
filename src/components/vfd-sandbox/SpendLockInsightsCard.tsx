@@ -60,22 +60,21 @@ export function SpendLockInsightsCard() {
   };
 
   const nothingToShow = !upcoming.length && !suggestion && avgWeekly <= 0;
-  if (!insights || nothingToShow) return null;
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className="w-full rounded-xl border border-border bg-card px-3.5 py-3 space-y-3"
+      className="relative w-full h-full min-h-[176px] overflow-hidden rounded-lg border border-[hsl(var(--spendlock-border))] bg-[hsl(var(--spendlock-surface))] px-3 py-3 text-[hsl(var(--spendlock-foreground))] shadow-glow space-y-3"
     >
       <div className="flex items-center justify-between">
-        <p className="text-[11px] uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-          <Sparkles className="h-3 w-3 text-primary" /> Spending insights
+        <p className="text-[10px] uppercase text-[hsl(var(--spendlock-muted))] flex items-center gap-1.5">
+          <Sparkles className="h-3 w-3 text-primary" /> Insights
         </p>
         <button
           onClick={() => requestSuggestion()}
           disabled={suggesting}
-          className="p-1.5 -m-1 text-muted-foreground hover:text-foreground disabled:opacity-50"
+          className="p-1.5 -m-1 text-[hsl(var(--spendlock-muted))] hover:text-[hsl(var(--spendlock-foreground))] disabled:opacity-50"
           aria-label="Refresh suggestion"
         >
           <RefreshCw className={`h-3.5 w-3.5 ${suggesting ? "animate-spin" : ""}`} />
@@ -83,10 +82,10 @@ export function SpendLockInsightsCard() {
       </div>
 
       {avgWeekly > 0 && (
-        <p className="text-xs text-muted-foreground flex items-start gap-1.5">
+        <p className="text-[11px] text-[hsl(var(--spendlock-muted))] flex flex-col items-start gap-1">
           <TrendingUp className="h-3.5 w-3.5 mt-0.5 shrink-0 text-primary" />
           <span>
-            You spend about <span className="font-semibold text-foreground">{naira(avgWeekly)}</span> a
+            You spend about <span className="font-semibold text-[hsl(var(--spendlock-foreground))]">{naira(avgWeekly)}</span> a
             week
             {volatility === "high"
               ? ", and it swings a lot week to week."
@@ -95,6 +94,17 @@ export function SpendLockInsightsCard() {
               : ", fairly steadily."}
           </span>
         </p>
+      )}
+
+      {nothingToShow && (
+        <div className="flex min-h-[86px] flex-col justify-end">
+          <div className="flex h-12 items-end gap-1">
+            {[35, 55, 42, 76, 50, 64].map((height, index) => (
+              <span key={index} className="flex-1 rounded-t-sm bg-primary/30" style={{ height: `${height}%` }} />
+            ))}
+          </div>
+          <p className="mt-2 text-[10px] text-[hsl(var(--spendlock-muted))]">Your spending pattern will appear here.</p>
+        </div>
       )}
 
       {upcoming.map((bill) => {
