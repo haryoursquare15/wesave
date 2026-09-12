@@ -14,6 +14,7 @@ import { describeTransaction } from "@/lib/transactionLabels";
 import { supabase } from "@/integrations/supabase/client";
 import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
 import { SpendLockCard } from "@/components/vfd-sandbox/SpendLockCard";
+import { SpendLockInsightsCard } from "@/components/vfd-sandbox/SpendLockInsightsCard";
 
 interface BalanceData {
   totalBalance: number;
@@ -455,6 +456,9 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
 
       {/* ═══ SPENDLOCK ═══ */}
       <SpendLockCard />
+
+      {/* ═══ SPENDLOCK INSIGHTS (read-only suggestions) ═══ */}
+      <SpendLockInsightsCard />
 
       {/* ═══ KYC TIER BANNER ═══ */}
       {(() => {
