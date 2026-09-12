@@ -288,6 +288,127 @@ export type Database = {
         }
         Relationships: []
       }
+      budget_periods: {
+        Row: {
+          created_at: string
+          id: string
+          limit_amount: number
+          period_end: string
+          period_start: string
+          rule_id: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          limit_amount: number
+          period_end: string
+          period_start: string
+          rule_id: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          limit_amount?: number
+          period_end?: string
+          period_start?: string
+          rule_id?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "budget_periods_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "budget_rules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      budget_rules: {
+        Row: {
+          cooling_off_minutes: number
+          created_at: string
+          id: string
+          limit_amount: number
+          period_type: string
+          reset_day: number | null
+          status: string
+          unlock_mode: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cooling_off_minutes?: number
+          created_at?: string
+          id?: string
+          limit_amount: number
+          period_type: string
+          reset_day?: number | null
+          status?: string
+          unlock_mode?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cooling_off_minutes?: number
+          created_at?: string
+          id?: string
+          limit_amount?: number
+          period_type?: string
+          reset_day?: number | null
+          status?: string
+          unlock_mode?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      budget_unlocks: {
+        Row: {
+          amount: number
+          cooling_off_expires_at: string | null
+          created_at: string
+          id: string
+          period_id: string
+          reason: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          cooling_off_expires_at?: string | null
+          created_at?: string
+          id?: string
+          period_id: string
+          reason?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          cooling_off_expires_at?: string | null
+          created_at?: string
+          id?: string
+          period_id?: string
+          reason?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "budget_unlocks_period_id_fkey"
+            columns: ["period_id"]
+            isOneToOne: false
+            referencedRelation: "budget_periods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       campaign_updates: {
         Row: {
           campaign_id: string
@@ -7046,6 +7167,35 @@ export type Database = {
       award_cycle_completion: {
         Args: { _group_id: string; _user_id: string }
         Returns: undefined
+      }
+      budget_cancel_unlock: { Args: { _unlock_id: string }; Returns: Json }
+      budget_delete_rule: { Args: never; Returns: Json }
+      budget_get_status: { Args: never; Returns: Json }
+      budget_period_window: {
+        Args: { _period_type: string; _reset_day: number }
+        Returns: {
+          period_end: string
+          period_start: string
+        }[]
+      }
+      budget_request_unlock: {
+        Args: { _amount: number; _reason?: string }
+        Returns: Json
+      }
+      budget_set_rule: {
+        Args: {
+          _cooling_off_minutes?: number
+          _limit_amount: number
+          _period_type: string
+          _reset_day?: number
+          _unlock_mode?: string
+        }
+        Returns: Json
+      }
+      budget_set_status: { Args: { _status: string }; Returns: Json }
+      budget_spent_in_window: {
+        Args: { _from: string; _to: string; _user: string }
+        Returns: number
       }
       can_self_join_group: {
         Args: { _group_id: string; _user_id: string }
