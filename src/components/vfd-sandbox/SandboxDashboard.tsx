@@ -454,12 +454,6 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
         </div>
       </motion.div>
 
-      {/* ═══ SPENDLOCK ═══ */}
-      <SpendLockCard />
-
-      {/* ═══ SPENDLOCK INSIGHTS (read-only suggestions) ═══ */}
-      <SpendLockInsightsCard />
-
       {/* ═══ KYC TIER BANNER ═══ */}
       {(() => {
         const tierKey = (tier || "tier1").toLowerCase();
@@ -698,6 +692,11 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
       </motion.div>
 
       {/* ═══ RECENT ACTIVITY ═══ */}
+      <div className="grid grid-cols-[minmax(0,1.35fr)_minmax(0,0.9fr)] gap-2.5 items-stretch">
+        <SpendLockCard />
+        <SpendLockInsightsCard />
+      </div>
+
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}

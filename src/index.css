@@ -1,6 +1,3 @@
-@import url("https://fonts.googleapis.com/css2?family=Roboto&display=swap");
-@import url("https://fonts.googleapis.com/css2?family=Libre+Caslon+Text&display=swap");
-@import url("https://fonts.googleapis.com/css2?family=Roboto+Mono&display=swap");
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -78,6 +75,12 @@
     --shadow-lg: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 4px 6px -1px hsl(0 0% 0% / 0.1);
     --shadow-xl: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 8px 10px -1px hsl(0 0% 0% / 0.1);
     --shadow-gold: 0 4px 14px 0 hsl(43 96% 56% / 0.35);
+    --spendlock-surface: 0 0% 10%;
+    --spendlock-surface-soft: 0 0% 14%;
+    --spendlock-border: 0 0% 25%;
+    --spendlock-foreground: 0 0% 98%;
+    --spendlock-muted: 0 0% 65%;
+    --spendlock-glow: 20 90% 48%;
 
     /* Sidebar */
     --sidebar-background: 0 0% 100%;

@@ -38,6 +38,7 @@ import {
   type BillIdentity,
   type ValidationRecord,
 } from "../_shared/bill-validation.ts";
+import { checkSpendLock } from "../_shared/spend-lock.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -6034,6 +6035,25 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
       available,
       shortfall,
     }, 400);
+  }
+
+  try {
+    const spendLock = await checkSpendLock(getSupabaseAdmin(), userId, totalDebit);
+    if (!spendLock.allowed) {
+      return jsonResponse({
+        error: `This bill is above your SpendLock amount. You have ₦${spendLock.remaining.toLocaleString()} left ${spendLock.periodType === "daily" ? "today" : spendLock.periodType === "weekly" ? "this week" : "this month"}. Add more spending room in SpendLock, then try again.`,
+        code: "SPENDLOCK_LIMIT_EXCEEDED",
+        required: totalDebit,
+        remaining: spendLock.remaining,
+        action: "open_spendlock",
+      }, 403);
+    }
+  } catch (error) {
+    console.error("[bills] SpendLock check unavailable:", error);
+    return jsonResponse({
+      error: "We couldn't confirm your SpendLock right now. No money was moved. Please try again.",
+      code: "SPENDLOCK_CHECK_UNAVAILABLE",
+    }, 503);
   }
 
   const token = await getVfdAccessToken();
