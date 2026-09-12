@@ -104,6 +104,25 @@ export function SpendLockCard() {
               value={amount}
               onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))}
             />
+            {suggested > 0 && Number(amount) !== suggested && (
+              <button
+                type="button"
+                onClick={() => {
+                  setAmount(String(suggested));
+                  if (suggestedPeriod) setPeriodType(suggestedPeriod);
+                }}
+                className="text-[11px] text-primary underline underline-offset-2"
+              >
+                Suggested for you: {naira(suggested)}
+                {suggestedPeriod
+                  ? suggestedPeriod === "daily"
+                    ? " a day"
+                    : suggestedPeriod === "monthly"
+                    ? " a month"
+                    : " a week"
+                  : ""}
+              </button>
+            )}
           </div>
 
           {periodType === "weekly" && (
