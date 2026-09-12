@@ -453,6 +453,9 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
         </div>
       </motion.div>
 
+      {/* ═══ SPENDLOCK ═══ */}
+      <SpendLockCard />
+
       {/* ═══ KYC TIER BANNER ═══ */}
       {(() => {
         const tierKey = (tier || "tier1").toLowerCase();
