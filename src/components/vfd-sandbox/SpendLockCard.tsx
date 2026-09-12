@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useSpendLock, type SpendLockPeriod, type SpendLockUnlockMode } from "@/hooks/useSpendLock";
+import { useSpendLockInsights } from "@/hooks/useSpendLockInsights";
 
 const naira = (n: number) =>
   `₦${Number(n || 0).toLocaleString("en-NG", { maximumFractionDigits: 2 })}`;
@@ -30,6 +31,13 @@ const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Satur
 export function SpendLockCard() {
   const { status, loading, setRule, pause, resume, removeRule, requestUnlock, cancelUnlock } =
     useSpendLock();
+  const { insights } = useSpendLockInsights();
+  const pendingSuggestion = (insights?.suggestions ?? []).find(
+    (s) => s.suggestion_type === "set_limit" || s.suggestion_type === "adjust_limit"
+  );
+  const suggested = Number(pendingSuggestion?.payload?.suggested_limit || 0);
+  const suggestedPeriod = pendingSuggestion?.payload?.period_type ?? null;
+
 
   const [setupOpen, setSetupOpen] = useState(false);
   const [unlockOpen, setUnlockOpen] = useState(false);
