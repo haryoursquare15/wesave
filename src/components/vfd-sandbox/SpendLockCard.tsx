@@ -199,18 +199,18 @@ export function SpendLockCard() {
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           onClick={openSetup}
-          className="w-full flex items-center justify-between rounded-xl border border-border bg-card px-3.5 py-3 text-left active:scale-[0.99]"
+          className="w-full h-full min-h-[176px] flex flex-col items-start justify-between overflow-hidden rounded-lg border border-[hsl(var(--spendlock-border))] bg-[hsl(var(--spendlock-surface))] px-3.5 py-3 text-left text-[hsl(var(--spendlock-foreground))] shadow-glow active:scale-[0.99]"
         >
           <div className="flex items-center gap-2.5">
             <ShieldCheck className="h-4 w-4 text-primary" />
             <div>
               <p className="text-sm font-semibold">Set your SpendLock</p>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-[11px] text-[hsl(var(--spendlock-muted))]">
                 Give yourself a spending limit and track what is left
               </p>
             </div>
           </div>
-          <Pencil className="h-4 w-4 text-muted-foreground" />
+          <Pencil className="h-4 w-4 text-[hsl(var(--spendlock-muted))]" />
         </motion.button>
         {setupDialog}
       </>
@@ -233,29 +233,29 @@ export function SpendLockCard() {
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full rounded-xl border border-border bg-card px-3.5 py-3 space-y-2.5"
+        className="relative w-full h-full min-h-[176px] overflow-hidden rounded-lg border border-[hsl(var(--spendlock-border))] bg-[hsl(var(--spendlock-surface))] px-3.5 py-3 text-[hsl(var(--spendlock-foreground))] shadow-glow space-y-2.5"
       >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[11px] uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+            <p className="text-[10px] uppercase text-[hsl(var(--spendlock-muted))] flex items-center gap-1.5">
               <Lock className="h-3 w-3" /> Disposable {periodLabel}
             </p>
-            <p className="text-xl font-extrabold leading-tight">{naira(remaining)}</p>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-2xl font-extrabold leading-tight">{naira(remaining)}</p>
+            <p className="text-[10px] text-[hsl(var(--spendlock-muted))]">
               {naira(spent)} spent of {naira(allowance)}
               {paused && " · paused"}
             </p>
           </div>
           <button
             onClick={openSetup}
-            className="p-2 -m-1 text-muted-foreground hover:text-foreground"
+            className="p-2 -m-1 text-[hsl(var(--spendlock-muted))] hover:text-[hsl(var(--spendlock-foreground))]"
             aria-label="Edit SpendLock"
           >
             <Pencil className="h-4 w-4" />
           </button>
         </div>
 
-        <Progress value={pct} className="h-1.5" />
+        <Progress value={pct} className="h-1.5 bg-[hsl(var(--spendlock-surface-soft))]" />
 
         {pending.length > 0 && (
           <div className="space-y-1">
@@ -282,7 +282,7 @@ export function SpendLockCard() {
         <div className="flex gap-2">
           <Dialog open={unlockOpen} onOpenChange={setUnlockOpen}>
             <DialogTrigger asChild>
-              <Button variant="outline" size="sm" className="flex-1 min-h-[40px]">
+              <Button variant="outline" size="sm" className="flex-1 min-h-[40px] border-[hsl(var(--spendlock-border))] bg-transparent text-[hsl(var(--spendlock-foreground))] hover:bg-[hsl(var(--spendlock-surface-soft))]">
                 <Unlock className="h-3.5 w-3.5 mr-1.5" /> Give myself more
               </Button>
             </DialogTrigger>
@@ -324,7 +324,7 @@ export function SpendLockCard() {
           <Button
             variant="ghost"
             size="sm"
-            className="min-h-[40px]"
+            className="min-h-[40px] text-[hsl(var(--spendlock-muted))] hover:bg-[hsl(var(--spendlock-surface-soft))] hover:text-[hsl(var(--spendlock-foreground))]"
             onClick={() => (paused ? resume() : pause())}
             disabled={loading}
           >

@@ -1,6 +1,7 @@
 // vfd-banking edge function — quote_transfer action enabled
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { vfdFetch, getGatewayAccessToken } from "../_shared/vfd-gateway.ts";
+import { checkSpendLock } from "../_shared/spend-lock.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1518,6 +1519,26 @@ async function handleTransfer(
     }
   }
   // ─── END EARLY TIER ENFORCEMENT ───
+
+  // Enforce the user's active SpendLock before any internal or bank transfer.
+  try {
+    const spendLock = await checkSpendLock(getSupabaseAdmin(), userId, Number(body.amount));
+    if (!spendLock.allowed) {
+      return jsonResponse({
+        error: `This transfer is above your SpendLock amount. You have ₦${spendLock.remaining.toLocaleString()} left ${spendLock.periodType === "daily" ? "today" : spendLock.periodType === "weekly" ? "this week" : "this month"}. Add more spending room in SpendLock, then try again.`,
+        code: "SPENDLOCK_LIMIT_EXCEEDED",
+        required: spendLock.required,
+        remaining: spendLock.remaining,
+        action: "open_spendlock",
+      }, 403);
+    }
+  } catch (error) {
+    console.error("[transfer] SpendLock check unavailable:", error);
+    return jsonResponse({
+      error: "We couldn't confirm your SpendLock right now. No money was moved. Please try again.",
+      code: "SPENDLOCK_CHECK_UNAVAILABLE",
+    }, 503);
+  }
 
   // ─── SANDBOX VIRTUAL→VIRTUAL SHORT-CIRCUIT ───
   // Virtual NUBANs (9xxxxxxxxx) all settle to the shared PLATFORM_POOL_NUBAN
