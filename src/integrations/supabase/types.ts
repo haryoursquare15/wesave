@@ -368,6 +368,33 @@ export type Database = {
         }
         Relationships: []
       }
+      budget_suggestions: {
+        Row: {
+          created_at: string
+          id: string
+          payload: Json
+          status: string
+          suggestion_type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          payload?: Json
+          status?: string
+          suggestion_type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          payload?: Json
+          status?: string
+          suggestion_type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       budget_unlocks: {
         Row: {
           amount: number
@@ -821,6 +848,54 @@ export type Database = {
           },
         ]
       }
+      detected_bills: {
+        Row: {
+          amount_estimate: number | null
+          cadence: string | null
+          confidence: number | null
+          counterparty_hint: string | null
+          created_at: string
+          id: string
+          label: string | null
+          last_seen_at: string | null
+          next_expected_date: string | null
+          occurrences: number | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount_estimate?: number | null
+          cadence?: string | null
+          confidence?: number | null
+          counterparty_hint?: string | null
+          created_at?: string
+          id?: string
+          label?: string | null
+          last_seen_at?: string | null
+          next_expected_date?: string | null
+          occurrences?: number | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount_estimate?: number | null
+          cadence?: string | null
+          confidence?: number | null
+          counterparty_hint?: string | null
+          created_at?: string
+          id?: string
+          label?: string | null
+          last_seen_at?: string | null
+          next_expected_date?: string | null
+          occurrences?: number | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       email_send_log: {
         Row: {
           created_at: string
@@ -1117,6 +1192,39 @@ export type Database = {
           group_id?: string
           id?: string
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      income_events: {
+        Row: {
+          amount: number | null
+          cadence: string | null
+          confidence: number | null
+          created_at: string
+          detected_at: string | null
+          id: string
+          occurrences: number | null
+          user_id: string
+        }
+        Insert: {
+          amount?: number | null
+          cadence?: string | null
+          confidence?: number | null
+          created_at?: string
+          detected_at?: string | null
+          id?: string
+          occurrences?: number | null
+          user_id: string
+        }
+        Update: {
+          amount?: number | null
+          cadence?: string | null
+          confidence?: number | null
+          created_at?: string
+          detected_at?: string | null
+          id?: string
+          occurrences?: number | null
+          user_id?: string
         }
         Relationships: []
       }
@@ -7716,6 +7824,16 @@ export type Database = {
       }
       send_split_payment_reminder: {
         Args: { _split_request_id: string; _target_user_id: string }
+        Returns: Json
+      }
+      spendlock_get_insights: { Args: never; Returns: Json }
+      spendlock_resolve_suggestion: {
+        Args: { _status: string; _suggestion_id: string }
+        Returns: Json
+      }
+      spendlock_run_detection: { Args: { _user?: string }; Returns: Json }
+      spendlock_update_bill: {
+        Args: { _bill_id: string; _label?: string; _status?: string }
         Returns: Json
       }
       update_credit_score: {
