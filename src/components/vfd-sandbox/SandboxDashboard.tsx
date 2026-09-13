@@ -692,7 +692,7 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
       </motion.div>
 
       {/* ═══ RECENT ACTIVITY ═══ */}
-      <div className="grid grid-cols-[minmax(0,1.35fr)_minmax(0,0.9fr)] gap-2.5 items-stretch">
+      <div className="space-y-3">
         <SpendLockCard />
         <SpendLockInsightsCard />
       </div>

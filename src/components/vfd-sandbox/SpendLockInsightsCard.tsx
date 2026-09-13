@@ -43,7 +43,6 @@ export function SpendLockInsightsCard() {
     (s) => s.suggestion_type === "set_limit" || s.suggestion_type === "adjust_limit"
   );
   const avgWeekly = Number(insights?.stats?.avg_weekly_spend ?? 0);
-  const volatility = insights?.stats?.spend_volatility;
 
   const acceptSuggestion = async () => {
     if (!suggestion) return;
@@ -60,97 +59,110 @@ export function SpendLockInsightsCard() {
   };
 
   const nothingToShow = !upcoming.length && !suggestion && avgWeekly <= 0;
+  const nextBill = upcoming[0];
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className="relative w-full h-full min-h-[176px] overflow-hidden rounded-lg border border-[hsl(var(--spendlock-border))] bg-[hsl(var(--spendlock-surface))] px-3 py-3 text-[hsl(var(--spendlock-foreground))] shadow-glow space-y-3"
+      className="relative w-full overflow-hidden rounded-2xl border border-[hsl(var(--spendlock-border))] bg-[hsl(var(--spendlock-surface))] p-5 text-[hsl(var(--spendlock-foreground))] shadow-sm"
     >
       <div className="flex items-center justify-between">
-        <p className="text-[10px] uppercase text-[hsl(var(--spendlock-muted))] flex items-center gap-1.5">
-          <Sparkles className="h-3 w-3 text-primary" /> Insights
-        </p>
-        <button
+        <div>
+          <p className="flex items-center gap-2 text-xs font-semibold uppercase text-[hsl(var(--spendlock-muted))]">
+            <Sparkles className="h-3.5 w-3.5 text-primary" /> Spending insights
+          </p>
+          <p className="mt-1 text-sm text-[hsl(var(--spendlock-muted))]">A simple view of your spending pattern</p>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
           onClick={() => requestSuggestion()}
           disabled={suggesting}
-          className="p-1.5 -m-1 text-[hsl(var(--spendlock-muted))] hover:text-[hsl(var(--spendlock-foreground))] disabled:opacity-50"
+          className="h-10 w-10 shrink-0 text-[hsl(var(--spendlock-muted))] hover:bg-[hsl(var(--spendlock-surface-soft))] hover:text-[hsl(var(--spendlock-foreground))]"
           aria-label="Refresh suggestion"
         >
-          <RefreshCw className={`h-3.5 w-3.5 ${suggesting ? "animate-spin" : ""}`} />
-        </button>
+          <RefreshCw className={`h-4 w-4 ${suggesting ? "animate-spin" : ""}`} />
+        </Button>
       </div>
 
       {avgWeekly > 0 && (
-        <p className="text-[11px] text-[hsl(var(--spendlock-muted))] flex flex-col items-start gap-1">
-          <TrendingUp className="h-3.5 w-3.5 mt-0.5 shrink-0 text-primary" />
-          <span>
-            You spend about <span className="font-semibold text-[hsl(var(--spendlock-foreground))]">{naira(avgWeekly)}</span> a
-            week
-            {volatility === "high"
-              ? ", and it swings a lot week to week."
-              : volatility === "medium"
-              ? ", with some ups and downs."
-              : ", fairly steadily."}
-          </span>
-        </p>
-      )}
-
-      {nothingToShow && (
-        <div className="flex min-h-[86px] flex-col justify-end">
-          <div className="flex h-12 items-end gap-1">
-            {[35, 55, 42, 76, 50, 64].map((height, index) => (
-              <span key={index} className="flex-1 rounded-t-sm bg-primary/30" style={{ height: `${height}%` }} />
-            ))}
+        <div className="mt-5 flex items-center justify-between gap-4 border-b border-[hsl(var(--spendlock-border))] pb-4">
+          <div>
+            <p className="text-xs text-[hsl(var(--spendlock-muted))]">Average weekly spend</p>
+            <p className="mt-1 text-2xl font-bold tabular-nums">{naira(avgWeekly)}</p>
           </div>
-          <p className="mt-2 text-[10px] text-[hsl(var(--spendlock-muted))]">Your spending pattern will appear here.</p>
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[hsl(var(--spendlock-surface-soft))]">
+            <TrendingUp className="h-5 w-5 text-primary" />
+          </span>
         </div>
       )}
 
-      {upcoming.map((bill) => {
-        const days = daysUntil(bill.next_expected_date!);
-        const amount = Number(bill.amount_estimate || 0);
+      {nothingToShow && (
+        <div className="mt-5 flex items-center gap-4 rounded-xl bg-[hsl(var(--spendlock-surface-soft))] p-4">
+          <div className="flex h-10 items-end gap-1" aria-hidden="true">
+            {[35, 55, 42, 76].map((height, index) => (
+              <span key={index} className="w-1.5 rounded-full bg-primary/60" style={{ height: `${height}%` }} />
+            ))}
+          </div>
+          <div>
+            <p className="text-sm font-semibold">Your pattern is taking shape</p>
+            <p className="mt-1 text-xs leading-relaxed text-[hsl(var(--spendlock-muted))]">Insights will appear as you make payments.</p>
+          </div>
+        </div>
+      )}
+
+      {nextBill && (() => {
+        const days = daysUntil(nextBill.next_expected_date!);
+        const amount = Number(nextBill.amount_estimate || 0);
         const willStretch = hasRule && remaining > 0 && amount > remaining;
         return (
-          <div key={bill.id} className="rounded-lg bg-muted/50 px-3 py-2.5 space-y-1.5">
-            <div className="flex items-start justify-between gap-2">
-              <p className="text-xs font-semibold flex items-center gap-1.5 min-w-0">
-                <CalendarClock className="h-3.5 w-3.5 shrink-0 text-primary" />
-                <span className="truncate">{bill.label || "Recurring payment"}</span>
-              </p>
-              <span className="text-xs font-bold shrink-0">{naira(amount)}</span>
+          <div className="mt-4 rounded-xl bg-[hsl(var(--spendlock-surface-soft))] p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex min-w-0 items-start gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                  <CalendarClock className="h-4 w-4 text-primary" />
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold">{nextBill.label || "Recurring payment"}</p>
+                  <p className="mt-1 text-xs text-[hsl(var(--spendlock-muted))]">
+                    {days <= 0 ? "Due around now" : days === 1 ? "Due tomorrow" : `Due in ${days} days`}
+                  </p>
+                </div>
+              </div>
+              <p className="shrink-0 text-sm font-bold tabular-nums">{naira(amount)}</p>
             </div>
-            <p className="text-[11px] text-muted-foreground">
-              Usually paid {bill.cadence === "weekly" ? "every week" : bill.cadence === "monthly" ? "every month" : "now and then"} ·{" "}
-              {days <= 0 ? "due around now" : days === 1 ? "due tomorrow" : `due in ${days} days`}
-            </p>
             {hasRule && (
-              <p className={`text-[11px] ${willStretch ? "text-destructive" : "text-muted-foreground"}`}>
-                This will use {naira(amount)} of your {naira(remaining)} left
-                {willStretch ? " — more than you have set aside." : "."}
+              <p className={`mt-3 border-t border-[hsl(var(--spendlock-border))] pt-3 text-xs leading-relaxed ${willStretch ? "text-destructive" : "text-[hsl(var(--spendlock-muted))]"}`}>
+                {willStretch ? "This payment is above your available SpendLock amount." : `${naira(remaining - amount)} will remain after this payment.`}
               </p>
             )}
-            {bill.status === "suggested" && (
-              <div className="flex gap-2 pt-0.5">
-                <Button size="sm" variant="outline" className="h-8 text-[11px]" onClick={() => confirmBill(bill.id)}>
-                  <Check className="h-3 w-3 mr-1" /> That's right
+            {nextBill.status === "suggested" && (
+              <div className="mt-3 flex gap-2">
+                <Button size="sm" variant="outline" className="min-h-[40px] flex-1 text-xs" onClick={() => confirmBill(nextBill.id)}>
+                  <Check className="mr-1.5 h-3.5 w-3.5" /> That's right
                 </Button>
-                <Button size="sm" variant="ghost" className="h-8 text-[11px]" onClick={() => dismissBill(bill.id)}>
-                  <X className="h-3 w-3 mr-1" /> Not a bill
+                <Button size="sm" variant="ghost" className="min-h-[40px] flex-1 text-xs" onClick={() => dismissBill(nextBill.id)}>
+                  <X className="mr-1.5 h-3.5 w-3.5" /> Not a bill
                 </Button>
               </div>
             )}
           </div>
         );
-      })}
+      })()}
+
+      {upcoming.length > 1 && (
+        <p className="mt-3 text-xs text-[hsl(var(--spendlock-muted))]">+{upcoming.length - 1} more upcoming payment{upcoming.length > 2 ? "s" : ""}</p>
+      )}
 
       {suggestion ? (
-        <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2.5 space-y-1.5">
-          <p className="text-xs font-semibold">
+        <div className="mt-4 rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-2">
+          <p className="text-sm font-semibold">
             {suggestion.payload?.headline || "A limit that fits your spending"}
           </p>
-          <p className="text-[11px] text-muted-foreground">{suggestion.payload?.reasoning}</p>
-          <p className="text-sm font-extrabold">
+          <p className="text-xs leading-relaxed text-[hsl(var(--spendlock-muted))]">{suggestion.payload?.reasoning}</p>
+          <p className="text-lg font-bold">
             {naira(Number(suggestion.payload?.suggested_limit || 0))}{" "}
             <span className="text-[11px] font-medium text-muted-foreground">
               {suggestion.payload?.period_type === "daily"
@@ -161,13 +173,13 @@ export function SpendLockInsightsCard() {
             </span>
           </p>
           <div className="flex gap-2 pt-0.5">
-            <Button size="sm" className="h-8 flex-1 text-[11px]" onClick={acceptSuggestion} disabled={busy}>
+            <Button size="sm" className="min-h-[40px] flex-1 text-xs" onClick={acceptSuggestion} disabled={busy}>
               Use this limit
             </Button>
             <Button
               size="sm"
               variant="ghost"
-              className="h-8 text-[11px]"
+              className="min-h-[40px] text-xs"
               onClick={() => resolveSuggestion(suggestion.id, "dismissed")}
             >
               No thanks
@@ -179,7 +191,7 @@ export function SpendLockInsightsCard() {
           <Button
             size="sm"
             variant="outline"
-            className="w-full h-9 text-[11px]"
+            className="mt-4 min-h-[44px] w-full text-xs"
             onClick={() => requestSuggestion()}
             disabled={suggesting}
           >
