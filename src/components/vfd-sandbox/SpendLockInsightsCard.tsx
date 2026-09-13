@@ -4,6 +4,7 @@ import { Sparkles, CalendarClock, TrendingUp, Check, X, RefreshCw } from "lucide
 import { Button } from "@/components/ui/button";
 import { useSpendLockInsights } from "@/hooks/useSpendLockInsights";
 import { useSpendLock } from "@/hooks/useSpendLock";
+import { SpendLockInsightsDetail } from "@/components/vfd-sandbox/SpendLockInsightsDetail";
 
 const naira = (n: number) =>
   `₦${Number(n || 0).toLocaleString("en-NG", { maximumFractionDigits: 0 })}`;
@@ -26,6 +27,7 @@ export function SpendLockInsightsCard() {
   } = useSpendLockInsights();
   const { status, setRule } = useSpendLock();
   const [busy, setBusy] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
 
   const remaining = Number(status?.disposable_remaining ?? 0);
   const hasRule = !!status?.rule;
@@ -62,18 +64,19 @@ export function SpendLockInsightsCard() {
   const nextBill = upcoming[0];
 
   return (
+    <>
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       className="relative w-full overflow-hidden rounded-2xl border border-[hsl(var(--spendlock-border))] bg-[hsl(var(--spendlock-surface))] p-5 text-[hsl(var(--spendlock-foreground))] shadow-sm"
     >
       <div className="flex items-center justify-between">
-        <div>
+        <button type="button" onClick={() => setDetailOpen(true)} className="min-w-0 text-left">
           <p className="flex items-center gap-2 text-xs font-semibold uppercase text-[hsl(var(--spendlock-muted))]">
             <Sparkles className="h-3.5 w-3.5 text-primary" /> Spending insights
           </p>
-          <p className="mt-1 text-sm text-[hsl(var(--spendlock-muted))]">A simple view of your spending pattern</p>
-        </div>
+          <p className="mt-1 text-sm text-[hsl(var(--spendlock-muted))]">Tap for your full breakdown</p>
+        </button>
         <Button
           type="button"
           variant="ghost"
@@ -86,6 +89,7 @@ export function SpendLockInsightsCard() {
           <RefreshCw className={`h-4 w-4 ${suggesting ? "animate-spin" : ""}`} />
         </Button>
       </div>
+
 
       {avgWeekly > 0 && (
         <div className="mt-5 flex items-center justify-between gap-4 border-b border-[hsl(var(--spendlock-border))] pb-4">
@@ -200,6 +204,16 @@ export function SpendLockInsightsCard() {
           </Button>
         )
       )}
+      <Button
+        variant="ghost"
+        className="mt-3 min-h-[44px] w-full text-xs text-[hsl(var(--spendlock-muted))] hover:bg-[hsl(var(--spendlock-surface-soft))] hover:text-[hsl(var(--spendlock-foreground))]"
+        onClick={() => setDetailOpen(true)}
+      >
+        See full breakdown
+      </Button>
     </motion.div>
+    <SpendLockInsightsDetail open={detailOpen} onOpenChange={setDetailOpen} />
+    </>
   );
+
 }

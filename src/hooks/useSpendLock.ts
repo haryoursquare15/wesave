@@ -31,7 +31,14 @@ export interface SpendLockStatus {
   unlocked_amount?: number;
   disposable_remaining?: number;
   pending_unlocks?: SpendLockPendingUnlock[];
+  /** Verified account (KYC) ceiling — a limit can never be set above this. */
+  kyc_tier?: string;
+  kyc_cap?: number;
+  kyc_cap_daily?: number;
+  kyc_cap_weekly?: number;
+  kyc_cap_monthly?: number;
 }
+
 
 /** SpendLock — voluntary spending limit. Informational only: nothing is blocked. */
 export function useSpendLock() {
