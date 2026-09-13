@@ -191,7 +191,7 @@ export default function VestaraLanding() {
   }, []);
 
   return (
-    <div className="min-h-screen min-h-[100dvh] bg-background text-foreground">
+    <div className="min-h-screen min-h-[100dvh] overflow-anchor-none bg-background text-foreground">
       {/* Nav */}
       <nav className="sticky top-0 z-40 backdrop-blur-xl bg-background/70 border-b border-border">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
@@ -287,12 +287,8 @@ export default function VestaraLanding() {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           {starProducts.map((p, i) => (
-            <motion.article
+            <article
               key={p.title}
-              initial={{ opacity: 0, y: 16 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: i * 0.05 }}
               className="relative p-6 rounded-2xl bg-gradient-to-br from-card to-card/50 border border-primary/20 hover:border-primary/50 transition-colors"
             >
               <span className="absolute top-4 right-4 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary">
@@ -303,7 +299,7 @@ export default function VestaraLanding() {
               </div>
               <h3 className="font-bold text-lg leading-snug">{p.title}</h3>
               <p className="text-sm text-muted-foreground mt-2 leading-relaxed">{p.desc}</p>
-            </motion.article>
+            </article>
           ))}
         </div>
       </section>
@@ -317,12 +313,8 @@ export default function VestaraLanding() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {features.map((f, i) => (
-              <motion.div
+              <div
                 key={f.title}
-                initial={{ opacity: 0, y: 16 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.05 }}
                 className="p-6 rounded-2xl bg-card border border-border hover:border-primary/40 transition-colors"
               >
                 <div className="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
@@ -330,7 +322,7 @@ export default function VestaraLanding() {
                 </div>
                 <h3 className="font-semibold text-lg">{f.title}</h3>
                 <p className="text-sm text-muted-foreground mt-1.5">{f.desc}</p>
-              </motion.div>
+              </div>
             ))}
           </div>
         </div>
