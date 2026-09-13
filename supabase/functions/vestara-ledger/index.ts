@@ -1234,7 +1234,7 @@ serve(async (req) => {
           .update({ status: "skipped", failed_reason: "Plan closed — funds withdrawn" })
           .eq("savings_id", savings_id).eq("status", "scheduled");
         await supabase.from("vestara_savings")
-          .update({ activation_status: "closed", next_debit_at: null, mandate_status: "cancelled" })
+          .update({ activation_status: isEarly ? "expired" : "matured", next_debit_at: null, mandate_status: "cancelled" })
           .eq("id", savings_id);
         await supabase.from("mandates")
           .update({ status: "cancelled" })
