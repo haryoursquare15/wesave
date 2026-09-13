@@ -60,9 +60,27 @@ export function SpendLockCard() {
     setSetupOpen(true);
   };
 
+  // Verified-account ceiling: a self-set limit can never exceed the amount the
+  // customer's KYC level allows them to move in that window.
+  const capFor = (period: SpendLockPeriod) =>
+    Number(
+      period === "daily"
+        ? status?.kyc_cap_daily
+        : period === "weekly"
+        ? status?.kyc_cap_weekly
+        : status?.kyc_cap_monthly
+    ) || 0;
+  const activeCap = capFor(periodType);
+  const overCap = activeCap > 0 && Number(amount) > activeCap;
+  const unlockCap = Number(status?.kyc_cap ?? 0);
+  const currentAllowance =
+    Number(status?.period?.limit_amount ?? rule?.limit_amount ?? 0) + Number(status?.unlocked_amount ?? 0);
+  const unlockRoom = unlockCap > 0 ? Math.max(unlockCap - currentAllowance, 0) : Infinity;
+  const overUnlockCap = Number.isFinite(unlockRoom) && Number(unlockAmount) > unlockRoom;
+
   const saveRule = async () => {
     const value = Number(amount);
-    if (!value || value <= 0) return;
+    if (!value || value <= 0 || overCap) return;
     const day = periodType === "daily" ? null : Number(resetDay) || 1;
     const saved = await setRule(periodType, value, day, unlockMode, 30);
     if (saved) setSetupOpen(false);
@@ -70,7 +88,7 @@ export function SpendLockCard() {
 
   const submitUnlock = async () => {
     const value = Number(unlockAmount);
-    if (!value || value <= 0) return;
+    if (!value || value <= 0 || overUnlockCap) return;
     const saved = await requestUnlock(value, unlockReason || undefined);
     if (saved) {
       setUnlockOpen(false);
@@ -78,6 +96,7 @@ export function SpendLockCard() {
       setUnlockReason("");
     }
   };
+
 
   const setupDialog = (
     <Dialog open={setupOpen} onOpenChange={setSetupOpen}>
@@ -112,6 +131,17 @@ export function SpendLockCard() {
               value={amount}
               onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))}
             />
+            {activeCap > 0 && (
+              <p className={`text-[11px] ${overCap ? "text-destructive" : "text-muted-foreground"}`}>
+                {overCap
+                  ? `Your account allows up to ${naira(activeCap)} ${
+                      periodType === "daily" ? "a day" : periodType === "weekly" ? "a week" : "a month"
+                    }. Verify a higher level to raise it.`
+                  : `Most you can set: ${naira(activeCap)} ${
+                      periodType === "daily" ? "a day" : periodType === "weekly" ? "a week" : "a month"
+                    }`}
+              </p>
+            )}
             {suggested > 0 && Number(amount) !== suggested && (
               <button
                 type="button"
@@ -171,7 +201,7 @@ export function SpendLockCard() {
           </div>
 
           <div className="flex gap-2 pt-1">
-            <Button className="flex-1 min-h-[44px]" onClick={saveRule} disabled={loading}>
+            <Button className="flex-1 min-h-[44px]" onClick={saveRule} disabled={loading || overCap}>
               {rule ? "Update SpendLock" : "Turn on SpendLock"}
             </Button>
             {rule && (
@@ -317,6 +347,13 @@ export function SpendLockCard() {
                     value={unlockAmount}
                     onChange={(e) => setUnlockAmount(e.target.value.replace(/[^0-9.]/g, ""))}
                   />
+                  {Number.isFinite(unlockRoom) && (
+                    <p className={`text-[11px] ${overUnlockCap ? "text-destructive" : "text-muted-foreground"}`}>
+                      {overUnlockCap
+                        ? `You can only add up to ${naira(unlockRoom)} before reaching your account limit.`
+                        : `Most you can add: ${naira(unlockRoom)}`}
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="spendlock-reason">Why? (optional)</Label>
@@ -327,7 +364,7 @@ export function SpendLockCard() {
                     placeholder="Car repair"
                   />
                 </div>
-                <Button className="w-full min-h-[44px]" onClick={submitUnlock} disabled={loading}>
+                <Button className="w-full min-h-[44px]" onClick={submitUnlock} disabled={loading || overUnlockCap}>
                   Confirm
                 </Button>
               </div>

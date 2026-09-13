@@ -7279,6 +7279,10 @@ export type Database = {
       budget_cancel_unlock: { Args: { _unlock_id: string }; Returns: Json }
       budget_delete_rule: { Args: never; Returns: Json }
       budget_get_status: { Args: never; Returns: Json }
+      budget_kyc_cap: {
+        Args: { _period_type: string; _user: string }
+        Returns: number
+      }
       budget_period_window: {
         Args: { _period_type: string; _reset_day: number }
         Returns: {

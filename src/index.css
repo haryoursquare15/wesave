@@ -170,6 +170,10 @@
   html {
     -webkit-tap-highlight-color: transparent;
     -webkit-text-size-adjust: 100%;
+    /* `clip` (not `hidden`) keeps sticky headers working and stops the browser
+       from re-anchoring the scroll position mid-gesture, which made long pages
+       jump back up while scrolling. */
+    overflow-x: clip;
   }
 
   body {
@@ -177,10 +181,14 @@
     font-feature-settings: "rlig" 1, "calt" 1;
     min-height: 100vh;
     min-height: 100dvh;
-    overflow-x: hidden;
+    overflow-x: clip;
+    /* Content that animates in above the viewport must not shift what the
+       reader is currently looking at. */
+    overflow-anchor: none;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-y: none;
   }
+
 
   #root {
     min-height: 100vh;
