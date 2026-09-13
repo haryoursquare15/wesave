@@ -144,7 +144,7 @@ Deno.serve(async (req) => {
       // kill its remaining installments instead of debiting the customer again.
       if (s && s.status !== "active") {
         await supabase.from("vfd_savings_debit_schedule")
-          .update({ status: "cancelled", failed_reason: `Plan ${s.status} — subscription ended` })
+          .update({ status: "skipped", failed_reason: `Plan ${s.status} — subscription ended` })
           .eq("savings_id", s.id).eq("status", "scheduled");
         skipped++;
         continue;

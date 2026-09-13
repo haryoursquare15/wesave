@@ -1231,7 +1231,7 @@ serve(async (req) => {
         // 4. Withdrawing the funds ends the subscription: no further installments
         //    may be pulled from the customer after their money has left the plan.
         await supabase.from("vfd_savings_debit_schedule")
-          .update({ status: "cancelled", failed_reason: "Plan closed — funds withdrawn" })
+          .update({ status: "skipped", failed_reason: "Plan closed — funds withdrawn" })
           .eq("savings_id", savings_id).eq("status", "scheduled");
         await supabase.from("vestara_savings")
           .update({ activation_status: "closed", next_debit_at: null, mandate_status: "cancelled" })
