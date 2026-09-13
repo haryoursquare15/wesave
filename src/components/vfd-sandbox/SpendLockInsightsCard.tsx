@@ -43,7 +43,6 @@ export function SpendLockInsightsCard() {
     (s) => s.suggestion_type === "set_limit" || s.suggestion_type === "adjust_limit"
   );
   const avgWeekly = Number(insights?.stats?.avg_weekly_spend ?? 0);
-  const volatility = insights?.stats?.spend_volatility;
 
   const acceptSuggestion = async () => {
     if (!suggestion) return;
