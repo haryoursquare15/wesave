@@ -9748,10 +9748,15 @@ async function reconcileStuckThriftPayouts(limit = 50): Promise<Record<string, u
  */
 async function sweepUnbankedThriftPayouts(limit = 50): Promise<Record<string, unknown>> {
   const db = getSupabaseAdmin();
+  // Two shapes of "money never left the pool":
+  //   (a) no bank reference was ever assigned, and
+  //   (b) a reference exists but the transfer was never confirmed (gateway
+  //       outage / "Settlement account unreachable"). Both are swept here;
+  //       every row is still TSQ-proven unsent before any transfer is made.
   const { data: rows } = await db.from("vfd_sandbox_group_payouts")
     .select("*")
-    .is("vfd_reference", null)
     .gt("net_amount", 0)
+    .not("bank_status", "in", "(confirmed,not_required)")
     .order("created_at", { ascending: true })
     .limit(limit);
 
@@ -9760,9 +9765,11 @@ async function sweepUnbankedThriftPayouts(limit = 50): Promise<Record<string, un
     const payoutId = p.id as string;
     const groupId = p.group_id as string;
     const netAmount = Number(p.net_amount || 0);
-    const bankRef = p.cycle_id
-      ? bankPayoutReference(p.cycle_id as string)
-      : `AJO-PAYOUT-${String(payoutId).replace(/-/g, "").slice(0, 20)}`;
+    const bankRef = (p.vfd_reference as string | null) ||
+      (p.cycle_id
+        ? bankPayoutReference(p.cycle_id as string)
+        : `AJO-PAYOUT-${String(payoutId).replace(/-/g, "").slice(0, 20)}`);
+
 
     // Proof #1 — no settlement leg was ever confirmed for this reference.
     if (await isSettlementConfirmed(db, bankRef)) {
