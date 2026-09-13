@@ -144,7 +144,7 @@ export function SpendLockInsightsCard() {
             )}
             {nextBill.status === "suggested" && (
               <div className="mt-3 flex gap-2">
-                <Button size="sm" variant="outline" className="min-h-[40px] flex-1 text-xs" onClick={() => confirmBill(nextBill.id)}>
+                <Button size="sm" variant="outline" className="min-h-[40px] flex-1 border-[hsl(var(--spendlock-border))] bg-transparent text-xs text-[hsl(var(--spendlock-foreground))] hover:bg-[hsl(var(--spendlock-surface))]" onClick={() => confirmBill(nextBill.id)}>
                   <Check className="mr-1.5 h-3.5 w-3.5" /> That's right
                 </Button>
                 <Button size="sm" variant="ghost" className="min-h-[40px] flex-1 text-xs" onClick={() => dismissBill(nextBill.id)}>
@@ -195,7 +195,7 @@ export function SpendLockInsightsCard() {
           <Button
             size="sm"
             variant="outline"
-            className="mt-4 min-h-[44px] w-full text-xs"
+            className="mt-4 min-h-[44px] w-full border-[hsl(var(--spendlock-border))] bg-transparent text-xs text-[hsl(var(--spendlock-foreground))] hover:bg-[hsl(var(--spendlock-surface-soft))] hover:text-[hsl(var(--spendlock-foreground))]"
             onClick={() => requestSuggestion()}
             disabled={suggesting}
           >

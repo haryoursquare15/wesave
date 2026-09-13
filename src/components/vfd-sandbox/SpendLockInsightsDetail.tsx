@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { CalendarClock, TrendingUp, Wallet, Activity, Check } from "lucide-react";
+import { CalendarClock, TrendingUp, Wallet, Activity, Check, ArrowUpRight, ReceiptText, PiggyBank, Users, Lightbulb } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useSpendLockInsights } from "@/hooks/useSpendLockInsights";
@@ -46,6 +46,10 @@ export function SpendLockInsightsDetail({ open, onOpenChange }: Props) {
   );
   const income = insights?.income ?? [];
   const suggestions = (insights?.suggestions ?? []).filter((s) => s.status === "pending");
+  const frequentTransfers = insights?.frequent_transfers ?? [];
+  const frequentBills = insights?.frequent_bill_payments ?? [];
+  const investments = insights?.investments ?? {};
+  const ajo = insights?.ajo ?? {};
   const stats = insights?.stats ?? {};
   const history = insights?.budget_history ?? {};
 
@@ -62,7 +66,7 @@ export function SpendLockInsightsDetail({ open, onOpenChange }: Props) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-md gap-0 overflow-y-auto rounded-2xl border-[hsl(var(--spendlock-border))] bg-[hsl(var(--spendlock-surface))] p-0 text-[hsl(var(--spendlock-foreground))] sm:max-h-[85vh] max-h-[88dvh]"
+        className="max-h-[100dvh] w-full max-w-md gap-0 overflow-x-hidden overflow-y-auto rounded-none border-[hsl(var(--spendlock-border))] bg-[hsl(var(--spendlock-surface))] p-0 text-[hsl(var(--spendlock-foreground))] [&>button]:bg-[hsl(var(--spendlock-surface-soft))] [&>button]:text-[hsl(var(--spendlock-foreground))] sm:max-h-[85vh] sm:rounded-2xl"
       >
         <div className="sticky top-0 z-10 border-b border-[hsl(var(--spendlock-border))] bg-[hsl(var(--spendlock-surface))] px-5 py-4 pr-14">
           <h2 className="text-base font-semibold">Your spending breakdown</h2>
@@ -95,6 +99,62 @@ export function SpendLockInsightsDetail({ open, onOpenChange }: Props) {
             </p>
           )}
 
+          <section>
+            <h3 className="text-xs font-semibold uppercase text-[hsl(var(--spendlock-muted))]">Your money picture</h3>
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <div className="rounded-xl bg-[hsl(var(--spendlock-surface-soft))] p-4">
+                <PiggyBank className="h-4 w-4 text-primary" />
+                <p className="mt-2 text-[11px] text-[hsl(var(--spendlock-muted))]">Active investments</p>
+                <p className="mt-1 text-lg font-bold tabular-nums">{naira(Number(investments.total ?? 0))}</p>
+                <p className="mt-1 text-[10px] text-[hsl(var(--spendlock-muted))]">{Number(investments.active_count ?? 0)} active plan{Number(investments.active_count ?? 0) === 1 ? "" : "s"}</p>
+              </div>
+              <div className="rounded-xl bg-[hsl(var(--spendlock-surface-soft))] p-4">
+                <Users className="h-4 w-4 text-primary" />
+                <p className="mt-2 text-[11px] text-[hsl(var(--spendlock-muted))]">Ajo participation</p>
+                <p className="mt-1 text-lg font-bold tabular-nums">{Number(ajo.active_groups ?? 0)} active</p>
+                <p className="mt-1 text-[10px] text-[hsl(var(--spendlock-muted))]">{naira(Number(ajo.total_contributed ?? 0))} contributed</p>
+              </div>
+            </div>
+          </section>
+
+          <section>
+            <h3 className="text-xs font-semibold uppercase text-[hsl(var(--spendlock-muted))]">Frequently transferred to</h3>
+            {frequentTransfers.length === 0 ? (
+              <p className="mt-2 text-xs leading-relaxed text-[hsl(var(--spendlock-muted))]">No repeated transfer recipient spotted in the last 90 days.</p>
+            ) : (
+              <div className="mt-3 divide-y divide-[hsl(var(--spendlock-border))] overflow-hidden rounded-xl bg-[hsl(var(--spendlock-surface-soft))]">
+                {frequentTransfers.map((recipient, index) => (
+                  <div key={`${recipient.account ?? recipient.name}-${index}`} className="flex items-center gap-3 px-4 py-3">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10"><ArrowUpRight className="h-4 w-4 text-primary" /></span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold">{recipient.name}</p>
+                      <p className="mt-0.5 text-[11px] text-[hsl(var(--spendlock-muted))]">{recipient.transfer_count} transfer{recipient.transfer_count === 1 ? "" : "s"} · {naira(Number(recipient.total_amount))}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section>
+            <h3 className="text-xs font-semibold uppercase text-[hsl(var(--spendlock-muted))]">Frequent bill payments</h3>
+            {frequentBills.length === 0 ? (
+              <p className="mt-2 text-xs leading-relaxed text-[hsl(var(--spendlock-muted))]">No repeated bill payment spotted in the last 90 days.</p>
+            ) : (
+              <div className="mt-3 divide-y divide-[hsl(var(--spendlock-border))] overflow-hidden rounded-xl bg-[hsl(var(--spendlock-surface-soft))]">
+                {frequentBills.map((bill, index) => (
+                  <div key={`${bill.name}-${index}`} className="flex items-center gap-3 px-4 py-3">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10"><ReceiptText className="h-4 w-4 text-primary" /></span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold">{bill.name}</p>
+                      <p className="mt-0.5 text-[11px] text-[hsl(var(--spendlock-muted))]">{bill.payment_count} payment{bill.payment_count === 1 ? "" : "s"} · {naira(Number(bill.total_amount))}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
           {/* Repeating payments */}
           <section>
             <h3 className="text-xs font-semibold uppercase text-[hsl(var(--spendlock-muted))]">Repeating payments</h3>
@@ -118,7 +178,7 @@ export function SpendLockInsightsDetail({ open, onOpenChange }: Props) {
                     </div>
                     {b.status === "suggested" && (
                       <div className="mt-3 flex gap-2">
-                        <Button size="sm" variant="outline" className="min-h-[40px] flex-1 text-xs" onClick={() => confirmBill(b.id)}>
+                        <Button size="sm" variant="outline" className="min-h-[40px] flex-1 border-[hsl(var(--spendlock-border))] bg-transparent text-xs text-[hsl(var(--spendlock-foreground))] hover:bg-[hsl(var(--spendlock-surface))]" onClick={() => confirmBill(b.id)}>
                           <Check className="mr-1.5 h-3.5 w-3.5" /> That's right
                         </Button>
                         <Button size="sm" variant="ghost" className="min-h-[40px] flex-1 text-xs" onClick={() => dismissBill(b.id)}>
@@ -191,7 +251,19 @@ export function SpendLockInsightsDetail({ open, onOpenChange }: Props) {
             </section>
           )}
 
-          <Button variant="outline" className="min-h-[44px] w-full" onClick={() => onOpenChange(false)}>
+          <section className="rounded-xl border border-primary/30 bg-primary/10 p-4">
+            <div className="flex items-start gap-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15"><Lightbulb className="h-4 w-4 text-primary" /></span>
+              <div>
+                <h3 className="text-sm font-semibold">Your overview</h3>
+                <p className="mt-1 text-xs leading-relaxed text-[hsl(var(--spendlock-muted))]">
+                  {insights?.overview || "Keep enough money available for regular bills, then move what is left into savings that match your timeline."}
+                </p>
+              </div>
+            </div>
+          </section>
+
+          <Button variant="outline" className="min-h-[44px] w-full border-[hsl(var(--spendlock-border))] bg-[hsl(var(--spendlock-surface-soft))] text-[hsl(var(--spendlock-foreground))] hover:bg-[hsl(var(--spendlock-border))] hover:text-[hsl(var(--spendlock-foreground))]" onClick={() => onOpenChange(false)}>
             Back to dashboard
           </Button>
         </div>

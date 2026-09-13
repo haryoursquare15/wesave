@@ -41,6 +41,23 @@ export interface SpendLockInsights {
   income: IncomeEvent[];
   suggestions: BudgetSuggestion[];
   budget_history: { periods_closed?: number; weeks_over_limit?: number; unlock_count?: number };
+  frequent_transfers?: Array<{
+    name: string;
+    account: string | null;
+    transfer_count: number;
+    total_amount: number;
+    last_sent_at: string | null;
+  }>;
+  frequent_bill_payments?: Array<{
+    name: string;
+    item: string | null;
+    payment_count: number;
+    total_amount: number;
+    last_paid_at: string | null;
+  }>;
+  investments?: { total?: number; active_count?: number };
+  ajo?: { groups_joined?: number; active_groups?: number; total_contributed?: number };
+  overview?: string;
 }
 
 /**

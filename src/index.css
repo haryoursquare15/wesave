@@ -174,6 +174,9 @@
        from re-anchoring the scroll position mid-gesture, which made long pages
        jump back up while scrolling. */
     overflow-x: clip;
+    overflow-anchor: none;
+    overscroll-behavior-y: none;
+    scroll-behavior: auto;
   }
 
   body {
@@ -195,6 +198,7 @@
     min-height: 100dvh;
     display: flex;
     flex-direction: column;
+    overflow-anchor: none;
   }
 
   /* iPhone safe areas (notch / Dynamic Island / home indicator).
