@@ -286,7 +286,7 @@ export default function VestaraLanding() {
           </p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          {starProducts.map((p, i) => (
+          {starProducts.map((p) => (
             <article
               key={p.title}
               className="relative p-6 rounded-2xl bg-gradient-to-br from-card to-card/50 border border-primary/20 hover:border-primary/50 transition-colors"
@@ -312,7 +312,7 @@ export default function VestaraLanding() {
             <p className="mt-3 text-muted-foreground">One app. Savings, payments, group ajo, and a real bank account.</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {features.map((f, i) => (
+            {features.map((f) => (
               <div
                 key={f.title}
                 className="p-6 rounded-2xl bg-card border border-border hover:border-primary/40 transition-colors"
