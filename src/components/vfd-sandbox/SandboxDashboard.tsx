@@ -260,12 +260,14 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
     return () => clearInterval(interval);
   }, []);
 
-  // Scroll banner into view
+  // Move only the horizontal savings carousel. `scrollIntoView` also moves the
+  // page vertically, which pulled customers back to this section every 5s.
   useEffect(() => {
     if (bannerRef.current) {
       const card = bannerRef.current.children[activeBanner] as HTMLElement;
       if (card) {
-        card.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+        const left = card.offsetLeft - (bannerRef.current.clientWidth - card.clientWidth) / 2;
+        bannerRef.current.scrollTo({ left: Math.max(left, 0), behavior: "smooth" });
       }
     }
   }, [activeBanner]);
