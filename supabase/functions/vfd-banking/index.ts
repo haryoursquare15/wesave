@@ -2077,6 +2077,57 @@ async function handleTransfer(
 
   const vfdData = data as Record<string, unknown>;
   const isSuccess = vfdData?.status === "00";
+  // ─── AMBIGUOUS OUTCOMES MUST NEVER BE REVERSED ───
+  // Only a small set of VFD codes mean "the bank definitively did not move the
+  // money". Everything else (98 timeout, 99 gateway error, 96 system malfunction,
+  // 09/06 in-progress, unparsable responses) can still settle at NIBSS minutes
+  // later. Reversing those refunds the sender while the beneficiary keeps real
+  // cash — exactly the balance inflation we must never allow. Leave the tx
+  // `reserved` and let TSQ / the reconciler decide.
+  const DEFINITIVE_FAILURE_CODES = new Set([
+    "51", // insufficient funds
+    "07", // invalid account
+    "12", // invalid transaction
+    "13", // invalid amount
+    "57", // transaction not permitted
+    "61", // exceeds limit
+    "34", // suspected fraud
+    "03", // invalid beneficiary / merchant
+  ]);
+  const vfdCode = vfdData?.status == null ? null : String(vfdData.status);
+  const isDefiniteFailure = !!vfdCode && DEFINITIVE_FAILURE_CODES.has(vfdCode);
+  if (!isSuccess && !isDefiniteFailure) {
+    await settleIdempotencyKey(supabaseAdmin, idemKey, {
+      status: "pending",
+      response: data,
+      http_status: status,
+    });
+    await supabaseAdmin
+      .from("vfd_sandbox_transactions")
+      .update({
+        metadata: { ...(data as Record<string, unknown>), stage: "awaiting_confirmation", vfd_status: vfdCode },
+      })
+      .eq("id", reservedTx?.id);
+    await recordTxEvent(supabaseAdmin, {
+      transaction_id: reservedTx?.id ?? null,
+      user_id: userId,
+      reference,
+      event_type: "tx.pending_unconfirmed",
+      actor: "vfd_response",
+      from_status: "reserved",
+      to_status: "reserved",
+      payload: { vfd_status: vfdCode },
+    });
+    return jsonResponse(
+      {
+        error: "Transfer is processing. We'll confirm the outcome shortly — the amount stays on hold until the bank responds.",
+        code: "TRANSFER_PENDING",
+        reference,
+      },
+      202,
+    );
+  }
+
   const vfdInner = (vfdData?.data as Record<string, unknown> | undefined) || {};
   // VFD echoes our client `reference` as `txnId`. The real VFD-issued
   // identifier is `data.reference` (numeric) with `bankTransactionId` as a

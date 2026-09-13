@@ -1227,9 +1227,24 @@ serve(async (req) => {
           : await supabase.rpc("vestara_mature_savings", { _savings_id: savings_id });
         if (e) return err(e.message);
         await markSettlementLedgerPosted(supabase, leg.reference, `${isEarly ? "ewd" : "mature"}-${savings_id}`);
-        result = { ...(data as Record<string, unknown> ?? {}), bank_reference: leg.reference, paid_to: leg.destinationAccount };
+
+        // 4. Withdrawing the funds ends the subscription: no further installments
+        //    may be pulled from the customer after their money has left the plan.
+        await supabase.from("vfd_savings_debit_schedule")
+          .update({ status: "skipped", failed_reason: "Plan closed — funds withdrawn" })
+          .eq("savings_id", savings_id).eq("status", "scheduled");
+        await supabase.from("vestara_savings")
+          .update({ activation_status: isEarly ? "expired" : "matured", next_debit_at: null, mandate_status: "cancelled" })
+          .eq("id", savings_id);
+        await supabase.from("mandates")
+          .update({ status: "cancelled" })
+          .eq("product_type", "fd_investment").eq("product_id", savings_id)
+          .not("status", "in", "(cancelled,expired)");
+
+        result = { ...(data as Record<string, unknown> ?? {}), bank_reference: leg.reference, paid_to: leg.destinationAccount, subscription_cancelled: true };
         break;
       }
+
 
       // Recovery: savings that were closed before the bank leg existed (or whose
       // leg never confirmed) — pay the cash out now. Ledger is already posted for

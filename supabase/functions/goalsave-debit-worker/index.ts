@@ -140,10 +140,20 @@ Deno.serve(async (req) => {
       // A bank-authorized mandate is the real gate. If the plan is still sitting
       // in `pending_mandate` (activation flip missed), heal it here rather than
       // silently skipping every installment.
+      // A closed plan (matured, withdrawn, cancelled) has no subscription left:
+      // kill its remaining installments instead of debiting the customer again.
+      if (s && s.status !== "active") {
+        await supabase.from("vfd_savings_debit_schedule")
+          .update({ status: "skipped", failed_reason: `Plan ${s.status} — subscription ended` })
+          .eq("savings_id", s.id).eq("status", "scheduled");
+        skipped++;
+        continue;
+      }
       if (!s || s.mandate_status !== "authorized" || (s.activation_status !== "active" && s.activation_status !== "pending_mandate")) {
         skipped++;
         continue;
       }
+
       if (s.activation_status === "pending_mandate") {
         await supabase.from("vestara_savings")
           .update({ activation_status: "active" })
