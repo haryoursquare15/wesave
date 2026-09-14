@@ -41,9 +41,8 @@ export function SpendLockInsightsDetail({ open, onOpenChange }: Props) {
 
   const applyRange = async (next: DateRange | undefined) => {
     if (!next?.from) return;
-    const complete = { from: next.from, to: next.to ?? next.from };
-    setRange(complete);
-    if (complete.to) await refresh(format(complete.from, "yyyy-MM-dd"), format(complete.to, "yyyy-MM-dd"));
+    setRange(next);
+    if (next.to) await refresh(format(next.from, "yyyy-MM-dd"), format(next.to, "yyyy-MM-dd"));
   };
 
   const bills = useMemo(
@@ -88,7 +87,7 @@ export function SpendLockInsightsDetail({ open, onOpenChange }: Props) {
             <PopoverTrigger asChild>
               <Button variant="ghost" className="mt-1 h-auto max-w-full justify-start p-0 text-left text-xs font-normal text-[hsl(var(--spendlock-muted))] hover:bg-transparent hover:text-[hsl(var(--spendlock-foreground))]">
                 <CalendarDays className="mr-1.5 h-3.5 w-3.5 shrink-0" />
-                <span className="whitespace-normal">{range.from && range.to ? `${format(range.from, "d MMM yyyy")} – ${format(range.to, "d MMM yyyy")}` : "Choose dates"}</span>
+                <span className="whitespace-normal">{range.from ? `${format(range.from, "d MMM yyyy")}${range.to ? ` – ${format(range.to, "d MMM yyyy")}` : " – choose end date"}` : "Choose dates"}</span>
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto max-w-[calc(100vw-1rem)] p-0" align="start">
