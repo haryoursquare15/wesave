@@ -561,8 +561,9 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
           onTouchStart={() => setCarouselPaused(true)}
           onScroll={(e) => {
             const el = e.currentTarget;
-            const cardWidth = el.children[0]?.clientWidth || 260;
-            const idx = Math.round(el.scrollLeft / (cardWidth + 12));
+            const cards = Array.from(el.children) as HTMLElement[];
+            const idx = cards.reduce((closest, card, index) =>
+              Math.abs(card.offsetLeft - el.scrollLeft) < Math.abs(cards[closest].offsetLeft - el.scrollLeft) ? index : closest, 0);
             if (idx !== activeBanner && idx >= 0 && idx < productBanners.length) {
               setActiveBanner(idx);
             }
