@@ -36,7 +36,7 @@ export interface BudgetSuggestion {
 }
 
 export interface SpendLockInsights {
-  stats: { avg_weekly_spend?: number; spend_volatility?: string; debit_count_90d?: number };
+  stats: { avg_weekly_spend?: number; spend_volatility?: string; debit_count_90d?: number; debit_count?: number; range_days?: number };
   bills: DetectedBill[];
   income: IncomeEvent[];
   suggestions: BudgetSuggestion[];
@@ -57,6 +57,16 @@ export interface SpendLockInsights {
   }>;
   investments?: { total?: number; active_count?: number };
   ajo?: { groups_joined?: number; active_groups?: number; total_contributed?: number };
+  wallet?: { available_balance?: number; idle_days?: number };
+  airtime?: { total?: number; payment_count?: number };
+  advice?: Array<{
+    type: "idle_wallet" | "savings" | "ajo" | "airtime";
+    title: string;
+    message: string;
+    action?: string;
+    action_key?: string;
+  }>;
+  date_range?: { start?: string; end?: string; days?: number };
   overview?: string;
 }
 
@@ -90,7 +100,14 @@ export function useSpendLockInsights() {
     [session, supabase]
   );
 
-  const refresh = useCallback(() => call("spendlock_get_insights"), [call]);
+  const refresh = useCallback(
+    (startDate?: string, endDate?: string) =>
+      call("spendlock_get_insights", {
+        _start_date: startDate ?? new Date(Date.now() - 89 * 86400000).toISOString().slice(0, 10),
+        _end_date: endDate ?? new Date().toISOString().slice(0, 10),
+      }),
+    [call]
+  );
 
   useEffect(() => {
     if (session) refresh();

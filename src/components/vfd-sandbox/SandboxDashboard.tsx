@@ -209,6 +209,7 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
   const [showBalance, setShowBalance] = useState(true);
   const [copied, setCopied] = useState(false);
   const [activeBanner, setActiveBanner] = useState(0);
+  const [carouselPaused, setCarouselPaused] = useState(false);
   const [openCategory, setOpenCategory] = useState<string | null>(null);
   // Per-product aggregate holdings (product_code → { total, count }) shown on
   // each product banner so users can see what they already have at a glance.
@@ -252,13 +253,22 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
   }, [client, session?.user?.id]);
 
 
-  // Auto-scroll banners
+  const moveBanner = useCallback((nextIndex: number) => {
+    const normalized = Math.max(0, Math.min(productBanners.length - 1, nextIndex));
+    setActiveBanner(normalized);
+    const carousel = bannerRef.current;
+    const card = carousel?.children[normalized] as HTMLElement | undefined;
+    if (carousel && card) carousel.scrollTo({ left: card.offsetLeft - carousel.offsetLeft, behavior: "smooth" });
+  }, []);
+
+  // Auto-scroll banners until the customer starts swiping them manually.
   useEffect(() => {
+    if (carouselPaused) return;
     const interval = setInterval(() => {
       setActiveBanner((prev) => (prev + 1) % productBanners.length);
     }, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [carouselPaused]);
 
   // Move only the horizontal savings carousel. `scrollIntoView` also moves the
   // page vertically, which pulled customers back to this section every 5s.
@@ -532,12 +542,22 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
               Existing holdings live in Active Savings
             </p>
           </div>
+          <div className="flex items-center gap-1">
+            <Button type="button" variant="ghost" size="icon" className="h-10 w-10" disabled={activeBanner === 0} onClick={() => { setCarouselPaused(true); moveBanner(activeBanner - 1); }} aria-label="Previous savings plan">
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button type="button" variant="ghost" size="icon" className="h-10 w-10" disabled={activeBanner === productBanners.length - 1} onClick={() => { setCarouselPaused(true); moveBanner(activeBanner + 1); }} aria-label="Next savings plan">
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
 
         <div
           ref={bannerRef}
-          className="flex gap-3 overflow-x-auto snap-x snap-mandatory scrollbar-hide pb-1"
+          className="flex touch-pan-x gap-3 overflow-x-auto overscroll-x-contain snap-x snap-mandatory scroll-px-1 scrollbar-hide pb-2"
           style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+          onPointerDown={() => setCarouselPaused(true)}
+          onTouchStart={() => setCarouselPaused(true)}
           onScroll={(e) => {
             const el = e.currentTarget;
             const cardWidth = el.children[0]?.clientWidth || 260;
