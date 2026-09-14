@@ -8222,6 +8222,7 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
   const processed: Array<Record<string, unknown>> = [];
 
   for (const group of (groups || [])) {
+    try {
     if (!forceGroupId) {
       // HARD SCHEDULE GATE: the current cycle cannot be collected before its
       // configured opening slot, even via the retry queue. A completed cycle
@@ -8555,7 +8556,22 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
       group_id: group.id, name: group.name, succeeded, failed, deferred, penalized,
       defaulted: cycleDefaulters.length, payout: payoutOutcome, members: memberResults,
     });
-
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error("[sandbox_auto_contribute] group sweep failed", {
+        group_id: group.id,
+        group_name: group.name,
+        message,
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      processed.push({
+        group_id: group.id,
+        name: group.name,
+        status: "failed",
+        reason: "GROUP_SWEEP_FAILED",
+        error: message,
+      });
+    }
   }
 
   return jsonResponse({ data: { processed_count: processed.length, processed } });
