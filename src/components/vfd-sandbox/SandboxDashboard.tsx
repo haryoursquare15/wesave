@@ -258,7 +258,7 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
     setActiveBanner(normalized);
     const carousel = bannerRef.current;
     const card = carousel?.children[normalized] as HTMLElement | undefined;
-    if (carousel && card) carousel.scrollTo({ left: card.offsetLeft - carousel.offsetLeft, behavior: "smooth" });
+    if (carousel && card) carousel.scrollTo({ left: card.offsetLeft, behavior: "smooth" });
   }, []);
 
   // Auto-scroll banners until the customer starts swiping them manually.
@@ -273,6 +273,7 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
   // Move only the horizontal savings carousel. `scrollIntoView` also moves the
   // page vertically, which pulled customers back to this section every 5s.
   useEffect(() => {
+    if (carouselPaused) return;
     if (bannerRef.current) {
       const card = bannerRef.current.children[activeBanner] as HTMLElement;
       if (card) {
@@ -280,7 +281,7 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
         bannerRef.current.scrollTo({ left: Math.max(left, 0), behavior: "smooth" });
       }
     }
-  }, [activeBanner]);
+  }, [activeBanner, carouselPaused]);
 
   const copyAccount = useCallback(() => {
     if (balance.accountNumber && balance.accountNumber !== "—") {
