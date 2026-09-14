@@ -1,7 +1,12 @@
-import { useMemo } from "react";
-import { CalendarClock, TrendingUp, Wallet, Activity, Check, ArrowUpRight, ReceiptText, PiggyBank, Users, Lightbulb } from "lucide-react";
+import { useMemo, useState } from "react";
+import { subDays, format } from "date-fns";
+import type { DateRange } from "react-day-picker";
+import { CalendarClock, TrendingUp, Wallet, Activity, Check, ArrowUpRight, ReceiptText, PiggyBank, Users, Lightbulb, CalendarDays } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 import { useSpendLockInsights } from "@/hooks/useSpendLockInsights";
 import { useSpendLock } from "@/hooks/useSpendLock";
 
@@ -30,8 +35,16 @@ interface Props {
 
 /** Full breakdown of a customer's spending analysis. Read-only, closes back to the dashboard. */
 export function SpendLockInsightsDetail({ open, onOpenChange }: Props) {
-  const { insights, confirmBill, dismissBill, resolveSuggestion } = useSpendLockInsights();
+  const { insights, loading, refresh, confirmBill, dismissBill, resolveSuggestion } = useSpendLockInsights();
   const { status } = useSpendLock();
+  const [range, setRange] = useState<DateRange>({ from: subDays(new Date(), 89), to: new Date() });
+
+  const applyRange = async (next: DateRange | undefined) => {
+    if (!next?.from) return;
+    const complete = { from: next.from, to: next.to ?? next.from };
+    setRange(complete);
+    if (complete.to) await refresh(format(complete.from, "yyyy-MM-dd"), format(complete.to, "yyyy-MM-dd"));
+  };
 
   const bills = useMemo(
     () =>
@@ -52,6 +65,7 @@ export function SpendLockInsightsDetail({ open, onOpenChange }: Props) {
   const ajo = insights?.ajo ?? {};
   const stats = insights?.stats ?? {};
   const history = insights?.budget_history ?? {};
+  const advice = insights?.advice ?? [];
 
   const avgWeekly = Number(stats.avg_weekly_spend ?? 0);
   const monthlyBills = bills
@@ -66,27 +80,37 @@ export function SpendLockInsightsDetail({ open, onOpenChange }: Props) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-h-[100dvh] w-full max-w-md gap-0 overflow-x-hidden overflow-y-auto rounded-none border-[hsl(var(--spendlock-border))] bg-[hsl(var(--spendlock-surface))] p-0 text-[hsl(var(--spendlock-foreground))] [&>button]:bg-[hsl(var(--spendlock-surface-soft))] [&>button]:text-[hsl(var(--spendlock-foreground))] sm:max-h-[85vh] sm:rounded-2xl"
+        className="h-[100dvh] w-screen max-w-md gap-0 overflow-x-hidden overflow-y-auto rounded-none border-[hsl(var(--spendlock-border))] bg-[hsl(var(--spendlock-surface))] p-0 text-[hsl(var(--spendlock-foreground))] [&>button]:bg-[hsl(var(--spendlock-surface-soft))] [&>button]:text-[hsl(var(--spendlock-foreground))] sm:h-auto sm:max-h-[85vh] sm:w-full sm:rounded-2xl"
       >
-        <div className="sticky top-0 z-10 border-b border-[hsl(var(--spendlock-border))] bg-[hsl(var(--spendlock-surface))] px-5 py-4 pr-14">
+        <div className="sticky top-0 z-10 border-b border-[hsl(var(--spendlock-border))] bg-[hsl(var(--spendlock-surface))] px-4 py-4 pr-14 sm:px-5">
           <h2 className="text-base font-semibold">Your spending breakdown</h2>
-          <p className="mt-0.5 text-xs text-[hsl(var(--spendlock-muted))]">Based on your last 90 days</p>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="ghost" className="mt-1 h-auto max-w-full justify-start p-0 text-left text-xs font-normal text-[hsl(var(--spendlock-muted))] hover:bg-transparent hover:text-[hsl(var(--spendlock-foreground))]">
+                <CalendarDays className="mr-1.5 h-3.5 w-3.5 shrink-0" />
+                <span className="whitespace-normal">{range.from && range.to ? `${format(range.from, "d MMM yyyy")} – ${format(range.to, "d MMM yyyy")}` : "Choose dates"}</span>
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto max-w-[calc(100vw-1rem)] p-0" align="start">
+              <Calendar mode="range" selected={range} onSelect={applyRange} disabled={{ after: new Date() }} numberOfMonths={1} initialFocus className={cn("pointer-events-auto p-2")} />
+            </PopoverContent>
+          </Popover>
         </div>
 
 
-        <div className="space-y-5 px-5 py-5">
+        <div className={cn("space-y-5 px-4 py-5 sm:px-5", loading && "opacity-70")}>
           {/* Headline numbers */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2">
             {[
               { icon: TrendingUp, label: "Average weekly spend", value: naira(avgWeekly) },
               { icon: CalendarClock, label: "Repeating payments a month", value: naira(monthlyBills) },
               { icon: Activity, label: "Payments made", value: `${Number(stats.debit_count_90d ?? 0)}` },
               { icon: Wallet, label: "Left to spend", value: status?.rule ? naira(remaining) : "No limit set" },
             ].map((item) => (
-              <div key={item.label} className="rounded-xl bg-[hsl(var(--spendlock-surface-soft))] p-4">
+              <div key={item.label} className="min-w-0 rounded-xl bg-[hsl(var(--spendlock-surface-soft))] p-4">
                 <item.icon className="h-4 w-4 text-primary" />
                 <p className="mt-2 text-[11px] leading-tight text-[hsl(var(--spendlock-muted))]">{item.label}</p>
-                <p className="mt-1 text-lg font-bold tabular-nums">{item.value}</p>
+                <p className="mt-1 break-words text-base font-bold tabular-nums sm:text-lg">{item.value}</p>
               </div>
             ))}
           </div>
@@ -101,7 +125,7 @@ export function SpendLockInsightsDetail({ open, onOpenChange }: Props) {
 
           <section>
             <h3 className="text-xs font-semibold uppercase text-[hsl(var(--spendlock-muted))]">Your money picture</h3>
-            <div className="mt-3 grid grid-cols-2 gap-3">
+            <div className="mt-3 grid grid-cols-1 gap-3 min-[360px]:grid-cols-2">
               <div className="rounded-xl bg-[hsl(var(--spendlock-surface-soft))] p-4">
                 <PiggyBank className="h-4 w-4 text-primary" />
                 <p className="mt-2 text-[11px] text-[hsl(var(--spendlock-muted))]">Active investments</p>
@@ -127,8 +151,8 @@ export function SpendLockInsightsDetail({ open, onOpenChange }: Props) {
                   <div key={`${recipient.account ?? recipient.name}-${index}`} className="flex items-center gap-3 px-4 py-3">
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10"><ArrowUpRight className="h-4 w-4 text-primary" /></span>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold">{recipient.name}</p>
-                      <p className="mt-0.5 text-[11px] text-[hsl(var(--spendlock-muted))]">{recipient.transfer_count} transfer{recipient.transfer_count === 1 ? "" : "s"} · {naira(Number(recipient.total_amount))}</p>
+                       <p className="break-words text-sm font-semibold">{recipient.name}</p>
+                       <p className="mt-0.5 break-words text-[11px] leading-relaxed text-[hsl(var(--spendlock-muted))]">{recipient.transfer_count} transfer{recipient.transfer_count === 1 ? "" : "s"} · {naira(Number(recipient.total_amount))}</p>
                     </div>
                   </div>
                 ))}
@@ -146,8 +170,8 @@ export function SpendLockInsightsDetail({ open, onOpenChange }: Props) {
                   <div key={`${bill.name}-${index}`} className="flex items-center gap-3 px-4 py-3">
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10"><ReceiptText className="h-4 w-4 text-primary" /></span>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold">{bill.name}</p>
-                      <p className="mt-0.5 text-[11px] text-[hsl(var(--spendlock-muted))]">{bill.payment_count} payment{bill.payment_count === 1 ? "" : "s"} · {naira(Number(bill.total_amount))}</p>
+                       <p className="break-words text-sm font-semibold">{bill.name}</p>
+                       <p className="mt-0.5 break-words text-[11px] leading-relaxed text-[hsl(var(--spendlock-muted))]">{bill.payment_count} payment{bill.payment_count === 1 ? "" : "s"} · {naira(Number(bill.total_amount))}</p>
                     </div>
                   </div>
                 ))}
@@ -166,18 +190,18 @@ export function SpendLockInsightsDetail({ open, onOpenChange }: Props) {
               <div className="mt-3 space-y-2">
                 {bills.map((b) => (
                   <div key={b.id} className="rounded-xl bg-[hsl(var(--spendlock-surface-soft))] p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold">{b.label || b.counterparty_hint || "Recurring payment"}</p>
-                        <p className="mt-1 text-[11px] text-[hsl(var(--spendlock-muted))]">
+                     <div className="flex flex-col gap-2 min-[360px]:flex-row min-[360px]:items-start min-[360px]:justify-between">
+                       <div className="min-w-0 flex-1">
+                         <p className="break-words text-sm font-semibold">{b.label || b.counterparty_hint || "Recurring payment"}</p>
+                         <p className="mt-1 break-words text-[11px] leading-relaxed text-[hsl(var(--spendlock-muted))]">
                           {cadenceLabel(b.cadence)} · {dueLabel(b.next_expected_date)}
                           {b.occurrences ? ` · seen ${b.occurrences} times` : ""}
                         </p>
                       </div>
-                      <p className="shrink-0 text-sm font-bold tabular-nums">{naira(Number(b.amount_estimate || 0))}</p>
+                       <p className="text-sm font-bold tabular-nums min-[360px]:shrink-0">{naira(Number(b.amount_estimate || 0))}</p>
                     </div>
                     {b.status === "suggested" && (
-                      <div className="mt-3 flex gap-2">
+                       <div className="mt-3 grid grid-cols-1 gap-2 min-[360px]:grid-cols-2">
                         <Button size="sm" variant="outline" className="min-h-[40px] flex-1 border-[hsl(var(--spendlock-border))] bg-transparent text-xs text-[hsl(var(--spendlock-foreground))] hover:bg-[hsl(var(--spendlock-surface))]" onClick={() => confirmBill(b.id)}>
                           <Check className="mr-1.5 h-3.5 w-3.5" /> That's right
                         </Button>
@@ -211,7 +235,7 @@ export function SpendLockInsightsDetail({ open, onOpenChange }: Props) {
           {status?.rule && (
             <section>
               <h3 className="text-xs font-semibold uppercase text-[hsl(var(--spendlock-muted))]">How you're keeping to it</h3>
-              <div className="mt-3 grid grid-cols-3 gap-3 text-center">
+               <div className="mt-3 grid grid-cols-1 gap-2 min-[360px]:grid-cols-3 min-[360px]:gap-3 min-[360px]:text-center">
                 {[
                   { label: "Periods done", value: Number(history.periods_closed ?? 0) },
                   { label: "Times over", value: Number(history.weeks_over_limit ?? 0) },
@@ -220,6 +244,20 @@ export function SpendLockInsightsDetail({ open, onOpenChange }: Props) {
                   <div key={s.label} className="rounded-xl bg-[hsl(var(--spendlock-surface-soft))] p-3">
                     <p className="text-lg font-bold tabular-nums">{s.value}</p>
                     <p className="mt-1 text-[10px] leading-tight text-[hsl(var(--spendlock-muted))]">{s.label}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {advice.length > 0 && (
+            <section>
+              <h3 className="text-xs font-semibold uppercase text-[hsl(var(--spendlock-muted))]">Ideas to grow your money</h3>
+              <div className="mt-3 space-y-2">
+                {advice.map((item, index) => (
+                  <div key={`${item.type}-${index}`} className="rounded-xl border border-primary/30 bg-primary/5 p-4">
+                    <p className="break-words text-sm font-semibold">{item.title}</p>
+                    <p className="mt-1 break-words text-xs leading-relaxed text-[hsl(var(--spendlock-muted))]">{item.message}</p>
                   </div>
                 ))}
               </div>
@@ -254,9 +292,9 @@ export function SpendLockInsightsDetail({ open, onOpenChange }: Props) {
           <section className="rounded-xl border border-primary/30 bg-primary/10 p-4">
             <div className="flex items-start gap-3">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15"><Lightbulb className="h-4 w-4 text-primary" /></span>
-              <div>
+               <div className="min-w-0">
                 <h3 className="text-sm font-semibold">Your overview</h3>
-                <p className="mt-1 text-xs leading-relaxed text-[hsl(var(--spendlock-muted))]">
+                 <p className="mt-1 break-words text-xs leading-relaxed text-[hsl(var(--spendlock-muted))]">
                   {insights?.overview || "Keep enough money available for regular bills, then move what is left into savings that match your timeline."}
                 </p>
               </div>

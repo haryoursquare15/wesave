@@ -109,7 +109,12 @@ Deno.serve(async (req) => {
 
     if (!LOVABLE_API_KEY) return json({ error: "AI is not configured" }, 500);
 
-    const { data: insightsRaw, error: insightsErr } = await supabase.rpc("spendlock_get_insights");
+    const endDate = new Date();
+    const startDate = new Date(endDate.getTime() - 89 * 86400000);
+    const { data: insightsRaw, error: insightsErr } = await supabase.rpc("spendlock_get_insights", {
+      _start_date: startDate.toISOString().slice(0, 10),
+      _end_date: endDate.toISOString().slice(0, 10),
+    });
     if (insightsErr) return json({ error: insightsErr.message }, 400);
     const insights = (insightsRaw || {}) as Insights;
 
