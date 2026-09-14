@@ -124,7 +124,9 @@ export async function allInboundConfirmed(
     .eq("product_type", productType)
     .eq("product_reference", productReference)
     .eq("direction", "in")
-    .neq("status", "confirmed");
+    // A definitively failed bank leg moved no money and cannot hold a cycle.
+    // Positive per-member funding proof is checked separately before payout.
+    .in("status", ["pending", "unreconciled"]);
   const { data } = await q;
   let rows = (data || []) as Array<Record<string, unknown>>;
   if (cycleTag) {
