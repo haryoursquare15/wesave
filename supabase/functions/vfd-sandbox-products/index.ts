@@ -10752,9 +10752,11 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  let requestedAction = "missing";
   try {
     const body: Record<string, unknown> = req.method === "POST" ? await req.json() : {};
     const action = body.action as string;
+    requestedAction = action || "missing";
     console.log(`[vfd-sandbox-products] action=${action || "missing"} source=${req.headers.get("x-cron-secret") ? "cron" : "user"}`);
 
     // Cron-callable actions: no user JWT, but they MUST present the shared
@@ -10971,6 +10973,7 @@ Deno.serve(async (req) => {
       message: err instanceof Error ? err.message : String(err),
       stack: err instanceof Error ? err.stack : undefined,
       method: req.method,
+      action: requestedAction,
     });
     const message = err instanceof Error ? err.message : "Internal server error";
     return jsonResponse({ error: message }, 500);
