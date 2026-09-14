@@ -3,6 +3,8 @@ import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
 import { useToast } from "@/hooks/use-toast";
 import { getUserFriendlyError } from "@/lib/errorMessages";
 
+const SPENDLOCK_UPDATED_EVENT = "vestara:spendlock-updated";
+
 export type SpendLockPeriod = "daily" | "weekly" | "monthly";
 export type SpendLockUnlockMode = "instant" | "cooling_off";
 
@@ -80,6 +82,13 @@ export function useSpendLock() {
     if (session) refresh();
   }, [session, refresh]);
 
+  useEffect(() => {
+    if (!session) return;
+    const handleUpdated = () => void refresh();
+    window.addEventListener(SPENDLOCK_UPDATED_EVENT, handleUpdated);
+    return () => window.removeEventListener(SPENDLOCK_UPDATED_EVENT, handleUpdated);
+  }, [session, refresh]);
+
   const setRule = useCallback(
     (
       periodType: SpendLockPeriod,
@@ -87,13 +96,15 @@ export function useSpendLock() {
       resetDay: number | null,
       unlockMode: SpendLockUnlockMode,
       coolingOffMinutes = 30
-    ) =>
-      call("budget_set_rule", {
+    ) => call("budget_set_rule", {
         _period_type: periodType,
         _limit_amount: limitAmount,
         _reset_day: resetDay,
         _unlock_mode: unlockMode,
         _cooling_off_minutes: coolingOffMinutes,
+      }).then((next) => {
+        if (next) window.dispatchEvent(new Event(SPENDLOCK_UPDATED_EVENT));
+        return next;
       }),
     [call]
   );

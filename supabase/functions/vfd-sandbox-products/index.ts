@@ -4169,6 +4169,29 @@ async function handleAdminSweepSplitFee(userId: string, body: Record<string, unk
     }, 502);
   }
 
+  // This confirmed wallet funding replaces any unresolved mandate attempt for
+  // the same member and cycle. Without closing the old breadcrumb, the payout
+  // gate would continue waiting for a bank leg that can no longer be used.
+  const cycleTag = `c${group.current_cycle}`;
+  const { data: unresolvedMandateLegs } = await db.from("settlement_records")
+    .select("provider_reference, metadata")
+    .eq("product_type", "thrift")
+    .eq("product_reference", groupId)
+    .eq("user_id", userId)
+    .eq("direction", "in")
+    .in("status", ["pending", "unreconciled"]);
+  for (const leg of unresolvedMandateLegs || []) {
+    const metadata = (leg.metadata || {}) as Record<string, unknown>;
+    if (String(metadata.cycle_tag || "") !== cycleTag || String(leg.provider_reference) === `${recoveryRef}-FUND`) continue;
+    await markSettlement(db, String(leg.provider_reference), "failed", {
+      evidence: {
+        resolution: "superseded_by_confirmed_wallet_recovery",
+        recovery_reference: `${recoveryRef}-FUND`,
+        resolved_at: new Date().toISOString(),
+      },
+    });
+  }
+
   return jsonResponse({
     success: true,
     reference: funding.reference,
@@ -10732,6 +10755,7 @@ Deno.serve(async (req) => {
   try {
     const body: Record<string, unknown> = req.method === "POST" ? await req.json() : {};
     const action = body.action as string;
+    console.log(`[vfd-sandbox-products] action=${action || "missing"} source=${req.headers.get("x-cron-secret") ? "cron" : "user"}`);
 
     // Cron-callable actions: no user JWT, but they MUST present the shared
     // cron secret. Previously these were reachable unauthenticated.
@@ -10943,7 +10967,11 @@ Deno.serve(async (req) => {
         return jsonResponse({ error: `Unknown action: ${action}` }, 400);
     }
   } catch (err) {
-    console.error("[VFD Sandbox Products Error]", err);
+    console.error("[VFD Sandbox Products Error]", {
+      message: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+      method: req.method,
+    });
     const message = err instanceof Error ? err.message : "Internal server error";
     return jsonResponse({ error: message }, 500);
   }
