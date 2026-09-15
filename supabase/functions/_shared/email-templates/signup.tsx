@@ -5,12 +5,17 @@ import { EmailShell, EmailHeading, EmailText, EmailButton } from './email-shell.
 interface SignupEmailProps {
   siteName: string
   siteUrl: string
-  recipient: string
+  recipient?: string
   recipientName?: string
   confirmationUrl: string
 }
 
-export const SignupEmail = ({ siteName, recipient, recipientName, confirmationUrl }: SignupEmailProps) => (
+export const SignupEmail = ({
+  siteName,
+  recipient,
+  recipientName,
+  confirmationUrl,
+}: SignupEmailProps) => (
   <EmailShell
     preview={`Confirm your email for ${siteName}`}
     greetingName={recipientName || 'there'}
@@ -20,7 +25,7 @@ export const SignupEmail = ({ siteName, recipient, recipientName, confirmationUr
     <EmailHeading>Confirm your email</EmailHeading>
     <EmailText>Thanks for signing up for {siteName}.</EmailText>
     <EmailText>
-      Please confirm that <strong>{recipient}</strong> is your email address by clicking the button
+      Please confirm your email address{recipient ? ` (${recipient})` : ''} by clicking the button
       below.
     </EmailText>
     <EmailButton href={confirmationUrl}>Verify Email</EmailButton>

@@ -1,6 +1,6 @@
 /// <reference types="npm:@types/react@18.3.1" />
 import * as React from 'npm:react@18.3.1'
-import { EmailShell, EmailHeading, EmailText, EmailButton, DetailList } from './email-shell.tsx'
+import { EmailShell, EmailHeading, EmailText, EmailButton } from './email-shell.tsx'
 
 interface EmailChangeEmailProps {
   siteName: string
@@ -25,19 +25,17 @@ export const EmailChangeEmail = ({
   <EmailShell
     preview={`Confirm your email change for ${siteName}`}
     greetingName={recipientName || 'there'}
-    signOff="Thank you for keeping your account details up to date."
+    signOff="Stay safe out there."
   >
     <EmailHeading>Confirm your email change</EmailHeading>
-    <EmailText>You requested to change the email address on your {siteName} account.</EmailText>
-    <DetailList
-      items={[
-        { label: 'Current email', value: oldEmail },
-        { label: 'New email', value: newEmail },
-      ]}
-    />
+    <EmailText>
+      You requested to change the email address on your {siteName} account from {oldEmail} to{' '}
+      {newEmail}.
+    </EmailText>
+    <EmailText>Click the button below to confirm this change.</EmailText>
     <EmailButton href={confirmationUrl}>Confirm Email Change</EmailButton>
     <EmailText>
-      If you didn't request this change, please secure your account immediately.
+      If you didn't request this change, ignore this email and your address stays unchanged.
     </EmailText>
   </EmailShell>
 )

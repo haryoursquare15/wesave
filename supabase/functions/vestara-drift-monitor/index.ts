@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+import { sendBrandedEmail } from "../_shared/send-branded-email.ts";
 
 /**
  * Ledger integrity monitor.
@@ -78,19 +79,14 @@ async function alertAdmins(findings: Array<Record<string, unknown>>) {
   for (const p of profiles || []) {
     if (!p.email) continue;
     try {
-      await supabase.functions.invoke("send-transactional-email", {
-        body: {
-          templateName: "notification",
-          recipientEmail: p.email,
-          templateData: {
-            recipientName: String(p.full_name || "").trim().split(/\s+/)[0] || "there",
-            title,
-            message: body,
-            actionUrl: "https://vestara.ng/vst-ops-9f3c",
-            actionLabel: "Open Admin Portal",
-            signOff: "Please action this before the next reconciliation window.",
-          },
-        },
+      await sendBrandedEmail({
+        recipientEmail: p.email as string,
+        recipientName: (p.full_name as string) || undefined,
+        title,
+        message: body,
+        actionUrl: "https://vestara.ng/vst-ops-9f3c",
+        actionLabel: "Open Admin Portal",
+        signOff: "Please action this before the next reconciliation window.",
       });
     } catch (e) {
       console.error("[drift-monitor] email alert failed:", e);

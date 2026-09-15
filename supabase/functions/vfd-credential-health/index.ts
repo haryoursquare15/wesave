@@ -13,6 +13,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { vfdFetch, getGatewayAccessToken } from "../_shared/vfd-gateway.ts";
+import { sendBrandedEmail } from "../_shared/send-branded-email.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -160,19 +161,14 @@ async function alertAdmins(title: string, body: string) {
   for (const p of profiles || []) {
     if (!p.email) continue;
     try {
-      await supabase.functions.invoke("send-transactional-email", {
-        body: {
-          templateName: "notification",
-          recipientEmail: p.email,
-          templateData: {
-            recipientName: String(p.full_name || "").trim().split(/\s+/)[0] || "there",
-            title,
-            message: body,
-            actionUrl: "https://vestara.ng/vst-ops-9f3c",
-            actionLabel: "Open Admin Portal",
-            signOff: "Banking credential monitoring — Vestara platform.",
-          },
-        },
+      await sendBrandedEmail({
+        recipientEmail: p.email as string,
+        recipientName: (p.full_name as string) || undefined,
+        title,
+        message: body,
+        actionUrl: "https://vestara.ng/vst-ops-9f3c",
+        actionLabel: "Open Admin Portal",
+        signOff: "Banking credential monitoring — Vestara platform.",
       });
     } catch (e) {
       console.error("[vfd-credential-health] email alert failed:", e);

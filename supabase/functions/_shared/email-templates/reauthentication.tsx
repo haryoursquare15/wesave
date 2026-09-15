@@ -1,7 +1,6 @@
 /// <reference types="npm:@types/react@18.3.1" />
 import * as React from 'npm:react@18.3.1'
-import { Text } from 'npm:@react-email/components@0.0.22'
-import { EmailShell, EmailHeading, EmailText, BRAND } from './email-shell.tsx'
+import { EmailShell, EmailHeading, EmailText, EmailHighlight } from './email-shell.tsx'
 
 interface ReauthenticationEmailProps {
   token: string
@@ -12,28 +11,15 @@ export const ReauthenticationEmail = ({ token, recipientName }: Reauthentication
   <EmailShell
     preview="Your verification code"
     greetingName={recipientName || 'there'}
-    signOff="Thanks for keeping your account secure."
+    signOff="Stay safe out there."
   >
-    <EmailHeading>Confirm it's you</EmailHeading>
-    <EmailText>Use the verification code below to confirm your identity.</EmailText>
-    <Text style={codeStyle}>{token}</Text>
+    <EmailHeading>Confirm reauthentication</EmailHeading>
+    <EmailText>Use the code below to confirm your identity:</EmailText>
+    <EmailHighlight label="Verification code" value={token} />
     <EmailText>
-      This code expires shortly. If you didn't request it, you can safely ignore this email.
+      This code will expire shortly. If you didn't request this, you can safely ignore this email.
     </EmailText>
   </EmailShell>
 )
 
 export default ReauthenticationEmail
-
-const codeStyle = {
-  fontSize: '30px',
-  fontWeight: 'bold' as const,
-  letterSpacing: '10px',
-  color: BRAND.navy,
-  backgroundColor: BRAND.surface,
-  border: `1px solid ${BRAND.border}`,
-  borderRadius: '10px',
-  padding: '18px 0',
-  textAlign: 'center' as const,
-  margin: '18px 0 20px',
-}
