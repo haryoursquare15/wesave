@@ -7415,16 +7415,7 @@ export type Database = {
         Args: { _split_request_id: string; _user_id: string }
         Returns: Json
       }
-      delete_email: {
-        Args: { message_id: number; queue_name: string }
-        Returns: boolean
-      }
-      email_queue_dispatch: { Args: never; Returns: undefined }
       enforce_caller_is: { Args: { _target: string }; Returns: undefined }
-      enqueue_email: {
-        Args: { payload: Json; queue_name: string }
-        Returns: number
-      }
       freeze_wallet_for_withdrawal: {
         Args: {
           _amount: number
@@ -7716,15 +7707,6 @@ export type Database = {
         }
         Returns: string
       }
-      move_to_dlq: {
-        Args: {
-          dlq_name: string
-          message_id: number
-          payload: Json
-          source_queue: string
-        }
-        Returns: number
-      }
       process_contribution_atomic: {
         Args: { _amount: number; _group_id: string; _user_id: string }
         Returns: Json
@@ -7736,14 +7718,6 @@ export type Database = {
       process_split_payment: {
         Args: { _amount: number; _split_request_id: string; _user_id: string }
         Returns: Json
-      }
-      read_email_batch: {
-        Args: { batch_size: number; queue_name: string; vt: number }
-        Returns: {
-          message: Json
-          msg_id: number
-          read_ct: number
-        }[]
       }
       record_login_attempt: {
         Args: {
