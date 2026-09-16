@@ -1931,18 +1931,18 @@ async function handleTransfer(
   let toClient = body.beneficiaryName as string || body.toClient as string || "";
 
   if (transferType === "intra" && (!toSavingsId || !toClientId)) {
-    const { data: benEnquiry, status: benStatus } = await vfdRequest("/account/enquiry", "GET", undefined, {
-      accountNumber: toAccount,
-    });
-    if (benStatus === 200 && (benEnquiry as Record<string, unknown>)?.status === "00") {
-      const bdEnv = (benEnquiry as Record<string, unknown>).data as Record<string, unknown>;
-      const bdAcct = (bdEnv?.account as Record<string, unknown> | undefined) || bdEnv;
-      toClientId = toClientId || bdEnv?.clientId?.toString() || bdAcct?.clientId?.toString() || "";
-      toSavingsId = toSavingsId || bdAcct?.id?.toString() || bdEnv?.accountId?.toString() || "";
-      toBvn = toBvn || bdEnv?.bvn?.toString() || "";
-      toClient = toClient || bdEnv?.client?.toString() || bdAcct?.client?.toString() || "";
+    // `/account/enquiry` is scoped to our own wallet credentials' client, so it
+    // returns "01 Account Not Found" for any other VFD account. Use the shared
+    // resolver, which tries the intra-bank name enquiry (`/transfer/recipient`)
+    // first and only falls back to the credential-scoped enquiry.
+    const ben = await resolveVfdAccount(toAccount);
+    if (ben.ok && (ben.savingsId || ben.clientId)) {
+      toClientId = toClientId || ben.clientId;
+      toSavingsId = toSavingsId || ben.savingsId;
+      toBvn = toBvn || ben.bvn;
+      toClient = toClient || ben.clientName;
     } else {
-      return jsonResponse({ error: "Could not retrieve beneficiary VFD account details for intra transfer", data: benEnquiry }, 400);
+      return jsonResponse({ error: "Could not retrieve beneficiary VFD account details for intra transfer", data: ben.raw }, 400);
     }
   }
 
