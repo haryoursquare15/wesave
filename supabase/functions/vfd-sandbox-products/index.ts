@@ -1,5 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { vfdFetch, getGatewayAccessToken } from "../_shared/vfd-gateway.ts";
+import { vfdFetch, getGatewayAccessToken, isUncertainTransaction } from "../_shared/vfd-gateway.ts";
 import { notifyMandateApproved } from "../_shared/mandate-notify.ts";
 import { sendBrandedEmail } from "../_shared/send-branded-email.ts";
 import {
@@ -4946,10 +4946,18 @@ async function fundBillsSettlement(params: {
 
 
   console.log(`[bills][fund][request] ${JSON.stringify(payload)}`);
-  const { data: transferResp } = await walletRequest("/transfer", "POST", payload);
+  const { data: transferResp, status: transferHttp } = await walletRequest("/transfer", "POST", payload);
   const vfdStatus = String(transferResp?.status ?? "");
   const vfdMessage = String(transferResp?.message ?? "");
   const duplicate = vfdStatus === "98" || /reference exist/i.test(vfdMessage);
+  // The gateway could not tell us what VFD did: HTTP error, empty/unparseable
+  // body, or the explicit "unknown outcome" envelope. The transfer MAY have
+  // executed, so this is never a plain failure — it must be left pending for
+  // the reconciler, never retried blindly (that would risk a double debit).
+  const outcomeUnknown =
+    transferHttp >= 400 ||
+    isUncertainTransaction(transferHttp, transferResp) ||
+    (!vfdStatus && !vfdMessage);
 
   // Never trust the transfer response alone — confirm against VFD's own record.
   const verified = await verifyVfdTransfer(fundingRef);
@@ -4967,6 +4975,8 @@ async function fundBillsSettlement(params: {
       amount: params.amount,
       transfer_status: vfdStatus,
       transfer_message: vfdMessage,
+      transfer_http_status: transferHttp,
+      outcome_unknown: outcomeUnknown,
       duplicate,
       verified: verified.confirmed,
       transfer_response: transferResp,
@@ -4985,6 +4995,19 @@ async function fundBillsSettlement(params: {
         code: "BANK_SERVICE_UNAVAILABLE",
         error: "Payments are temporarily unavailable while we restore our banking connection. Nothing was debited — please try again shortly.",
         evidence: { transfer: transferResp, tsq: verified.evidence },
+      };
+    }
+    if (outcomeUnknown && !insufficient) {
+      console.error(
+        `[bills][fund] unknown transfer outcome http=${transferHttp} ref=${fundingRef} ` +
+        `body=${JSON.stringify(transferResp ?? {}).slice(0, 500)}`,
+      );
+      return {
+        confirmed: false,
+        reference: fundingRef,
+        code: "SETTLEMENT_FUNDING_UNCONFIRMED",
+        error: "Our bank did not confirm this payment yet, so the bill was not completed. Nothing has been taken twice — we are tracking it and it will settle or be reversed automatically.",
+        evidence: { transfer: transferResp, http_status: transferHttp, tsq: verified.evidence },
       };
     }
     return {
