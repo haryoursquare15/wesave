@@ -8533,28 +8533,18 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
             if (!cover.ok) {
               return { success: false, error: cover.error, code: cover.code };
             }
-            // Real bank leg first (member NUBAN -> corporate pool), verified.
-            const funding = await collectFromCustomerToPool({
-              userId: m.user_id, amount, reference: autoRef,
-              productType: "thrift", productReference: group.id,
-              metadata: { cycle_tag: `c${group.current_cycle}`, cycle_id: activeCycle.id, source: "wallet_auto" },
-            });
-            if (!funding.confirmed) {
-              return { success: false, error: funding.error || "Bank settlement not confirmed", code: funding.code };
-            }
-            const posted = await debitVestaraForThrift(m.user_id, group.id, amount, autoRef, {
-              cycle_id: activeCycle.id,
-              cycle_number: group.current_cycle,
+            // WALLET RULE: wallet -> group thrift pool inside the Vestara
+            // corporate pool. No bank transfer leg.
+            const funding = await collectThriftFromWalletInternal({
+              userId: m.user_id as string, groupId: group.id as string, amount, reference: autoRef,
+              cycleId: activeCycle.id as string,
+              cycleNumber: Number(group.current_cycle),
               source: "vfd_sandbox_auto_sweep",
             });
-            if (!posted.success) {
-              await flagUnpostedWalletCollection({
-                userId: m.user_id as string, groupId: group.id as string,
-                cycleId: activeCycle.id as string, amount, reference: autoRef,
-                error: (posted.error || "").toString(),
-              });
+            if (!funding.confirmed) {
+              return { success: false, error: funding.error || "Wallet collection failed", code: funding.code };
             }
-            return posted;
+            return { success: true };
           })();
 
 
