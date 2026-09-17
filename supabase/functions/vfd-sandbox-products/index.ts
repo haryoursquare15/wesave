@@ -4975,6 +4975,8 @@ async function fundBillsSettlement(params: {
       amount: params.amount,
       transfer_status: vfdStatus,
       transfer_message: vfdMessage,
+      transfer_http_status: transferHttp,
+      outcome_unknown: outcomeUnknown,
       duplicate,
       verified: verified.confirmed,
       transfer_response: transferResp,
@@ -4993,6 +4995,19 @@ async function fundBillsSettlement(params: {
         code: "BANK_SERVICE_UNAVAILABLE",
         error: "Payments are temporarily unavailable while we restore our banking connection. Nothing was debited — please try again shortly.",
         evidence: { transfer: transferResp, tsq: verified.evidence },
+      };
+    }
+    if (outcomeUnknown && !insufficient) {
+      console.error(
+        `[bills][fund] unknown transfer outcome http=${transferHttp} ref=${fundingRef} ` +
+        `body=${JSON.stringify(transferResp ?? {}).slice(0, 500)}`,
+      );
+      return {
+        confirmed: false,
+        reference: fundingRef,
+        code: "SETTLEMENT_FUNDING_UNCONFIRMED",
+        error: "Our bank did not confirm this payment yet, so the bill was not completed. Nothing has been taken twice — we are tracking it and it will settle or be reversed automatically.",
+        evidence: { transfer: transferResp, http_status: transferHttp, tsq: verified.evidence },
       };
     }
     return {
