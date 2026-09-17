@@ -1,5 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { vfdFetch, getGatewayAccessToken } from "../_shared/vfd-gateway.ts";
+import { vfdFetch, getGatewayAccessToken, isUncertainTransaction } from "../_shared/vfd-gateway.ts";
 import { notifyMandateApproved } from "../_shared/mandate-notify.ts";
 import { sendBrandedEmail } from "../_shared/send-branded-email.ts";
 import {
