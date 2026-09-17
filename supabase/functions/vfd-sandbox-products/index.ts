@@ -1530,11 +1530,24 @@ async function processAutoPayout(
   // the funds simply stay in the group's thrift pool (covering the shortfall
   // the member's missed contributions created).
   if (debitFromPool > 0) {
+    // WALLET-FUNDED GROUPS settle entirely inside the Vestara corporate pool:
+    // the thrift pool is debited and the recipient's wallet credited (less the
+    // service fee) on the ledger. There is no bank transfer, because the pool
+    // and the member's wallet are the same VFD pooled account.
+    const isWalletFunded = ((group.funding_mode as string) || "wallet") !== "ddm";
+    if (isWalletFunded) {
+      bankStatus = "internal_pool";
+      await updatePayoutRow(payoutRowId, {
+        bank_status: "internal_pool",
+        bank_confirmed_at: new Date().toISOString(),
+        payout_status: "bank_confirmed_ledger_pending",
+      });
+    }
     // REAL money-out leg FIRST: corporate pool -> recipient's own NUBAN,
     // independently verified. The internal ledger only mirrors it afterwards.
     // If the bank leg is ALREADY confirmed (previous attempt crashed after the
     // transfer), money must never move a second time — go straight to ledger.
-    if (netAmount > 0 && bankStatus !== "confirmed") {
+    if (!isWalletFunded && netAmount > 0 && bankStatus !== "confirmed") {
       // payoutFromPoolToCustomer TSQ-checks this deterministic reference first
       // and returns replayed:true instead of sending a second transfer.
       const bankPayout = await payoutFromPoolToCustomer({
