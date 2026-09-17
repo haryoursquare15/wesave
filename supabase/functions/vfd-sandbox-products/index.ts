@@ -1147,38 +1147,25 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
         required: amount, available: cover.available, shortfall: cover.shortfall,
       }, 400);
     }
-    // REAL bank leg first: the member's own NUBAN -> corporate pool, verified
-    // at VFD. An internal ledger debit alone is never accepted as settlement.
-    const funding = await collectFromCustomerToPool({
-      userId, amount, reference,
-      productType: "thrift", productReference: groupId,
-      metadata: { cycle_tag: `c${group.current_cycle}`, cycle_id: activeCycle.id, source: "wallet" },
-    });
-    if (!funding.confirmed) {
-      return jsonResponse({
-        error: funding.error || "We could not move your funds to the group pool. Nothing was debited — please try again.",
-        code: funding.code || "SETTLEMENT_UNCONFIRMED",
-      }, 400);
-    }
-    const debit = await debitVestaraForThrift(userId, groupId, amount, reference, {
-      cycle_id: activeCycle.id,
-      cycle_number: group.current_cycle,
+    // WALLET RULE: the member's wallet is debited and the group's thrift pool
+    // credited inside the Vestara corporate pool. No bank transfer — wallet and
+    // pool are the same VFD pool account.
+    const funding = await collectThriftFromWalletInternal({
+      userId, groupId, amount, reference,
+      cycleId: activeCycle.id as string,
+      cycleNumber: Number(group.current_cycle),
       source: "vfd_sandbox_ajo",
     });
-    if (!debit.success) {
+    if (!funding.confirmed) {
       const available = await getVestaraWalletBalance(userId);
-      const rawErr = (debit.error || "").toString();
-      console.error(`[handleContributeGroup] debit failed AFTER confirmed bank leg group=${groupId} user=${userId} amount=${amount} available=${available} err=${rawErr}`);
-      await flagUnpostedWalletCollection({
-        userId, groupId, cycleId: activeCycle.id as string, amount, reference, error: rawErr,
-      });
       return jsonResponse({
-        error: "Your money reached the group pool but the contribution record could not be completed. We are reconciling it now — no further action is needed and you will not be debited again.",
-        code: "CONTRIBUTION_POSTING_PENDING",
+        error: funding.error || "We could not move your funds to the group pool. Nothing was debited — please try again.",
+        code: funding.code || "WALLET_DEBIT_FAILED",
         required: amount,
         available,
-      }, 202);
+      }, 400);
     }
+
 
   }
 
@@ -1543,11 +1530,24 @@ async function processAutoPayout(
   // the funds simply stay in the group's thrift pool (covering the shortfall
   // the member's missed contributions created).
   if (debitFromPool > 0) {
+    // WALLET-FUNDED GROUPS settle entirely inside the Vestara corporate pool:
+    // the thrift pool is debited and the recipient's wallet credited (less the
+    // service fee) on the ledger. There is no bank transfer, because the pool
+    // and the member's wallet are the same VFD pooled account.
+    const isWalletFunded = ((group.funding_mode as string) || "wallet") !== "ddm";
+    if (isWalletFunded) {
+      bankStatus = "not_required";
+      await updatePayoutRow(payoutRowId, {
+        bank_status: "not_required",
+        bank_confirmed_at: new Date().toISOString(),
+        payout_status: "bank_confirmed_ledger_pending",
+      });
+    }
     // REAL money-out leg FIRST: corporate pool -> recipient's own NUBAN,
     // independently verified. The internal ledger only mirrors it afterwards.
     // If the bank leg is ALREADY confirmed (previous attempt crashed after the
     // transfer), money must never move a second time — go straight to ledger.
-    if (netAmount > 0 && bankStatus !== "confirmed") {
+    if (!isWalletFunded && netAmount > 0 && bankStatus !== "confirmed") {
       // payoutFromPoolToCustomer TSQ-checks this deterministic reference first
       // and returns replayed:true instead of sending a second transfer.
       const bankPayout = await payoutFromPoolToCustomer({
@@ -4685,6 +4685,88 @@ async function collectFromCustomerToPool(params: {
   });
   return funding;
 }
+
+/**
+ * WALLET-FUNDED THRIFT COLLECTION (internal pool model).
+ *
+ * A member's Vestara wallet and the corporate pool are the SAME pooled bank
+ * account at VFD (sub-account of 1047279595), so a sub-account -> pool
+ * transfer is a no-op the bank rejects. For funding_mode = 'wallet' the
+ * authoritative movement is therefore the internal double-entry debit
+ * (member wallet -> group thrift pool). The settlement leg is still recorded
+ * and confirmed, with the ledger reference as its evidence, so cycle payout
+ * gating keeps positive per-member proof. DDM groups are unaffected: they
+ * still require a real, VFD-confirmed bank debit.
+ */
+async function collectThriftFromWalletInternal(params: {
+  userId: string;
+  groupId: string;
+  amount: number;
+  reference: string;
+  cycleId: string;
+  cycleNumber: number;
+  source: string;
+  metadata?: Record<string, unknown>;
+}): Promise<SettlementFunding> {
+  const db = getSupabaseAdmin();
+  const legRef = `${params.reference}-FUND`;
+  const metadata = {
+    cycle_tag: `c${params.cycleNumber}`,
+    cycle_id: params.cycleId,
+    source: params.source,
+    settlement_model: "internal_pool_ledger",
+    ...(params.metadata || {}),
+  };
+  await openSettlement(db, {
+    productType: "thrift",
+    productReference: params.groupId,
+    userId: params.userId,
+    direction: "in",
+    amount: params.amount,
+    destinationAccount: VFD_CORPORATE_POOL_NUBAN,
+    providerReference: legRef,
+    metadata,
+  });
+
+  // Idempotent: a previous attempt may already have posted this exact debit.
+  const already = await ledgerPayoutExists(params.reference);
+  let posted = already;
+  let failure = "";
+  if (!already) {
+    const debit = await debitVestaraForThrift(params.userId, params.groupId, params.amount, params.reference, {
+      cycle_id: params.cycleId,
+      cycle_number: params.cycleNumber,
+      source: params.source,
+      settlement_model: "internal_pool_ledger",
+    });
+    posted = !!debit.success || await ledgerPayoutExists(params.reference);
+    failure = (debit.error || "").toString();
+  }
+
+  if (!posted) {
+    await markSettlement(db, legRef, "pending", {
+      evidence: { method: "internal_pool_ledger", error: failure }, bumpAttempt: true,
+    });
+    return {
+      confirmed: false,
+      reference: legRef,
+      code: "WALLET_DEBIT_FAILED",
+      error: failure || "We could not move this contribution from your wallet to the group pool. Nothing was debited — please try again.",
+    };
+  }
+
+  await markSettlement(db, legRef, "confirmed", {
+    evidence: {
+      method: "internal_pool_ledger",
+      ledger_reference: params.reference,
+      note: "Member wallet debited into the group thrift pool inside the Vestara corporate pool account",
+    },
+    bumpAttempt: true,
+  });
+  await markSettlementLedgerPosted(db, legRef, params.reference);
+  return { confirmed: true, reference: legRef, replayed: already };
+}
+
 
 type SettlementFunding = {
   confirmed: boolean;
@@ -8107,31 +8189,21 @@ async function settleMissedContributionFromWallet(
     };
   }
 
-  // Real bank leg: member NUBAN -> corporate pool for the FULL swept amount.
+  // WALLET RULE: wallet -> group thrift pool inside the Vestara corporate
+  // pool; no bank transfer leg (wallet and pool are the same VFD account).
   const recoveryRef = `ajo-wallet-recovery-${groupId}-${activeCycle.id}-${userId}`;
-  const funding = await collectFromCustomerToPool({
-    userId, amount: total, reference: recoveryRef,
-    productType: "thrift", productReference: groupId,
-    metadata: {
-      cycle_tag: `c${group.current_cycle}`, cycle_id: activeCycle.id,
-      source: "elapsed_mandate_wallet_recovery", reason,
-      contribution_amount: amount, penal_charge: penalty,
-    },
+  const funding = await collectThriftFromWalletInternal({
+    userId, groupId, amount, reference: `${recoveryRef}-CONTRIB`,
+    cycleId: activeCycle.id as string,
+    cycleNumber: Number(group.current_cycle),
+    source: "elapsed_mandate_wallet_recovery",
+    metadata: { reason, contribution_amount: amount, penal_charge: penalty },
   });
   if (!funding.confirmed) {
     return {
-      success: false, code: funding.code || "SETTLEMENT_UNCONFIRMED",
-      error: funding.error || "Bank settlement not confirmed", amount, penalty, total,
+      success: false, code: funding.code || "WALLET_DEBIT_FAILED",
+      error: funding.error || "Wallet collection failed", amount, penalty, total,
     };
-  }
-
-  // Internal leg 1 — contribution into the group pool (honours payout order).
-  const contrib = await debitVestaraForThrift(userId, groupId, amount, `${recoveryRef}-CONTRIB`, {
-    cycle_id: activeCycle.id, cycle_number: group.current_cycle,
-    source: "elapsed_mandate_wallet_recovery", reason, settlement_reference: `${recoveryRef}-FUND`,
-  });
-  if (contrib && (contrib as any).success === false) {
-    return { success: false, code: "LEDGER_POST_FAILED", error: (contrib as any).error, amount, penalty, total };
   }
 
   // Internal leg 2 — penal charge booked as platform penalty revenue.
@@ -8464,28 +8536,18 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
             if (!cover.ok) {
               return { success: false, error: cover.error, code: cover.code };
             }
-            // Real bank leg first (member NUBAN -> corporate pool), verified.
-            const funding = await collectFromCustomerToPool({
-              userId: m.user_id, amount, reference: autoRef,
-              productType: "thrift", productReference: group.id,
-              metadata: { cycle_tag: `c${group.current_cycle}`, cycle_id: activeCycle.id, source: "wallet_auto" },
-            });
-            if (!funding.confirmed) {
-              return { success: false, error: funding.error || "Bank settlement not confirmed", code: funding.code };
-            }
-            const posted = await debitVestaraForThrift(m.user_id, group.id, amount, autoRef, {
-              cycle_id: activeCycle.id,
-              cycle_number: group.current_cycle,
+            // WALLET RULE: wallet -> group thrift pool inside the Vestara
+            // corporate pool. No bank transfer leg.
+            const funding = await collectThriftFromWalletInternal({
+              userId: m.user_id as string, groupId: group.id as string, amount, reference: autoRef,
+              cycleId: activeCycle.id as string,
+              cycleNumber: Number(group.current_cycle),
               source: "vfd_sandbox_auto_sweep",
             });
-            if (!posted.success) {
-              await flagUnpostedWalletCollection({
-                userId: m.user_id as string, groupId: group.id as string,
-                cycleId: activeCycle.id as string, amount, reference: autoRef,
-                error: (posted.error || "").toString(),
-              });
+            if (!funding.confirmed) {
+              return { success: false, error: funding.error || "Wallet collection failed", code: funding.code };
             }
-            return posted;
+            return { success: true };
           })();
 
 
