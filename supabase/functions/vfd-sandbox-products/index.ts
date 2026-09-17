@@ -1401,6 +1401,58 @@ async function recordContributionDefault(
     "contribution_failed", groupId);
 }
 
+/**
+ * A member who was defaulted for a cycle but then actually funds that same
+ * cycle must not keep carrying the missed-contribution debt + penalty. Called
+ * right after any successful collection: voids the not-yet-recovered penalty
+ * for that (group, user, cycle) and removes it from `outstanding_owed`.
+ * A penalty already recovered from a payout is left alone (money moved) and
+ * logged for ops review instead.
+ */
+async function clearContributionDefault(
+  groupId: string,
+  userId: string,
+  cycleId: string,
+  reason = "contribution funded after default",
+) {
+  const db = getSupabaseAdmin();
+  const { data: penalty } = await db.from("vfd_sandbox_penalties")
+    .select("id, amount, recovered_at")
+    .eq("group_id", groupId).eq("user_id", userId).eq("cycle_id", cycleId)
+    .maybeSingle();
+  if (!penalty?.id) return;
+  if (penalty.recovered_at) {
+    console.error(
+      `[clearContributionDefault] penalty already recovered — manual refund needed group=${groupId} user=${userId} cycle=${cycleId} amount=${penalty.amount}`,
+    );
+    return;
+  }
+  const owedDelta = Math.round(Number(penalty.amount || 0) * 100) / 100;
+  await db.from("vfd_sandbox_penalties").delete().eq("id", penalty.id as string);
+
+  const { data: memberRow } = await db.from("vfd_sandbox_group_members")
+    .select("id, outstanding_owed").eq("group_id", groupId).eq("user_id", userId).maybeSingle();
+  if (memberRow?.id) {
+    const residual = Math.max(0, Math.round((Number(memberRow.outstanding_owed || 0) - owedDelta) * 100) / 100);
+    await db.from("vfd_sandbox_group_members").update({
+      outstanding_owed: residual,
+      payout_blocked: residual > 0,
+      payout_blocked_reason: residual > 0 ? `₦${residual.toLocaleString()} still owed to the group` : null,
+      outstanding_settled_at: residual > 0 ? null : new Date().toISOString(),
+    }).eq("id", memberRow.id as string);
+  }
+  if (owedDelta > 0) {
+    await postChatMessage(groupId, userId,
+      `✅ Contribution received — the ₦${owedDelta.toLocaleString()} missed-contribution charge for this cycle has been cancelled.`,
+      "contribution_status");
+    await sendNotification(userId, "Missed-contribution charge cancelled",
+      `Your contribution came through, so the ₦${owedDelta.toLocaleString()} outstanding charge for this cycle was cancelled (${reason}).`,
+      "contribution_success", groupId);
+  }
+}
+
+
+
 
 // AUTO-PAYOUT (Production parity: tiered fee, credit recipient wallet, advance cycle)
 
