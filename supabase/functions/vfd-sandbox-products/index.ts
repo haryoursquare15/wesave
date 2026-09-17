@@ -1147,38 +1147,25 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
         required: amount, available: cover.available, shortfall: cover.shortfall,
       }, 400);
     }
-    // REAL bank leg first: the member's own NUBAN -> corporate pool, verified
-    // at VFD. An internal ledger debit alone is never accepted as settlement.
-    const funding = await collectFromCustomerToPool({
-      userId, amount, reference,
-      productType: "thrift", productReference: groupId,
-      metadata: { cycle_tag: `c${group.current_cycle}`, cycle_id: activeCycle.id, source: "wallet" },
-    });
-    if (!funding.confirmed) {
-      return jsonResponse({
-        error: funding.error || "We could not move your funds to the group pool. Nothing was debited — please try again.",
-        code: funding.code || "SETTLEMENT_UNCONFIRMED",
-      }, 400);
-    }
-    const debit = await debitVestaraForThrift(userId, groupId, amount, reference, {
-      cycle_id: activeCycle.id,
-      cycle_number: group.current_cycle,
+    // WALLET RULE: the member's wallet is debited and the group's thrift pool
+    // credited inside the Vestara corporate pool. No bank transfer — wallet and
+    // pool are the same VFD pool account.
+    const funding = await collectThriftFromWalletInternal({
+      userId, groupId, amount, reference,
+      cycleId: activeCycle.id as string,
+      cycleNumber: Number(group.current_cycle),
       source: "vfd_sandbox_ajo",
     });
-    if (!debit.success) {
+    if (!funding.confirmed) {
       const available = await getVestaraWalletBalance(userId);
-      const rawErr = (debit.error || "").toString();
-      console.error(`[handleContributeGroup] debit failed AFTER confirmed bank leg group=${groupId} user=${userId} amount=${amount} available=${available} err=${rawErr}`);
-      await flagUnpostedWalletCollection({
-        userId, groupId, cycleId: activeCycle.id as string, amount, reference, error: rawErr,
-      });
       return jsonResponse({
-        error: "Your money reached the group pool but the contribution record could not be completed. We are reconciling it now — no further action is needed and you will not be debited again.",
-        code: "CONTRIBUTION_POSTING_PENDING",
+        error: funding.error || "We could not move your funds to the group pool. Nothing was debited — please try again.",
+        code: funding.code || "WALLET_DEBIT_FAILED",
         required: amount,
         available,
-      }, 202);
+      }, 400);
     }
+
 
   }
 
