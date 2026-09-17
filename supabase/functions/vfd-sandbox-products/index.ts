@@ -1182,6 +1182,9 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
   await db.from("vfd_sandbox_group_members").update({ has_contributed_current: true })
     .eq("group_id", groupId).eq("user_id", userId);
 
+  // This cycle is now funded by this member — cancel any earlier default for it.
+  await clearContributionDefault(groupId, userId, activeCycle.id as string);
+
   const chatMsg = isDdm
     ? `Direct debit of ₦${amount.toLocaleString()} collected (DDM) for cycle ${group.current_cycle}`
     : `has contributed ₦${amount.toLocaleString()} to the pool`;
@@ -9760,6 +9763,8 @@ async function finalizeThriftContribution(p: {
 
   await db.from("vfd_sandbox_group_members").update({ has_contributed_current: true })
     .eq("group_id", p.groupId).eq("user_id", p.userId);
+
+  await clearContributionDefault(p.groupId, p.userId, activeCycle.id as string);
 
   const { count } = await db.from("vfd_sandbox_group_contributions")
     .select("*", { count: "exact", head: true })
