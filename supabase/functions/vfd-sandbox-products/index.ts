@@ -8176,31 +8176,21 @@ async function settleMissedContributionFromWallet(
     };
   }
 
-  // Real bank leg: member NUBAN -> corporate pool for the FULL swept amount.
+  // WALLET RULE: wallet -> group thrift pool inside the Vestara corporate
+  // pool; no bank transfer leg (wallet and pool are the same VFD account).
   const recoveryRef = `ajo-wallet-recovery-${groupId}-${activeCycle.id}-${userId}`;
-  const funding = await collectFromCustomerToPool({
-    userId, amount: total, reference: recoveryRef,
-    productType: "thrift", productReference: groupId,
-    metadata: {
-      cycle_tag: `c${group.current_cycle}`, cycle_id: activeCycle.id,
-      source: "elapsed_mandate_wallet_recovery", reason,
-      contribution_amount: amount, penal_charge: penalty,
-    },
+  const funding = await collectThriftFromWalletInternal({
+    userId, groupId, amount, reference: `${recoveryRef}-CONTRIB`,
+    cycleId: activeCycle.id as string,
+    cycleNumber: Number(group.current_cycle),
+    source: "elapsed_mandate_wallet_recovery",
+    metadata: { reason, contribution_amount: amount, penal_charge: penalty },
   });
   if (!funding.confirmed) {
     return {
-      success: false, code: funding.code || "SETTLEMENT_UNCONFIRMED",
-      error: funding.error || "Bank settlement not confirmed", amount, penalty, total,
+      success: false, code: funding.code || "WALLET_DEBIT_FAILED",
+      error: funding.error || "Wallet collection failed", amount, penalty, total,
     };
-  }
-
-  // Internal leg 1 — contribution into the group pool (honours payout order).
-  const contrib = await debitVestaraForThrift(userId, groupId, amount, `${recoveryRef}-CONTRIB`, {
-    cycle_id: activeCycle.id, cycle_number: group.current_cycle,
-    source: "elapsed_mandate_wallet_recovery", reason, settlement_reference: `${recoveryRef}-FUND`,
-  });
-  if (contrib && (contrib as any).success === false) {
-    return { success: false, code: "LEDGER_POST_FAILED", error: (contrib as any).error, amount, penalty, total };
   }
 
   // Internal leg 2 — penal charge booked as platform penalty revenue.
