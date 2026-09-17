@@ -4686,6 +4686,88 @@ async function collectFromCustomerToPool(params: {
   return funding;
 }
 
+/**
+ * WALLET-FUNDED THRIFT COLLECTION (internal pool model).
+ *
+ * A member's Vestara wallet and the corporate pool are the SAME pooled bank
+ * account at VFD (sub-account of 1047279595), so a sub-account -> pool
+ * transfer is a no-op the bank rejects. For funding_mode = 'wallet' the
+ * authoritative movement is therefore the internal double-entry debit
+ * (member wallet -> group thrift pool). The settlement leg is still recorded
+ * and confirmed, with the ledger reference as its evidence, so cycle payout
+ * gating keeps positive per-member proof. DDM groups are unaffected: they
+ * still require a real, VFD-confirmed bank debit.
+ */
+async function collectThriftFromWalletInternal(params: {
+  userId: string;
+  groupId: string;
+  amount: number;
+  reference: string;
+  cycleId: string;
+  cycleNumber: number;
+  source: string;
+  metadata?: Record<string, unknown>;
+}): Promise<SettlementFunding> {
+  const db = getSupabaseAdmin();
+  const legRef = `${params.reference}-FUND`;
+  const metadata = {
+    cycle_tag: `c${params.cycleNumber}`,
+    cycle_id: params.cycleId,
+    source: params.source,
+    settlement_model: "internal_pool_ledger",
+    ...(params.metadata || {}),
+  };
+  await openSettlement(db, {
+    productType: "thrift",
+    productReference: params.groupId,
+    userId: params.userId,
+    direction: "in",
+    amount: params.amount,
+    destinationAccount: VFD_CORPORATE_POOL_NUBAN,
+    providerReference: legRef,
+    metadata,
+  });
+
+  // Idempotent: a previous attempt may already have posted this exact debit.
+  const already = await ledgerPayoutExists(params.reference);
+  let posted = already;
+  let failure = "";
+  if (!already) {
+    const debit = await debitVestaraForThrift(params.userId, params.groupId, params.amount, params.reference, {
+      cycle_id: params.cycleId,
+      cycle_number: params.cycleNumber,
+      source: params.source,
+      settlement_model: "internal_pool_ledger",
+    });
+    posted = !!debit.success || await ledgerPayoutExists(params.reference);
+    failure = (debit.error || "").toString();
+  }
+
+  if (!posted) {
+    await markSettlement(db, legRef, "pending", {
+      evidence: { method: "internal_pool_ledger", error: failure }, bumpAttempt: true,
+    });
+    return {
+      confirmed: false,
+      reference: legRef,
+      code: "WALLET_DEBIT_FAILED",
+      error: failure || "We could not move this contribution from your wallet to the group pool. Nothing was debited — please try again.",
+    };
+  }
+
+  await markSettlement(db, legRef, "confirmed", {
+    evidence: {
+      method: "internal_pool_ledger",
+      ledger_reference: params.reference,
+      note: "Member wallet debited into the group thrift pool inside the Vestara corporate pool account",
+    },
+    bumpAttempt: true,
+  });
+  await markSettlementLedgerPosted(db, legRef, params.reference);
+  return { confirmed: true, reference: legRef, replayed: already };
+}
+
+
 type SettlementFunding = {
   confirmed: boolean;
   reference: string;
