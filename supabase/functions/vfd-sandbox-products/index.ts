@@ -1184,6 +1184,7 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
 
   // This cycle is now funded by this member — cancel any earlier default for it.
   await clearContributionDefault(groupId, userId, activeCycle.id as string);
+  await syncGroupLedgerCounters(groupId);
 
   const chatMsg = isDdm
     ? `Direct debit of ₦${amount.toLocaleString()} collected (DDM) for cycle ${group.current_cycle}`
@@ -1206,6 +1207,7 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
   if ((count || 0) + cycleDefaulters.length >= Number(group.member_count)) {
     allContributed = true;
     payoutResult = await processAutoPayout(db, group, activeCycle);
+    await syncGroupLedgerCounters(groupId);
   }
 
 
@@ -8779,6 +8781,7 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
     let payoutOutcome: unknown = null;
     if ((count || 0) + cycleDefaulters.length >= Number(group.member_count)) {
       payoutOutcome = await processAutoPayout(db, group, activeCycle);
+      await syncGroupLedgerCounters(group.id as string);
     }
 
     processed.push({
@@ -9795,6 +9798,7 @@ async function finalizeThriftContribution(p: {
     .eq("group_id", p.groupId).eq("user_id", p.userId);
 
   await clearContributionDefault(p.groupId, p.userId, activeCycle.id as string);
+  await syncGroupLedgerCounters(p.groupId);
 
   const { count } = await db.from("vfd_sandbox_group_contributions")
     .select("*", { count: "exact", head: true })
@@ -9803,6 +9807,7 @@ async function finalizeThriftContribution(p: {
   let payout: unknown = null;
   if (count && count >= Number(group.member_count)) {
     payout = await processAutoPayout(db, group, activeCycle);
+    await syncGroupLedgerCounters(p.groupId);
   }
   return { recorded: true, payout };
 }
@@ -9921,6 +9926,7 @@ async function resumeFullyFundedCycles(limit = 50): Promise<Array<Record<string,
       if ((count || 0) + defaulters.length < Number(group.member_count)) continue;
 
       const result = await processAutoPayout(db, group, activeCycle);
+      await syncGroupLedgerCounters(group.id as string);
       out.push({ group_id: group.id, cycle: group.current_cycle, result });
     } catch (e) {
       console.error("[resumeFullyFundedCycles] failed", group.id, e);
