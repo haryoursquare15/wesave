@@ -4764,7 +4764,30 @@ async function collectThriftFromWalletInternal(params: {
     bumpAttempt: true,
   });
   await markSettlementLedgerPosted(db, legRef, params.reference);
+
+  // Supersede any older, never-settled bank legs for the SAME member + cycle
+  // (e.g. sub-account -> pool transfers attempted before the wallet rule, which
+  // the bank can never settle). Left as pending/unreconciled they would freeze
+  // this cycle's payout gate forever even though the money is now in the pool.
+  await db.from("settlement_records")
+    .update({
+      status: "failed",
+      last_checked_at: new Date().toISOString(),
+      evidence: {
+        superseded_by: legRef,
+        reason: "wallet-funded thrift collects internally; this bank leg never moved money",
+      },
+    })
+    .eq("product_type", "thrift")
+    .eq("product_reference", params.groupId)
+    .eq("user_id", params.userId)
+    .eq("direction", "in")
+    .eq("metadata->>cycle_tag", `c${params.cycleNumber}`)
+    .neq("provider_reference", legRef)
+    .in("status", ["pending", "unreconciled"]);
+
   return { confirmed: true, reference: legRef, replayed: already };
+
 }
 
 
