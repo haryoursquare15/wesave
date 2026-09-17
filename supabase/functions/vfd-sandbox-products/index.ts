@@ -4309,22 +4309,47 @@ const VFD_CORPORATE_POOL_NUBAN =
 const VFD_BILLS_SETTLEMENT_NUBAN =
   Deno.env.get("VFD_BILLS_SETTLEMENT_NUBAN") || VFD_CORPORATE_POOL_NUBAN;
 
+/** True when VFD rejected the wallet token itself (stale / revoked). */
+function isWalletTokenRejected(status: number, data: Record<string, unknown>): boolean {
+  if (status === 401 || status === 403) return true;
+  const msg = String(data?.message ?? data?.error ?? "").toLowerCase();
+  return msg.includes("invalid wallet token") || msg.includes("token expired");
+}
+
 async function walletRequest(
   endpoint: string,
   method: "GET" | "POST",
   body?: Record<string, unknown>,
   query?: Record<string, string>,
 ): Promise<{ data: Record<string, unknown>; status: number }> {
-  const token = await getVfdAccessToken();
-  if (!token) return { data: { error: "VFD auth failed" }, status: 401 };
   const url = new URL(`${getWalletBase()}${endpoint}`);
   for (const [k, v] of Object.entries(query || {})) url.searchParams.set(k, v);
-  const resp = await vfdFetch(url.toString(), {
-    method,
-    headers: { "Content-Type": "application/json", AccessToken: token },
-    body: body && method === "POST" ? JSON.stringify(body) : undefined,
-  });
-  return { data: await safeJson(resp), status: resp.status };
+  const payload = body && method === "POST" ? JSON.stringify(body) : undefined;
+
+  const send = async (): Promise<{ data: Record<string, unknown>; status: number } | null> => {
+    const token = await getVfdAccessToken();
+    if (!token) return null;
+    const resp = await vfdFetch(url.toString(), {
+      method,
+      headers: { "Content-Type": "application/json", AccessToken: token },
+      body: payload,
+    });
+    return { data: await safeJson(resp), status: resp.status };
+  };
+
+  let out = await send();
+  if (!out) return { data: { error: "VFD auth failed" }, status: 401 };
+
+  // VFD reports stale/revoked wallet tokens as "Invalid wallet token" (often
+  // with HTTP 200 + status 99). Mint a fresh token and replay ONCE. Money legs
+  // carry a deterministic reference, so a replay is rejected as a duplicate by
+  // VFD rather than debiting twice.
+  if (isWalletTokenRejected(out.status, out.data)) {
+    console.warn(`[vfd-wallet] token rejected on ${endpoint} — reauthenticating once`);
+    const retry = await send();
+    if (retry) out = retry;
+  }
+  return out;
 }
 
 async function transferSignature(fromAccount: string, toAccount: string): Promise<string> {
@@ -4951,6 +4976,17 @@ async function fundBillsSettlement(params: {
 
   if (!verified.confirmed) {
     const insufficient = /insufficient|balance/i.test(vfdMessage);
+    // Bank-partner credential/entitlement failure — an upstream outage, not a
+    // bad request. Nothing was debited; tell the user to retry shortly.
+    if (/invalid wallet token|token expired|access denied/i.test(vfdMessage)) {
+      return {
+        confirmed: false,
+        reference: fundingRef,
+        code: "BANK_SERVICE_UNAVAILABLE",
+        error: "Payments are temporarily unavailable while we restore our banking connection. Nothing was debited — please try again shortly.",
+        evidence: { transfer: transferResp, tsq: verified.evidence },
+      };
+    }
     return {
       confirmed: false,
       reference: fundingRef,
