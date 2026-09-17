@@ -1182,6 +1182,10 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
   await db.from("vfd_sandbox_group_members").update({ has_contributed_current: true })
     .eq("group_id", groupId).eq("user_id", userId);
 
+  // This cycle is now funded by this member — cancel any earlier default for it.
+  await clearContributionDefault(groupId, userId, activeCycle.id as string);
+  await syncGroupLedgerCounters(groupId);
+
   const chatMsg = isDdm
     ? `Direct debit of ₦${amount.toLocaleString()} collected (DDM) for cycle ${group.current_cycle}`
     : `has contributed ₦${amount.toLocaleString()} to the pool`;
@@ -1203,6 +1207,7 @@ async function handleContributeGroup(userId: string, body: Record<string, unknow
   if ((count || 0) + cycleDefaulters.length >= Number(group.member_count)) {
     allContributed = true;
     payoutResult = await processAutoPayout(db, group, activeCycle);
+    await syncGroupLedgerCounters(groupId);
   }
 
 
@@ -1400,6 +1405,88 @@ async function recordContributionDefault(
     `Your contribution for ${group.name} could not be collected (${reason}). ₦${owedDelta.toLocaleString()} is now outstanding and will be recovered from your payout.`,
     "contribution_failed", groupId);
 }
+
+/**
+ * A member who was defaulted for a cycle but then actually funds that same
+ * cycle must not keep carrying the missed-contribution debt + penalty. Called
+ * right after any successful collection: voids the not-yet-recovered penalty
+ * for that (group, user, cycle) and removes it from `outstanding_owed`.
+ * A penalty already recovered from a payout is left alone (money moved) and
+ * logged for ops review instead.
+ */
+async function clearContributionDefault(
+  groupId: string,
+  userId: string,
+  cycleId: string,
+  reason = "contribution funded after default",
+) {
+  const db = getSupabaseAdmin();
+  const { data: penalty } = await db.from("vfd_sandbox_penalties")
+    .select("id, amount, recovered_at")
+    .eq("group_id", groupId).eq("user_id", userId).eq("cycle_id", cycleId)
+    .maybeSingle();
+  if (!penalty?.id) return;
+  if (penalty.recovered_at) {
+    console.error(
+      `[clearContributionDefault] penalty already recovered — manual refund needed group=${groupId} user=${userId} cycle=${cycleId} amount=${penalty.amount}`,
+    );
+    return;
+  }
+  const owedDelta = Math.round(Number(penalty.amount || 0) * 100) / 100;
+  await db.from("vfd_sandbox_penalties").delete().eq("id", penalty.id as string);
+
+  const { data: memberRow } = await db.from("vfd_sandbox_group_members")
+    .select("id, outstanding_owed").eq("group_id", groupId).eq("user_id", userId).maybeSingle();
+  if (memberRow?.id) {
+    const residual = Math.max(0, Math.round((Number(memberRow.outstanding_owed || 0) - owedDelta) * 100) / 100);
+    await db.from("vfd_sandbox_group_members").update({
+      outstanding_owed: residual,
+      payout_blocked: residual > 0,
+      payout_blocked_reason: residual > 0 ? `₦${residual.toLocaleString()} still owed to the group` : null,
+      outstanding_settled_at: residual > 0 ? null : new Date().toISOString(),
+    }).eq("id", memberRow.id as string);
+  }
+  if (owedDelta > 0) {
+    await postChatMessage(groupId, userId,
+      `✅ Contribution received — the ₦${owedDelta.toLocaleString()} missed-contribution charge for this cycle has been cancelled.`,
+      "contribution_status");
+    await sendNotification(userId, "Missed-contribution charge cancelled",
+      `Your contribution came through, so the ₦${owedDelta.toLocaleString()} outstanding charge for this cycle was cancelled (${reason}).`,
+      "contribution_success", groupId);
+  }
+}
+
+/**
+ * Recompute a group's displayed money counters from the ledger/source rows
+ * instead of incrementing them, so a missed increment can never leave the
+ * group showing ₦0 while the pool actually holds money.
+ *   pool_ledger_balance  = the group's thrift_pool ledger account balance
+ *   total_contributed    = sum of recorded cycle contributions
+ *   total_paid_out       = sum of completed payout net amounts
+ */
+async function syncGroupLedgerCounters(groupId: string) {
+  const db = getSupabaseAdmin();
+  try {
+    const { data: pool } = await db.from("vestara_accounts")
+      .select("balance").eq("account_type", "thrift_pool").eq("group_ref", groupId).maybeSingle();
+    const { data: contribs } = await db.from("vfd_sandbox_group_contributions")
+      .select("amount").eq("group_id", groupId);
+    const { data: payouts } = await db.from("vfd_sandbox_group_payouts")
+      .select("net_amount").eq("group_id", groupId).eq("status", "completed");
+    const toKobo = (n: number) => Math.round(Number(n || 0) * 100);
+    await db.from("vfd_sandbox_groups").update({
+      pool_ledger_balance: toKobo(Number(pool?.balance || 0)),
+      total_contributed_kobo: (contribs || []).reduce((s, r) => s + toKobo(Number(r.amount)), 0),
+      total_paid_out_kobo: (payouts || []).reduce((s, r) => s + toKobo(Number(r.net_amount)), 0),
+    }).eq("id", groupId);
+  } catch (e) {
+    console.error("[syncGroupLedgerCounters] failed", groupId, e);
+  }
+}
+
+
+
+
 
 
 // AUTO-PAYOUT (Production parity: tiered fee, credit recipient wallet, advance cycle)
@@ -8694,6 +8781,7 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
     let payoutOutcome: unknown = null;
     if ((count || 0) + cycleDefaulters.length >= Number(group.member_count)) {
       payoutOutcome = await processAutoPayout(db, group, activeCycle);
+      await syncGroupLedgerCounters(group.id as string);
     }
 
     processed.push({
@@ -9709,6 +9797,9 @@ async function finalizeThriftContribution(p: {
   await db.from("vfd_sandbox_group_members").update({ has_contributed_current: true })
     .eq("group_id", p.groupId).eq("user_id", p.userId);
 
+  await clearContributionDefault(p.groupId, p.userId, activeCycle.id as string);
+  await syncGroupLedgerCounters(p.groupId);
+
   const { count } = await db.from("vfd_sandbox_group_contributions")
     .select("*", { count: "exact", head: true })
     .eq("group_id", p.groupId).eq("cycle_number", p.cycleNumber);
@@ -9716,6 +9807,7 @@ async function finalizeThriftContribution(p: {
   let payout: unknown = null;
   if (count && count >= Number(group.member_count)) {
     payout = await processAutoPayout(db, group, activeCycle);
+    await syncGroupLedgerCounters(p.groupId);
   }
   return { recorded: true, payout };
 }
@@ -9834,6 +9926,7 @@ async function resumeFullyFundedCycles(limit = 50): Promise<Array<Record<string,
       if ((count || 0) + defaulters.length < Number(group.member_count)) continue;
 
       const result = await processAutoPayout(db, group, activeCycle);
+      await syncGroupLedgerCounters(group.id as string);
       out.push({ group_id: group.id, cycle: group.current_cycle, result });
     } catch (e) {
       console.error("[resumeFullyFundedCycles] failed", group.id, e);
