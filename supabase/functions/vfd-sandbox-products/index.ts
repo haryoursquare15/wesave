@@ -4946,10 +4946,18 @@ async function fundBillsSettlement(params: {
 
 
   console.log(`[bills][fund][request] ${JSON.stringify(payload)}`);
-  const { data: transferResp } = await walletRequest("/transfer", "POST", payload);
+  const { data: transferResp, status: transferHttp } = await walletRequest("/transfer", "POST", payload);
   const vfdStatus = String(transferResp?.status ?? "");
   const vfdMessage = String(transferResp?.message ?? "");
   const duplicate = vfdStatus === "98" || /reference exist/i.test(vfdMessage);
+  // The gateway could not tell us what VFD did: HTTP error, empty/unparseable
+  // body, or the explicit "unknown outcome" envelope. The transfer MAY have
+  // executed, so this is never a plain failure — it must be left pending for
+  // the reconciler, never retried blindly (that would risk a double debit).
+  const outcomeUnknown =
+    transferHttp >= 400 ||
+    isUncertainTransaction(transferHttp, transferResp) ||
+    (!vfdStatus && !vfdMessage);
 
   // Never trust the transfer response alone — confirm against VFD's own record.
   const verified = await verifyVfdTransfer(fundingRef);
