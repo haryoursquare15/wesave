@@ -1536,9 +1536,9 @@ async function processAutoPayout(
     // and the member's wallet are the same VFD pooled account.
     const isWalletFunded = ((group.funding_mode as string) || "wallet") !== "ddm";
     if (isWalletFunded) {
-      bankStatus = "internal_pool";
+      bankStatus = "not_required";
       await updatePayoutRow(payoutRowId, {
-        bank_status: "internal_pool",
+        bank_status: "not_required",
         bank_confirmed_at: new Date().toISOString(),
         payout_status: "bank_confirmed_ledger_pending",
       });
