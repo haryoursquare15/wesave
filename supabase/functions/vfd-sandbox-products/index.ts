@@ -1454,6 +1454,36 @@ async function clearContributionDefault(
   }
 }
 
+/**
+ * Recompute a group's displayed money counters from the ledger/source rows
+ * instead of incrementing them, so a missed increment can never leave the
+ * group showing ₦0 while the pool actually holds money.
+ *   pool_ledger_balance  = the group's thrift_pool ledger account balance
+ *   total_contributed    = sum of recorded cycle contributions
+ *   total_paid_out       = sum of completed payout net amounts
+ */
+async function syncGroupLedgerCounters(groupId: string) {
+  const db = getSupabaseAdmin();
+  try {
+    const { data: pool } = await db.from("vestara_accounts")
+      .select("balance").eq("account_type", "thrift_pool").eq("group_ref", groupId).maybeSingle();
+    const { data: contribs } = await db.from("vfd_sandbox_group_contributions")
+      .select("amount").eq("group_id", groupId);
+    const { data: payouts } = await db.from("vfd_sandbox_group_payouts")
+      .select("net_amount").eq("group_id", groupId).eq("status", "completed");
+    const toKobo = (n: number) => Math.round(Number(n || 0) * 100);
+    await db.from("vfd_sandbox_groups").update({
+      pool_ledger_balance: toKobo(Number(pool?.balance || 0)),
+      total_contributed_kobo: (contribs || []).reduce((s, r) => s + toKobo(Number(r.amount)), 0),
+      total_paid_out_kobo: (payouts || []).reduce((s, r) => s + toKobo(Number(r.net_amount)), 0),
+    }).eq("id", groupId);
+  } catch (e) {
+    console.error("[syncGroupLedgerCounters] failed", groupId, e);
+  }
+}
+
+
+
 
 
 
