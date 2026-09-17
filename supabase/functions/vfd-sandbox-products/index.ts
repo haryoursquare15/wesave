@@ -4764,7 +4764,30 @@ async function collectThriftFromWalletInternal(params: {
     bumpAttempt: true,
   });
   await markSettlementLedgerPosted(db, legRef, params.reference);
+
+  // Supersede any older, never-settled bank legs for the SAME member + cycle
+  // (e.g. sub-account -> pool transfers attempted before the wallet rule, which
+  // the bank can never settle). Left as pending/unreconciled they would freeze
+  // this cycle's payout gate forever even though the money is now in the pool.
+  await db.from("settlement_records")
+    .update({
+      status: "failed",
+      last_checked_at: new Date().toISOString(),
+      evidence: {
+        superseded_by: legRef,
+        reason: "wallet-funded thrift collects internally; this bank leg never moved money",
+      },
+    })
+    .eq("product_type", "thrift")
+    .eq("product_reference", params.groupId)
+    .eq("user_id", params.userId)
+    .eq("direction", "in")
+    .eq("metadata->>cycle_tag", `c${params.cycleNumber}`)
+    .neq("provider_reference", legRef)
+    .in("status", ["pending", "unreconciled"]);
+
   return { confirmed: true, reference: legRef, replayed: already };
+
 }
 
 
@@ -9777,8 +9800,48 @@ async function reconcileThriftSettlements(limit = 50): Promise<Record<string, un
   }
   const payouts = await reconcileStuckThriftPayouts(limit);
   const swept = await sweepUnbankedThriftPayouts(limit);
-  return { checked: (rows || []).length, results, payouts, swept };
+  const resumed = await resumeFullyFundedCycles(limit);
+  return { checked: (rows || []).length, results, payouts, swept, resumed };
 }
+
+/**
+ * CYCLE RESUME.
+ *
+ * A cycle whose collections are all in (contributions recorded for every
+ * non-defaulting member) but whose payout never ran — because an earlier
+ * attempt was held by a settlement leg that has since been resolved — would
+ * otherwise sit frozen until someone contributes again. This pass re-runs the
+ * payout gate for those cycles. Every gate inside processAutoPayout still
+ * applies, and claimPayout keeps it idempotent.
+ */
+async function resumeFullyFundedCycles(limit = 50): Promise<Array<Record<string, unknown>>> {
+  const db = getSupabaseAdmin();
+  const out: Array<Record<string, unknown>> = [];
+  const { data: groups } = await db.from("vfd_sandbox_groups")
+    .select("*").eq("status", "active").limit(limit);
+  for (const group of (groups || [])) {
+    try {
+      const { data: cycles } = await db.from("vfd_sandbox_contribution_cycles")
+        .select("*").eq("group_id", group.id).eq("status", "active")
+        .order("created_at", { ascending: true }).limit(1);
+      const activeCycle = cycles?.[0];
+      if (!activeCycle) continue;
+
+      const { count } = await db.from("vfd_sandbox_group_contributions")
+        .select("*", { count: "exact", head: true })
+        .eq("group_id", group.id).eq("cycle_number", group.current_cycle);
+      const defaulters = await getCycleDefaulters(group.id as string, activeCycle.id as string);
+      if ((count || 0) + defaulters.length < Number(group.member_count)) continue;
+
+      const result = await processAutoPayout(db, group, activeCycle);
+      out.push({ group_id: group.id, cycle: group.current_cycle, result });
+    } catch (e) {
+      console.error("[resumeFullyFundedCycles] failed", group.id, e);
+    }
+  }
+  return out;
+}
+
 
 /**
  * PAYOUT RECOVERY.
