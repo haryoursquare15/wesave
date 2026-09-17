@@ -4976,6 +4976,17 @@ async function fundBillsSettlement(params: {
 
   if (!verified.confirmed) {
     const insufficient = /insufficient|balance/i.test(vfdMessage);
+    // Bank-partner credential/entitlement failure — an upstream outage, not a
+    // bad request. Nothing was debited; tell the user to retry shortly.
+    if (/invalid wallet token|token expired|access denied/i.test(vfdMessage)) {
+      return {
+        confirmed: false,
+        reference: fundingRef,
+        code: "BANK_SERVICE_UNAVAILABLE",
+        error: "Payments are temporarily unavailable while we restore our banking connection. Nothing was debited — please try again shortly.",
+        evidence: { transfer: transferResp, tsq: verified.evidence },
+      };
+    }
     return {
       confirmed: false,
       reference: fundingRef,
