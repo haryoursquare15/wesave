@@ -721,13 +721,42 @@ async function handleCreateGroup(userId: string, body: Record<string, unknown>) 
   return jsonResponse({ data: group });
 }
 
+// Returns true once the group has run at least one contribution cycle.
+// Such a group is "closed" to new members — the admin must either continue
+// with the same members or exit/create a new group.
+async function groupHasRunCycles(
+  db: ReturnType<typeof getSupabaseAdmin>,
+  groupId: string,
+): Promise<boolean> {
+  const { count } = await db.from("vfd_sandbox_contribution_cycles")
+    .select("id", { count: "exact", head: true })
+    .eq("group_id", groupId);
+  return (count || 0) > 0;
+}
+
 async function handleListGroups(userId: string) {
   const db = getSupabaseAdmin();
   const { data } = await db.from("vfd_sandbox_groups")
     .select("*, vfd_sandbox_group_members(user_id, status, payout_position, has_contributed_current, has_received_payout, mandate_status, mandate_reference)")
     .order("created_at", { ascending: false });
-  return jsonResponse({ data });
+
+  // Groups the user has exited stay in the database (full audit trail per
+  // group id) but must disappear from their app. Only surface groups where
+  // the user still holds a non-exited membership, or has a pending invite.
+  const { data: invites } = await db.from("vfd_sandbox_group_invites")
+    .select("group_id").eq("invitee_id", userId).eq("status", "pending");
+  const invitedGroupIds = new Set((invites || []).map((i: { group_id: string }) => i.group_id));
+
+  const visible = (data || []).filter((g: Record<string, unknown>) => {
+    const members = (g.vfd_sandbox_group_members || []) as { user_id: string; status?: string }[];
+    const mine = members.find((m) => m.user_id === userId);
+    if (mine) return (mine.status ?? "active") !== "exited";
+    return invitedGroupIds.has(g.id as string);
+  });
+
+  return jsonResponse({ data: visible });
 }
+
 
 // SWAP_WINDOW_MS: time members have to swap positions after the group fills
 // up but before contributions automatically begin.
