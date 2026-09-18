@@ -229,6 +229,16 @@ export function SandboxAjoTab() {
     }
   };
 
+  // While the open group is filling up or inside its swap window, refresh the
+  // detail view so the countdown and swap buttons appear as soon as it opens.
+  const detailStatus: string | undefined = detailData?.group?.status ?? detailData?.status;
+  useEffect(() => {
+    if (!detailGroup) return;
+    if (detailStatus !== "swap_window" && detailStatus !== "pending") return;
+    const id = setInterval(() => { loadDetail(detailGroup); }, 5000);
+    return () => clearInterval(id);
+  }, [detailGroup, detailStatus]); // eslint-disable-line
+
   // Gate non-members: if the user has a pending invite to this group, force
   // an Accept/Decline modal before letting them open the group detail. If they
   // are neither a member nor invited, deny entry.
