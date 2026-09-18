@@ -85,8 +85,25 @@ export function useSpendLock() {
   useEffect(() => {
     if (!session) return;
     const handleUpdated = () => void refresh();
+    // Spending totals change whenever money leaves the wallet (transfer, bill,
+    // SplitPay), which can happen anywhere in the app. Re-read the status when
+    // the user comes back to the screen and on a slow timer so "spent this
+    // week" never sits on a stale figure.
+    const handleVisible = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
     window.addEventListener(SPENDLOCK_UPDATED_EVENT, handleUpdated);
-    return () => window.removeEventListener(SPENDLOCK_UPDATED_EVENT, handleUpdated);
+    window.addEventListener("focus", handleUpdated);
+    document.addEventListener("visibilitychange", handleVisible);
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void refresh();
+    }, 45000);
+    return () => {
+      window.removeEventListener(SPENDLOCK_UPDATED_EVENT, handleUpdated);
+      window.removeEventListener("focus", handleUpdated);
+      document.removeEventListener("visibilitychange", handleVisible);
+      window.clearInterval(timer);
+    };
   }, [session, refresh]);
 
   const setRule = useCallback(
