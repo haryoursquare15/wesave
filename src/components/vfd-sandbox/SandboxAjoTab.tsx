@@ -383,6 +383,11 @@ export function SandboxAjoTab() {
                     <Share2 className="h-4 w-4" />
                   </Button>
                 )}
+                {canDeleteGroup(g as Group) && (
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteTarget(g as Group)} title="Delete group">
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
             </div>
 
