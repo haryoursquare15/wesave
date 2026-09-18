@@ -1,25 +1,28 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Allowed origins for CORS
+// Allowed origins for CORS — exact matches only. Credentialed responses must
+// never be handed to an arbitrary site just because it sits on a shared
+// hosting suffix.
 const ALLOWED_ORIGINS = [
-  'https://thrift-harmony-hub.lovable.app',
-  'https://id-preview--52f5b582-a468-4659-81c8-2245803e62d4.lovable.app',
+  'https://app.vestara.ng',
+  'https://vestara.ng',
+  'https://www.vestara.ng',
   'https://wesave.lovable.app',
+  'https://id-preview--52f5b582-a468-4659-81c8-2245803e62d4.lovable.app',
+  'http://localhost:8080',
 ];
 
 function isAllowedOrigin(origin: string | null): boolean {
   if (!origin) return false;
-  if (ALLOWED_ORIGINS.includes(origin)) return true;
-  if (origin.endsWith('.lovableproject.com')) return true;
-  if (origin.endsWith('.lovable.app')) return true;
-  return false;
+  return ALLOWED_ORIGINS.includes(origin);
 }
 
 function getCorsHeaders(origin: string | null): Record<string, string> {
   const allowedOrigin = isAllowedOrigin(origin) ? origin! : ALLOWED_ORIGINS[0];
   return {
     'Access-Control-Allow-Origin': allowedOrigin,
+    'Vary': 'Origin',
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
     'Access-Control-Allow-Credentials': 'true',
   };
