@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { verifyCronToken } from "../_shared/cron-auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -28,8 +29,21 @@ serve(async (req) => {
     const body = await req.json();
     const { action } = body;
 
-    // Skip auth for cron-triggered actions (runs via service role)
-    if (action !== 'cron_auto_charge' && action !== 'verify_pending') {
+    const authHeader0 = req.headers.get('Authorization') || '';
+    const bearer0 = authHeader0.replace('Bearer ', '').trim();
+    const isServiceCaller =
+      (bearer0.length > 0 && bearer0 === supabaseServiceKey) ||
+      (await verifyCronToken(req, 'recurring_test_charge', supabase));
+
+    // Scheduled actions run unattended: they must prove they are the scheduler
+    // (cron token or service role), never open to anonymous callers.
+    if (action === 'cron_auto_charge' || action === 'verify_pending') {
+      if (!isServiceCaller) {
+        return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), {
+          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    } else {
       const authHeader = req.headers.get('Authorization');
       if (!authHeader) {
         return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), {
@@ -463,7 +477,7 @@ serve(async (req) => {
         // Call Flutterwave Verify API
         try {
           const verifyData = await verifyTransaction(payment.flw_transaction_id);
-          console.log(`Verify ${payment.tx_ref}:`, JSON.stringify(verifyData));
+          console.log(`Verify ${payment.tx_ref}:`, verifyData?.data?.status ?? verifyData?.status);
 
           if (verifyData.status === 'success' && verifyData.data?.status === 'successful') {
             // FINAL SUCCESS - confirm and create ledger entry
@@ -671,7 +685,7 @@ serve(async (req) => {
       }
 
       const verifyData = await verifyTransaction(transaction_id);
-      console.log('Verify response:', JSON.stringify(verifyData));
+      console.log('Verify response status:', verifyData?.data?.status ?? verifyData?.status);
 
       if (verifyData.status !== 'success' || verifyData.data?.status !== 'successful') {
         return new Response(JSON.stringify({ success: false, error: 'Transaction not successful', details: verifyData }), {

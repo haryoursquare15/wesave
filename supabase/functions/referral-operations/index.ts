@@ -215,7 +215,8 @@ serve(async (req) => {
         .single();
 
       if (insertError) {
-        return new Response(JSON.stringify({ error: insertError.message }), {
+        console.error('Referral insert failed:', insertError.message);
+        return new Response(JSON.stringify({ error: 'We could not record this referral. Please try again.' }), {
           status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }

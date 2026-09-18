@@ -1335,8 +1335,34 @@ serve(async (req) => {
           .from("user_roles").select("role").eq("user_id", userId);
         const isAdmin = (roles ?? []).some((r: { role: string }) => r.role === "admin");
         if (!isAdmin) return err("Admin only", 403);
+
+        // Only these product fields may be changed through this action.
+        // Anything else (identifiers, linked accounts, audit fields) is ignored.
+        const EDITABLE_PRODUCT_FIELDS = [
+          "name",
+          "description",
+          "is_active",
+          "allow_early_withdrawal",
+          "early_withdrawal_penalty_pct",
+          "is_upfront_yield",
+          "min_tenor_days",
+          "max_tenor_days",
+          "min_user_rate",
+          "max_user_rate",
+          "vfd_rate",
+        ];
+        const safeUpdates: Record<string, unknown> = {};
+        for (const key of EDITABLE_PRODUCT_FIELDS) {
+          if (Object.prototype.hasOwnProperty.call(updates, key)) {
+            safeUpdates[key] = (updates as Record<string, unknown>)[key];
+          }
+        }
+        if (Object.keys(safeUpdates).length === 0) {
+          return err("No editable product fields supplied");
+        }
+
         const { data, error: e } = await supabase
-          .from("vestara_products").update(updates).eq("id", product_id).select().single();
+          .from("vestara_products").update(safeUpdates).eq("id", product_id).select().single();
         if (e) return err(e.message);
         result = { success: true, product: data };
         break;

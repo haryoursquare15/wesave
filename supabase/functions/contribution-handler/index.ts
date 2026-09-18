@@ -29,8 +29,23 @@ serve(async (req) => {
 
     switch (action) {
       case 'initiate_contribution': {
-        const { groupId, amount } = params;
-        if (!groupId || !amount) throw new Error('Group ID and amount are required');
+        const { groupId } = params;
+        if (!groupId) throw new Error('Group ID is required');
+
+        // The contribution amount is never taken from the caller: it is the
+        // group's configured amount, read server-side.
+        const { data: group, error: groupError } = await supabase
+          .from('thrift_groups')
+          .select('id, contribution_amount')
+          .eq('id', groupId)
+          .maybeSingle();
+
+        if (groupError || !group) throw new Error('Group not found');
+
+        const amount = Number(group.contribution_amount);
+        if (!Number.isFinite(amount) || amount <= 0) {
+          throw new Error('This group does not have a valid contribution amount set.');
+        }
 
         // Wallet-only contribution — no card fallback
         const { data: contribResult, error: rpcError } = await supabase.rpc('process_contribution_ledger_atomic', {

@@ -141,7 +141,7 @@ serve(async (req) => {
       });
 
       const verifyData = await verifyRes.json();
-      console.log('Bank verification response:', JSON.stringify(verifyData));
+      console.log('Bank verification result:', verifyData?.status);
 
       if (verifyData.status !== 'success') {
         throw new Error(verifyData.message || 'Unable to verify bank account');
@@ -204,7 +204,7 @@ serve(async (req) => {
         });
 
         const paymentData = await paymentLinkResponse.json();
-        console.log('Payment link response:', JSON.stringify(paymentData));
+        console.log('Payment link response status:', paymentData?.status);
 
         if (paymentData.status !== 'success') {
           throw new Error(paymentData.message || 'Failed to generate payment link');
@@ -235,8 +235,23 @@ serve(async (req) => {
           throw new Error('Transaction reference is required');
         }
 
+        // The reference must belong to a funding attempt this user started.
+        // Without this, any caller could claim someone else's payment.
+        const { data: ownFunding } = await supabase
+          .from('transactions')
+          .select('id, user_id, type')
+          .eq('reference', tx_ref)
+          .eq('user_id', user.id)
+          .eq('type', 'funding')
+          .maybeSingle();
+
+        if (!ownFunding) {
+          result = { success: false, error: 'We could not find this payment on your account.', verified: false };
+          break;
+        }
+
         const verifyResponse = await fetch(
-          `${FLUTTERWAVE_BASE_URL}/transactions/verify_by_reference?tx_ref=${tx_ref}`,
+          `${FLUTTERWAVE_BASE_URL}/transactions/verify_by_reference?tx_ref=${encodeURIComponent(tx_ref)}`,
           {
             method: 'GET',
             headers: {
@@ -246,7 +261,7 @@ serve(async (req) => {
         );
 
         const verifyData = await verifyResponse.json();
-        console.log('Verification response:', JSON.stringify(verifyData));
+        console.log('Verification result:', verifyData?.data?.status ?? verifyData?.status);
 
         if (verifyData.status === 'success' && verifyData.data?.status === 'successful') {
           const { data: creditResult, error: creditError } = await supabase.rpc('credit_wallet_atomic', {

@@ -137,7 +137,7 @@ serve(async (req) => {
     }
 
 
-    console.log(`[SPLIT SETTLEMENT] Processing for split ${split_request_id}: ₦${merchant_amount} to ${merchant_name} (${merchant_bank} - ${merchant_account})`);
+    console.log(`[SPLIT SETTLEMENT] Processing for split ${split_request_id}`);
 
     // ATOMIC CLAIM: prevents two concurrent invocations from both initiating
     // a Flutterwave transfer for the same split. The RPC flips
@@ -202,7 +202,7 @@ serve(async (req) => {
     });
 
     const verifyData = await verifyRes.json();
-    console.log(`[SPLIT SETTLEMENT] Account verification:`, JSON.stringify(verifyData));
+    console.log(`[SPLIT SETTLEMENT] Account verification status:`, verifyData?.status);
 
     if (verifyData.status !== 'success') {
       const errorMsg = `Account verification failed for ${merchant_account} at ${merchant_bank}`;

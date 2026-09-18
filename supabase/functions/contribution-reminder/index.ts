@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { verifyCronToken, requireAdminJwt } from "../_shared/cron-auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -15,6 +16,19 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // This job reads every group's membership and writes reminders, so only the
+    // scheduler (cron token / service role) or an admin may trigger it.
+    const bearer = (req.headers.get('Authorization') || '').replace('Bearer ', '').trim();
+    const isScheduler =
+      (bearer.length > 0 && bearer === supabaseServiceKey) ||
+      (await verifyCronToken(req, 'contribution_reminder', supabase)) ||
+      (await requireAdminJwt(req, supabase)) !== null;
+    if (!isScheduler) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     console.log('Contribution reminder job started at:', new Date().toISOString());
 
