@@ -794,7 +794,7 @@ async function handleCreateTiered(userId: string, body: Record<string, unknown>)
   if (bvn && nin && address) expectedTier = "3";
   else if (bvn && nin) expectedTier = "2";
 
-  console.log(`[VFD create_tiered] Creating tier ${expectedTier} account`, queryParams);
+  console.log(`[VFD create_tiered] Creating tier ${expectedTier} account`, { fields: Object.keys(queryParams) });
 
   const { data, status } = await vfdRequest("/client/tiers/individual", "POST", undefined, queryParams);
 
@@ -1180,7 +1180,7 @@ async function handleValidateBeneficiary(accountNo: string, bankCode: string, tr
     bank: bankCode,
     transfer_type: transferType,
   });
-  console.log("[VFD validate_beneficiary] Status:", status, "Response:", JSON.stringify(data));
+  console.log("[VFD validate_beneficiary] Status:", status);
 
   // Normalize: extract account name from various possible response shapes
   const vfdData = data as Record<string, unknown> | null;
@@ -1971,7 +1971,7 @@ async function handleTransfer(
     uniqueSenderAccountId: senderSavingsId,
   };
 
-  console.log("[VFD Transfer] Payload:", JSON.stringify(transferPayload));
+  console.log("[VFD Transfer] Prepared", { reference, transferType, amount: String(body.amount) });
 
   const supabaseAdmin = getSupabaseAdmin();
 
@@ -2540,8 +2540,13 @@ async function handleTransactionStatusQuery(reference?: string, sessionId?: stri
   return jsonResponse({ data, vfd_status: status });
 }
 
-// Sub-accounts listing
-async function handleSubAccounts(entity: string = "individual", page: string = "0", size: string = "20") {
+// Sub-accounts listing — administrative view of every customer sub-account.
+// Restricted to admins: a normal signed-in user must never enumerate these.
+async function handleSubAccounts(userId: string, entity: string = "individual", page: string = "0", size: string = "20") {
+  const db = getSupabaseAdmin();
+  const { data: isAdmin } = await db.rpc("is_any_admin", { _user_id: userId });
+  if (isAdmin !== true) return jsonResponse({ error: "Admin access required" }, 403);
+
   const { data, status } = await vfdRequest("/sub-accounts", "GET", undefined, { entity, page, size });
   return jsonResponse({ data, vfd_status: status });
 }
@@ -2599,7 +2604,7 @@ async function handleWebhook(req: Request) {
     processed: false,
   });
 
-  console.log("[VFD Webhook]", JSON.stringify(payload));
+  console.log("[VFD Webhook] received", { keys: Object.keys(payload ?? {}) });
 
   // VFD docs use snake_case for inward-credit fields; transfer status webhooks
   // (if VFD ever ships them) tend toward camelCase under `data`. Normalise both.
@@ -4178,7 +4183,7 @@ async function handleAdminMoveSavingsToSubaccount(
     uniqueSenderAccountId: senderSavingsId,
   };
 
-  console.log("[move_savings_to_subaccount] payload:", JSON.stringify(payload));
+  console.log("[move_savings_to_subaccount] prepared", { reference, amount: String(amount) });
 
   const { data: transferResp, status: transferStatus } = await vfdRequest("/transfer", "POST", payload);
   const respData = transferResp as Record<string, unknown>;
