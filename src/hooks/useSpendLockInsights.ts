@@ -83,13 +83,23 @@ export function useSpendLockInsights() {
   const [suggesting, setSuggesting] = useState(false);
 
   const call = useCallback(
-    async (fn: string, args: Record<string, unknown> = {}) => {
+    async (fn: string, args: Record<string, unknown> = {}, silent = false) => {
       if (!session) return null;
       setLoading(true);
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data, error } = await (supabase as any).rpc(fn, args);
-        if (error) return null;
+        if (error) {
+          // Never fail silently: a dead button is worse than a clear message.
+          if (!silent) {
+            toast({
+              title: "Spending insights",
+              description: getUserFriendlyError(error.message),
+              variant: "destructive",
+            });
+          }
+          return null;
+        }
         const next = data as SpendLockInsights;
         setInsights(next);
         return next;
@@ -97,7 +107,7 @@ export function useSpendLockInsights() {
         setLoading(false);
       }
     },
-    [session, supabase]
+    [session, supabase, toast]
   );
 
   const refresh = useCallback(

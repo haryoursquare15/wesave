@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useSpendLockInsights } from "@/hooks/useSpendLockInsights";
 import { useSpendLock } from "@/hooks/useSpendLock";
 import { SpendLockInsightsDetail } from "@/components/vfd-sandbox/SpendLockInsightsDetail";
+import { useToast } from "@/hooks/use-toast";
 
 const naira = (n: number) =>
   `₦${Number(n || 0).toLocaleString("en-NG", { maximumFractionDigits: 0 })}`;
@@ -26,6 +27,7 @@ export function SpendLockInsightsCard() {
     requestSuggestion,
   } = useSpendLockInsights();
   const { status, setRule } = useSpendLock();
+  const { toast } = useToast();
   const [busy, setBusy] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
 
@@ -53,8 +55,29 @@ export function SpendLockInsightsCard() {
     if (!amount) return;
     setBusy(true);
     try {
-      await setRule(period, amount, period === "daily" ? null : 1, status?.rule?.unlock_mode ?? "instant", 30);
+      const applied = await setRule(
+        period,
+        amount,
+        period === "daily" ? null : 1,
+        status?.rule?.unlock_mode ?? "instant",
+        30
+      );
+      if (!applied) return;
       await resolveSuggestion(suggestion.id, "accepted");
+      toast({
+        title: "Limit updated",
+        description: `Your ${period === "daily" ? "daily" : period === "monthly" ? "monthly" : "weekly"} limit is now ${naira(amount)}.`,
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const dismissSuggestion = async () => {
+    if (!suggestion) return;
+    setBusy(true);
+    try {
+      await resolveSuggestion(suggestion.id, "dismissed");
     } finally {
       setBusy(false);
     }
@@ -184,7 +207,8 @@ export function SpendLockInsightsCard() {
               size="sm"
               variant="ghost"
               className="min-h-[40px] text-xs"
-              onClick={() => resolveSuggestion(suggestion.id, "dismissed")}
+              onClick={dismissSuggestion}
+              disabled={busy}
             >
               No thanks
             </Button>
