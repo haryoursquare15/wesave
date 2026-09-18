@@ -848,11 +848,22 @@ export function SandboxAjoTab() {
                           <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-500/40">E-Mandate pending</Badge>
                         )
                       )}
-                      <Badge variant="outline" className={g.status === "active" ? "text-green-600 border-green-500" : g.status === "completed" ? "text-primary border-primary" : "text-muted-foreground"}>
-                        {g.status}
+                      <Badge variant="outline" className={g.status === "active" ? "text-green-600 border-green-500" : g.status === "completed" ? "text-primary border-primary" : g.status === "swap_window" ? "text-warning border-warning" : "text-muted-foreground"}>
+                        {g.status === "swap_window" ? "swap window" : g.status}
                       </Badge>
                     </div>
                   </div>
+
+                  {g.status === "swap_window" && (
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <SwapWindowBanner
+                        endsAt={g.swap_window_ends_at}
+                        onElapsed={async () => { await loadGroups(); }}
+                      />
+                    </div>
+                  )}
+
+
 
 
 
