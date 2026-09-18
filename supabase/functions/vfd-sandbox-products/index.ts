@@ -849,7 +849,11 @@ async function handleJoinGroup(userId: string, body: Record<string, unknown>) {
   if (group.status === "completed") return jsonResponse({ error: "Group has already completed" }, 400);
   if (group.status === "active") return jsonResponse({ error: "Group has already started" }, 400);
   if (group.status === "swap_window") return jsonResponse({ error: "Group is full and waiting to start" }, 400);
+  if (await groupHasRunCycles(db, groupId)) {
+    return jsonResponse({ error: "This group has already run a cycle and is closed to new members" }, 400);
+  }
   if (group.member_count >= group.max_members) return jsonResponse({ error: "Group is full" }, 400);
+
 
   // Prevent duplicate membership
   const { data: existingMember } = await db.from("vfd_sandbox_group_members")
@@ -7858,8 +7862,11 @@ async function handleValidateGroupInviteLink(body: Record<string, unknown>) {
   if (!group) return jsonResponse({ data: { valid: false, error_message: "Group not found" } });
   if (group.status === "completed")
     return jsonResponse({ data: { valid: false, error_message: "Group has already completed" } });
+  if (await groupHasRunCycles(db, group.id))
+    return jsonResponse({ data: { valid: false, error_message: "This group has already run a cycle and is closed to new members" } });
   if (group.member_count >= group.max_members)
     return jsonResponse({ data: { valid: false, error_message: "Group is full" } });
+
 
   const { data: admin } = await db.from("profiles")
     .select("full_name, username").eq("id", group.admin_id).maybeSingle();
@@ -7885,7 +7892,13 @@ async function handleInviteGroupMember(userId: string, body: Record<string, unkn
   if (group.admin_id !== userId) return jsonResponse({ error: "Only the group admin can invite members" }, 403);
   // Allow inviting while group is pending OR active-but-not-full
   if (group.status === "completed") return jsonResponse({ error: "Group has already completed" }, 400);
+  // Once a group has run a cycle it is closed to new members: the admin either
+  // continues with the same members or exits and starts a fresh group.
+  if (await groupHasRunCycles(db, groupId)) {
+    return jsonResponse({ error: "This group has already run a cycle. Continue with the same members, or exit and create a new group to add new people." }, 400);
+  }
   if (group.member_count >= group.max_members) return jsonResponse({ error: "Group is full" }, 400);
+
 
   // Check if already a member
   const { data: existing } = await db.from("vfd_sandbox_group_members")
