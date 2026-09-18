@@ -45,12 +45,17 @@ Deno.serve(async (req) => {
     const target = list.users.find(
       (u) => u.email?.toLowerCase() === email.toLowerCase(),
     );
-    if (!target) return json({ error: "user not found" }, 404);
+    if (!target) return json({ error: "not eligible for auto-confirm" }, 403);
 
-    // Guardrail: only auto-confirm accounts explicitly created from the sandbox
+    // Guardrails: only auto-confirm accounts explicitly created from the
+    // sandbox, and only within a short window after sign-up. This stops the
+    // endpoint from being used to confirm somebody else's account later on.
     const isSandbox = target.user_metadata?.sandbox_account === true;
+    const createdAt = target.created_at ? Date.parse(target.created_at) : NaN;
+    const isRecent =
+      Number.isFinite(createdAt) && Date.now() - createdAt < 15 * 60 * 1000;
 
-    if (!isSandbox) {
+    if (!isSandbox || !isRecent) {
       return json({ error: "not eligible for auto-confirm" }, 403);
     }
 
@@ -62,7 +67,10 @@ Deno.serve(async (req) => {
     const { error: updErr } = await admin.auth.admin.updateUserById(target.id, {
       email_confirm: true,
     });
-    if (updErr) return json({ error: updErr.message }, 500);
+    if (updErr) {
+      console.error("[sandbox-auto-confirm] update failed:", updErr.message);
+      return json({ error: "could not confirm account" }, 500);
+    }
 
     return json({ success: true });
   } catch (err) {
