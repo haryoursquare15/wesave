@@ -3803,7 +3803,7 @@ Deno.serve(async (req) => {
         return await handleTransactionStatusQuery(body.reference as string, body.sessionId as string);
 
       case "sub_accounts":
-        return await handleSubAccounts(body.entity as string, body.page as string, body.size as string);
+        return await handleSubAccounts(userId, body.entity as string, body.page as string, body.size as string);
 
       case "get_client":
         return await handleGetClient(userId);
