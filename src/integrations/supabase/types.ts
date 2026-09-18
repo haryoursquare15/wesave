@@ -7804,9 +7804,10 @@ export type Database = {
         Args: { _split_request_id: string; _target_user_id: string }
         Returns: Json
       }
-      spendlock_get_insights:
-        | { Args: never; Returns: Json }
-        | { Args: { _end_date?: string; _start_date?: string }; Returns: Json }
+      spendlock_get_insights: {
+        Args: { _end_date?: string; _start_date?: string }
+        Returns: Json
+      }
       spendlock_resolve_suggestion: {
         Args: { _status: string; _suggestion_id: string }
         Returns: Json
