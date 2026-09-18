@@ -362,6 +362,8 @@ function VfdSandboxInner() {
 
     await refreshVestaraBalance();
     await refreshVestaraTransactions();
+    // Let the SpendLock card recount what has been spent in this window.
+    window.dispatchEvent(new Event("vestara:spendlock-updated"));
     return vfdResult;
   };
 
