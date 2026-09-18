@@ -177,6 +177,15 @@ export function SandboxAjoTab() {
 
   useEffect(() => { loadGroups(); }, []); // eslint-disable-line
 
+  // Keep the list fresh while a group is filling up or inside its 3-minute
+  // swap window, so the admin sees the window open without a manual refresh.
+  const hasLiveWindow = groups.some((g) => g.status === "swap_window" || g.status === "pending");
+  useEffect(() => {
+    if (detailGroup || !hasLiveWindow) return;
+    const id = setInterval(() => { loadGroups(); }, 8000);
+    return () => clearInterval(id);
+  }, [detailGroup, hasLiveWindow]); // eslint-disable-line
+
   const pool = form.contributionAmount * form.maxMembers;
   const fee = calculatePlatformFee(pool);
 
