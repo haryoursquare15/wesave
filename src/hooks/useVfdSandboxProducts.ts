@@ -99,6 +99,7 @@ export function useVfdSandboxProducts() {
   const requestSwap = useCallback((group_id: string, target_id: string) => invoke("request_swap", { group_id, target_id }), [invoke]);
   const respondSwap = useCallback((swap_id: string, accept: boolean) => invoke("respond_swap", { swap_id, accept }), [invoke]);
   const exitGroup = useCallback((group_id: string) => invoke("exit_group", { group_id }), [invoke]);
+  const deleteGroup = useCallback((group_id: string) => invoke("delete_group", { group_id }), [invoke]);
   const confirmContinue = useCallback((group_id: string) => invoke("confirm_continue", { group_id }), [invoke]);
   const restartGroup = useCallback((group_id: string, terms_accepted: boolean) => invoke("restart_group", { group_id, terms_accepted }), [invoke]);
   const searchUsers = useCallback((query: string) => invoke("search_users", { query }), [invoke]);
@@ -212,7 +213,7 @@ export function useVfdSandboxProducts() {
     invoke,
     // Thrift Groups
     createGroup, listGroups, joinGroup, commenceGroup, contributeGroup, getGroupDetail,
-    requestSwap, respondSwap, exitGroup, confirmContinue, restartGroup,
+    requestSwap, respondSwap, exitGroup, deleteGroup, confirmContinue, restartGroup,
     searchUsers, inviteGroupMember, respondGroupInvite, respondGroupInviteByGroup, createGroupInviteLink, validateGroupInviteLink, joinGroupViaLink, listGroupInvites, listPendingGroupInvitees,
     autoStartPendingGroups,
     postGroupChat, listGroupChat, updateGroupSettings, acceptGroupMandate, checkGroupMandateStatus, sandboxAutoContribute,

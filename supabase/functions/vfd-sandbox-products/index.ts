@@ -2002,6 +2002,42 @@ async function handleExitGroup(userId: string, body: Record<string, unknown>) {
   return jsonResponse({ data: { success: true } });
 }
 
+// GROUP LIFECYCLE: Delete (admin only, only before the group ever starts)
+// Allowed strictly while the group is still being set up: status pending or
+// swap_window, no contribution cycle ever created, and no money collected.
+async function handleDeleteGroup(userId: string, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  const groupId = body.group_id as string;
+
+  const { data: group } = await db.from("vfd_sandbox_groups").select("*").eq("id", groupId).single();
+  if (!group) return jsonResponse({ error: "Group not found" }, 404);
+  if (group.admin_id !== userId) return jsonResponse({ error: "Only the group admin can delete this group" }, 403);
+  if (group.status !== "pending" && group.status !== "swap_window") {
+    return jsonResponse({ error: "This group has already started, so it can no longer be deleted." }, 400);
+  }
+  if (await groupHasRunCycles(db, groupId)) {
+    return jsonResponse({ error: "This group has already started, so it can no longer be deleted." }, 400);
+  }
+
+  const { count: contribCount } = await db.from("vfd_sandbox_group_contributions")
+    .select("id", { count: "exact", head: true }).eq("group_id", groupId);
+  if ((contribCount || 0) > 0) {
+    return jsonResponse({ error: "Money has already been collected for this group, so it cannot be deleted." }, 400);
+  }
+
+  // Clean up setup-only records, then the group itself.
+  await db.from("vfd_sandbox_group_invites").delete().eq("group_id", groupId);
+  await db.from("vfd_sandbox_group_invite_links").delete().eq("group_id", groupId);
+  await db.from("vfd_sandbox_chat_messages").delete().eq("group_id", groupId);
+  await db.from("vfd_sandbox_group_mandates").delete().eq("group_id", groupId);
+  await db.from("vfd_sandbox_group_members").delete().eq("group_id", groupId);
+
+  const { error: delError } = await db.from("vfd_sandbox_groups").delete().eq("id", groupId);
+  if (delError) return jsonResponse({ error: delError.message }, 500);
+
+  return jsonResponse({ data: { success: true } });
+}
+
 // GROUP LIFECYCLE: Confirm continue
 async function handleConfirmContinue(userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
@@ -11185,6 +11221,7 @@ Deno.serve(async (req) => {
       case "clear_missed_contribution": return await handleClearMissedContribution(userId, body);
       case "respond_swap": return await handleRespondSwap(userId, body);
       case "exit_group": return await handleExitGroup(userId, body);
+      case "delete_group": return await handleDeleteGroup(userId, body);
       case "confirm_continue": return await handleConfirmContinue(userId, body);
       case "restart_group": return await handleRestartGroup(userId, body);
       case "search_users": return await handleSearchUsers(userId, body);

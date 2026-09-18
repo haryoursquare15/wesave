@@ -15,7 +15,7 @@ import { useVfdSandboxProducts } from "@/hooks/useVfdSandboxProducts";
 import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
 import {
   Users, Plus, RefreshCw, ArrowRight, ArrowLeft, Play, Crown,
-  ListOrdered, Coins, Calendar, Info, LogOut, AlertCircle, ArrowLeftRight, Share2,
+  ListOrdered, Coins, Calendar, Info, LogOut, AlertCircle, ArrowLeftRight, Share2, Trash2,
 } from "lucide-react";
 import { SandboxGroupInviteDialog } from "./SandboxGroupInviteDialog";
 import { SandboxGroupChat } from "./SandboxGroupChat";
@@ -133,6 +133,30 @@ export function SandboxAjoTab() {
   const [mandateGroup, setMandateGroup] = useState<Group | null>(null);
   const { findFor: findMandate, refresh: refreshMandates } = useMandates();
   const [mandateBusy, setMandateBusy] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Group | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+
+  // A group can only be deleted by its admin while it is still being set up:
+  // not started (pending / swap window) and no cycle run yet.
+  const canDeleteGroup = (g: Group) =>
+    !!currentUserId && g.admin_id === currentUserId &&
+    (g.status === "pending" || g.status === "swap_window") &&
+    (g.current_cycle ?? 0) < 1;
+
+  const confirmDeleteGroup = async () => {
+    if (!deleteTarget) return;
+    setDeleteBusy(true);
+    const res = await products.deleteGroup(deleteTarget.id);
+    setDeleteBusy(false);
+    if ((res as any)?.error) {
+      toast({ title: "Could not delete group", description: getUserFriendlyError((res as any).error), variant: "destructive" });
+      return;
+    }
+    toast({ title: "Group deleted", description: `"${deleteTarget.name}" has been removed.` });
+    if (detailGroup === deleteTarget.id) { setDetailGroup(null); setDetailData(null); }
+    setDeleteTarget(null);
+    await loadGroups();
+  };
 
   const AJO_DDM_FEE = 100;
 
@@ -286,6 +310,25 @@ export function SandboxAjoTab() {
     }
   };
 
+  const deleteDialog = (
+    <Dialog open={!!deleteTarget} onOpenChange={(o) => { if (!o && !deleteBusy) setDeleteTarget(null); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="text-base">Delete this group?</DialogTitle>
+          <DialogDescription className="text-xs">
+            "{deleteTarget?.name}" hasn't started yet, so you can delete it. Members and invites will be removed. This can't be undone.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-2">
+          <Button variant="outline" disabled={deleteBusy} onClick={() => setDeleteTarget(null)} className="h-11">Cancel</Button>
+          <Button variant="destructive" disabled={deleteBusy} onClick={confirmDeleteGroup} className="h-11">
+            {deleteBusy ? <RefreshCw className="h-4 w-4 animate-spin mr-1" /> : <Trash2 className="h-4 w-4 mr-1" />} Delete
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+
   // Detail view
   if (detailGroup && detailData) {
     const g = detailData.group || detailData;
@@ -338,6 +381,11 @@ export function SandboxAjoTab() {
                 {isAdmin && g.status === "pending" && g.member_count < g.max_members && (
                   <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowInviteDialog(true)} title="Invite members">
                     <Share2 className="h-4 w-4" />
+                  </Button>
+                )}
+                {canDeleteGroup(g as Group) && (
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteTarget(g as Group)} title="Delete group">
+                    <Trash2 className="h-4 w-4" />
                   </Button>
                 )}
               </div>
@@ -627,6 +675,7 @@ export function SandboxAjoTab() {
           groupName={g.name}
           onMemberAdded={() => loadDetail(g.id)}
         />
+        {deleteDialog}
       </div>
     );
   }
@@ -878,6 +927,11 @@ export function SandboxAjoTab() {
                   )}
 
                   <div className="flex gap-2 flex-wrap">
+                    {canDeleteGroup(g) && (
+                      <Button size="sm" variant="outline" className="text-destructive border-destructive/40" onClick={(e) => { e.stopPropagation(); setDeleteTarget(g); }}>
+                        <Trash2 className="h-3 w-3 mr-1" /> Delete group
+                      </Button>
+                    )}
                     {mandatePending && myMandate !== "awaiting_approval" && (
                       <Button size="sm" variant="default" className="bg-amber-600 hover:bg-amber-700" onClick={(e) => {
                         e.stopPropagation();
@@ -973,6 +1027,8 @@ export function SandboxAjoTab() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {deleteDialog}
     </div>
   );
 }
