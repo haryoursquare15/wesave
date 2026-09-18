@@ -927,6 +927,11 @@ export function SandboxAjoTab() {
                   )}
 
                   <div className="flex gap-2 flex-wrap">
+                    {canDeleteGroup(g) && (
+                      <Button size="sm" variant="outline" className="text-destructive border-destructive/40" onClick={(e) => { e.stopPropagation(); setDeleteTarget(g); }}>
+                        <Trash2 className="h-3 w-3 mr-1" /> Delete group
+                      </Button>
+                    )}
                     {mandatePending && myMandate !== "awaiting_approval" && (
                       <Button size="sm" variant="default" className="bg-amber-600 hover:bg-amber-700" onClick={(e) => {
                         e.stopPropagation();
@@ -1022,6 +1027,8 @@ export function SandboxAjoTab() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {deleteDialog}
     </div>
   );
 }
