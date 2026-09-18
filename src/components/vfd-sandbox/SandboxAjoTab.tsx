@@ -15,7 +15,7 @@ import { useVfdSandboxProducts } from "@/hooks/useVfdSandboxProducts";
 import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
 import {
   Users, Plus, RefreshCw, ArrowRight, ArrowLeft, Play, Crown,
-  ListOrdered, Coins, Calendar, Info, LogOut, AlertCircle, ArrowLeftRight, Share2,
+  ListOrdered, Coins, Calendar, Info, LogOut, AlertCircle, ArrowLeftRight, Share2, Trash2,
 } from "lucide-react";
 import { SandboxGroupInviteDialog } from "./SandboxGroupInviteDialog";
 import { SandboxGroupChat } from "./SandboxGroupChat";
