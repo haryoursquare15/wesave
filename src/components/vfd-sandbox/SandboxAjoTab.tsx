@@ -177,6 +177,15 @@ export function SandboxAjoTab() {
 
   useEffect(() => { loadGroups(); }, []); // eslint-disable-line
 
+  // Keep the list fresh while a group is filling up or inside its 3-minute
+  // swap window, so the admin sees the window open without a manual refresh.
+  const hasLiveWindow = groups.some((g) => g.status === "swap_window" || g.status === "pending");
+  useEffect(() => {
+    if (detailGroup || !hasLiveWindow) return;
+    const id = setInterval(() => { loadGroups(); }, 8000);
+    return () => clearInterval(id);
+  }, [detailGroup, hasLiveWindow]); // eslint-disable-line
+
   const pool = form.contributionAmount * form.maxMembers;
   const fee = calculatePlatformFee(pool);
 
@@ -219,6 +228,16 @@ export function SandboxAjoTab() {
       setDetailGroup(groupId);
     }
   };
+
+  // While the open group is filling up or inside its swap window, refresh the
+  // detail view so the countdown and swap buttons appear as soon as it opens.
+  const detailStatus: string | undefined = detailData?.group?.status ?? detailData?.status;
+  useEffect(() => {
+    if (!detailGroup) return;
+    if (detailStatus !== "swap_window" && detailStatus !== "pending") return;
+    const id = setInterval(() => { loadDetail(detailGroup); }, 5000);
+    return () => clearInterval(id);
+  }, [detailGroup, detailStatus]); // eslint-disable-line
 
   // Gate non-members: if the user has a pending invite to this group, force
   // an Accept/Decline modal before letting them open the group detail. If they
@@ -829,11 +848,22 @@ export function SandboxAjoTab() {
                           <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-500/40">E-Mandate pending</Badge>
                         )
                       )}
-                      <Badge variant="outline" className={g.status === "active" ? "text-green-600 border-green-500" : g.status === "completed" ? "text-primary border-primary" : "text-muted-foreground"}>
-                        {g.status}
+                      <Badge variant="outline" className={g.status === "active" ? "text-green-600 border-green-500" : g.status === "completed" ? "text-primary border-primary" : g.status === "swap_window" ? "text-warning border-warning" : "text-muted-foreground"}>
+                        {g.status === "swap_window" ? "swap window" : g.status}
                       </Badge>
                     </div>
                   </div>
+
+                  {g.status === "swap_window" && (
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <SwapWindowBanner
+                        endsAt={g.swap_window_ends_at}
+                        onElapsed={async () => { await loadGroups(); }}
+                      />
+                    </div>
+                  )}
+
+
 
 
 
