@@ -1342,13 +1342,14 @@ serve(async (req) => {
           "name",
           "description",
           "is_active",
-          "min_amount",
-          "max_amount",
-          "interest_rate",
-          "tenor_days",
-          "lock_days",
-          "penalty_rate",
-          "display_order",
+          "allow_early_withdrawal",
+          "early_withdrawal_penalty_pct",
+          "is_upfront_yield",
+          "min_tenor_days",
+          "max_tenor_days",
+          "min_user_rate",
+          "max_user_rate",
+          "vfd_rate",
         ];
         const safeUpdates: Record<string, unknown> = {};
         for (const key of EDITABLE_PRODUCT_FIELDS) {
