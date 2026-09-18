@@ -207,7 +207,8 @@ export function SpendLockInsightsCard() {
               size="sm"
               variant="ghost"
               className="min-h-[40px] text-xs"
-              onClick={() => resolveSuggestion(suggestion.id, "dismissed")}
+              onClick={dismissSuggestion}
+              disabled={busy}
             >
               No thanks
             </Button>
