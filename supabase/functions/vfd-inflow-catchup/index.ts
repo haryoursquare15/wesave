@@ -229,8 +229,7 @@ Deno.serve(async (req) => {
       continue;
     }
     if (debug) {
-      console.log(`[catchup][debug] ${nuban}`, JSON.stringify(stmt).slice(0, 4000));
-      scanned.push({ account: nuban, raw_statement: stmt, parsed: parseStatement(stmt, nuban) });
+            scanned.push({ account: nuban, raw_statement: stmt, parsed: parseStatement(stmt, nuban) });
     }
 
 

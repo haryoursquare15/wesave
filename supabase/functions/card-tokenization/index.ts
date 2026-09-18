@@ -182,7 +182,7 @@ serve(async (req) => {
       });
 
       const verifyData = await verifyResp.json();
-      console.log('Tokenization verify response:', JSON.stringify(verifyData));
+      console.log('Tokenization verify response status:', verifyData?.data?.status ?? verifyData?.status);
 
       if (verifyData.status !== 'success' || verifyData.data?.status !== 'successful') {
         throw new Error('Transaction verification failed: ' + (verifyData.message || 'Unknown error'));
@@ -409,7 +409,7 @@ serve(async (req) => {
         headers: { 'Authorization': `Bearer ${secretKey}` },
       });
       const verifyData = await verifyResp.json();
-      console.log('User recover token verify:', JSON.stringify(verifyData));
+      console.log('User recover token verify status:', verifyData?.data?.status ?? verifyData?.status);
 
       if (verifyData.status !== 'success' || verifyData.data?.status !== 'successful') {
         throw new Error('Transaction verification failed. The original payment may not have completed.');
@@ -521,7 +521,7 @@ serve(async (req) => {
         headers: { 'Authorization': `Bearer ${secretKey}` },
       });
       const verifyData = await verifyResp.json();
-      console.log('Retokenization verify response:', JSON.stringify(verifyData));
+      console.log('Retokenization verify response status:', verifyData?.data?.status ?? verifyData?.status);
 
       if (verifyData.status !== 'success' || verifyData.data?.status !== 'successful') {
         throw new Error('Transaction verification failed');

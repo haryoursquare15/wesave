@@ -197,7 +197,7 @@ serve(async (req) => {
         }
 
         sentCount++;
-        console.log(`Email sent to ${user.email}`);
+        console.log(`Email sent to user ${user.id}`);
       } catch (err) {
         console.error(`Error processing user ${user.id}:`, err);
         errors.push(`${user.id}: ${err instanceof Error ? err.message : 'Unknown error'}`);

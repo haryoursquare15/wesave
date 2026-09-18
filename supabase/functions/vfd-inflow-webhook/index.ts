@@ -244,7 +244,7 @@ Deno.serve(async (req) => {
   );
   const internalReason = isInternalSettlement(payerAccount, payerName, narration);
   if (internalReason) {
-    console.log("[vfd-inflow] internal settlement ignored", internalReason, accountNo, amount, narration);
+    console.log("[vfd-inflow] internal settlement ignored", internalReason);
     if (auditId) {
       await db.from("vfd_sandbox_webhook_logs")
         .update({ processed: true, processed_at: new Date().toISOString() })

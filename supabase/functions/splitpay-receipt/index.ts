@@ -160,9 +160,9 @@ serve(async (req) => {
 
       if (sendResult.ok) {
         sentCount++;
-        console.log(`Receipt sent to ${profile.email}`);
+        console.log(`Receipt sent to user ${userId}`);
       } else {
-        console.error(`Failed to send to ${profile.email}:`, sendResult.error);
+        console.error(`Failed to send receipt to user ${userId}:`, sendResult.error);
       }
 
       // 600ms delay between sends to prevent rate limiting

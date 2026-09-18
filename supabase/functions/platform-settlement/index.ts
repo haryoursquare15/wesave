@@ -187,7 +187,7 @@ serve(async (req) => {
           });
 
           const transferData = await transferResponse.json();
-          console.log('Settlement transfer response:', JSON.stringify(transferData));
+          console.log('Settlement transfer response status:', transferData?.status);
 
           if (transferData.status === 'success') {
             const newBalance = 0;

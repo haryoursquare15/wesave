@@ -204,7 +204,7 @@ serve(async (req) => {
         });
 
         const paymentData = await paymentLinkResponse.json();
-        console.log('Payment link response:', JSON.stringify(paymentData));
+        console.log('Payment link response status:', paymentData?.status);
 
         if (paymentData.status !== 'success') {
           throw new Error(paymentData.message || 'Failed to generate payment link');

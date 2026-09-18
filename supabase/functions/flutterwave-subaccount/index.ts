@@ -272,7 +272,7 @@ serve(async (req) => {
         });
 
         const saData = await subaccountResponse.json();
-        console.log('Flutterwave Subaccount response:', JSON.stringify(saData));
+        console.log('Flutterwave Subaccount response status:', saData?.status);
 
         if (saData.status !== 'success') {
           throw new Error(saData.message || 'Failed to create group subaccount');

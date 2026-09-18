@@ -463,7 +463,7 @@ serve(async (req) => {
         // Call Flutterwave Verify API
         try {
           const verifyData = await verifyTransaction(payment.flw_transaction_id);
-          console.log(`Verify ${payment.tx_ref}:`, JSON.stringify(verifyData));
+          console.log(`Verify ${payment.tx_ref}:`, verifyData?.data?.status ?? verifyData?.status);
 
           if (verifyData.status === 'success' && verifyData.data?.status === 'successful') {
             // FINAL SUCCESS - confirm and create ledger entry
@@ -671,7 +671,7 @@ serve(async (req) => {
       }
 
       const verifyData = await verifyTransaction(transaction_id);
-      console.log('Verify response:', JSON.stringify(verifyData));
+      console.log('Verify response status:', verifyData?.data?.status ?? verifyData?.status);
 
       if (verifyData.status !== 'success' || verifyData.data?.status !== 'successful') {
         return new Response(JSON.stringify({ success: false, error: 'Transaction not successful', details: verifyData }), {
