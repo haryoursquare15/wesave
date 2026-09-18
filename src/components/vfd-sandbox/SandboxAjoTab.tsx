@@ -276,7 +276,12 @@ export function SandboxAjoTab() {
     const memberNameMap: Record<string, string> = {};
     members.forEach((m: any) => { if (m.user_id && m.display_name) memberNameMap[m.user_id] = m.display_name; });
     const isAdmin = !!currentUserId && g.admin_id === currentUserId;
-    const progress = g.total_cycles > 0 ? ((g.current_cycle - 1) / g.total_cycles) * 100 : 0;
+    const progress = g.status === "completed"
+      ? 100
+      : g.total_cycles > 0
+        ? Math.min(100, ((g.current_cycle - 1) / g.total_cycles) * 100)
+        : 0;
+
 
     return (
       <div className="space-y-4">
