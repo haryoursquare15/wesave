@@ -11221,6 +11221,7 @@ Deno.serve(async (req) => {
       case "clear_missed_contribution": return await handleClearMissedContribution(userId, body);
       case "respond_swap": return await handleRespondSwap(userId, body);
       case "exit_group": return await handleExitGroup(userId, body);
+      case "delete_group": return await handleDeleteGroup(userId, body);
       case "confirm_continue": return await handleConfirmContinue(userId, body);
       case "restart_group": return await handleRestartGroup(userId, body);
       case "search_users": return await handleSearchUsers(userId, body);
