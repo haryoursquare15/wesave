@@ -133,6 +133,30 @@ export function SandboxAjoTab() {
   const [mandateGroup, setMandateGroup] = useState<Group | null>(null);
   const { findFor: findMandate, refresh: refreshMandates } = useMandates();
   const [mandateBusy, setMandateBusy] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Group | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+
+  // A group can only be deleted by its admin while it is still being set up:
+  // not started (pending / swap window) and no cycle run yet.
+  const canDeleteGroup = (g: Group) =>
+    !!currentUserId && g.admin_id === currentUserId &&
+    (g.status === "pending" || g.status === "swap_window") &&
+    (g.current_cycle ?? 0) < 1;
+
+  const confirmDeleteGroup = async () => {
+    if (!deleteTarget) return;
+    setDeleteBusy(true);
+    const res = await products.deleteGroup(deleteTarget.id);
+    setDeleteBusy(false);
+    if ((res as any)?.error) {
+      toast({ title: "Could not delete group", description: getUserFriendlyError((res as any).error), variant: "destructive" });
+      return;
+    }
+    toast({ title: "Group deleted", description: `"${deleteTarget.name}" has been removed.` });
+    if (detailGroup === deleteTarget.id) { setDetailGroup(null); setDetailData(null); }
+    setDeleteTarget(null);
+    await loadGroups();
+  };
 
   const AJO_DDM_FEE = 100;
 
