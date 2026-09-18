@@ -310,6 +310,25 @@ export function SandboxAjoTab() {
     }
   };
 
+  const deleteDialog = (
+    <Dialog open={!!deleteTarget} onOpenChange={(o) => { if (!o && !deleteBusy) setDeleteTarget(null); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="text-base">Delete this group?</DialogTitle>
+          <DialogDescription className="text-xs">
+            "{deleteTarget?.name}" hasn't started yet, so you can delete it. Members and invites will be removed. This can't be undone.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-2">
+          <Button variant="outline" disabled={deleteBusy} onClick={() => setDeleteTarget(null)} className="h-11">Cancel</Button>
+          <Button variant="destructive" disabled={deleteBusy} onClick={confirmDeleteGroup} className="h-11">
+            {deleteBusy ? <RefreshCw className="h-4 w-4 animate-spin mr-1" /> : <Trash2 className="h-4 w-4 mr-1" />} Delete
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+
   // Detail view
   if (detailGroup && detailData) {
     const g = detailData.group || detailData;
