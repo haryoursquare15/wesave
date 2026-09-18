@@ -675,6 +675,7 @@ export function SandboxAjoTab() {
           groupName={g.name}
           onMemberAdded={() => loadDetail(g.id)}
         />
+        {deleteDialog}
       </div>
     );
   }
