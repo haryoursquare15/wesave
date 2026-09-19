@@ -10174,6 +10174,20 @@ async function reconcileStuckThriftPayouts(limit = 50): Promise<Record<string, u
       last_error: null, last_reconciled_at: nowIso,
     });
 
+    {
+      const { data: gm } = await db.from("vfd_sandbox_groups")
+        .select("funding_mode").eq("id", groupId).maybeSingle();
+      await settleThriftServiceFee({
+        groupId,
+        recipientId: p.recipient_id as string,
+        cycleNumber: Number(p.cycle_number || 0),
+        fee: Number(p.platform_fee || 0),
+        payoutReference: ledgerRef,
+        walletFunded: ((gm?.funding_mode as string) || "wallet") !== "ddm",
+      });
+    }
+
+
     // 3. Finish cycle advancement if it never happened (idempotent).
     const { data: cyc } = await db.from("vfd_sandbox_contribution_cycles")
       .select("id, status, cycle_number").eq("id", cycleId).maybeSingle();
