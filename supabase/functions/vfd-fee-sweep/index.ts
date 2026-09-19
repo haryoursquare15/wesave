@@ -266,7 +266,7 @@ serve(async (req) => {
         toClientId,
         toSavingsId,
         toSession: "",
-        toBvn: String(poolSelf.env?.bvn ?? ""),
+        toBvn: poolBvn,
         signature: await transferSignature(acctNo, POOL_NUBAN),
         amount: String(amount),
         remark: "Vestara fee sweep",
