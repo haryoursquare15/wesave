@@ -1864,6 +1864,20 @@ async function processAutoPayout(
     last_error: null,
   });
 
+  // Service fee: booked as collected cash straight away for wallet-funded
+  // groups (the money is already in the corporate pool), so nothing is left
+  // for the sweep to reconcile later.
+  await settleThriftServiceFee({
+    groupId,
+    recipientId,
+    cycleNumber: currentCycle,
+    fee: feeCharged,
+    payoutReference: ledgerRef,
+    walletFunded: ((group.funding_mode as string) || "wallet") !== "ddm",
+  });
+
+
+
   // Cycle completion is idempotent — only an 'active' cycle transitions.
   await db.from("vfd_sandbox_contribution_cycles").update({
     status: "completed", payout_recipient_id: recipientId,
