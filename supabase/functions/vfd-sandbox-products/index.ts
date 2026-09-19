@@ -525,6 +525,64 @@ async function creditVestaraThriftPayout(recipientId: string, groupId: string, g
   return (data || { success: false, error: "Payout credit failed" }) as { success?: boolean; error?: string };
 }
 
+/**
+ * THRIFT SERVICE FEE — CASH SETTLEMENT AT PAYOUT.
+ *
+ * Wallet-funded thrift settles entirely inside the Vestara corporate pool, so
+ * the ₦ fee deducted from the payout is ALREADY sitting in the pool account at
+ * the moment of payout. It is therefore booked as collected cash immediately
+ * (platform wallet + fee ledger marked settled) instead of waiting for the
+ * daily fee sweep, which can never find it in a customer sub-account.
+ *
+ * DDM groups keep the sweep path: the cash is still in customer NUBANs, so the
+ * fee row is recorded as awaiting sweep.
+ *
+ * Idempotent on the deterministic fee reference.
+ */
+async function settleThriftServiceFee(p: {
+  groupId: string;
+  recipientId: string;
+  cycleNumber: number;
+  fee: number;
+  payoutReference: string;
+  walletFunded: boolean;
+}) {
+  if (!(p.fee > 0)) return;
+  const db = getSupabaseAdmin();
+  const feeRef = `${p.payoutReference}-FEE`;
+  try {
+    const { data: existing } = await db.from("vestara_fee_ledger")
+      .select("id").eq("reference", feeRef).maybeSingle();
+    if (existing?.id) return;
+
+    await db.from("vestara_fee_ledger").insert({
+      user_id: p.recipientId,
+      fee_type: "thrift_service_fee",
+      amount: p.fee,
+      reference: feeRef,
+      tx_reference: p.payoutReference,
+      transfer_type: p.walletFunded ? "internal_pool_settled" : "awaiting_sweep",
+      metadata: {
+        group_id: p.groupId,
+        cycle_number: p.cycleNumber,
+        funding_mode: p.walletFunded ? "wallet" : "ddm",
+        cash_location: p.walletFunded ? "corporate_pool" : "customer_subaccount",
+        settled_at: p.walletFunded ? new Date().toISOString() : null,
+      },
+    });
+
+    await db.rpc("record_platform_fee", {
+      _amount: p.fee,
+      _source_type: p.walletFunded ? "thrift_service_fee_wallet" : "thrift_service_fee_ddm",
+      _source_id: feeRef,
+      _source_user_id: p.recipientId,
+      _source_group_id: p.groupId,
+    });
+  } catch (e) {
+    console.error("[settleThriftServiceFee] failed", feeRef, e);
+  }
+}
+
 // =============================================
 // HELPER: Chat & Notifications
 // =============================================
