@@ -1375,29 +1375,18 @@ async function updatePayoutRow(id: string, patch: Record<string, unknown>) {
 }
 
 /**
- * Members whose collection for this cycle has definitively failed: retries
- * exhausted and the penalty already served (outstanding recorded against
- * them). They are excluded from the cycle's funding expectation so a single
- * defaulter can never stall an active group indefinitely.
- * A member who actually funded the cycle is never treated as a defaulter.
+ * CYCLE COMPLETENESS RULE (owner decision, 2026-09-19):
+ * A cycle is only complete when EVERY member has funded it in full. A member
+ * who missed their contribution (retries exhausted, penalty served) does NOT
+ * shrink the cycle — the cycle stays open on its current number and the payout
+ * is held until the outstanding contribution is paid. Nothing may advance to
+ * the next cycle on a partially funded pool.
+ *
+ * The function is kept (and always returns no defaulters) so every payout,
+ * sweep and reconciliation path shares the same rule.
  */
-async function getCycleDefaulters(groupId: string, cycleId: string): Promise<string[]> {
-  const db = getSupabaseAdmin();
-  const [{ data: failedRows }, { data: successRows }] = await Promise.all([
-    db.from("vfd_sandbox_contribution_audit")
-      .select("user_id").eq("group_id", groupId).eq("cycle_id", cycleId)
-      .eq("status", "failed").eq("penalty_served", true),
-    db.from("vfd_sandbox_contribution_audit")
-      .select("user_id").eq("group_id", groupId).eq("cycle_id", cycleId)
-      .eq("status", "success"),
-  ]);
-  const funded = new Set((successRows || []).map((r: Record<string, unknown>) => String(r.user_id)));
-  const defaulters = new Set(
-    (failedRows || [])
-      .map((r: Record<string, unknown>) => String(r.user_id))
-      .filter((uid) => !funded.has(uid)),
-  );
-  return [...defaulters];
+async function getCycleDefaulters(_groupId: string, _cycleId: string): Promise<string[]> {
+  return [];
 }
 
 /**
