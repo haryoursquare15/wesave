@@ -525,6 +525,64 @@ async function creditVestaraThriftPayout(recipientId: string, groupId: string, g
   return (data || { success: false, error: "Payout credit failed" }) as { success?: boolean; error?: string };
 }
 
+/**
+ * THRIFT SERVICE FEE — CASH SETTLEMENT AT PAYOUT.
+ *
+ * Wallet-funded thrift settles entirely inside the Vestara corporate pool, so
+ * the ₦ fee deducted from the payout is ALREADY sitting in the pool account at
+ * the moment of payout. It is therefore booked as collected cash immediately
+ * (platform wallet + fee ledger marked settled) instead of waiting for the
+ * daily fee sweep, which can never find it in a customer sub-account.
+ *
+ * DDM groups keep the sweep path: the cash is still in customer NUBANs, so the
+ * fee row is recorded as awaiting sweep.
+ *
+ * Idempotent on the deterministic fee reference.
+ */
+async function settleThriftServiceFee(p: {
+  groupId: string;
+  recipientId: string;
+  cycleNumber: number;
+  fee: number;
+  payoutReference: string;
+  walletFunded: boolean;
+}) {
+  if (!(p.fee > 0)) return;
+  const db = getSupabaseAdmin();
+  const feeRef = `${p.payoutReference}-FEE`;
+  try {
+    const { data: existing } = await db.from("vestara_fee_ledger")
+      .select("id").eq("reference", feeRef).maybeSingle();
+    if (existing?.id) return;
+
+    await db.from("vestara_fee_ledger").insert({
+      user_id: p.recipientId,
+      fee_type: "thrift_service_fee",
+      amount: p.fee,
+      reference: feeRef,
+      tx_reference: p.payoutReference,
+      transfer_type: p.walletFunded ? "internal_pool_settled" : "awaiting_sweep",
+      metadata: {
+        group_id: p.groupId,
+        cycle_number: p.cycleNumber,
+        funding_mode: p.walletFunded ? "wallet" : "ddm",
+        cash_location: p.walletFunded ? "corporate_pool" : "customer_subaccount",
+        settled_at: p.walletFunded ? new Date().toISOString() : null,
+      },
+    });
+
+    await db.rpc("record_platform_fee", {
+      _amount: p.fee,
+      _source_type: p.walletFunded ? "thrift_service_fee_wallet" : "thrift_service_fee_ddm",
+      _source_id: feeRef,
+      _source_user_id: p.recipientId,
+      _source_group_id: p.groupId,
+    });
+  } catch (e) {
+    console.error("[settleThriftServiceFee] failed", feeRef, e);
+  }
+}
+
 // =============================================
 // HELPER: Chat & Notifications
 // =============================================
@@ -1375,29 +1433,18 @@ async function updatePayoutRow(id: string, patch: Record<string, unknown>) {
 }
 
 /**
- * Members whose collection for this cycle has definitively failed: retries
- * exhausted and the penalty already served (outstanding recorded against
- * them). They are excluded from the cycle's funding expectation so a single
- * defaulter can never stall an active group indefinitely.
- * A member who actually funded the cycle is never treated as a defaulter.
+ * CYCLE COMPLETENESS RULE (owner decision, 2026-09-19):
+ * A cycle is only complete when EVERY member has funded it in full. A member
+ * who missed their contribution (retries exhausted, penalty served) does NOT
+ * shrink the cycle — the cycle stays open on its current number and the payout
+ * is held until the outstanding contribution is paid. Nothing may advance to
+ * the next cycle on a partially funded pool.
+ *
+ * The function is kept (and always returns no defaulters) so every payout,
+ * sweep and reconciliation path shares the same rule.
  */
-async function getCycleDefaulters(groupId: string, cycleId: string): Promise<string[]> {
-  const db = getSupabaseAdmin();
-  const [{ data: failedRows }, { data: successRows }] = await Promise.all([
-    db.from("vfd_sandbox_contribution_audit")
-      .select("user_id").eq("group_id", groupId).eq("cycle_id", cycleId)
-      .eq("status", "failed").eq("penalty_served", true),
-    db.from("vfd_sandbox_contribution_audit")
-      .select("user_id").eq("group_id", groupId).eq("cycle_id", cycleId)
-      .eq("status", "success"),
-  ]);
-  const funded = new Set((successRows || []).map((r: Record<string, unknown>) => String(r.user_id)));
-  const defaulters = new Set(
-    (failedRows || [])
-      .map((r: Record<string, unknown>) => String(r.user_id))
-      .filter((uid) => !funded.has(uid)),
-  );
-  return [...defaulters];
+async function getCycleDefaulters(_groupId: string, _cycleId: string): Promise<string[]> {
+  return [];
 }
 
 /**
@@ -1440,10 +1487,18 @@ async function recordContributionDefault(
 }
 
 /**
- * A member who was defaulted for a cycle but then actually funds that same
- * cycle must not keep carrying the missed-contribution debt + penalty. Called
- * right after any successful collection: voids the not-yet-recovered penalty
- * for that (group, user, cycle) and removes it from `outstanding_owed`.
+ * A member who defaulted on a cycle and then funds that same cycle late has
+ * settled the CONTRIBUTION, not the penal charge.
+ *
+ * Owner rule (2026-09-19): once the 3 collection attempts of the cycle day are
+ * exhausted, the penal charge is earned and stays owed. A late payment of the
+ * contribution therefore:
+ *   - clears the missed-contribution part of `outstanding_owed`
+ *   - keeps the penal charge outstanding (recovered from the member's payout)
+ * Example: ₦500 contribution missed ⇒ ₦600 owed (₦500 + ₦100 penalty). Member
+ * later pays ₦500 ⇒ ₦100 penalty still owed. Payout ₦1,000 − ₦100 service fee
+ * − ₦100 penalty = ₦800 credited.
+ *
  * A penalty already recovered from a payout is left alone (money moved) and
  * logged for ops review instead.
  */
@@ -1455,7 +1510,7 @@ async function clearContributionDefault(
 ) {
   const db = getSupabaseAdmin();
   const { data: penalty } = await db.from("vfd_sandbox_penalties")
-    .select("id, amount, recovered_at")
+    .select("id, amount, penalty_fee, missed_amount, recovered_at")
     .eq("group_id", groupId).eq("user_id", userId).eq("cycle_id", cycleId)
     .maybeSingle();
   if (!penalty?.id) return;
@@ -1465,13 +1520,25 @@ async function clearContributionDefault(
     );
     return;
   }
-  const owedDelta = Math.round(Number(penalty.amount || 0) * 100) / 100;
-  await db.from("vfd_sandbox_penalties").delete().eq("id", penalty.id as string);
+  const total = Math.round(Number(penalty.amount || 0) * 100) / 100;
+  const penalFee = Math.round(Number(penalty.penalty_fee || 0) * 100) / 100;
+  // Only the missed-contribution portion is cleared by the late payment.
+  const clearedDelta = Math.max(0, Math.round((total - penalFee) * 100) / 100);
+  if (clearedDelta <= 0 && penalFee <= 0) return;
+
+  if (penalFee > 0) {
+    // Keep the penal charge owed on its own.
+    await db.from("vfd_sandbox_penalties")
+      .update({ amount: penalFee, missed_amount: 0 })
+      .eq("id", penalty.id as string);
+  } else {
+    await db.from("vfd_sandbox_penalties").delete().eq("id", penalty.id as string);
+  }
 
   const { data: memberRow } = await db.from("vfd_sandbox_group_members")
     .select("id, outstanding_owed").eq("group_id", groupId).eq("user_id", userId).maybeSingle();
   if (memberRow?.id) {
-    const residual = Math.max(0, Math.round((Number(memberRow.outstanding_owed || 0) - owedDelta) * 100) / 100);
+    const residual = Math.max(0, Math.round((Number(memberRow.outstanding_owed || 0) - clearedDelta) * 100) / 100);
     await db.from("vfd_sandbox_group_members").update({
       outstanding_owed: residual,
       payout_blocked: residual > 0,
@@ -1479,12 +1546,17 @@ async function clearContributionDefault(
       outstanding_settled_at: residual > 0 ? null : new Date().toISOString(),
     }).eq("id", memberRow.id as string);
   }
-  if (owedDelta > 0) {
+
+  if (clearedDelta > 0) {
     await postChatMessage(groupId, userId,
-      `✅ Contribution received — the ₦${owedDelta.toLocaleString()} missed-contribution charge for this cycle has been cancelled.`,
+      penalFee > 0
+        ? `✅ Missed contribution of ₦${clearedDelta.toLocaleString()} received. The ₦${penalFee.toLocaleString()} penal charge stays outstanding and is deducted from this member's payout.`
+        : `✅ Contribution received — the ₦${clearedDelta.toLocaleString()} missed-contribution charge for this cycle has been cancelled.`,
       "contribution_status");
-    await sendNotification(userId, "Missed-contribution charge cancelled",
-      `Your contribution came through, so the ₦${owedDelta.toLocaleString()} outstanding charge for this cycle was cancelled (${reason}).`,
+    await sendNotification(userId, "Missed contribution settled",
+      penalFee > 0
+        ? `Your ₦${clearedDelta.toLocaleString()} missed contribution for this cycle is now paid (${reason}). The ₦${penalFee.toLocaleString()} late charge remains and will be deducted from your payout.`
+        : `Your contribution came through, so the ₦${clearedDelta.toLocaleString()} outstanding charge for this cycle was cancelled (${reason}).`,
       "contribution_success", groupId);
   }
 }
@@ -1791,6 +1863,20 @@ async function processAutoPayout(
     payout_status: "completed", completed_at: new Date().toISOString(),
     last_error: null,
   });
+
+  // Service fee: booked as collected cash straight away for wallet-funded
+  // groups (the money is already in the corporate pool), so nothing is left
+  // for the sweep to reconcile later.
+  await settleThriftServiceFee({
+    groupId,
+    recipientId,
+    cycleNumber: currentCycle,
+    fee: feeCharged,
+    payoutReference: ledgerRef,
+    walletFunded: ((group.funding_mode as string) || "wallet") !== "ddm",
+  });
+
+
 
   // Cycle completion is idempotent — only an 'active' cycle transitions.
   await db.from("vfd_sandbox_contribution_cycles").update({
@@ -10087,6 +10173,20 @@ async function reconcileStuckThriftPayouts(limit = 50): Promise<Record<string, u
       payout_status: "completed", completed_at: p.completed_at || nowIso,
       last_error: null, last_reconciled_at: nowIso,
     });
+
+    {
+      const { data: gm } = await db.from("vfd_sandbox_groups")
+        .select("funding_mode").eq("id", groupId).maybeSingle();
+      await settleThriftServiceFee({
+        groupId,
+        recipientId: p.recipient_id as string,
+        cycleNumber: Number(p.cycle_number || 0),
+        fee: Number(p.platform_fee || 0),
+        payoutReference: ledgerRef,
+        walletFunded: ((gm?.funding_mode as string) || "wallet") !== "ddm",
+      });
+    }
+
 
     // 3. Finish cycle advancement if it never happened (idempotent).
     const { data: cyc } = await db.from("vfd_sandbox_contribution_cycles")
