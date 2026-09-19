@@ -169,16 +169,26 @@ serve(async (req) => {
     }
 
     // ── 3. Pool destination identity ──
+    // The credential-scoped /account/enquiry does NOT resolve the corporate
+    // pool (it is a separate VFD client), so resolve it the way every other
+    // pool mover does: intra-bank name enquiry first, enquiry as fallback.
+    const { data: rec } = await walletRequest(
+      "/transfer/recipient", "GET", undefined,
+      { accountNo: POOL_NUBAN, bank: "999999", transfer_type: "intra" },
+    );
+    const recOk = String((rec as Record<string, unknown>)?.status ?? "") === "00";
+    const recData = ((rec as Record<string, unknown>)?.data as Record<string, unknown>) || {};
+    const recAcct = (recData?.account as Record<string, unknown>) || {};
+
     const poolEnq = await enquiry(POOL_NUBAN);
     const poolSelf = poolEnq.ok && poolEnq.balance !== null ? poolEnq : await enquiry(null);
-    if (!poolSelf.ok) {
-      return json({ error: "Corporate pool enquiry failed", evidence: poolSelf.raw }, 502);
-    }
-    const toClient = firstNonEmpty(Deno.env.get("VFD_POOL_CLIENT_NAME"), poolSelf.env?.client, poolSelf.acct?.client, poolSelf.env?.name);
-    const toClientId = firstNonEmpty(Deno.env.get("VFD_POOL_CLIENT_ID"), poolSelf.env?.clientId, poolSelf.acct?.clientId);
-    const toSavingsId = firstNonEmpty(Deno.env.get("VFD_POOL_SAVINGS_ID"), poolSelf.acct?.id, poolSelf.env?.accountId, poolSelf.env?.id);
+
+    const toClient = firstNonEmpty(Deno.env.get("VFD_POOL_CLIENT_NAME"), recOk ? recData?.name : "", poolSelf.env?.client, poolSelf.acct?.client, poolSelf.env?.name);
+    const toClientId = firstNonEmpty(Deno.env.get("VFD_POOL_CLIENT_ID"), recOk ? recData?.clientId : "", poolSelf.env?.clientId, poolSelf.acct?.clientId);
+    const toSavingsId = firstNonEmpty(Deno.env.get("VFD_POOL_SAVINGS_ID"), recOk ? recAcct?.id : "", poolSelf.acct?.id, poolSelf.env?.accountId, poolSelf.env?.id);
+    const poolBvn = firstNonEmpty(recOk ? recData?.bvn : "", poolSelf.env?.bvn);
     if (!toClient || !toClientId || !toSavingsId) {
-      return json({ error: "Corporate pool identity incomplete", evidence: poolSelf.raw }, 502);
+      return json({ error: "Corporate pool identity incomplete", evidence: { recipient: rec, enquiry: poolSelf.raw } }, 502);
     }
 
     // ── 4. Per-customer sweep ──
