@@ -180,8 +180,14 @@ serve(async (req) => {
     const recData = ((rec as Record<string, unknown>)?.data as Record<string, unknown>) || {};
     const recAcct = (recData?.account as Record<string, unknown>) || {};
 
-    const poolEnq = await enquiry(POOL_NUBAN);
-    const poolSelf = poolEnq.ok && poolEnq.balance !== null ? poolEnq : await enquiry(null);
+    // VFD enquiry calls are slow; only fall back when the name enquiry failed,
+    // otherwise the function burns its whole request budget on lookups.
+    const poolSelf = recOk && recData?.clientId && recAcct?.id
+      ? { ok: true, env: {} as Record<string, unknown>, acct: {} as Record<string, unknown>, raw: rec }
+      : await (async () => {
+        const e = await enquiry(POOL_NUBAN);
+        return e.ok && e.balance !== null ? e : await enquiry(null);
+      })();
 
     const toClient = firstNonEmpty(Deno.env.get("VFD_POOL_CLIENT_NAME"), recOk ? recData?.name : "", poolSelf.env?.client, poolSelf.acct?.client, poolSelf.env?.name);
     const toClientId = firstNonEmpty(Deno.env.get("VFD_POOL_CLIENT_ID"), recOk ? recData?.clientId : "", poolSelf.env?.clientId, poolSelf.acct?.clientId);
