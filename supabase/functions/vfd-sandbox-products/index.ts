@@ -1429,10 +1429,18 @@ async function recordContributionDefault(
 }
 
 /**
- * A member who was defaulted for a cycle but then actually funds that same
- * cycle must not keep carrying the missed-contribution debt + penalty. Called
- * right after any successful collection: voids the not-yet-recovered penalty
- * for that (group, user, cycle) and removes it from `outstanding_owed`.
+ * A member who defaulted on a cycle and then funds that same cycle late has
+ * settled the CONTRIBUTION, not the penal charge.
+ *
+ * Owner rule (2026-09-19): once the 3 collection attempts of the cycle day are
+ * exhausted, the penal charge is earned and stays owed. A late payment of the
+ * contribution therefore:
+ *   - clears the missed-contribution part of `outstanding_owed`
+ *   - keeps the penal charge outstanding (recovered from the member's payout)
+ * Example: ₦500 contribution missed ⇒ ₦600 owed (₦500 + ₦100 penalty). Member
+ * later pays ₦500 ⇒ ₦100 penalty still owed. Payout ₦1,000 − ₦100 service fee
+ * − ₦100 penalty = ₦800 credited.
+ *
  * A penalty already recovered from a payout is left alone (money moved) and
  * logged for ops review instead.
  */
@@ -1444,7 +1452,7 @@ async function clearContributionDefault(
 ) {
   const db = getSupabaseAdmin();
   const { data: penalty } = await db.from("vfd_sandbox_penalties")
-    .select("id, amount, recovered_at")
+    .select("id, amount, penalty_fee, missed_amount, recovered_at")
     .eq("group_id", groupId).eq("user_id", userId).eq("cycle_id", cycleId)
     .maybeSingle();
   if (!penalty?.id) return;
@@ -1454,13 +1462,25 @@ async function clearContributionDefault(
     );
     return;
   }
-  const owedDelta = Math.round(Number(penalty.amount || 0) * 100) / 100;
-  await db.from("vfd_sandbox_penalties").delete().eq("id", penalty.id as string);
+  const total = Math.round(Number(penalty.amount || 0) * 100) / 100;
+  const penalFee = Math.round(Number(penalty.penalty_fee || 0) * 100) / 100;
+  // Only the missed-contribution portion is cleared by the late payment.
+  const clearedDelta = Math.max(0, Math.round((total - penalFee) * 100) / 100);
+  if (clearedDelta <= 0 && penalFee <= 0) return;
+
+  if (penalFee > 0) {
+    // Keep the penal charge owed on its own.
+    await db.from("vfd_sandbox_penalties")
+      .update({ amount: penalFee, missed_amount: 0 })
+      .eq("id", penalty.id as string);
+  } else {
+    await db.from("vfd_sandbox_penalties").delete().eq("id", penalty.id as string);
+  }
 
   const { data: memberRow } = await db.from("vfd_sandbox_group_members")
     .select("id, outstanding_owed").eq("group_id", groupId).eq("user_id", userId).maybeSingle();
   if (memberRow?.id) {
-    const residual = Math.max(0, Math.round((Number(memberRow.outstanding_owed || 0) - owedDelta) * 100) / 100);
+    const residual = Math.max(0, Math.round((Number(memberRow.outstanding_owed || 0) - clearedDelta) * 100) / 100);
     await db.from("vfd_sandbox_group_members").update({
       outstanding_owed: residual,
       payout_blocked: residual > 0,
@@ -1468,12 +1488,17 @@ async function clearContributionDefault(
       outstanding_settled_at: residual > 0 ? null : new Date().toISOString(),
     }).eq("id", memberRow.id as string);
   }
-  if (owedDelta > 0) {
+
+  if (clearedDelta > 0) {
     await postChatMessage(groupId, userId,
-      `✅ Contribution received — the ₦${owedDelta.toLocaleString()} missed-contribution charge for this cycle has been cancelled.`,
+      penalFee > 0
+        ? `✅ Missed contribution of ₦${clearedDelta.toLocaleString()} received. The ₦${penalFee.toLocaleString()} penal charge stays outstanding and is deducted from this member's payout.`
+        : `✅ Contribution received — the ₦${clearedDelta.toLocaleString()} missed-contribution charge for this cycle has been cancelled.`,
       "contribution_status");
-    await sendNotification(userId, "Missed-contribution charge cancelled",
-      `Your contribution came through, so the ₦${owedDelta.toLocaleString()} outstanding charge for this cycle was cancelled (${reason}).`,
+    await sendNotification(userId, "Missed contribution settled",
+      penalFee > 0
+        ? `Your ₦${clearedDelta.toLocaleString()} missed contribution for this cycle is now paid (${reason}). The ₦${penalFee.toLocaleString()} late charge remains and will be deducted from your payout.`
+        : `Your contribution came through, so the ₦${clearedDelta.toLocaleString()} outstanding charge for this cycle was cancelled (${reason}).`,
       "contribution_success", groupId);
   }
 }
