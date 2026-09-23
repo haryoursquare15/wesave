@@ -63,7 +63,15 @@ async function logSend(
   }
 }
 
+// Addresses that must never receive automated app/ops emails (e.g. retired
+// admin inboxes). Sends to these are skipped silently and logged as such.
+const EMAIL_EXCLUSIONS = new Set(['samir@wesave.ng']);
+
 export async function sendBrandedEmail(input: BrandedEmailInput): Promise<{ ok: boolean; error?: string }> {
+  if (EMAIL_EXCLUSIONS.has(input.recipientEmail.trim().toLowerCase())) {
+    console.log(`Email skipped — excluded recipient ${input.recipientEmail}`);
+    return { ok: true };
+  }
   try {
     const result = await sendTemplateEmail(TEMPLATE_NAME, input.recipientEmail, {
       idempotencyKey: input.idempotencyKey,
