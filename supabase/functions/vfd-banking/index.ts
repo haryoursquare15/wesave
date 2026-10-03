@@ -44,7 +44,15 @@ async function getAccessToken(): Promise<string> {
     if (gatewayToken) return gatewayToken;
   } catch (err) {
     console.error("[VFD] Gateway token mint failed:", err);
-    throw new WalletCredentialError(CREDENTIALS_REJECTED);
+    const msg = err instanceof Error ? err.message : String(err);
+    // Only a real 401/403 from the gateway means credentials were rejected.
+    // Connection refused / DNS / timeouts mean the gateway is unreachable.
+    if (/authentication failed/i.test(msg)) {
+      throw new WalletCredentialError(CREDENTIALS_REJECTED);
+    }
+    throw new Error(
+      "Our banking service is temporarily unavailable. Nothing was debited — please try again in a few minutes.",
+    );
   }
   throw new WalletCredentialError("The banking gateway returned no wallet access token.");
 }
