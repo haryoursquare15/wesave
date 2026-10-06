@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { sendBrandedEmail } from "../_shared/send-branded-email.ts";
+import { sendWhatsAppAlert } from "../_shared/whatsapp-notify.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -180,6 +181,15 @@ serve(async (req) => {
       .select('email, full_name')
       .eq('id', record.user_id)
       .single();
+
+    // WhatsApp runs alongside email for opted-in users; failures never block email.
+    await sendWhatsAppAlert(supabase, {
+      userId: record.user_id,
+      notificationId: record.id,
+      name: profile?.full_name,
+      title: String(record.title),
+      message: String(record.message),
+    });
 
     if (!profile?.email) {
       console.log(`No email found for user ${record.user_id}, skipping`);
