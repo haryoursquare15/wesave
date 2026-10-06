@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { MessageCircle } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { sandboxSupabase as supabase } from "@/integrations/supabase/sandboxClient";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
