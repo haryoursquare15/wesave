@@ -13,7 +13,7 @@ function normalise(raw: string): string | null {
   return /^[0-9]{10,15}$/.test(d) ? d : null;
 }
 
-export function WhatsAppAlertSettings() {
+export function WhatsAppAlertSettings({ onSaved }: { onSaved?: (optedIn: boolean) => void }) {
   const [user, setUser] = useState<{ id: string } | null>(null);
   useEffect(() => { supabase.auth.getUser().then(({ data }) => setUser(data.user)); }, []);
   const [phone, setPhone] = useState("");
@@ -40,6 +40,7 @@ export function WhatsAppAlertSettings() {
     if (error) { toast.error("Couldn't save your WhatsApp setting. Please try again."); return; }
     setPhone(p); setOptedIn(nextOptIn);
     toast.success(nextOptIn ? "WhatsApp alerts turned on" : "WhatsApp alerts turned off");
+    onSaved?.(nextOptIn);
   };
 
   return (
