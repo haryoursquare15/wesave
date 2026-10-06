@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { MessageCircle } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -15,7 +14,8 @@ function normalise(raw: string): string | null {
 }
 
 export function WhatsAppAlertSettings() {
-  const { user } = useAuth();
+  const [user, setUser] = useState<{ id: string } | null>(null);
+  useEffect(() => { supabase.auth.getUser().then(({ data }) => setUser(data.user)); }, []);
   const [phone, setPhone] = useState("");
   const [optedIn, setOptedIn] = useState(false);
   const [busy, setBusy] = useState(false);
