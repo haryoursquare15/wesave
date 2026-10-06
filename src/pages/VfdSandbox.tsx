@@ -492,6 +492,8 @@ function VfdSandboxInner() {
     };
   });
 
+  const [waOpen, setWaOpen] = useState(false);
+
   return (
     <div className="min-h-screen bg-background">
       <SandboxHeader />
@@ -501,7 +503,7 @@ function VfdSandboxInner() {
           Signed in as <span className="font-medium text-foreground">{user?.email}</span>
         </span>
         <div className="flex items-center gap-1 shrink-0">
-        <Dialog>
+        <Dialog open={waOpen} onOpenChange={setWaOpen}>
           <DialogTrigger asChild>
             <Button variant="ghost" size="sm" className="h-7 text-xs">
               <MessageCircle className="h-3.5 w-3.5 mr-1" />
@@ -510,7 +512,7 @@ function VfdSandboxInner() {
           </DialogTrigger>
           <DialogContent className="max-w-md">
             <DialogHeader><DialogTitle>WhatsApp alerts</DialogTitle></DialogHeader>
-            <WhatsAppAlertSettings />
+            <WhatsAppAlertSettings onSaved={() => setWaOpen(false)} />
           </DialogContent>
         </Dialog>
         <Button
