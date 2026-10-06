@@ -5,7 +5,9 @@ import { SandboxModeContext } from "@/hooks/useSandboxAwareAuth";
 import { useVfdBanking } from "@/hooks/useVfdBanking";
 import { useVestaraLedger, VestaraLockedFund } from "@/hooks/useVestaraLedger";
 import { useToast } from "@/hooks/use-toast";
-import { RefreshCw, LogOut } from "lucide-react";
+import { RefreshCw, LogOut, MessageCircle } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { WhatsAppAlertSettings } from "@/components/settings/WhatsAppAlertSettings";
 import { SandboxHeader } from "@/components/vfd-sandbox/SandboxHeader";
 import { SandboxDashboard } from "@/components/vfd-sandbox/SandboxDashboard";
 import { SandboxKYC } from "@/components/vfd-sandbox/SandboxKYC";
@@ -498,6 +500,19 @@ function VfdSandboxInner() {
         <span className="text-xs text-muted-foreground truncate">
           Signed in as <span className="font-medium text-foreground">{user?.email}</span>
         </span>
+        <div className="flex items-center gap-1 shrink-0">
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button variant="ghost" size="sm" className="h-7 text-xs">
+              <MessageCircle className="h-3.5 w-3.5 mr-1" />
+              WhatsApp alerts
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-md">
+            <DialogHeader><DialogTitle>WhatsApp alerts</DialogTitle></DialogHeader>
+            <WhatsAppAlertSettings />
+          </DialogContent>
+        </Dialog>
         <Button
           variant="ghost"
           size="sm"
@@ -510,6 +525,7 @@ function VfdSandboxInner() {
           <LogOut className="h-3.5 w-3.5 mr-1" />
           Sign out
         </Button>
+        </div>
       </div>
       <div className="max-w-lg mx-auto px-4 py-5 pb-32 space-y-5">
         {!kycDone ? (
