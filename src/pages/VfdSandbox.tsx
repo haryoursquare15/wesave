@@ -74,6 +74,7 @@ function VfdSandboxInner() {
   const [currentView, setCurrentView] = useState<View>("dashboard");
   const [initialSavingsProduct, setInitialSavingsProduct] = useState<string | null>(null);
   const [banks, setBanks] = useState<Array<{ code: string; name: string }>>([]);
+  const [waOpen, setWaOpen] = useState(false);
 
   // Deep-link support: /app?view=lock (or ajo|target|split|...) opens that
   // section directly so menu links land on the right screen.
@@ -491,8 +492,6 @@ function VfdSandboxInner() {
       status: lf.balance > 0 ? "active" : "unlocked",
     };
   });
-
-  const [waOpen, setWaOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-background">
