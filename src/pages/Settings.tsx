@@ -6,6 +6,7 @@ import {
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { WhatsAppAlertSettings } from "@/components/settings/WhatsAppAlertSettings";
 import { BottomNav } from "@/components/BottomNav";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
@@ -27,7 +28,12 @@ const supportItems = [
 function PushNotificationSettings() {
   const { supported, permission, isSubscribed, loading, subscribe, unsubscribe } = usePushNotifications();
 
-  if (!supported) return null;
+  if (!supported) return (
+    <section>
+      <h2 className="text-sm font-medium text-muted-foreground mb-3 px-1">Notifications</h2>
+      <WhatsAppAlertSettings />
+    </section>
+  );
 
   const handleToggle = async (checked: boolean) => {
     if (checked) {
@@ -75,6 +81,7 @@ function PushNotificationSettings() {
           />
         </div>
       </motion.div>
+      <WhatsAppAlertSettings />
     </section>
   );
 }

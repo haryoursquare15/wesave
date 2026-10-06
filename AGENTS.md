@@ -1,0 +1,1 @@
+- WhatsApp alerts are sent best-effort from send-notification-email via _shared/whatsapp-notify.ts, only to opted-in users (whatsapp_preferences); why: never block or alter email/push delivery.
