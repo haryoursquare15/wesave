@@ -39,6 +39,7 @@ import {
   type ValidationRecord,
 } from "../_shared/bill-validation.ts";
 import { checkSpendLock } from "../_shared/spend-lock.ts";
+import { sendWhatsAppAlert } from "../_shared/whatsapp-notify.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -8580,6 +8581,12 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
     console.error("[sandbox_auto_contribute] settlement reconcile pass failed:", e);
   }
 
+  // WhatsApp reminder ~5 minutes before each group's contribution slot.
+  try {
+    await sendThriftWhatsAppReminders();
+  } catch (e) {
+    console.error("[sandbox_auto_contribute] whatsapp reminder pass failed:", e);
+  }
 
   // WAT = UTC+1
   const now = new Date();
@@ -11451,3 +11458,49 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: message }, 500);
   }
 });
+
+// ---------------------------------------------------------------------------
+// Thrift WhatsApp reminder: sent once per member per slot, ~5 minutes before
+// the group's contribution time (WAT). Best-effort; never affects collection.
+// ---------------------------------------------------------------------------
+async function reminderUuid(seed: string): Promise<string> {
+  const h = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(seed)));
+  const hex = [...h.slice(0, 16)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
+
+async function sendThriftWhatsAppReminders(): Promise<void> {
+  const nowMs = Date.now();
+  const { data: groups } = await db.from("vfd_sandbox_groups")
+    .select("id, name, contribution_amount, period, contribution_hour, contribution_minute, contribution_day_of_week, contribution_day_of_month, next_contribution_date")
+    .eq("status", "active");
+  for (const g of (groups || []) as Array<Record<string, any>>) {
+    const wat = new Date(nowMs + 3600_000);
+    const slotUtc = Date.UTC(wat.getUTCFullYear(), wat.getUTCMonth(), wat.getUTCDate(),
+      g.contribution_hour ?? 0, g.contribution_minute ?? 0) - 3600_000;
+    const minsTo = (slotUtc - nowMs) / 60000;
+    if (minsTo <= 0 || minsTo > 7) continue;
+    const slotWat = new Date(slotUtc + 3600_000);
+    if (g.period === "weekly" && (g.contribution_day_of_week ?? 1) !== slotWat.getUTCDay()) continue;
+    if (g.period === "monthly" && (g.contribution_day_of_month ?? 1) !== slotWat.getUTCDate()) continue;
+    if (g.next_contribution_date && new Date(g.next_contribution_date).getTime() > slotUtc + 60_000) continue;
+
+    const { data: members } = await db.from("vfd_sandbox_group_members")
+      .select("user_id").eq("group_id", g.id).eq("status", "active").eq("has_contributed_current", false);
+    if (!members?.length) continue;
+    const ids = members.map((m: { user_id: string }) => m.user_id);
+    const { data: clients } = await db.from("vfd_sandbox_clients").select("user_id, full_name").in("user_id", ids);
+    const nameMap = new Map((clients || []).map((c: any) => [c.user_id, c.full_name]));
+    const hh = String(g.contribution_hour ?? 0).padStart(2, "0");
+    const mm = String(g.contribution_minute ?? 0).padStart(2, "0");
+    for (const uid of ids) {
+      await sendWhatsAppAlert(db, {
+        userId: uid,
+        notificationId: await reminderUuid(`thrift-reminder:${g.id}:${slotUtc}:${uid}`),
+        name: (nameMap.get(uid) as string) || null,
+        title: "Thrift contribution in 5 minutes",
+        message: `Your NGN ${Number(g.contribution_amount || 0).toLocaleString()} contribution for ${g.name} will be collected at ${hh}:${mm} WAT. Please make sure your wallet is funded.`,
+      });
+    }
+  }
+}
