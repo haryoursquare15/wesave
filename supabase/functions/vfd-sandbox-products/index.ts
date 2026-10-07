@@ -8580,6 +8580,12 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
     console.error("[sandbox_auto_contribute] settlement reconcile pass failed:", e);
   }
 
+  // WhatsApp reminder ~5 minutes before each group's contribution slot.
+  try {
+    await sendThriftWhatsAppReminders();
+  } catch (e) {
+    console.error("[sandbox_auto_contribute] whatsapp reminder pass failed:", e);
+  }
 
   // WAT = UTC+1
   const now = new Date();
