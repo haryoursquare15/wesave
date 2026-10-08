@@ -11470,6 +11470,7 @@ async function reminderUuid(seed: string): Promise<string> {
 }
 
 async function sendThriftWhatsAppReminders(): Promise<void> {
+  const db = getSupabaseAdmin();
   const nowMs = Date.now();
   const { data: groups } = await db.from("vfd_sandbox_groups")
     .select("id, name, contribution_amount, period, contribution_hour, contribution_minute, contribution_day_of_week, contribution_day_of_month, next_contribution_date")
