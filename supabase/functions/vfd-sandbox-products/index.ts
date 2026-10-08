@@ -8584,6 +8584,7 @@ async function handleSandboxAutoContribute(_userId: string, body: Record<string,
   // WhatsApp reminder ~5 minutes before each group's contribution slot.
   try {
     await sendThriftWhatsAppReminders();
+    console.log("[sandbox_auto_contribute] whatsapp reminder pass ok");
   } catch (e) {
     console.error("[sandbox_auto_contribute] whatsapp reminder pass failed:", e);
   }
@@ -11469,7 +11470,7 @@ async function reminderUuid(seed: string): Promise<string> {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 
-async function sendThriftWhatsAppReminders(): Promise<void> {
+async function sendThriftWhatsAppReminders(testGroupId?: string): Promise<void> {
   const db = getSupabaseAdmin();
   const nowMs = Date.now();
   const { data: groups } = await db.from("vfd_sandbox_groups")
@@ -11480,11 +11481,15 @@ async function sendThriftWhatsAppReminders(): Promise<void> {
     const slotUtc = Date.UTC(wat.getUTCFullYear(), wat.getUTCMonth(), wat.getUTCDate(),
       g.contribution_hour ?? 0, g.contribution_minute ?? 0) - 3600_000;
     const minsTo = (slotUtc - nowMs) / 60000;
-    if (minsTo <= 0 || minsTo > 7) continue;
-    const slotWat = new Date(slotUtc + 3600_000);
-    if (g.period === "weekly" && (g.contribution_day_of_week ?? 1) !== slotWat.getUTCDay()) continue;
-    if (g.period === "monthly" && (g.contribution_day_of_month ?? 1) !== slotWat.getUTCDate()) continue;
-    if (g.next_contribution_date && new Date(g.next_contribution_date).getTime() > slotUtc + 60_000) continue;
+    const isTest = testGroupId === g.id;
+    if (testGroupId && !isTest) continue;
+    if (!isTest) {
+      if (minsTo <= 0 || minsTo > 7) continue;
+      const slotWat = new Date(slotUtc + 3600_000);
+      if (g.period === "weekly" && (g.contribution_day_of_week ?? 1) !== slotWat.getUTCDay()) continue;
+      if (g.period === "monthly" && (g.contribution_day_of_month ?? 1) !== slotWat.getUTCDate()) continue;
+      if (g.next_contribution_date && new Date(g.next_contribution_date).getTime() > slotUtc + 60_000) continue;
+    }
 
     const { data: members } = await db.from("vfd_sandbox_group_members")
       .select("user_id").eq("group_id", g.id).eq("status", "active").eq("has_contributed_current", false);
@@ -11497,7 +11502,7 @@ async function sendThriftWhatsAppReminders(): Promise<void> {
     for (const uid of ids) {
       await sendWhatsAppAlert(db, {
         userId: uid,
-        notificationId: await reminderUuid(`thrift-reminder:${g.id}:${slotUtc}:${uid}`),
+        notificationId: await reminderUuid(`${isTest ? `test-${nowMs}:` : ""}thrift-reminder:${g.id}:${slotUtc}:${uid}`),
         name: (nameMap.get(uid) as string) || null,
         title: "Thrift contribution in 5 minutes",
         message: `Your NGN ${Number(g.contribution_amount || 0).toLocaleString()} contribution for ${g.name} will be collected at ${hh}:${mm} WAT. Please make sure your wallet is funded.`,
