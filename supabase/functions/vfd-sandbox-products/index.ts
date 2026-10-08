@@ -11500,6 +11500,8 @@ async function sendThriftWhatsAppReminders(): Promise<void> {
         name: (nameMap.get(uid) as string) || null,
         title: "Thrift contribution in 5 minutes",
         message: `Your NGN ${Number(g.contribution_amount || 0).toLocaleString()} contribution for ${g.name} will be collected at ${hh}:${mm} WAT. Please make sure your wallet is funded.`,
+        template: "vestara_thrift_reminder",
+        params: [`₦${Number(g.contribution_amount || 0).toLocaleString()}`, String(g.name || "your group"), `${hh}:${mm} WAT`],
       });
     }
   }
