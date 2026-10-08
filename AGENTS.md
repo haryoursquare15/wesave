@@ -1,1 +1,2 @@
 - WhatsApp alerts are sent best-effort from send-notification-email via _shared/whatsapp-notify.ts, only to opted-in users (whatsapp_preferences); why: never block or alter email/push delivery.
+- In-app notifications (vfd_sandbox_notifications) reach WhatsApp through a DB trigger → whatsapp-dispatch, which maps notification types to approved templates and falls back to the general alert; why: one best-effort path that never touches money flows.
