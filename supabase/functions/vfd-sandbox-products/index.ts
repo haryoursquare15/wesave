@@ -8564,6 +8564,10 @@ async function handleClearMissedContribution(userId: string, body: Record<string
 async function handleSandboxAutoContribute(_userId: string, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   const forceGroupId = body.force_group_id as string | undefined;
+  if (typeof body.whatsapp_reminder_test_group_id === "string") {
+    await sendThriftWhatsAppReminders(body.whatsapp_reminder_test_group_id);
+    return jsonResponse({ data: { reminder_test: true } });
+  }
 
   // Groups whose swap window has expired must transition to cycle 1 automatically,
   // independent of anyone opening the app — do it before the sweep runs.
