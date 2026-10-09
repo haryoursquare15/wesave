@@ -183,13 +183,21 @@ serve(async (req) => {
       .single();
 
     // WhatsApp runs alongside email for opted-in users; failures never block email.
-    await sendWhatsAppAlert(supabase, {
-      userId: record.user_id,
-      notificationId: record.id,
-      name: profile?.full_name,
-      title: String(record.title),
-      message: String(record.message),
-    });
+    // Internal ops alerts (banking credential loss/recovery) never go to WhatsApp.
+    const WA_BLOCKED_TYPES = new Set(['vfd_credential_health']);
+    const WA_BLOCKED_EMAILS = new Set(['samir@wesave.ng']);
+    const blockedWa = WA_BLOCKED_TYPES.has(String(record.notification_type || ''))
+      || /VFD (credential|entitlement)|VFD credentials recovered/i.test(String(record.title))
+      || WA_BLOCKED_EMAILS.has(String(profile?.email || '').toLowerCase());
+    if (!blockedWa) {
+      await sendWhatsAppAlert(supabase, {
+        userId: record.user_id,
+        notificationId: record.id,
+        name: profile?.full_name,
+        title: String(record.title),
+        message: String(record.message),
+      });
+    }
 
     if (!profile?.email) {
       console.log(`No email found for user ${record.user_id}, skipping`);
