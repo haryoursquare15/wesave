@@ -184,10 +184,10 @@ serve(async (req) => {
 
     // WhatsApp runs alongside email for opted-in users; failures never block email.
     // Internal ops alerts (banking credential loss/recovery) never go to WhatsApp.
-    const WA_BLOCKED_TYPES = new Set(['vfd_credential_health']);
+    const WA_BLOCKED_TYPES = new Set(['vfd_credential_health', 'ledger_drift']);
     const WA_BLOCKED_EMAILS = new Set(['samir@wesave.ng']);
     const blockedWa = WA_BLOCKED_TYPES.has(String(record.notification_type || ''))
-      || /VFD (credential|entitlement)|VFD credentials recovered/i.test(String(record.title))
+      || /VFD (credential|entitlement)|VFD credentials recovered|Ledger drift/i.test(String(record.title))
       || WA_BLOCKED_EMAILS.has(String(profile?.email || '').toLowerCase());
     if (!blockedWa) {
       await sendWhatsAppAlert(supabase, {
