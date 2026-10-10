@@ -1,8 +1,15 @@
 import { useState, FormEvent, useEffect } from "react";
 import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Eye, EyeOff, ArrowLeft, Loader2, Users, PiggyBank, Send, Delete } from "lucide-react";
+import { Eye, EyeOff, ArrowLeft, Loader2, Users, PiggyBank, Send, Delete, Fingerprint } from "lucide-react";
 import { useSandboxAuth } from "@/contexts/SandboxAuthContext";
+import {
+  requestSignupOtp, verifySignupAndSignIn, unlockWithPin, unlockWithBiometricToken, loginPinAction,
+} from "@/lib/loginPinApi";
+import {
+  readQuickUnlock, saveQuickUnlock, clearQuickUnlock, clearBiometric, hasBiometricSetup,
+  biometricSupported, biometricAssert, type QuickUnlockState,
+} from "@/lib/quickUnlock";
 import { SandboxSplash } from "@/components/vfd-sandbox/SandboxSplash";
 import { sandboxSupabase } from "@/integrations/supabase/sandboxClient";
 import { toast } from "sonner";
@@ -103,7 +110,7 @@ function Onboarding({ onDone }: { onDone: () => void }) {
 export default function SandboxAuth() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { signIn, signUp } = useSandboxAuth();
+  const { signIn } = useSandboxAuth();
   const [isSignUp, setIsSignUp] = useState(() => searchParams.get("mode") === "signup");
   const [step, setStep] = useState(1);
   const [showPassword, setShowPassword] = useState(false);
@@ -111,6 +118,12 @@ export default function SandboxAuth() {
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", phone: "", email: "", password: "" });
   const [pin, setPin] = useState("");
+  const [otp, setOtp] = useState("");
+  const [resendIn, setResendIn] = useState(0);
+  const [quick, setQuick] = useState<QuickUnlockState | null>(() => readQuickUnlock());
+  const [usePassword, setUsePassword] = useState(false);
+  const [qpin, setQpin] = useState("");
+  const [bioReady, setBioReady] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showSplash, setShowSplash] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -121,7 +134,14 @@ export default function SandboxAuth() {
   useEffect(() => {
     sessionStorage.removeItem("vestara_sandbox_signed_in");
     void sandboxSupabase.auth.signOut();
+    void biometricSupported().then((ok) => setBioReady(ok && hasBiometricSetup()));
   }, []);
+
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const t = setTimeout(() => setResendIn((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendIn]);
 
   const set = (k: keyof typeof form) => (v: string) => { setError(null); setForm((f) => ({ ...f, [k]: v })); };
 
@@ -137,6 +157,9 @@ export default function SandboxAuth() {
     try {
       const { error } = await signIn(form.email.trim(), form.password);
       if (error) return setError(getUserFriendlyError(error.message));
+      const st = await loginPinAction({ action: "get_status" });
+      if (st?.has_pin) saveQuickUnlock(form.email.trim(), true);
+      else clearQuickUnlock();
       toast.success("Welcome back to Vestara");
       finish();
     } finally {
@@ -144,20 +167,84 @@ export default function SandboxAuth() {
     }
   };
 
-  const createAccount = async () => {
-    if (form.password.length < 6) return setError("Password must be at least 6 characters.");
+  const resetQuick = () => {
+    clearQuickUnlock();
+    setQuick(null);
+    setBioReady(false);
+    setQpin("");
+  };
+
+  const forgotPin = () => {
+    resetQuick();
+    setError(null);
+    toast.message("Sign in with your password. You can set a new login PIN in the menu.");
+  };
+
+  const pressQuick = async (k: string) => {
+    if (isLoading || !quick) return;
+    setError(null);
+    if (k === "del") return setQpin((p) => p.slice(0, -1));
+    if (qpin.length >= 6) return;
+    const next = qpin + k;
+    setQpin(next);
+    if (next.length < 6) return;
     setIsLoading(true);
     try {
-      const { error } = await signUp(form.email.trim(), form.password, form.name.trim(), form.phone.trim());
-      if (error) return setError(getUserFriendlyError(error.message));
-      const { error: signInErr } = await signIn(form.email.trim(), form.password);
-      if (signInErr) {
-        toast.success("Account created. Please sign in.");
-        setIsSignUp(false);
-        setStep(1);
-        return;
+      const r = await unlockWithPin(quick.email, next);
+      if (r.error) {
+        setQpin("");
+        if (r.reset) resetQuick();
+        if (r.locked) setUsePassword(true);
+        return setError(r.error);
       }
-      setStep(3);
+      finish();
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const bioUnlock = async () => {
+    if (isLoading) return;
+    setError(null);
+    const token = await biometricAssert();
+    if (!token) return setError("Biometric check didn't complete. Use your PIN instead.");
+    setIsLoading(true);
+    try {
+      const r = await unlockWithBiometricToken(token);
+      if (r.error) {
+        if (r.reset) { clearBiometric(); setBioReady(false); }
+        return setError(r.error);
+      }
+      finish();
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const sendCode = async () => {
+    setIsLoading(true);
+    try {
+      const { error } = await requestSignupOtp(form.email.trim());
+      if (error) { setError(error); return false; }
+      setResendIn(30);
+      setOtp("");
+      toast.success("Code sent. Check your inbox.");
+      return true;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const verifyCode = async () => {
+    if (otp.length !== 6) return setError("Enter the 6-digit code from the email.");
+    setIsLoading(true);
+    try {
+      const { error } = await verifySignupAndSignIn({
+        email: form.email.trim(), code: otp, password: form.password,
+        fullName: form.name.trim(), phone: form.phone.trim(),
+      });
+      if (error) return setError(error);
+      setStep(4);
     } finally {
       setIsLoading(false);
     }
@@ -194,15 +281,16 @@ export default function SandboxAuth() {
     if (next.length === 4) void savePin(next);
   };
 
-  const continueSignUp = (e: FormEvent) => {
+  const continueSignUp = async (e: FormEvent) => {
     e.preventDefault();
     if (step === 1) {
       if (!form.name.trim()) return setError("Please enter your full name.");
       if (!/^0?\d{10}$|^\+?234\d{10}$/.test(form.phone.replace(/\s/g, ""))) return setError("Enter a valid Nigerian phone number.");
       setStep(2);
     } else if (step === 2) {
-      if (!form.email.includes("@")) return setError("Enter a valid email address.");
-      void createAccount();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) return setError("Enter a valid email address.");
+      if (form.password.length < 6) return setError("Password must be at least 6 characters.");
+      if (await sendCode()) setStep(3);
     }
   };
 
@@ -238,7 +326,43 @@ export default function SandboxAuth() {
         <Onboarding onDone={() => { localStorage.setItem(ONBOARD_KEY, "1"); finish(); }} />
       )}
 
-      {!isSignUp ? (
+      {!isSignUp && quick?.hasPin && !usePassword ? (
+        <div className="mx-auto flex min-h-[100dvh] max-w-md flex-col items-center px-4 pt-[max(env(safe-area-inset-top),32px)] pb-[max(env(safe-area-inset-bottom),16px)]">
+          <img src={logo} alt="Vestara" className="h-16 w-16 rounded-2xl object-contain" />
+          <h2 className="mt-4 text-xl font-semibold text-foreground">Welcome back</h2>
+          <p className="mt-1 text-center text-sm text-muted-foreground">Enter your 6-digit login PIN for {quick.email}</p>
+          <div className="my-8 flex gap-3">
+            {[0, 1, 2, 3, 4, 5].map((k) => (
+              <span key={k} className={cn("h-4 w-4 rounded-full border-2", k < qpin.length ? "border-primary bg-primary" : "border-muted-foreground/40")} />
+            ))}
+          </div>
+          <ErrorLine />
+          {isLoading && <Loader2 className="mt-2 h-5 w-5 animate-spin text-primary" />}
+          <div className="mt-auto grid w-full max-w-xs grid-cols-3 gap-4">
+            {[ "1", "2", "3", "4", "5", "6", "7", "8", "9", bioReady ? "bio" : "", "0", "del" ].map((k, idx) =>
+              k === "" ? <span key={idx} /> : (
+                <button
+                  key={idx}
+                  type="button"
+                  aria-label={k === "del" ? "Delete" : k === "bio" ? "Use Face ID or fingerprint" : k}
+                  onClick={() => (k === "bio" ? void bioUnlock() : pressQuick(k))}
+                  className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-muted text-2xl font-medium text-foreground active:bg-primary/20 select-none"
+                >
+                  {k === "del" ? <Delete className="h-6 w-6" /> : k === "bio" ? <Fingerprint className="h-7 w-7 text-primary" /> : k}
+                </button>
+              ),
+            )}
+          </div>
+          <div className="mt-4 flex w-full max-w-xs justify-between">
+            <button type="button" onClick={() => { setUsePassword(true); setError(null); }} className="min-h-11 text-sm font-medium text-primary">
+              Use password instead
+            </button>
+            <button type="button" onClick={forgotPin} className="min-h-11 text-sm text-muted-foreground">
+              Forgot PIN?
+            </button>
+          </div>
+        </div>
+      ) : !isSignUp ? (
         <div className="flex min-h-[100dvh] flex-col">
           <div className="relative flex h-[40dvh] min-h-[240px] flex-col items-center justify-center bg-ink pt-[env(safe-area-inset-top)]">
             <div className="absolute h-40 w-40 rounded-full bg-primary/30 blur-3xl" />
