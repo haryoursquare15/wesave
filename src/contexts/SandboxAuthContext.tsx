@@ -7,7 +7,7 @@ interface SandboxAuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string, fullName: string, phone?: string) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
@@ -49,13 +49,13 @@ export function SandboxAuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const signUp = async (email: string, password: string, fullName: string) => {
+  const signUp = async (email: string, password: string, fullName: string, phone?: string) => {
     const { error } = await sandboxSupabase.auth.signUp({
       email,
       password,
       options: {
         emailRedirectTo: `${window.location.origin}/app`,
-        data: { full_name: fullName, sandbox_account: true },
+        data: { full_name: fullName, sandbox_account: true, ...(phone ? { phone } : {}) },
       },
     });
     if (error) return { error };
