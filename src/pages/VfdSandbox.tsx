@@ -9,6 +9,8 @@ import { RefreshCw, LogOut, MessageCircle, Home, PiggyBank, CreditCard, Sparkles
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { WhatsAppAlertSettings } from "@/components/settings/WhatsAppAlertSettings";
+import { LoginPinSettings } from "@/components/settings/LoginPinSettings";
+import { KeyRound } from "lucide-react";
 import { SandboxHeader } from "@/components/vfd-sandbox/SandboxHeader";
 import { SandboxDashboard } from "@/components/vfd-sandbox/SandboxDashboard";
 import { SandboxKYC } from "@/components/vfd-sandbox/SandboxKYC";
@@ -77,6 +79,7 @@ function VfdSandboxInner() {
   const [initialSavingsProduct, setInitialSavingsProduct] = useState<string | null>(null);
   const [banks, setBanks] = useState<Array<{ code: string; name: string }>>([]);
   const [waOpen, setWaOpen] = useState(false);
+  const [pinOpen, setPinOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
 
   // Deep-link support: /app?view=lock (or ajo|target|split|...) opens that
@@ -503,6 +506,9 @@ function VfdSandboxInner() {
               <DropdownMenuItem onSelect={() => setWaOpen(true)}>
                 <MessageCircle className="h-4 w-4 mr-2" /> WhatsApp alerts
               </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setPinOpen(true)}>
+                <KeyRound className="h-4 w-4 mr-2" /> Login PIN & biometrics
+              </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={async () => { await signOut(); navigate("/signin"); }}
                 className="text-destructive focus:text-destructive"
@@ -517,6 +523,12 @@ function VfdSandboxInner() {
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>WhatsApp alerts</DialogTitle></DialogHeader>
           <WhatsAppAlertSettings onSaved={() => setWaOpen(false)} />
+        </DialogContent>
+      </Dialog>
+      <Dialog open={pinOpen} onOpenChange={setPinOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Login PIN & biometrics</DialogTitle></DialogHeader>
+          <LoginPinSettings />
         </DialogContent>
       </Dialog>
       {kycDone && <SandboxGroupInviteModal onAccepted={() => { /* downstream UIs poll on their own */ }} />}
