@@ -57,6 +57,11 @@ export default {
   				border: 'hsl(var(--sidebar-border))',
   				ring: 'hsl(var(--sidebar-ring))'
   			},
+  			ink: {
+  				DEFAULT: 'hsl(var(--ink))',
+  				foreground: 'hsl(var(--ink-foreground))'
+  			},
+  			'primary-soft': 'hsl(var(--primary-soft))',
   			success: {
   				DEFAULT: 'hsl(var(--success))',
   				foreground: 'hsl(var(--success-foreground))'
