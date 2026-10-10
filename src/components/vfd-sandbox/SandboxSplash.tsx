@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { useEffect } from "react";
-import vestaraIcon from "/icons/icon-512.png";
+const vestaraIcon = "/icons/icon-512.png";
 
 interface SandboxSplashProps {
   onDone?: () => void;
