@@ -94,12 +94,21 @@ export function SpendLockInsightsCard() {
       className="relative w-full overflow-hidden rounded-2xl border border-[hsl(var(--spendlock-border))] bg-[hsl(var(--spendlock-surface))] p-5 text-[hsl(var(--spendlock-foreground))] shadow-sm"
     >
       <div className="flex items-center justify-between">
-        <button type="button" onClick={() => setDetailOpen(true)} className="min-w-0 text-left">
-          <p className="flex items-center gap-2 text-xs font-semibold uppercase text-[hsl(var(--spendlock-muted))]">
-            <Sparkles className="h-3.5 w-3.5 text-primary" /> Spending insights
-          </p>
-          <p className="mt-1 text-sm text-[hsl(var(--spendlock-muted))]">Tap for your full breakdown</p>
-        </button>
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
+            <Sparkles className="h-5 w-5 text-primary" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold">Spending insights</p>
+            <button
+              type="button"
+              onClick={() => setDetailOpen(true)}
+              className="mt-0.5 text-xs font-semibold text-primary hover:underline"
+            >
+              See all insights
+            </button>
+          </div>
+        </div>
         <Button
           type="button"
           variant="ghost"
@@ -154,7 +163,7 @@ export function SpendLockInsightsCard() {
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold">{nextBill.label || "Recurring payment"}</p>
                   <p className="mt-1 text-xs text-[hsl(var(--spendlock-muted))]">
-                    {days <= 0 ? "Due around now" : days === 1 ? "Due tomorrow" : `Due in ${days} days`}
+                    {days <= 0 ? "Due today" : days === 1 ? "Due tomorrow" : `Due in ${days} days`}
                   </p>
                 </div>
               </div>
