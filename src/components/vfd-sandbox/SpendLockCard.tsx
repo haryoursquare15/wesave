@@ -4,7 +4,6 @@ import { Lock, Unlock, ShieldCheck, Timer, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Progress } from "@/components/ui/progress";
 import {
   Dialog,
   DialogContent,
@@ -259,6 +258,15 @@ export function SpendLockCard() {
   const paused = rule.status === "paused";
   const periodLabel =
     rule.period_type === "daily" ? "today" : rule.period_type === "weekly" ? "this week" : "this month";
+  const resetsLabel = (() => {
+    if (rule.period_type === "daily") return "resets tomorrow";
+    if (rule.period_type === "weekly") {
+      const day = WEEKDAYS[Math.min(Math.max(Number(rule.reset_day ?? 1), 1), 7) - 1];
+      return `resets ${day}`;
+    }
+    return `resets on day ${rule.reset_day ?? 1}`;
+  })();
+  const barColor = pct >= 100 ? "bg-destructive" : pct >= 80 ? "bg-warning" : "bg-primary";
 
   return (
     <>
@@ -270,9 +278,12 @@ export function SpendLockCard() {
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="flex items-center gap-2 text-xs font-semibold uppercase text-[hsl(var(--spendlock-muted))]">
-              <Lock className="h-3.5 w-3.5 text-primary" /> Disposable {periodLabel}
+              <Lock className="h-3.5 w-3.5 text-primary" /> Spent {periodLabel}
             </p>
-            <p className="mt-1 text-3xl font-bold leading-tight tabular-nums">{naira(remaining)}</p>
+            <p className="mt-1 text-3xl font-bold leading-tight tabular-nums">{naira(spent)}</p>
+            <p className="mt-1 text-xs text-[hsl(var(--spendlock-muted))]">
+              {naira(remaining)} left · {resetsLabel}
+            </p>
           </div>
           <Button
             type="button"
@@ -287,7 +298,9 @@ export function SpendLockCard() {
         </div>
 
         <div className="mt-5 space-y-3">
-          <Progress value={pct} className="h-2 bg-[hsl(var(--spendlock-surface-soft))]" />
+          <div className="h-2 w-full overflow-hidden rounded-full bg-[hsl(var(--spendlock-surface-soft))]">
+            <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
+          </div>
           <div className="grid grid-cols-2 divide-x divide-[hsl(var(--spendlock-border))]">
             <div className="pr-4">
               <p className="text-[10px] font-semibold uppercase text-[hsl(var(--spendlock-muted))]">Spent {periodLabel}</p>
@@ -326,7 +339,7 @@ export function SpendLockCard() {
           <Dialog open={unlockOpen} onOpenChange={setUnlockOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" size="sm" className="min-h-[44px] flex-1 border-[hsl(var(--spendlock-border))] bg-transparent text-sm text-[hsl(var(--spendlock-foreground))] hover:bg-[hsl(var(--spendlock-surface-soft))]">
-                <Unlock className="mr-2 h-4 w-4" /> Give myself more
+                <Unlock className="mr-2 h-4 w-4" /> Adjust limit
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-sm">
@@ -378,7 +391,7 @@ export function SpendLockCard() {
             onClick={() => (paused ? resume() : pause())}
             disabled={loading}
           >
-            {paused ? "Resume" : "Pause"}
+            {paused ? "Resume limit" : "Pause limit"}
           </Button>
         </div>
       </motion.div>
