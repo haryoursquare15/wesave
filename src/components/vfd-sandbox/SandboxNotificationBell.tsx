@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
-import { Bell, Check, CheckCheck, X, Users, Loader2 } from "lucide-react";
+import { Bell, Check, CheckCheck, X, Users, Loader2, BellRing } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useVfdSandboxProducts } from "@/hooks/useVfdSandboxProducts";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, isToday } from "date-fns";
 import { toast } from "sonner";
 
 import { getUserFriendlyError } from "@/lib/errorMessages";
@@ -36,6 +36,32 @@ interface PendingInvite {
     contribution_amount: number;
     period: string;
   } | null;
+}
+
+/**
+ * Rewrite system notification copy into plain, friendly wording and strip raw
+ * references from the list view (references belong in the detail view only).
+ */
+function friendlyNotification(n: Notification): { title: string; body: string } {
+  let title = n.title || "Notification";
+  let body = n.message || n.body || "";
+
+  if (/penalty served/i.test(title)) {
+    title = "Contribution missed";
+    body = body
+      .replace(/\$(\d[\d,]*(?:\.\d+)?)/g, "₦$1")
+      .replace(/penalty/gi, "fee");
+    if (!/fund your wallet/i.test(body)) {
+      body = `${body} Fund your wallet to avoid more fees.`.trim();
+    }
+  } else if (/auto-contribution failed/i.test(title)) {
+    title = "Contribution retrying in 30 minutes";
+    body = "Please fund your wallet.";
+  }
+
+  // Strip long raw references/ids from the list copy.
+  body = body.replace(/\b[A-Z0-9_-]{14,}\b/g, "").replace(/\s{2,}/g, " ").trim();
+  return { title, body };
 }
 
 export function SandboxNotificationBell() {
@@ -71,19 +97,16 @@ export function SandboxNotificationBell() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Opening the sheet marks everything read, which clears the badge.
   useEffect(() => {
-    if (open) refresh();
-  }, [open, refresh]);
-
-  const handleMarkRead = async (id: string) => {
-    await markNotificationRead(id);
-    setItems(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
-  };
-
-  const handleMarkAll = async () => {
-    await markAllNotificationsRead();
-    setItems(prev => prev.map(n => ({ ...n, is_read: true })));
-  };
+    if (!open) return;
+    refresh();
+    (async () => {
+      await markAllNotificationsRead();
+      setItems((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const handleRespond = async (inviteId: string, accept: boolean, groupId?: string, notificationId?: string) => {
     setRespondingId(inviteId);
@@ -94,9 +117,6 @@ export function SandboxNotificationBell() {
       if (res?.error) {
         // Stale notification (group/invite deleted) — clear it from the bell
         if (/not found/i.test(res.error)) {
-          if (notificationId) {
-            await markNotificationRead(notificationId);
-          }
           setItems(prev => prev.filter(n => n.id !== notificationId));
           toast.message("This invite is no longer available");
           await refresh();
@@ -148,10 +168,36 @@ export function SandboxNotificationBell() {
   const unreadCount = items.filter(n => n.notification_type !== "group_invite" && !n.is_read).length + actionableInvites.length;
   const isEmpty = visibleNotifs.length === 0 && actionableInvites.length === 0;
 
+  const todayNotifs = visibleNotifs.filter((n) => isToday(new Date(n.created_at)));
+  const earlierNotifs = visibleNotifs.filter((n) => !isToday(new Date(n.created_at)));
+
+  const renderNotif = (n: Notification) => {
+    const copy = friendlyNotification(n);
+    return (
+      <li key={n.id} className="flex items-start gap-3 px-4 py-3">
+        <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10">
+          <BellRing className="h-4 w-4 text-primary" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-sm font-semibold text-foreground leading-snug">{copy.title}</p>
+            {!n.is_read && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary" aria-label="Unread" />}
+          </div>
+          {copy.body && (
+            <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed line-clamp-2">{copy.body}</p>
+          )}
+          <p className="mt-1 text-[10px] text-muted-foreground">
+            {formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}
+          </p>
+        </div>
+      </li>
+    );
+  };
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative shrink-0 h-9 w-9">
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetTrigger asChild>
+        <Button variant="ghost" size="icon" className="relative shrink-0 h-9 w-9" aria-label="Notifications">
           <Bell className="h-5 w-5" />
           {unreadCount > 0 && (
             <Badge className="absolute -top-1 -right-1 h-4 min-w-4 px-1 text-[10px] flex items-center justify-center rounded-full bg-destructive text-destructive-foreground">
@@ -159,92 +205,96 @@ export function SandboxNotificationBell() {
             </Badge>
           )}
         </Button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 p-0">
-        <div className="flex items-center justify-between px-3 py-2 border-b border-border">
-          <p className="text-sm font-semibold">Notifications</p>
-          {items.some(n => !n.is_read) && (
-            <Button size="sm" variant="ghost" onClick={handleMarkAll} className="h-7 text-xs">
-              <CheckCheck className="h-3.5 w-3.5 mr-1" /> Mark all read
-            </Button>
-          )}
-        </div>
-        <ScrollArea className="max-h-96">
+      </SheetTrigger>
+      <SheetContent side="bottom" className="h-[85dvh] rounded-t-3xl bg-background p-0 flex flex-col">
+        <SheetHeader className="px-4 pt-4 pb-3 border-b border-border">
+          <div className="flex items-center justify-between">
+            <SheetTitle className="text-base">Notifications</SheetTitle>
+          </div>
+        </SheetHeader>
+        <ScrollArea className="flex-1">
           {loading && isEmpty ? (
-            <div className="text-center text-xs text-muted-foreground py-6">Loading…</div>
+            <div className="py-10 text-center text-xs text-muted-foreground">Loading…</div>
           ) : isEmpty ? (
-            <div className="text-center text-xs text-muted-foreground py-6">No notifications</div>
+            <div className="py-10 text-center">
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted/50">
+                <Bell className="h-5 w-5 text-muted-foreground/50" />
+              </div>
+              <p className="text-sm font-medium text-muted-foreground">No notifications yet</p>
+            </div>
           ) : (
-            <ul className="divide-y divide-border">
-              {actionableInvites.map((inv) => {
-                const g = inv.vfd_sandbox_groups;
-                return (
-                  <li key={`inv-${inv.id}`} className="p-3 bg-primary/5">
-                    <div className="flex items-start gap-2">
-                      <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                        <Users className="h-4 w-4 text-primary" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold truncate">
-                          {inv.inviter_name} invited you
-                        </p>
-                        <p className="text-[11px] text-muted-foreground truncate">
-                          {g?.name || "Group"}
-                          {g && ` • ₦${Number(g.contribution_amount).toLocaleString("en-NG")}/${g.period}`}
-                        </p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">
-                          {formatDistanceToNow(new Date(inv.created_at), { addSuffix: true })}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex gap-2 mt-2">
-                      <Button
-                        size="sm"
-                        className="flex-1 h-7 text-xs"
-                        onClick={() => handleRespond(inv.id, true, inv.group_id, items.find(n => n.notification_type === "group_invite" && n.group_id === inv.group_id)?.id)}
-                        disabled={respondingId === inv.id}
-                      >
-                        {respondingId === inv.id ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <><Check className="h-3.5 w-3.5 mr-1" />Accept</>
-                        )}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="flex-1 h-7 text-xs"
-                        onClick={() => handleRespond(inv.id, false, inv.group_id, items.find(n => n.notification_type === "group_invite" && n.group_id === inv.group_id)?.id)}
-                        disabled={respondingId === inv.id}
-                      >
-                        <X className="h-3.5 w-3.5 mr-1" />Decline
-                      </Button>
-                    </div>
-                  </li>
-                );
-              })}
-              {visibleNotifs.filter((n) => n.notification_type !== "group_invite").map((n) => (
-                <li key={n.id} className={`p-3 ${!n.is_read ? "bg-primary/5" : ""}`}>
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold truncate">{n.title}</p>
-                      {(n.message || n.body) && <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">{n.message || n.body}</p>}
-                      <p className="text-[10px] text-muted-foreground mt-1">
-                        {formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}
-                      </p>
-                    </div>
-                    {!n.is_read && (
-                      <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0" onClick={() => handleMarkRead(n.id)}>
-                        <Check className="h-3.5 w-3.5" />
-                      </Button>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <div>
+              {actionableInvites.length > 0 && (
+                <ul className="divide-y divide-border">
+                  {actionableInvites.map((inv) => {
+                    const g = inv.vfd_sandbox_groups;
+                    return (
+                      <li key={`inv-${inv.id}`} className="px-4 py-3 bg-primary/5">
+                        <div className="flex items-start gap-3">
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                            <Users className="h-4 w-4 text-primary" />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold leading-snug">
+                              {inv.inviter_name} invited you
+                            </p>
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              {g?.name || "Group"}
+                              {g && ` • ₦${Number(g.contribution_amount).toLocaleString("en-NG")}/${g.period}`}
+                            </p>
+                            <p className="mt-1 text-[10px] text-muted-foreground">
+                              {formatDistanceToNow(new Date(inv.created_at), { addSuffix: true })}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="mt-2 flex gap-2">
+                          <Button
+                            size="sm"
+                            className="h-9 flex-1 text-xs"
+                            onClick={() => handleRespond(inv.id, true, inv.group_id, items.find(n => n.notification_type === "group_invite" && n.group_id === inv.group_id)?.id)}
+                            disabled={respondingId === inv.id}
+                          >
+                            {respondingId === inv.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <><Check className="mr-1 h-3.5 w-3.5" />Accept</>
+                            )}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-9 flex-1 text-xs"
+                            onClick={() => handleRespond(inv.id, false, inv.group_id, items.find(n => n.notification_type === "group_invite" && n.group_id === inv.group_id)?.id)}
+                            disabled={respondingId === inv.id}
+                          >
+                            <X className="mr-1 h-3.5 w-3.5" />Decline
+                          </Button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              {todayNotifs.length > 0 && (
+                <section>
+                  <p className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Today</p>
+                  <ul className="divide-y divide-border">
+                    {todayNotifs.filter((n) => n.notification_type !== "group_invite").map(renderNotif)}
+                  </ul>
+                </section>
+              )}
+              {earlierNotifs.length > 0 && (
+                <section>
+                  <p className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Earlier</p>
+                  <ul className="divide-y divide-border">
+                    {earlierNotifs.filter((n) => n.notification_type !== "group_invite").map(renderNotif)}
+                  </ul>
+                </section>
+              )}
+            </div>
           )}
         </ScrollArea>
-      </PopoverContent>
-    </Popover>
+      </SheetContent>
+    </Sheet>
   );
 }
