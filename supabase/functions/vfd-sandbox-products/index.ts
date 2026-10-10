@@ -6903,7 +6903,7 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   const undocumentedDecline = /not in the recent documentation/i.test(rawBillerMsg);
   const opaqueBillerMsg =
     !rawBillerMsg ||
-    /unknown|undefined|null|^error$|^failed$|success/i.test(rawBillerMsg);
+    /unknown|undefined|null|^error$|^(payment |transaction )?failed( payment| transaction)?$|success/i.test(rawBillerMsg.trim());
   // Only claim the money is back when the bank reversal actually confirmed.
   const refundLine = bankRefund.ok
     ? "Your money has been returned."
