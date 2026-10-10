@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Bell, Check, CheckCheck, X, Users, Loader2, BellRing } from "lucide-react";
+import { Bell, Check, X, Users, Loader2, BellRing } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -68,7 +68,6 @@ export function SandboxNotificationBell() {
   const {
     listNotifications,
     listGroupInvites,
-    markNotificationRead,
     markAllNotificationsRead,
     respondGroupInvite,
     respondGroupInviteByGroup,
