@@ -297,9 +297,7 @@ function VfdSandboxInner() {
     const contextName =
       metaStr("group_name") || metaStr("product_name") || metaStr("campaign_title") ||
       metaStr("bill_name") || metaStr("product_code") || metaStr("source");
-    const richDescription = isPayout && fee > 0
-      ? `thrift payout (₦${gross.toLocaleString()} − ₦${fee.toLocaleString()} fee)`
-      : [tx.type.replace(/_/g, " "), contextName].filter(Boolean).join(" — ");
+    const richDescription = [tx.type.replace(/_/g, " "), contextName].filter(Boolean).join(" — ");
 
     const base = {
       id: tx.id,
@@ -321,25 +319,10 @@ function VfdSandboxInner() {
       beneficiary_account: metaStr("to_account"),
       status: tx.status,
       created_at: tx.created_at,
+      // Payout shows as one net row; gross + fee appear in its detail view.
+      gross_amount: isPayout && fee > 0 ? gross : null,
+      fee_amount: isPayout && fee > 0 ? fee : null,
     };
-
-    // Surface the platform fee as its own debit row in history
-    if (isPayout && fee > 0) {
-      return [
-        base,
-        {
-          id: `${tx.id}-fee`,
-          transaction_type: "debit",
-          amount: fee,
-          description: "Platform fee (thrift payout)",
-          reference: `${tx.reference}-fee`,
-          vfd_reference: null,
-          session_id: null,
-          status: tx.status,
-          created_at: tx.created_at,
-        },
-      ];
-    }
     return [base];
   });
 
