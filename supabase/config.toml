@@ -41,6 +41,10 @@ project_id = "sdwkqwmqgpsjrmijkdix"
     verify_jwt = false
   [functions.sandbox-auto-confirm]
     verify_jwt = false
+  [functions.sandbox-signup-otp]
+    verify_jwt = false
+  [functions.login-pin]
+    verify_jwt = false
   [functions.preview-transactional-email]
     verify_jwt = false
   [functions.handle-email-events]
