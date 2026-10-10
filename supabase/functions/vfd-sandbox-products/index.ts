@@ -6903,25 +6903,26 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   const undocumentedDecline = /not in the recent documentation/i.test(rawBillerMsg);
   const opaqueBillerMsg =
     !rawBillerMsg ||
-    /unknown|undefined|null|^error$|^failed$|success/i.test(rawBillerMsg);
+    /unknown|undefined|null|^error$|^(payment |transaction )?failed( payment| transaction)?$|success/i.test(rawBillerMsg.trim());
   // Only claim the money is back when the bank reversal actually confirmed.
   const refundLine = bankRefund.ok
     ? "Your money has been returned."
     : "Your refund is being processed and will land back in your wallet shortly — it is tracked automatically.";
+  const friendly = unknownCustomer
+    ? `${billerLabel} does not recognise ${customerId}. This meter/account number is not in their records, so the payment cannot go through at any amount. Your money was not taken — please confirm the number on a recent bill or with ${billerLabel} and try again.`
+    : undocumentedDecline
+      ? `${billerLabel} validated this customer but declined the vend without a specific reason. ${refundLine} Please try again later or contact support with reference ${reference}.`
+    : opaqueBillerMsg
+      ? `${billerLabel} declined this payment. ${refundLine} Check the customer/meter number and amount (some billers have a minimum), then try again.`
+      : rawBillerMsg;
+  // A biller decline is an expected business outcome (funds already reversed),
+  // not a server fault — return 200 with ok:false so clients show a notice.
   return jsonResponse({
-    error: unknownCustomer
-      ? `${billerLabel} does not recognise ${customerId}. This meter/account number is not in their records, so the payment cannot go through at any amount. Your money was not taken — please confirm the number on a recent bill or with ${billerLabel} and try again.`
-      : undocumentedDecline
-        ? `${billerLabel} validated this customer but declined the vend without a specific reason. ${refundLine} Please try again later or contact support with reference ${reference}.`
-      : opaqueBillerMsg
-        ? `${billerLabel} declined this payment. ${refundLine} Check the customer/meter number and amount (some billers have a minimum), then try again.`
-        : rawBillerMsg,
-
-
-
+    ok: false,
+    error: friendly,
     code: "BILL_PAYMENT_FAILED",
-    data: { ...data, reference, status: data?.status || "99", http_status: resp.status, effective_status: effStatus },
-  }, 400);
+    data: { ...data, reference, status: data?.status || "99", message: friendly, http_status: resp.status, effective_status: effStatus },
+  }, 200);
 }
 
 // Subscription-style bills get an expiry → enables expiry reminders.

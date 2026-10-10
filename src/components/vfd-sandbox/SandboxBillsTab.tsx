@@ -399,7 +399,7 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
 
 
       } else {
-        toast({ title: "Payment Failed", description: resData?.message || "Transaction could not be processed", variant: "destructive" });
+        toast({ title: "Payment Failed", description: result?.error || resData?.message || "Transaction could not be processed", variant: "destructive" });
       }
     } catch (err) {
       toast({ title: "Error", description: err instanceof Error ? err.message : "Payment failed", variant: "destructive" });
