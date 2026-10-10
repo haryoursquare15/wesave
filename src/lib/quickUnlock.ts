@@ -54,16 +54,16 @@ function b64url(buf: ArrayBuffer): string {
   const bytes = new Uint8Array(buf);
   let s = "";
   for (const b of bytes) s += String.fromCharCode(b);
-  return btoa(s).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
+  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
-function fromB64url(s: string): Uint8Array {
+function fromB64url(s: string): ArrayBuffer {
   const pad = "=".repeat((4 - (s.length % 4)) % 4);
-  const b64 = (s + pad).replaceAll("-", "+").replaceAll("_", "/");
+  const b64 = (s + pad).replace(/-/g, "+").replace(/_/g, "/");
   const bin = atob(b64);
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
+  return out.buffer;
 }
 
 export async function biometricSupported(): Promise<boolean> {
