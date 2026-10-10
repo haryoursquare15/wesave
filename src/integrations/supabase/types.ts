@@ -1496,6 +1496,66 @@ export type Database = {
         }
         Relationships: []
       }
+      login_biometric_devices: {
+        Row: {
+          created_at: string
+          device_label: string | null
+          id: string
+          last_used_at: string | null
+          revoked_at: string | null
+          token_hash: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          device_label?: string | null
+          id?: string
+          last_used_at?: string | null
+          revoked_at?: string | null
+          token_hash: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          device_label?: string | null
+          id?: string
+          last_used_at?: string | null
+          revoked_at?: string | null
+          token_hash?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      login_pins: {
+        Row: {
+          failed_attempts: number
+          last_used_at: string | null
+          locked_until: string | null
+          pin_hash: string
+          pin_set_at: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          failed_attempts?: number
+          last_used_at?: string | null
+          locked_until?: string | null
+          pin_hash: string
+          pin_set_at?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          failed_attempts?: number
+          last_used_at?: string | null
+          locked_until?: string | null
+          pin_hash?: string
+          pin_set_at?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       mandate_debit_attempts: {
         Row: {
           amount: number
@@ -2550,6 +2610,33 @@ export type Database = {
           status?: string
           updated_at?: string
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      signup_email_otps: {
+        Row: {
+          attempts: number
+          code_hash: string
+          created_at: string
+          email: string
+          expires_at: string
+          metadata: Json | null
+        }
+        Insert: {
+          attempts?: number
+          code_hash: string
+          created_at?: string
+          email: string
+          expires_at: string
+          metadata?: Json | null
+        }
+        Update: {
+          attempts?: number
+          code_hash?: string
+          created_at?: string
+          email?: string
+          expires_at?: string
+          metadata?: Json | null
         }
         Relationships: []
       }
