@@ -751,101 +751,10 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
       </motion.div>
 
 
-      {/* ═══ TRUST BANNER ═══ */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
-        className="flex items-center gap-3 rounded-2xl bg-success/5 border border-success/15 px-4 py-3"
-      >
-        <div className="w-10 h-10 rounded-xl bg-success/10 flex items-center justify-center shrink-0">
-          <Shield className="h-5 w-5 text-success" />
-        </div>
-        <div className="flex-1">
-          <p className="text-xs font-semibold text-success">Your funds are secure</p>
-          <p className="text-[10px] text-muted-foreground mt-0.5">Powered by VFD MicroFinance Bank • NDIC Insured</p>
-        </div>
-      </motion.div>
-
-      {/* ═══ RECENT ACTIVITY ═══ */}
-      <div id="home-insights" className="space-y-3 scroll-mt-20">
-        <SpendLockCard />
-        <SpendLockInsightsCard />
-      </div>
-
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.35 }}
-      >
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-bold text-foreground">Recent Activity</h3>
-          <button
-            onClick={() => onNavigate("history")}
-            className="text-xs font-semibold text-primary hover:underline"
-          >
-            View all
-          </button>
-        </div>
-
-        {recentTransactions.length === 0 ? (
-          <div className="bg-card rounded-2xl border border-border/50 p-8 text-center">
-            <div className="w-14 h-14 rounded-full bg-muted/50 flex items-center justify-center mx-auto mb-3">
-              <TrendingUp className="h-6 w-6 text-muted-foreground/40" />
-            </div>
-            <p className="text-sm font-medium text-muted-foreground">No transactions yet</p>
-            <p className="text-xs text-muted-foreground/70 mt-1 mb-3">Start saving today to see your activity here</p>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => onNavigate("fund")}
-              className="text-xs"
-            >
-              <Plus className="h-3.5 w-3.5 mr-1.5" />
-              Fund Account
-            </Button>
-          </div>
-        ) : (
-          <div className="bg-card rounded-2xl border border-border shadow-sm divide-y divide-border overflow-hidden">
-            {recentTransactions.slice(0, 5).map((tx, i) => {
-              const meta = getTxMeta(tx.transaction_type);
-              const TxIcon = meta.icon;
-              const info = describeTransaction(tx);
-              const isCredit = tx.transaction_type === "credit" || tx.transaction_type === "unlock" || tx.transaction_type === "interest";
-              const displayLabel = info.title;
-              return (
-                <motion.div
-                  key={tx.id}
-                  initial={{ opacity: 0, x: -8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.35 + i * 0.04 }}
-                  className="flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-colors"
-                >
-                  <div className={`w-9 h-9 rounded-xl ${meta.bg} flex items-center justify-center shrink-0`}>
-                    <TxIcon className={`h-4 w-4 ${meta.color}`} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate">
-                      {displayLabel}
-                    </p>
-                    {info.subtitle && (
-                      <p className="text-[10px] text-muted-foreground truncate">{info.subtitle}</p>
-                    )}
-                    <p className="text-[10px] text-muted-foreground">
-                      {new Date(tx.created_at).toLocaleDateString("en-NG", {
-                        month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
-                      })}
-                    </p>
-                  </div>
-                  <p className={`text-sm font-bold ${isCredit ? "text-success" : "text-foreground"}`}>
-                    {meta.sign}₦{tx.amount.toLocaleString()}
-                  </p>
-                </motion.div>
-              );
-            })}
-          </div>
-        )}
-      </motion.div>
+      {/* ═══ TRUST LINE ═══ */}
+      <p className="text-center text-[10px] text-muted-foreground">
+        Banking services provided by VFD Microfinance Bank
+      </p>
     </div>
   );
 }
