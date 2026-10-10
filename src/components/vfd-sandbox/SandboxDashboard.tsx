@@ -84,9 +84,9 @@ const productBanners = [
     title: "GoalSave",
     subtitle: "Flexible savings • Earn 10–16% p.a. • 90–365 days",
     cta: "Start GoalSave",
-    gradient: "bg-primary text-primary-foreground",
+    gradient: "from-blue-600 to-cyan-700",
     icon: Target,
-    accent: "bg-primary-foreground/15",
+    accent: "bg-blue-400/20",
   },
   {
     key: "vault",
@@ -94,9 +94,9 @@ const productBanners = [
     title: "Vault",
     subtitle: "Higher yield safe • Earn 14–20.5% p.a. • 30–365 days",
     cta: "Open a Vault",
-    gradient: "bg-ink text-ink-foreground",
+    gradient: "from-emerald-600 to-green-700",
     icon: VaultIcon,
-    accent: "bg-primary/25",
+    accent: "bg-emerald-400/20",
   },
   {
     key: "lockmax",
@@ -104,9 +104,9 @@ const productBanners = [
     title: "LockMax",
     subtitle: "Maximum returns • Earn 18–21% p.a. • 90–365 days",
     cta: "Lock for Max",
-    gradient: "bg-primary text-primary-foreground",
+    gradient: "from-purple-600 to-fuchsia-700",
     icon: Zap,
-    accent: "bg-primary-foreground/15",
+    accent: "bg-purple-400/20",
   },
   {
     key: "upfront_yield",
@@ -114,9 +114,9 @@ const productBanners = [
     title: "Upfront Yield",
     subtitle: "Get your interest paid up front • 12–18% p.a.",
     cta: "Earn Upfront",
-    gradient: "bg-ink text-ink-foreground",
+    gradient: "from-amber-500 to-orange-600",
     icon: Gift,
-    accent: "bg-primary/25",
+    accent: "bg-amber-300/20",
   },
 ];
 
@@ -546,7 +546,7 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
               <button
                 key={banner.key}
                 onClick={() => onNavigate(banner.routeKey)}
-                className={`flex-none w-[80%] min-w-[260px] snap-center rounded-2xl ${banner.gradient} p-5 shadow-sm text-left relative overflow-hidden active:scale-[0.99] transition-transform`}
+                className={`flex-none w-[80%] min-w-[260px] snap-center rounded-2xl bg-gradient-to-br ${banner.gradient} p-5 shadow-sm text-left relative overflow-hidden active:scale-[0.99] transition-transform`}
               >
                 <div className={`absolute top-3 right-3 w-16 h-16 rounded-2xl ${banner.accent} flex items-center justify-center`}>
                   <banner.icon className="h-8 w-8 opacity-80" />
