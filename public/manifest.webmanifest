@@ -1,0 +1,15 @@
+{
+  "name": "Vestara",
+  "short_name": "Vestara",
+  "description": "Save, split bills and run Ajo groups with Vestara.",
+  "start_url": "/app",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0F1B2D",
+  "theme_color": "#0F1B2D",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

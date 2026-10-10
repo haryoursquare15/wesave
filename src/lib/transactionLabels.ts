@@ -57,7 +57,41 @@ function cleanInflowNarration(desc: string): string {
   return desc.trim();
 }
 
+/** Internal system strings that must never reach a customer's screen. */
+const INTERNAL_TOKENS: Array<[RegExp, string]> = [
+  [/vfd[_\s]*transfer[_\s]*mirror/gi, "transfer"],
+  [/vfd[_\s]*sandbox[_\s]*auto[_\s]*sweep/gi, "savings contribution"],
+  [/vfd[_\s]*sandbox[_\s]*/gi, ""],
+  [/bill[_\s]payment/gi, "bill payment"],
+  [/thrift[_\s]payout/gi, "thrift payout"],
+  [/thrift[_\s]contribution/gi, "thrift contribution"],
+];
+
+/** Display-only rename: VFD registers sub-accounts under the legacy corporate name. */
+export function cleanDisplayText(s: string): string {
+  let out = s.replace(/we\s*save\s*ng\s*ltd\.?/gi, "Vestara");
+  for (const [re, rep] of INTERNAL_TOKENS) out = out.replace(re, rep);
+  return out.replace(/\s{2,}/g, " ").trim();
+}
+
+/** True for strings that look like a machine reference rather than words. */
+function looksLikeRef(s: string): boolean {
+  return /[a-z0-9]+[-_][a-z0-9-_]{6,}/i.test(s) && !/\s/.test(s.trim());
+}
+
+const titleCase = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
 export function describeTransaction(tx: TxLike): TxDescriptor {
+  const d = describeRaw({ ...tx, description: tx.description ? cleanDisplayText(tx.description) : tx.description });
+  let title = cleanDisplayText(d.title);
+  if (/^[a-z0-9_]+$/.test(title)) title = title.replace(/_/g, " ");
+  title = titleCase(title);
+  let subtitle = d.subtitle ? cleanDisplayText(d.subtitle) : undefined;
+  if (subtitle && (looksLikeRef(subtitle) || subtitle.toLowerCase() === title.toLowerCase())) subtitle = undefined;
+  return { ...d, title, subtitle, category: titleCase(d.category.replace(/_/g, " ")) };
+}
+
+function describeRaw(tx: TxLike): TxDescriptor {
   const desc = (tx.description || "").trim();
   const ref = (tx.reference || "").trim();
   const blob = `${desc} ${ref}`.toLowerCase();
@@ -136,15 +170,17 @@ export function describeTransaction(tx: TxLike): TxDescriptor {
   // ---- Thrift / Ajo / Target --------------------------------------------
   if (/ajo|thrift|target/.test(blob)) {
     const isTarget = /target/.test(blob);
-    const groupMatch = desc.match(/(?:group|ajo|thrift|target)[:\s-]+([^—\-|]+)/i);
-    const group = groupMatch?.[1]?.trim();
+    const dashGroup = desc.match(/[—–]\s*(.+)$/)?.[1];
+    const groupMatch = desc.match(/(?:group|ajo|thrift|target)[:\s-]+([^—\-|()]+)/i)?.[1];
+    const candidate = (dashGroup || groupMatch || "").trim();
+    const group = candidate && !/^(payout|contribution|withdrawal)$/i.test(candidate) ? candidate : undefined;
     const payout = /payout|withdraw/.test(blob) || (isCredit && !/contribut/.test(blob));
     const kind = isTarget
       ? payout ? "Target withdrawal" : "Target contribution"
       : payout ? "Thrift payout" : "Thrift contribution";
     return {
       title: group ? `${kind} — ${group}` : kind,
-      subtitle: group ? desc : desc || undefined,
+      subtitle: undefined,
       category: isTarget ? "Target" : "Thrift",
       isCredit,
     };

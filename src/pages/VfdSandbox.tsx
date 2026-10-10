@@ -5,7 +5,8 @@ import { SandboxModeContext } from "@/hooks/useSandboxAwareAuth";
 import { useVfdBanking } from "@/hooks/useVfdBanking";
 import { useVestaraLedger, VestaraLockedFund } from "@/hooks/useVestaraLedger";
 import { useToast } from "@/hooks/use-toast";
-import { RefreshCw, LogOut, MessageCircle } from "lucide-react";
+import { RefreshCw, LogOut, MessageCircle, Home, PiggyBank, CreditCard, Sparkles, User } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { WhatsAppAlertSettings } from "@/components/settings/WhatsAppAlertSettings";
 import { SandboxHeader } from "@/components/vfd-sandbox/SandboxHeader";
@@ -75,6 +76,7 @@ function VfdSandboxInner() {
   const [initialSavingsProduct, setInitialSavingsProduct] = useState<string | null>(null);
   const [banks, setBanks] = useState<Array<{ code: string; name: string }>>([]);
   const [waOpen, setWaOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   // Deep-link support: /app?view=lock (or ajo|target|split|...) opens that
   // section directly so menu links land on the right screen.
@@ -297,9 +299,7 @@ function VfdSandboxInner() {
     const contextName =
       metaStr("group_name") || metaStr("product_name") || metaStr("campaign_title") ||
       metaStr("bill_name") || metaStr("product_code") || metaStr("source");
-    const richDescription = isPayout && fee > 0
-      ? `thrift payout (₦${gross.toLocaleString()} − ₦${fee.toLocaleString()} fee)`
-      : [tx.type.replace(/_/g, " "), contextName].filter(Boolean).join(" — ");
+    const richDescription = [tx.type.replace(/_/g, " "), contextName].filter(Boolean).join(" — ");
 
     const base = {
       id: tx.id,
@@ -321,25 +321,10 @@ function VfdSandboxInner() {
       beneficiary_account: metaStr("to_account"),
       status: tx.status,
       created_at: tx.created_at,
+      // Payout shows as one net row; gross + fee appear in its detail view.
+      gross_amount: isPayout && fee > 0 ? gross : null,
+      fee_amount: isPayout && fee > 0 ? fee : null,
     };
-
-    // Surface the platform fee as its own debit row in history
-    if (isPayout && fee > 0) {
-      return [
-        base,
-        {
-          id: `${tx.id}-fee`,
-          transaction_type: "debit",
-          amount: fee,
-          description: "Platform fee (thrift payout)",
-          reference: `${tx.reference}-fee`,
-          vfd_reference: null,
-          session_id: null,
-          status: tx.status,
-          created_at: tx.created_at,
-        },
-      ];
-    }
     return [base];
   });
 
@@ -495,39 +480,45 @@ function VfdSandboxInner() {
 
   return (
     <div className="min-h-screen bg-background">
-      <SandboxHeader />
+      <SandboxHeader
+        showBack={currentView !== "dashboard"}
+        onBack={goBack}
+        right={
+          <DropdownMenu open={profileOpen} onOpenChange={setProfileOpen}>
+            <DropdownMenuTrigger asChild>
+              <button
+                aria-label="Profile menu"
+                className="h-9 w-9 min-h-0 min-w-0 rounded-full bg-primary-soft text-primary text-sm font-semibold flex items-center justify-center active:scale-95 transition-transform"
+              >
+                {(vfd.client?.full_name || user?.email || "V").replace(/^.*-/, "").trim().charAt(0).toUpperCase()}
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuLabel className="font-normal">
+                <p className="text-xs text-muted-foreground">Signed in as</p>
+                <p className="text-sm font-medium truncate">{user?.email}</p>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => setWaOpen(true)}>
+                <MessageCircle className="h-4 w-4 mr-2" /> WhatsApp alerts
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={async () => { await signOut(); navigate("/signin"); }}
+                className="text-destructive focus:text-destructive"
+              >
+                <LogOut className="h-4 w-4 mr-2" /> Sign out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        }
+      />
+      <Dialog open={waOpen} onOpenChange={setWaOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>WhatsApp alerts</DialogTitle></DialogHeader>
+          <WhatsAppAlertSettings onSaved={() => setWaOpen(false)} />
+        </DialogContent>
+      </Dialog>
       {kycDone && <SandboxGroupInviteModal onAccepted={() => { /* downstream UIs poll on their own */ }} />}
-      <div className="max-w-lg mx-auto px-4 pt-3 flex items-center justify-between">
-        <span className="text-xs text-muted-foreground truncate">
-          Signed in as <span className="font-medium text-foreground">{user?.email}</span>
-        </span>
-        <div className="flex items-center gap-1 shrink-0">
-        <Dialog open={waOpen} onOpenChange={setWaOpen}>
-          <DialogTrigger asChild>
-            <Button variant="ghost" size="sm" className="h-7 text-xs">
-              <MessageCircle className="h-3.5 w-3.5 mr-1" />
-              WhatsApp alerts
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-md">
-            <DialogHeader><DialogTitle>WhatsApp alerts</DialogTitle></DialogHeader>
-            <WhatsAppAlertSettings onSaved={() => setWaOpen(false)} />
-          </DialogContent>
-        </Dialog>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={async () => {
-            await signOut();
-            navigate("/signin");
-          }}
-          className="h-7 text-xs"
-        >
-          <LogOut className="h-3.5 w-3.5 mr-1" />
-          Sign out
-        </Button>
-        </div>
-      </div>
       <div className="max-w-lg mx-auto px-4 py-5 pb-32 space-y-5">
         {!kycDone ? (
           <SandboxKYC
@@ -610,6 +601,32 @@ function VfdSandboxInner() {
           </>
         )}
       </div>
+      {kycDone && (
+        <nav aria-label="Main" className="fixed bottom-0 inset-x-0 z-30 bg-card/95 backdrop-blur-md border-t border-border">
+          <div className="max-w-lg mx-auto grid grid-cols-5">
+            {([
+              { label: "Home", icon: Home, active: currentView === "dashboard", go: () => setCurrentView("dashboard") },
+              { label: "Save", icon: PiggyBank, active: currentView === "lock", go: () => { setInitialSavingsProduct(null); setCurrentView("lock"); } },
+              { label: "Pay", icon: CreditCard, active: currentView === "bills" || currentView === "transfer", go: () => setCurrentView("bills") },
+              { label: "Insights", icon: Sparkles, active: false, go: () => {
+                setCurrentView("dashboard");
+                setTimeout(() => document.getElementById("home-insights")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+              } },
+              { label: "Profile", icon: User, active: profileOpen, go: () => setProfileOpen(true) },
+            ]).map((t) => (
+              <button
+                key={t.label}
+                onClick={t.go}
+                aria-current={t.active ? "page" : undefined}
+                className={`flex flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium active:opacity-60 transition-colors ${t.active ? "text-primary" : "text-muted-foreground"}`}
+              >
+                <t.icon className="h-5 w-5" />
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </nav>
+      )}
     </div>
   );
 }

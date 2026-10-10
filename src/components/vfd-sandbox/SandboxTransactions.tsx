@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { describeTransaction } from "@/lib/transactionLabels";
+import { describeTransaction, cleanDisplayText } from "@/lib/transactionLabels";
 
 interface Transaction {
   id: string;
@@ -21,6 +21,8 @@ interface Transaction {
   beneficiary_name?: string | null;
   beneficiary_account?: string | null;
   beneficiary_bank?: string | null;
+  gross_amount?: number | null;
+  fee_amount?: number | null;
   status: string;
   created_at: string;
 }
@@ -55,6 +57,7 @@ function getStatusStyle(status: string) {
 export function SandboxTransactions({ transactions, loading, onRefresh, onBack }: Props) {
   const { toast } = useToast();
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
 
   const copy = async (label: string, value: string, key: string) => {
     try {
@@ -110,9 +113,14 @@ export function SandboxTransactions({ transactions, loading, onRefresh, onBack }
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.03 }}
-                className="bg-card rounded-xl border border-border/50 p-3"
+                className="bg-card rounded-2xl border border-border shadow-sm p-3"
               >
-                <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setOpenId(openId === tx.id ? null : tx.id)}
+                  aria-expanded={openId === tx.id}
+                  className="w-full flex items-center gap-3 text-left active:opacity-70 transition-opacity"
+                >
                   <div className={`w-10 h-10 rounded-xl ${bg} flex items-center justify-center shrink-0`}>
                     <Icon className={`h-4 w-4 ${color}`} />
                   </div>
@@ -126,9 +134,6 @@ export function SandboxTransactions({ transactions, loading, onRefresh, onBack }
                     {info.subtitle && (
                       <p className="text-[11px] text-muted-foreground truncate">{info.subtitle}</p>
                     )}
-                    <p className="text-[10px] text-muted-foreground/80 truncate">
-                      {tx.description || tx.reference || "—"}
-                    </p>
                     <p className="text-[10px] text-muted-foreground">
                       {new Date(tx.created_at).toLocaleDateString("en-NG", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                     </p>
@@ -141,10 +146,31 @@ export function SandboxTransactions({ transactions, loading, onRefresh, onBack }
                       {tx.status}
                     </Badge>
                   </div>
-                </div>
+                </button>
 
-                {(tx.vfd_reference || tx.session_id) && (
-                  <div className="mt-2 pt-2 border-t border-border/40 space-y-1">
+                {openId === tx.id && (
+                  <div className="mt-2 pt-2 border-t border-border space-y-1 text-[11px] text-muted-foreground">
+                    {tx.description && (
+                      <p className="break-words">{cleanDisplayText(tx.description)}</p>
+                    )}
+                    {tx.fee_amount != null && tx.gross_amount != null && (
+                      <>
+                        <div className="flex justify-between"><span>Gross payout</span><span>₦{tx.gross_amount.toLocaleString()}</span></div>
+                        <div className="flex justify-between"><span>Service fee</span><span>-₦{tx.fee_amount.toLocaleString()}</span></div>
+                        <div className="flex justify-between font-semibold text-foreground"><span>You received</span><span>₦{tx.amount.toLocaleString()}</span></div>
+                      </>
+                    )}
+                    {tx.reference && (
+                      <button
+                        type="button"
+                        onClick={() => copy("Reference", tx.reference!, `${tx.id}-own`)}
+                        className="w-full flex items-center justify-between gap-2 text-[10px] hover:text-foreground transition-colors"
+                      >
+                        <span className="shrink-0">Reference</span>
+                        <span className="font-mono truncate flex-1 text-right">{tx.reference}</span>
+                        {copiedKey === `${tx.id}-own` ? <Check className="h-3 w-3 text-success shrink-0" /> : <Copy className="h-3 w-3 shrink-0 opacity-60" />}
+                      </button>
+                    )}
                     {tx.vfd_reference && (
                       <button
                         type="button"
