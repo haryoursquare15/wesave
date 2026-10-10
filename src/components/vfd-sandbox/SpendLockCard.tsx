@@ -259,6 +259,15 @@ export function SpendLockCard() {
   const paused = rule.status === "paused";
   const periodLabel =
     rule.period_type === "daily" ? "today" : rule.period_type === "weekly" ? "this week" : "this month";
+  const resetsLabel = (() => {
+    if (rule.period_type === "daily") return "resets tomorrow";
+    if (rule.period_type === "weekly") {
+      const day = WEEKDAYS[Math.min(Math.max(Number(rule.reset_day ?? 1), 1), 7) - 1];
+      return `resets ${day}`;
+    }
+    return `resets on day ${rule.reset_day ?? 1}`;
+  })();
+  const barColor = pct >= 100 ? "bg-destructive" : pct >= 80 ? "bg-warning" : "bg-primary";
 
   return (
     <>
