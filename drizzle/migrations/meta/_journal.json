@@ -8,6 +8,13 @@
       "when": 1791485268473,
       "tag": "0000_migration",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791654302594,
+      "tag": "0001_login_pins_and_signup_otps",
+      "breakpoints": true
     }
   ]
 }
