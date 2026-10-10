@@ -14,7 +14,6 @@ import { describeTransaction } from "@/lib/transactionLabels";
 import { supabase } from "@/integrations/supabase/client";
 import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
 import { SpendLockCard } from "@/components/vfd-sandbox/SpendLockCard";
-import { SpendLockInsightsCard } from "@/components/vfd-sandbox/SpendLockInsightsCard";
 
 interface BalanceData {
   totalBalance: number;
@@ -502,9 +501,8 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
       </motion.div>
 
       {/* ═══ THIS WEEK (SPENDLOCK) ═══ */}
-      <div id="home-insights" className="space-y-3 scroll-mt-20">
+      <div id="home-spendlock" className="space-y-3 scroll-mt-20">
         <SpendLockCard />
-        <SpendLockInsightsCard />
       </div>
 
       {/* ═══ RECENT ACTIVITY ═══ */}

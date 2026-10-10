@@ -24,6 +24,7 @@ import { SandboxAssociationTab } from "@/components/vfd-sandbox/SandboxAssociati
 import { SandboxBillsTab } from "@/components/vfd-sandbox/SandboxBillsTab";
 import { SandboxCardTab } from "@/components/vfd-sandbox/SandboxCardTab";
 import { SandboxMandatesTab } from "@/components/vfd-sandbox/SandboxMandatesTab";
+import { SpendLockInsightsDetail } from "@/components/vfd-sandbox/SpendLockInsightsDetail";
 import { SandboxGroupInviteModal } from "@/components/vfd-sandbox/SandboxGroupInviteModal";
 import { SandboxSplash } from "@/components/vfd-sandbox/SandboxSplash";
 import { useSandboxSessionEnforcement } from "@/hooks/useSandboxSessionEnforcement";
@@ -39,7 +40,7 @@ interface UserBalance {
   no_vfd_account?: boolean; stale?: boolean;
 }
 
-type View = "dashboard" | "fund" | "transfer" | "lock" | "history" | "ajo" | "target" | "goal" | "split" | "association" | "bills" | "card" | "kyc" | "mandates";
+type View = "dashboard" | "fund" | "transfer" | "lock" | "history" | "ajo" | "target" | "goal" | "split" | "association" | "bills" | "card" | "kyc" | "mandates" | "insights";
 
 function ProductWrapper({ children, onBack }: { children: React.ReactNode; onBack: () => void }) {
   return (
@@ -598,6 +599,12 @@ function VfdSandboxInner() {
             {currentView === "bills" && <ProductWrapper onBack={goBack}><SandboxBillsTab /></ProductWrapper>}
             {currentView === "card" && <ProductWrapper onBack={goBack}><SandboxCardTab /></ProductWrapper>}
             {currentView === "mandates" && <ProductWrapper onBack={goBack}><SandboxMandatesTab /></ProductWrapper>}
+            {currentView === "insights" && (
+              <SpendLockInsightsDetail
+                open
+                onOpenChange={(next) => { if (!next) setCurrentView("dashboard"); }}
+              />
+            )}
           </>
         )}
       </div>
@@ -608,10 +615,7 @@ function VfdSandboxInner() {
               { label: "Home", icon: Home, active: currentView === "dashboard", go: () => setCurrentView("dashboard") },
               { label: "Save", icon: PiggyBank, active: currentView === "lock", go: () => { setInitialSavingsProduct(null); setCurrentView("lock"); } },
               { label: "Pay", icon: CreditCard, active: currentView === "bills" || currentView === "transfer", go: () => setCurrentView("bills") },
-              { label: "Insights", icon: Sparkles, active: false, go: () => {
-                setCurrentView("dashboard");
-                setTimeout(() => document.getElementById("home-insights")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
-              } },
+              { label: "Insights", icon: Sparkles, active: currentView === "insights", go: () => setCurrentView("insights") },
               { label: "Profile", icon: User, active: profileOpen, go: () => setProfileOpen(true) },
             ]).map((t) => (
               <button
