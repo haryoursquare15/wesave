@@ -291,16 +291,16 @@ export default function SandboxAuth() {
             <button
               type="button"
               aria-label="Back"
-              disabled={step === 3}
+              disabled={step === 4}
               onClick={() => { setError(null); if (step === 1) setIsSignUp(false); else setStep(step - 1); }}
               className="flex h-11 w-11 items-center justify-center rounded-full text-foreground disabled:opacity-30"
             >
               <ArrowLeft className="h-5 w-5" />
             </button>
             <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
-              <div className="h-full rounded-full bg-primary transition-all duration-200" style={{ width: `${(step / 3) * 100}%` }} />
+              <div className="h-full rounded-full bg-primary transition-all duration-200" style={{ width: `${(step / 4) * 100}%` }} />
             </div>
-            <span className="w-10 text-right text-xs text-muted-foreground">{step}/3</span>
+            <span className="w-10 text-right text-xs text-muted-foreground">{step}/4</span>
           </div>
 
           <AnimatePresence mode="wait">
@@ -312,13 +312,41 @@ export default function SandboxAuth() {
               transition={{ duration: 0.2 }}
               className="flex flex-1 flex-col pt-8"
             >
-              {step < 3 ? (
+              {step === 3 ? (
+                <form onSubmit={(e) => { e.preventDefault(); void verifyCode(); }} className="flex flex-1 flex-col">
+                  <h2 className="text-2xl font-semibold text-foreground">Check your email</h2>
+                  <p className="mb-6 mt-1 text-sm text-muted-foreground">
+                    We sent a 6-digit code to <span className="font-medium text-foreground">{form.email.trim()}</span>.
+                  </p>
+                  <input
+                    aria-label="6-digit code"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    autoFocus
+                    value={otp}
+                    onChange={(e) => { setError(null); setOtp(e.target.value.replace(/\D/g, "").slice(0, 6)); }}
+                    className="h-16 w-full rounded-[14px] border border-input bg-background text-center text-3xl tracking-[0.5em] text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
+                  />
+                  <div className="mt-3"><ErrorLine /></div>
+                  <button
+                    type="button"
+                    disabled={resendIn > 0 || isLoading}
+                    onClick={() => void sendCode()}
+                    className="mt-4 min-h-11 self-start text-sm font-medium text-primary disabled:text-muted-foreground"
+                  >
+                    {resendIn > 0 ? `Resend code in ${resendIn}s` : "Resend code"}
+                  </button>
+                  <div className="sticky bottom-0 mt-auto bg-background pt-6">
+                    <Primary>Verify and create account</Primary>
+                  </div>
+                </form>
+              ) : step < 3 ? (
                 <form onSubmit={continueSignUp} className="flex flex-1 flex-col">
                   <h2 className="text-2xl font-semibold text-foreground">
                     {step === 1 ? "Let's get to know you" : "Secure your account"}
                   </h2>
                   <p className="mb-6 mt-1 text-sm text-muted-foreground">
-                    {step === 1 ? "Your name and phone number." : "Your email and a strong password."}
+                    {step === 1 ? "Your name and phone number." : "Your email and a strong password. We'll send a code to confirm the email."}
                   </p>
                   <div className="space-y-4">
                     {step === 1 ? (
@@ -357,7 +385,7 @@ export default function SandboxAuth() {
                     <ErrorLine />
                   </div>
                   <div className="sticky bottom-0 mt-auto bg-background pt-6">
-                    <Primary>{step === 2 ? "Create account" : "Continue"}</Primary>
+                    <Primary>{step === 2 ? "Send code" : "Continue"}</Primary>
                   </div>
                 </form>
               ) : (
