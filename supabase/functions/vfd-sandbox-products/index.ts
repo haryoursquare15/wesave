@@ -5939,8 +5939,12 @@ async function resolveBillMsisdn(
   explicitPhone?: string | null,
   customerId?: string | null,
 ): Promise<string> {
-  const clean = (v?: string | null) => String(v ?? "").replace(/[\s-]/g, "");
-  const looksLikePhone = (v: string) => /^(0|234|\+234)?\d{10,13}$/.test(v);
+  const clean = (v?: string | null) => String(v ?? "").replace(/[\s-+]/g, "");
+  // Nigerian mobile MSISDN: 0[789][01]XXXXXXXX (11 digits) or 234[789][01]XXXXXXXX (13 digits).
+  // Deliberately strict so biller account/meter IDs (e.g. IPNX "360500000051") are not
+  // mistaken for a phone number and sent to VFD as phoneNumber.
+  const looksLikePhone = (v: string) =>
+    /^0[789][01]\d{8}$/.test(v) || /^234[789][01]\d{8}$/.test(v);
 
   const direct = clean(explicitPhone);
   if (direct && looksLikePhone(direct)) return direct;
