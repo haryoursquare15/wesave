@@ -45,10 +45,10 @@ interface SandboxDashboardProps {
   upgradePending?: boolean;
 }
 
-const TIER_INFO: Record<string, { label: string; daily: string; color: string }> = {
-  tier1: { label: "Tier 1 — Starter", daily: "₦30,000 daily", color: "bg-blue-500/25 text-blue-50 border-blue-300/50" },
-  tier2: { label: "Tier 2 — Standard", daily: "₦100,000 daily", color: "bg-amber-500/25 text-amber-50 border-amber-300/50" },
-  tier3: { label: "Tier 3 — Premium", daily: "₦5,000,000 daily", color: "bg-emerald-500/25 text-emerald-50 border-emerald-300/50" },
+const TIER_INFO: Record<string, { short: string; daily: string }> = {
+  tier1: { short: "Tier 1", daily: "₦30k" },
+  tier2: { short: "Tier 2", daily: "₦100k" },
+  tier3: { short: "Tier 3", daily: "₦5M" },
 };
 
 /* ─── Animated Counter ─── */
@@ -84,9 +84,9 @@ const productBanners = [
     title: "GoalSave",
     subtitle: "Flexible savings • Earn 10–16% p.a. • 90–365 days",
     cta: "Start GoalSave",
-    gradient: "from-blue-600 to-cyan-700",
+    gradient: "bg-primary text-primary-foreground",
     icon: Target,
-    accent: "bg-blue-400/20",
+    accent: "bg-primary-foreground/15",
   },
   {
     key: "vault",
@@ -94,9 +94,9 @@ const productBanners = [
     title: "Vault",
     subtitle: "Higher yield safe • Earn 14–20.5% p.a. • 30–365 days",
     cta: "Open a Vault",
-    gradient: "from-emerald-600 to-green-700",
+    gradient: "bg-ink text-ink-foreground",
     icon: VaultIcon,
-    accent: "bg-emerald-400/20",
+    accent: "bg-primary/25",
   },
   {
     key: "lockmax",
@@ -104,9 +104,9 @@ const productBanners = [
     title: "LockMax",
     subtitle: "Maximum returns • Earn 18–21% p.a. • 90–365 days",
     cta: "Lock for Max",
-    gradient: "from-purple-600 to-fuchsia-700",
+    gradient: "bg-primary text-primary-foreground",
     icon: Zap,
-    accent: "bg-purple-400/20",
+    accent: "bg-primary-foreground/15",
   },
   {
     key: "upfront_yield",
@@ -114,9 +114,9 @@ const productBanners = [
     title: "Upfront Yield",
     subtitle: "Get your interest paid up front • 12–18% p.a.",
     cta: "Earn Upfront",
-    gradient: "from-amber-500 to-orange-600",
+    gradient: "bg-ink text-ink-foreground",
     icon: Gift,
-    accent: "bg-amber-300/20",
+    accent: "bg-primary/25",
   },
 ];
 
@@ -147,7 +147,7 @@ const serviceCategories: ServiceCategory[] = [
     key: "bills-payments",
     label: "Bills & Payments",
     icon: CreditCard,
-    color: "bg-cyan-500/10 text-cyan-600",
+    color: "bg-primary-soft text-primary",
     desc: "Airtime, utilities, split",
     children: [
       { key: "bills", label: "Pay Bills", icon: CreditCard, desc: "Airtime, data & utilities" },
@@ -156,18 +156,10 @@ const serviceCategories: ServiceCategory[] = [
     ],
   },
   {
-    key: "transfer",
-    label: "Transfer",
-    icon: Send,
-    color: "bg-purple-500/10 text-purple-600",
-    desc: "Send money",
-    navKey: "transfer",
-  },
-  {
     key: "save-invest",
     label: "Save & Invest",
     icon: PiggyBank,
-    color: "bg-emerald-500/10 text-emerald-600",
+    color: "bg-primary-soft text-primary",
     desc: "Savings & goals",
     children: [
       { key: "lock", label: "Active Savings", icon: Lock, desc: "View all your holdings" },
@@ -180,7 +172,7 @@ const serviceCategories: ServiceCategory[] = [
     key: "ajo-groups",
     label: "Ajo Groups",
     icon: Users,
-    color: "bg-orange-500/10 text-orange-600",
+    color: "bg-primary-soft text-primary",
     desc: "Rotating savings",
     children: [
       { key: "ajo", label: "My Ajo Groups", icon: Users, desc: "Rotating savings" },
@@ -344,13 +336,13 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1, duration: 0.5 }}
-        className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary via-primary/90 to-primary/80 p-5 text-primary-foreground shadow-xl"
+        className="relative overflow-hidden rounded-2xl bg-primary p-5 text-primary-foreground shadow-md"
       >
         {/* Decorative circles */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -right-10 -top-10 h-36 w-36 rounded-full bg-white/[0.06]" />
-          <div className="absolute -bottom-8 -left-8 h-28 w-28 rounded-full bg-white/[0.04]" />
-          <div className="absolute right-1/4 top-1/2 h-20 w-20 rounded-full bg-white/[0.03]" />
+          <div className="absolute -right-10 -top-10 h-36 w-36 rounded-full bg-primary-foreground/[0.06]" />
+          <div className="absolute -bottom-8 -left-8 h-28 w-28 rounded-full bg-primary-foreground/[0.04]" />
+          <div className="absolute right-1/4 top-1/2 h-20 w-20 rounded-full bg-primary-foreground/[0.03]" />
         </div>
 
         <div className="relative z-10">
@@ -362,7 +354,7 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
             </div>
             <button
               onClick={() => setShowBalance(!showBalance)}
-              className="p-1.5 hover:bg-white/10 rounded-full transition-colors"
+              className="p-1.5 hover:bg-primary-foreground/10 rounded-full transition-colors"
               aria-label={showBalance ? "Hide balance" : "Show balance"}
             >
               {showBalance ? <Eye className="h-4 w-4 opacity-70" /> : <EyeOff className="h-4 w-4 opacity-70" />}
@@ -376,19 +368,12 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -4 }}
-              className="text-[2.5rem] font-extrabold tracking-tight mb-1 leading-none"
+              className="text-[2.5rem] font-semibold tracking-tight mb-3 leading-none"
             >
               {showBalance ? <AnimatedNumber value={balance.totalBalance} /> : "₦ ••••••"}
             </motion.h2>
           </AnimatePresence>
 
-          {/* Secondary detail — Available, Locked, Savings */}
-          <p className="text-[11px] opacity-70 mb-2 leading-snug">
-            Available{" "}
-            <span className="font-semibold opacity-100">
-              {showBalance ? `₦${balance.availableBalance.toLocaleString()}` : "••••"}
-            </span>
-          </p>
 
 
           {balance.noVfdAccount && (
@@ -437,7 +422,7 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
                 <span className="flex items-center gap-1.5">
                   <span className="font-mono font-semibold tracking-wide">{acct}</span>
                   {copied ? (
-                    <Check className="h-3 w-3 text-green-300" />
+                    <Check className="h-3 w-3" />
                   ) : (
                     <Copy className="h-3 w-3" />
                   )}
@@ -450,54 +435,40 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
 
 
           {/* Secondary detail row — clearly subordinate to Total */}
-          <div className="flex items-center gap-4 border-t border-white/[0.12] pt-2.5">
+          <div className="grid grid-cols-3 gap-2 border-t border-primary-foreground/15 pt-3">
             {[
-              { label: "Locked", value: balance.lockedBalance, icon: Lock },
-              { label: "Savings", value: balance.savingsBalance, icon: PiggyBank },
+              { label: "Available", value: balance.availableBalance },
+              { label: "Locked", value: balance.lockedBalance },
+              { label: "Savings", value: balance.savingsBalance },
             ].map((item) => (
-              <div key={item.label} className="flex items-center gap-1.5">
-                <item.icon className="h-3 w-3 opacity-40" />
-                <span className="text-[10px] opacity-55">{item.label}</span>
-                <span className="text-[11px] font-semibold opacity-90">
+              <div key={item.label} className="min-w-0">
+                <p className="text-xs opacity-75">{item.label}</p>
+                <p className="text-sm font-semibold tabular-nums break-words">
                   {showBalance ? `₦${item.value.toLocaleString()}` : "••••"}
-                </span>
+                </p>
               </div>
             ))}
           </div>
         </div>
       </motion.div>
 
-      {/* ═══ KYC TIER BANNER ═══ */}
+      {/* ═══ KYC TIER PILL ═══ */}
       {(() => {
         const tierKey = (tier || "tier1").toLowerCase();
         const info = TIER_INFO[tierKey] || TIER_INFO.tier1;
         const canUpgrade = tierKey !== "tier3" && !upgradePending;
         return (
-          <motion.button
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.12 }}
-            onClick={() => canUpgrade && onNavigate("kyc")}
-            disabled={!canUpgrade}
-            className={`w-full flex items-center justify-between rounded-xl border px-3.5 py-2.5 text-left ${info.color} ${canUpgrade ? "active:scale-[0.99] hover:opacity-90" : "cursor-default"}`}
-          >
-            <div className="flex items-center gap-2.5 min-w-0">
-              <Shield className="h-4 w-4 shrink-0" />
-              <div className="min-w-0">
-                <p className="text-[13px] font-extrabold tracking-tight leading-tight truncate">
-                  {upgradePending ? "Upgrade in progress" : info.label}
-                </p>
-                <p className="text-[11px] font-semibold opacity-95 leading-tight">
-                  {upgradePending ? "Takes no more than 24 hours" : `Limit: ${info.daily}`}
-                </p>
-              </div>
-            </div>
+          <div className="flex items-center gap-2 -mt-3">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-primary-soft text-accent-foreground px-3 py-1 text-xs font-semibold">
+              <Shield className="h-3.5 w-3.5" />
+              {upgradePending ? "Upgrade in progress · up to 24h" : `${info.short} · ${info.daily} daily limit`}
+            </span>
             {canUpgrade && (
-              <span className="text-[10px] font-semibold whitespace-nowrap flex items-center gap-1">
+              <button onClick={() => onNavigate("kyc")} className="min-h-0 text-xs font-semibold text-primary flex items-center gap-0.5 active:opacity-60">
                 Upgrade <ChevronRight className="h-3 w-3" />
-              </span>
+              </button>
             )}
-          </motion.button>
+          </div>
         );
       })()}
 
@@ -509,10 +480,10 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
         className="grid grid-cols-4 gap-3"
       >
         {[
-          { key: "fund", label: "Add Money", icon: Plus, color: "bg-green-500 text-white" },
-          { key: "transfer", label: "Transfer", icon: Send, color: "bg-blue-500 text-white" },
-          { key: "lock", label: "Lock", icon: Lock, color: "bg-amber-500 text-white" },
-          { key: "history", label: "History", icon: Clock, color: "bg-gray-500 text-white" },
+          { key: "fund", label: "Add Money", icon: Plus, color: "bg-primary-soft text-primary" },
+          { key: "transfer", label: "Transfer", icon: Send, color: "bg-primary-soft text-primary" },
+          { key: "lock", label: "Lock", icon: Lock, color: "bg-primary-soft text-primary" },
+          { key: "history", label: "History", icon: Clock, color: "bg-primary-soft text-primary" },
         ].map((action) => (
           <button
             key={action.key}
@@ -521,11 +492,11 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
           >
             <motion.div
               whileTap={{ scale: 0.9 }}
-              className={`w-14 h-14 rounded-2xl ${action.color} flex items-center justify-center shadow-md transition-shadow group-hover:shadow-lg`}
+              className={`w-14 h-14 rounded-2xl ${action.color} flex items-center justify-center transition-transform active:scale-95`}
             >
               <action.icon className="h-5 w-5" />
             </motion.div>
-            <span className="text-[11px] font-semibold text-muted-foreground">{action.label}</span>
+            <span className="text-xs font-medium text-foreground">{action.label}</span>
           </button>
         ))}
       </motion.div>
@@ -575,22 +546,22 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
               <button
                 key={banner.key}
                 onClick={() => onNavigate(banner.routeKey)}
-                className={`flex-none w-[80%] min-w-[260px] snap-center rounded-2xl bg-gradient-to-br ${banner.gradient} p-5 text-left relative overflow-hidden active:scale-[0.99] transition-transform`}
+                className={`flex-none w-[80%] min-w-[260px] snap-center rounded-2xl ${banner.gradient} p-5 shadow-sm text-left relative overflow-hidden active:scale-[0.99] transition-transform`}
               >
                 <div className={`absolute top-3 right-3 w-16 h-16 rounded-2xl ${banner.accent} flex items-center justify-center`}>
-                  <banner.icon className="h-8 w-8 text-white/80" />
+                  <banner.icon className="h-8 w-8 opacity-80" />
                 </div>
                 <div className="relative z-10 min-h-[132px] flex flex-col justify-between">
                   <div>
-                    <h4 className="text-base font-bold text-white mb-1">{banner.title}</h4>
-                    <p className="text-xs text-white/80 max-w-[75%] leading-relaxed">{banner.subtitle}</p>
+                    <h4 className="text-base font-semibold mb-1">{banner.title}</h4>
+                    <p className="text-sm opacity-80 max-w-[75%] leading-relaxed">{banner.subtitle}</p>
                   </div>
 
                   <div className="flex items-end justify-between">
-                    <span className="inline-block text-xs font-semibold text-white bg-white/20 px-3 py-1.5 rounded-full backdrop-blur-sm">
+                    <span className="inline-block text-xs font-semibold bg-background/20 px-3 py-1.5 rounded-full">
                       {banner.cta}
                     </span>
-                    <span className="text-[11px] font-semibold text-white/90 tabular-nums">
+                    <span className="text-xs font-semibold opacity-90 tabular-nums">
                       {holding && showBalance
                         ? `₦${holding.total.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
                         : holding && !showBalance
@@ -675,8 +646,8 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
                         disabled ? "opacity-60 cursor-not-allowed" : "hover:bg-muted/50"
                       }`}
                     >
-                      <div className="w-9 h-9 rounded-xl bg-muted flex items-center justify-center shrink-0">
-                        <child.icon className="h-4 w-4 text-muted-foreground" />
+                      <div className="w-9 h-9 rounded-xl bg-primary-soft flex items-center justify-center shrink-0">
+                        <child.icon className="h-4 w-4 text-primary" />
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="text-xs font-semibold text-foreground leading-tight">{child.label}</p>
@@ -716,7 +687,7 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
       </motion.div>
 
       {/* ═══ RECENT ACTIVITY ═══ */}
-      <div className="space-y-3">
+      <div id="home-insights" className="space-y-3 scroll-mt-20">
         <SpendLockCard />
         <SpendLockInsightsCard />
       </div>
@@ -754,7 +725,7 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
             </Button>
           </div>
         ) : (
-          <div className="bg-card rounded-2xl border border-border/50 divide-y divide-border/30 overflow-hidden">
+          <div className="bg-card rounded-2xl border border-border shadow-sm divide-y divide-border overflow-hidden">
             {recentTransactions.slice(0, 5).map((tx, i) => {
               const meta = getTxMeta(tx.transaction_type);
               const TxIcon = meta.icon;
