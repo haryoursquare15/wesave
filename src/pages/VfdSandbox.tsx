@@ -29,6 +29,7 @@ import { SandboxBillsTab } from "@/components/vfd-sandbox/SandboxBillsTab";
 import { SandboxCardTab } from "@/components/vfd-sandbox/SandboxCardTab";
 import { SandboxMandatesTab } from "@/components/vfd-sandbox/SandboxMandatesTab";
 import { SpendLockInsightsDetail } from "@/components/vfd-sandbox/SpendLockInsightsDetail";
+import { SandboxProfile } from "@/components/vfd-sandbox/SandboxProfile";
 import { SandboxGroupInviteModal } from "@/components/vfd-sandbox/SandboxGroupInviteModal";
 import { SandboxSplash } from "@/components/vfd-sandbox/SandboxSplash";
 import { useSandboxSessionEnforcement } from "@/hooks/useSandboxSessionEnforcement";
@@ -44,7 +45,7 @@ interface UserBalance {
   no_vfd_account?: boolean; stale?: boolean;
 }
 
-type View = "dashboard" | "fund" | "transfer" | "lock" | "history" | "ajo" | "target" | "goal" | "split" | "association" | "bills" | "card" | "kyc" | "mandates" | "insights";
+type View = "dashboard" | "fund" | "transfer" | "lock" | "history" | "ajo" | "target" | "goal" | "split" | "association" | "bills" | "card" | "kyc" | "mandates" | "insights" | "profile";
 
 function ProductWrapper({ children, onBack }: { children: React.ReactNode; onBack: () => void }) {
   return (
