@@ -1,4 +1,4 @@
 # Requested updates
-- [ ] Stop WhatsApp transaction notifications; preserve reminders and other existing channels.
-- [ ] Unify logos using the supplied Vestara artwork and extracted V.
-- [ ] Enable customer profile-photo selection and removal.
+- [x] Stop WhatsApp transaction notifications; preserve reminders and other existing channels.
+- [x] Unify logos using the supplied Vestara artwork and extracted V.
+- [x] Enable customer profile-photo selection and removal.
