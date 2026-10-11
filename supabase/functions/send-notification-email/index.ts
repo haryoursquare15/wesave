@@ -193,6 +193,7 @@ serve(async (req) => {
       await sendWhatsAppAlert(supabase, {
         userId: record.user_id,
         notificationId: record.id,
+        notificationType: String(record.notification_type || ''),
         name: profile?.full_name,
         title: String(record.title),
         message: String(record.message),

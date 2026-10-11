@@ -1,5 +1,6 @@
 // Best-effort WhatsApp alert. Never throws — email/push must not be affected.
 // Only sends to customers who opted in (whatsapp_preferences.opted_in).
+import { canSendWhatsAppAlert } from './whatsapp-policy.ts';
 // deno-lint-ignore no-explicit-any
 type Client = any;
 
@@ -16,9 +17,10 @@ export async function sendWhatsAppAlert(
   opts: {
     userId: string; notificationId?: string; name?: string | null; title: string; message: string;
     // Optional approved template; params exclude the leading first-name ({{1}}), which is added here.
-    template?: string; params?: string[];
+    template?: string; params?: string[]; notificationType?: string;
   },
 ): Promise<void> {
+  if (!canSendWhatsAppAlert(opts)) return;
   try {
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     const WHATSAPP_API_KEY = Deno.env.get('WHATSAPP_API_KEY');
@@ -42,7 +44,7 @@ export async function sendWhatsAppAlert(
     const TEMPLATE = opts.template && opts.params?.length ? opts.template : DEFAULT_TEMPLATE;
     const values = TEMPLATE === DEFAULT_TEMPLATE
       ? [firstName, summary]
-      : [firstName, ...opts.params!.map((v) => clean(v, 300) || '-')];
+      : [firstName, ...(opts.params || []).map((v) => clean(v, 300) || '-')];
 
     const res = await fetch(`${GATEWAY_URL}/messages`, {
       method: 'POST',

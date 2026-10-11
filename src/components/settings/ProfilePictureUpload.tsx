@@ -1,10 +1,9 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Camera, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
 import { toast } from "sonner";
 
 interface ProfilePictureUploadProps {
@@ -14,11 +13,25 @@ interface ProfilePictureUploadProps {
 }
 
 export function ProfilePictureUpload({ open, onOpenChange, onComplete }: ProfilePictureUploadProps) {
-  const { user, profile, refreshProfile } = useAuth();
+  const { session, client: supabase } = useSandboxAwareAuth();
+  const user = session?.user;
+  const [profile, setProfile] = useState<{ avatar_url: string | null; full_name: string | null } | null>(null);
+  const refreshProfile = async () => {
+    if (!user) return;
+    const { data } = await supabase.from("profiles").select("avatar_url, full_name").eq("id", user.id).maybeSingle();
+    setProfile(data);
+    window.dispatchEvent(new Event("vestara:profile-updated"));
+  };
+  useEffect(() => {
+    if (!open || !user) return;
+    void supabase.from("profiles").select("avatar_url, full_name").eq("id", user.id).maybeSingle()
+      .then(({ data }) => setProfile(data));
+  }, [open, user?.id, supabase]);
   const [uploading, setUploading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
 
   const getInitials = (name: string | null | undefined) => {
     if (!name) return "U";
@@ -30,8 +43,8 @@ export function ProfilePictureUpload({ open, onOpenChange, onComplete }: Profile
     if (!file) return;
 
     // Validate file type
-    if (!file.type.startsWith("image/")) {
-      toast.error("Please select an image file");
+    if (!["image/jpeg", "image/png", "image/gif", "image/webp"].includes(file.type)) {
+      toast.error("Choose a JPG, PNG, GIF or WebP photo");
       return;
     }
 
@@ -52,8 +65,8 @@ export function ProfilePictureUpload({ open, onOpenChange, onComplete }: Profile
 
     try {
       // Upload to Supabase Storage with user folder for RLS
-      const fileExt = selectedFile.name.split(".").pop();
-      const fileName = `${Date.now()}.${fileExt}`;
+      const fileExt = { "image/jpeg": "jpg", "image/png": "png", "image/gif": "gif", "image/webp": "webp" }[selectedFile.type] || "jpg";
+      const fileName = `${crypto.randomUUID()}.${fileExt}`;
       const filePath = `${user.id}/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
@@ -76,7 +89,10 @@ export function ProfilePictureUpload({ open, onOpenChange, onComplete }: Profile
         .update({ avatar_url: publicUrl })
         .eq("id", user.id);
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        await supabase.storage.from("avatars").remove([filePath]);
+        throw updateError;
+      }
 
       await refreshProfile();
       toast.success("Profile picture updated!");
@@ -84,7 +100,7 @@ export function ProfilePictureUpload({ open, onOpenChange, onComplete }: Profile
       onComplete?.();
     } catch (err) {
       console.error("Upload error:", err);
-      toast.error("Failed to upload image");
+      toast.error("Your photo wasn't saved. Please try again.");
     } finally {
       setUploading(false);
     }
@@ -121,7 +137,7 @@ export function ProfilePictureUpload({ open, onOpenChange, onComplete }: Profile
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
+    <Dialog open={open} onOpenChange={(next) => { if (!next && !uploading) handleClose(); }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -134,7 +150,7 @@ export function ProfilePictureUpload({ open, onOpenChange, onComplete }: Profile
           {/* Preview */}
           <div className="flex flex-col items-center gap-4">
             <Avatar className="h-32 w-32">
-              <AvatarImage src={previewUrl || profile?.avatar_url || undefined} />
+              <AvatarImage src={previewUrl || profile?.avatar_url || undefined} alt="Your profile photo" className="object-cover" />
               <AvatarFallback className="text-3xl">
                 {getInitials(profile?.full_name)}
               </AvatarFallback>
@@ -142,7 +158,8 @@ export function ProfilePictureUpload({ open, onOpenChange, onComplete }: Profile
 
             <input
               type="file"
-              accept="image/*"
+              aria-label="Choose profile photo"
+              accept="image/jpeg,image/png,image/gif,image/webp"
               onChange={handleFileSelect}
               ref={fileInputRef}
               className="hidden"
@@ -152,6 +169,7 @@ export function ProfilePictureUpload({ open, onOpenChange, onComplete }: Profile
               <div className="flex gap-3">
                 <Button
                   variant="outline"
+                  disabled={uploading}
                   onClick={() => fileInputRef.current?.click()}
                 >
                   <Upload className="h-4 w-4 mr-2" />
@@ -196,7 +214,7 @@ export function ProfilePictureUpload({ open, onOpenChange, onComplete }: Profile
           </div>
 
           <p className="text-xs text-muted-foreground text-center">
-            Supported formats: JPG, PNG, GIF. Max size: 5MB
+            JPG, PNG, GIF or WebP · Up to 5MB
           </p>
         </div>
       </DialogContent>

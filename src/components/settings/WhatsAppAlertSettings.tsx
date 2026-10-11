@@ -52,7 +52,7 @@ export function WhatsAppAlertSettings({ onSaved }: { onSaved?: (optedIn: boolean
           </div>
           <div className="min-w-0">
             <p className="font-medium text-foreground">WhatsApp Alerts</p>
-            <p className="text-xs text-muted-foreground">Money in/out, bills, thrift and savings updates</p>
+            <p className="text-xs text-muted-foreground">Contribution reminders and account security alerts</p>
           </div>
         </div>
         <Switch checked={optedIn} disabled={busy} onCheckedChange={(v) => save(v)} />
