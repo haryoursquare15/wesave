@@ -3,6 +3,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { sendWhatsAppAlert } from "../_shared/whatsapp-notify.ts";
+import { canSendWhatsAppAlert } from "../_shared/whatsapp-policy.ts";
 
 const json = (b: unknown, status = 200) =>
   new Response(JSON.stringify(b), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -36,6 +37,9 @@ Deno.serve(async (req) => {
     const { record: r } = await req.json();
     if (!r?.id || !r?.user_id || !r?.notification_type) return json({ error: "Invalid payload" }, 400);
     const type = String(r.notification_type);
+    if (!canSendWhatsAppAlert({ notificationType: type, title: String(r.title || '') })) {
+      return json({ skipped: true, reason: "whatsapp_transaction_alerts_disabled" });
+    }
     if (!ALLOWED.has(type)) return json({ skipped: true });
 
     const title = String(r.title || "Vestara update");
@@ -79,7 +83,7 @@ Deno.serve(async (req) => {
 
     await sendWhatsAppAlert(db, {
       userId: r.user_id, notificationId: r.id, name: (client?.full_name as string) || null,
-      title, message: msg, template, params,
+      title, message: msg, template, params, notificationType: type,
     });
     return json({ ok: true, template: template ?? "vestara_account_alert" });
   } catch (e) {

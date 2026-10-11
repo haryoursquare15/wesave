@@ -20,8 +20,8 @@ self.addEventListener("push", (event) => {
 
   const options = {
     body: data.body || data.message || "",
-    icon: "/vestara-logo.jpg",
-    badge: "/vestara-logo.jpg",
+    icon: "/icons/icon-192.png",
+    badge: "/favicon.png",
     tag: data.tag || "wesave-notification",
     data: {
       url: data.url || "/dashboard",

@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowRight, Shield, Users, Zap, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import wesaveLogo from "@/assets/vestara-logo.jpg";
+import wesaveLogo from "@/assets/vestara-v.png.asset.json";
 
 const slides = [
   {
@@ -75,7 +75,7 @@ export default function AppHome() {
           className="flex flex-col items-center gap-6"
         >
           <motion.img
-            src={wesaveLogo}
+            src={wesaveLogo.url}
             alt="Vestara"
             className="h-24 w-auto rounded-2xl shadow-xl"
             animate={{ scale: [1, 1.05, 1] }}

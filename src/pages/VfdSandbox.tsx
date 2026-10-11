@@ -10,6 +10,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { WhatsAppAlertSettings } from "@/components/settings/WhatsAppAlertSettings";
 import { LoginPinSettings } from "@/components/settings/LoginPinSettings";
+import { ProfilePictureUpload } from "@/components/settings/ProfilePictureUpload";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { KeyRound } from "lucide-react";
 import { SandboxHeader } from "@/components/vfd-sandbox/SandboxHeader";
 import { SandboxDashboard } from "@/components/vfd-sandbox/SandboxDashboard";
@@ -81,6 +83,19 @@ function VfdSandboxInner() {
   const [waOpen, setWaOpen] = useState(false);
   const [pinOpen, setPinOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [photoOpen, setPhotoOpen] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!user) return;
+    let active = true;
+    const loadPhoto = () => {
+      void sandboxSupabase.from("profiles").select("avatar_url").eq("id", user.id).maybeSingle()
+        .then(({ data }) => { if (active) setAvatarUrl(data?.avatar_url || null); });
+    };
+    loadPhoto();
+    window.addEventListener("vestara:profile-updated", loadPhoto);
+    return () => { active = false; window.removeEventListener("vestara:profile-updated", loadPhoto); };
+  }, [user?.id]);
 
   // Deep-link support: /app?view=lock (or ajo|target|split|...) opens that
   // section directly so menu links land on the right screen.
@@ -490,12 +505,15 @@ function VfdSandboxInner() {
         right={
           <DropdownMenu open={profileOpen} onOpenChange={setProfileOpen}>
             <DropdownMenuTrigger asChild>
-              <button
+              <Button variant="ghost" size="icon"
                 aria-label="Profile menu"
                 className="h-9 w-9 min-h-0 min-w-0 rounded-full bg-primary-soft text-primary text-sm font-semibold flex items-center justify-center active:scale-95 transition-transform"
               >
-                {(vfd.client?.full_name || user?.email || "V").replace(/^.*-/, "").trim().charAt(0).toUpperCase()}
-              </button>
+                <Avatar className="h-9 w-9">
+                  <AvatarImage src={avatarUrl || undefined} alt="Your profile photo" className="object-cover" />
+                  <AvatarFallback>{(vfd.client?.full_name || user?.email || "V").replace(/^.*-/, "").trim().charAt(0).toUpperCase()}</AvatarFallback>
+                </Avatar>
+              </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-64">
               <DropdownMenuLabel className="font-normal">
@@ -503,6 +521,9 @@ function VfdSandboxInner() {
                 <p className="text-sm font-medium truncate">{user?.email}</p>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => setPhotoOpen(true)}>
+                <User className="h-4 w-4 mr-2" /> Profile photo
+              </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setWaOpen(true)}>
                 <MessageCircle className="h-4 w-4 mr-2" /> WhatsApp alerts
               </DropdownMenuItem>
@@ -525,6 +546,7 @@ function VfdSandboxInner() {
           <WhatsAppAlertSettings onSaved={() => setWaOpen(false)} />
         </DialogContent>
       </Dialog>
+      <ProfilePictureUpload open={photoOpen} onOpenChange={setPhotoOpen} />
       <Dialog open={pinOpen} onOpenChange={setPinOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>Login PIN & biometrics</DialogTitle></DialogHeader>
@@ -547,6 +569,7 @@ function VfdSandboxInner() {
             {currentView === "dashboard" && (
               <SandboxDashboard
                 balance={balanceData}
+                avatarUrl={avatarUrl}
                 onNavigate={(v) => {
                   const [view, productCode] = String(v).split(":");
                   setInitialSavingsProduct(productCode || null);

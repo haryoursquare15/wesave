@@ -9,7 +9,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import vestaraBadge from "@/assets/vestara-badge.jpg";
+import vestaraBadge from "@/assets/vestara-v.png.asset.json";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { describeTransaction } from "@/lib/transactionLabels";
 import { supabase } from "@/integrations/supabase/client";
 import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
@@ -42,6 +43,7 @@ interface SandboxDashboardProps {
   recentTransactions?: Transaction[];
   tier?: string | null;
   upgradePending?: boolean;
+  avatarUrl?: string | null;
 }
 
 const TIER_INFO: Record<string, { short: string; daily: string }> = {
@@ -196,7 +198,7 @@ function getTxMeta(type: string) {
 }
 
 /* ─── Main Dashboard Component ─── */
-export function SandboxDashboard({ balance, onNavigate, recentTransactions = [], tier, upgradePending = false }: SandboxDashboardProps) {
+export function SandboxDashboard({ balance, onNavigate, recentTransactions = [], tier, upgradePending = false, avatarUrl }: SandboxDashboardProps) {
   const [showBalance, setShowBalance] = useState(true);
   const [copied, setCopied] = useState(false);
   const [activeBanner, setActiveBanner] = useState(0);
@@ -319,11 +321,10 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
         transition={{ delay: 0.05 }}
         className="flex items-center gap-3"
       >
-        <img
-          src={vestaraBadge}
-          alt="Vestara"
-          className="h-12 w-12 rounded-full object-cover ring-2 ring-primary/20 shadow-md shrink-0"
-        />
+        <Avatar className="h-12 w-12 shrink-0 ring-2 ring-primary/20">
+          <AvatarImage src={avatarUrl || undefined} alt="Your profile photo" className="object-cover" />
+          <AvatarFallback className="bg-background"><img src={vestaraBadge.url} alt="Vestara" className="h-9 w-9 object-contain" /></AvatarFallback>
+        </Avatar>
         <div>
           <p className="text-sm text-muted-foreground">{greeting},</p>
           <h1 className="text-xl font-bold text-foreground">{firstName} 👋</h1>

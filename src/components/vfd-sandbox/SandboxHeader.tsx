@@ -2,7 +2,7 @@ import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import type { ReactNode } from "react";
-import vestaraLogo from "@/assets/vestara-logo-transparent.png";
+import vestaraLogo from "@/assets/vestara-logo.png.asset.json";
 import { SandboxNotificationBell } from "./SandboxNotificationBell";
 import { BillDeliveryPopupListener } from "./BillDeliveryPopupListener";
 
@@ -31,7 +31,7 @@ export function SandboxHeader({ showBack = true, onBack, right }: SandboxHeaderP
           </Button>
         )}
         <div className="flex-1 flex items-center">
-          <img src={vestaraLogo} alt="Vestara" className="h-7 w-auto object-contain" />
+          <img src={vestaraLogo.url} alt="Vestara" className="h-8 w-auto max-w-[160px] object-contain" />
         </div>
         <SandboxNotificationBell />
         {right}

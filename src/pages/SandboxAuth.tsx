@@ -16,7 +16,8 @@ import { toast } from "sonner";
 import { getUserFriendlyError } from "@/lib/errorMessages";
 import { cn } from "@/lib/utils";
 
-const logo = "/icons/icon-512.png";
+import logoAsset from "@/assets/vestara-v.png.asset.json";
+const logo = logoAsset.url;
 const ONBOARD_KEY = "vestara_onboarding_seen";
 
 function FloatField({
