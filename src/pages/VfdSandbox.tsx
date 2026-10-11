@@ -61,7 +61,7 @@ function ProductWrapper({ children, onBack }: { children: React.ReactNode; onBac
   );
 }
 
-const VALID_VIEWS: View[] = ["dashboard", "fund", "transfer", "lock", "history", "ajo", "target", "goal", "split", "association", "bills", "card", "kyc", "mandates"];
+const VALID_VIEWS: View[] = ["dashboard", "fund", "transfer", "lock", "history", "ajo", "target", "goal", "split", "association", "bills", "card", "kyc", "mandates", "insights", "profile"];
 
 function VfdSandboxInner() {
   const navigate = useNavigate();
@@ -504,56 +504,20 @@ function VfdSandboxInner() {
         showBack={currentView !== "dashboard"}
         onBack={goBack}
         right={
-          <DropdownMenu open={profileOpen} onOpenChange={setProfileOpen}>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon"
-                aria-label="Profile menu"
-                className="h-9 w-9 min-h-0 min-w-0 rounded-full bg-primary-soft text-primary text-sm font-semibold flex items-center justify-center active:scale-95 transition-transform"
-              >
-                <Avatar className="h-9 w-9">
-                  <AvatarImage src={avatarUrl || undefined} alt="Your profile photo" className="object-cover" />
-                  <AvatarFallback>{(vfd.client?.full_name || user?.email || "V").replace(/^.*-/, "").trim().charAt(0).toUpperCase()}</AvatarFallback>
-                </Avatar>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuLabel className="font-normal">
-                <p className="text-xs text-muted-foreground">Signed in as</p>
-                <p className="text-sm font-medium truncate">{user?.email}</p>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => setPhotoOpen(true)}>
-                <User className="h-4 w-4 mr-2" /> Profile photo
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setWaOpen(true)}>
-                <MessageCircle className="h-4 w-4 mr-2" /> WhatsApp alerts
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setPinOpen(true)}>
-                <KeyRound className="h-4 w-4 mr-2" /> Login PIN & biometrics
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={async () => { await signOut(); navigate("/signin"); }}
-                className="text-destructive focus:text-destructive"
-              >
-                <LogOut className="h-4 w-4 mr-2" /> Sign out
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <Button
+            variant="ghost" size="icon"
+            aria-label="Open profile"
+            onClick={() => setCurrentView("profile")}
+            className="h-9 w-9 min-h-0 min-w-0 rounded-full bg-primary-soft text-primary text-sm font-semibold flex items-center justify-center active:scale-95 transition-transform"
+          >
+            <Avatar className="h-9 w-9">
+              <AvatarImage src={avatarUrl || undefined} alt="Your profile photo" className="object-cover" />
+              <AvatarFallback>{(vfd.client?.full_name || user?.email || "V").replace(/^.*-/, "").trim().charAt(0).toUpperCase()}</AvatarFallback>
+            </Avatar>
+          </Button>
         }
       />
-      <Dialog open={waOpen} onOpenChange={setWaOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>WhatsApp alerts</DialogTitle></DialogHeader>
-          <WhatsAppAlertSettings onSaved={() => setWaOpen(false)} />
-        </DialogContent>
-      </Dialog>
       <ProfilePictureUpload open={photoOpen} onOpenChange={setPhotoOpen} />
-      <Dialog open={pinOpen} onOpenChange={setPinOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>Login PIN & biometrics</DialogTitle></DialogHeader>
-          <LoginPinSettings />
-        </DialogContent>
-      </Dialog>
       {kycDone && <SandboxGroupInviteModal onAccepted={() => { /* downstream UIs poll on their own */ }} />}
       <div className="max-w-lg mx-auto px-4 py-5 pb-32 space-y-5">
         {!kycDone ? (
