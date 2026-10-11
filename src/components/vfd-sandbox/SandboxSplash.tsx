@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { useEffect } from "react";
-const vestaraIcon = "/icons/icon-512.png";
+import vestaraIcon from "@/assets/vestara-v.png.asset.json";
 
 interface SandboxSplashProps {
   onDone?: () => void;
@@ -27,7 +27,7 @@ export function SandboxSplash({ onDone, duration = 2200 }: SandboxSplashProps) {
         className="flex flex-col items-center gap-4 px-6"
       >
         <img
-          src={vestaraIcon}
+          src={vestaraIcon.url}
           alt="Vestara"
           width={112}
           height={112}
