@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import {
@@ -20,7 +19,7 @@ import { WhatsAppAlertSettings } from "@/components/settings/WhatsAppAlertSettin
 import { useTransactionPin } from "@/hooks/useTransactionPin";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { sandboxSupabase } from "@/integrations/supabase/sandboxClient";
-import { FORGOT_PASSWORD } from "@/lib/appRoutes";
+import { RESET_PASSWORD } from "@/lib/appRoutes";
 import { cn } from "@/lib/utils";
 
 interface ProfileClient {
@@ -43,7 +42,7 @@ interface SandboxProfileProps {
 }
 
 type SheetKey =
-  | null | "loginPin" | "txPin" | "whatsapp" | "soon" | "freeze" | "signout" | "tier";
+  | null | "loginPin" | "txPin" | "whatsapp" | "soon" | "freeze" | "signout" | "tier" | "contact" | "password" | "doc";
 
 const mask = (v?: string | null, keep = 4) =>
   v ? `••••${v.replace(/\s/g, "").slice(-keep)}` : "Not added";
@@ -114,7 +113,7 @@ function TransactionPinSheet({ onDone }: { onDone: () => void }) {
         <p>To reset your 4-digit transaction PIN, our support team will verify you with a code sent to your registered number.</p>
         <p className="rounded-xl bg-primary/10 text-foreground p-3">After a reset, your transfer limits are lower for 24 hours to keep your money safe.</p>
         <div className="flex gap-2">
-          <Button asChild className="flex-1"><a href="/support/new">Contact support</a></Button>
+          <Button asChild className="flex-1"><a href="mailto:support@vestara.ng?subject=Reset%20my%20transaction%20PIN">Contact support</a></Button>
           <Button variant="ghost" onClick={() => setMode("menu")}>Back</Button>
         </div>
       </div>
@@ -129,7 +128,17 @@ function TransactionPinSheet({ onDone }: { onDone: () => void }) {
 }
 
 export function SandboxProfile({ userId, email, client, avatarUrl, onChangePhoto, onNavigate, onSignOut }: SandboxProfileProps) {
-  const navigate = useNavigate();
+  const [doc, setDoc] = useState({ title: "", src: "" });
+  const [resetSending, setResetSending] = useState(false);
+  const sendReset = async () => {
+    if (!email) return;
+    setResetSending(true);
+    const { error } = await sandboxSupabase.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}${RESET_PASSWORD}` });
+    setResetSending(false);
+    if (error) return toast.error("We couldn't send the link. Please try again.");
+    toast.success("Check your email for a link to set a new password");
+    setSheet(null);
+  };
   const { theme, setTheme } = useTheme();
   const push = usePushNotifications();
   const [sheet, setSheet] = useState<SheetKey>(null);
@@ -197,7 +206,7 @@ export function SandboxProfile({ userId, email, client, avatarUrl, onChangePhoto
       <ProfileSection title="Security">
         <ProfileRow icon={KeyRound} label="Login PIN (6-digit)" helper="Used to open the app" onClick={() => setSheet("loginPin")} />
         <ProfileRow icon={Lock} label="Transaction PIN (4-digit)" helper="Used to approve payments and transfers" onClick={() => setSheet("txPin")} />
-        <ProfileRow icon={Shield} label="Change password" onClick={() => navigate(FORGOT_PASSWORD)} />
+        <ProfileRow icon={Shield} label="Change password" onClick={() => setSheet("password")} />
         <ProfileRow icon={Fingerprint} label="Biometric login" helper="Set up inside Login PIN" onClick={() => setSheet("loginPin")} />
         <ProfileRow icon={Fingerprint} label="Use biometrics to confirm transfers" onClick={() => soon("Biometrics for transfers")} />
         <ProfileRow icon={Timer} label="Auto-lock" value="After 2 min" onClick={() => soon("Auto-lock")} />
@@ -244,19 +253,19 @@ export function SandboxProfile({ userId, email, client, avatarUrl, onChangePhoto
         <ProfileRow icon={Sparkles} label="Personalised insights" helper="Use your spending to suggest budgets and savings"
           trailing={<Switch checked={insightsOn} onCheckedChange={(v) => { setInsightsOn(v); localStorage.setItem("vestara:insights", v ? "on" : "off"); }} aria-label="Personalised insights" />} />
         <ProfileRow icon={Download} label="Download my data" onClick={() => soon("Download my data")} />
-        <ProfileRow icon={Trash2} label="Delete my account" onClick={() => navigate("/delete-account")} />
+        <ProfileRow icon={Trash2} label="Delete my account" onClick={() => soon("Delete my account")} />
       </ProfileSection>
 
       <ProfileSection title="Support">
         <ProfileRow icon={AlertTriangle} label="Report fraud / Freeze my account" destructive onClick={() => setSheet("freeze")} />
-        <ProfileRow icon={LifeBuoy} label="Contact us" onClick={() => navigate("/support/new")} />
-        <ProfileRow icon={HelpCircle} label="FAQ" onClick={() => navigate("/help")} />
-        <ProfileRow icon={ClipboardList} label="Complaints" onClick={() => navigate("/support/new")} />
+        <ProfileRow icon={LifeBuoy} label="Contact us" onClick={() => setSheet("contact")} />
+        <ProfileRow icon={HelpCircle} label="FAQ" onClick={() => soon("FAQ")} />
+        <ProfileRow icon={ClipboardList} label="Complaints" onClick={() => setSheet("contact")} />
       </ProfileSection>
 
       <ProfileSection title="About">
-        <ProfileRow icon={ScrollText} label="Terms of Service" onClick={() => navigate("/terms")} />
-        <ProfileRow icon={Shield} label="Privacy Policy" onClick={() => navigate("/privacy")} />
+        <ProfileRow icon={ScrollText} label="Terms of Service" onClick={() => { setDoc({ title: "Terms of Service", src: "/terms" }); setSheet("doc"); }} />
+        <ProfileRow icon={Shield} label="Privacy Policy" onClick={() => { setDoc({ title: "Privacy Policy", src: "/privacy" }); setSheet("doc"); }} />
         <ProfileRow icon={Info} label="App version" value="1.0.0" />
       </ProfileSection>
       <p className="text-xs text-center text-muted-foreground">Banking services provided by VFD Microfinance Bank</p>
@@ -299,7 +308,7 @@ export function SandboxProfile({ userId, email, client, avatarUrl, onChangePhoto
             <SheetHeader><SheetTitle>Report fraud or freeze your account</SheetTitle>
               <SheetDescription>Freezing stops all transfers, bill payments and card use until you unfreeze. Your savings keep earning. To unfreeze, contact support and verify your identity.</SheetDescription></SheetHeader>
             <div className="flex flex-col gap-2 pt-4">
-              <Button variant="destructive" onClick={() => { setSheet(null); navigate("/support/new"); }}>Report to support now</Button>
+              <Button variant="destructive" onClick={() => setSheet("contact")}>Report to support now</Button>
               <Button variant="ghost" onClick={() => setSheet(null)}>Cancel</Button>
             </div>
           </>)}
@@ -311,6 +320,23 @@ export function SandboxProfile({ userId, email, client, avatarUrl, onChangePhoto
               </Button>
               <Button variant="ghost" onClick={() => setSheet(null)}>Cancel</Button>
             </div>
+          </>)}
+          {sheet === "password" && (<>
+            <SheetHeader><SheetTitle>Change password</SheetTitle><SheetDescription>We'll email a secure link to {email} so you can set a new password.</SheetDescription></SheetHeader>
+            <div className="flex flex-col gap-2 pt-4">
+              <Button disabled={resetSending} onClick={sendReset}>{resetSending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send link"}</Button>
+              <Button variant="ghost" onClick={() => setSheet(null)}>Cancel</Button>
+            </div>
+          </>)}
+          {sheet === "contact" && (<>
+            <SheetHeader><SheetTitle>Contact Vestara</SheetTitle><SheetDescription>Our team will get back to you as soon as possible.</SheetDescription></SheetHeader>
+            <div className="mt-4 divide-y divide-border rounded-2xl border border-border overflow-hidden">
+              <ProfileRow icon={Mail} label="Email support" helper="support@vestara.ng" onClick={() => { window.location.href = "mailto:support@vestara.ng"; }} />
+            </div>
+          </>)}
+          {sheet === "doc" && (<>
+            <SheetHeader><SheetTitle>{doc.title}</SheetTitle></SheetHeader>
+            <iframe title={doc.title} src={doc.src} className="mt-3 w-full h-[70dvh] rounded-xl border border-border bg-background" />
           </>)}
           {sheet === "soon" && (<>
             <SheetHeader><SheetTitle>{soonTitle}</SheetTitle><SheetDescription>This is coming soon. We'll let you know when it's ready.</SheetDescription></SheetHeader>
