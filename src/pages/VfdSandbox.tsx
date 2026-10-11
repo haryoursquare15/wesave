@@ -6,13 +6,8 @@ import { useVfdBanking } from "@/hooks/useVfdBanking";
 import { useVestaraLedger, VestaraLockedFund } from "@/hooks/useVestaraLedger";
 import { useToast } from "@/hooks/use-toast";
 import { RefreshCw, LogOut, MessageCircle, Home, PiggyBank, CreditCard, Sparkles, User } from "lucide-react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { WhatsAppAlertSettings } from "@/components/settings/WhatsAppAlertSettings";
-import { LoginPinSettings } from "@/components/settings/LoginPinSettings";
 import { ProfilePictureUpload } from "@/components/settings/ProfilePictureUpload";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { KeyRound } from "lucide-react";
 import { SandboxHeader } from "@/components/vfd-sandbox/SandboxHeader";
 import { SandboxDashboard } from "@/components/vfd-sandbox/SandboxDashboard";
 import { SandboxKYC } from "@/components/vfd-sandbox/SandboxKYC";
@@ -81,9 +76,6 @@ function VfdSandboxInner() {
   const [currentView, setCurrentView] = useState<View>("dashboard");
   const [initialSavingsProduct, setInitialSavingsProduct] = useState<string | null>(null);
   const [banks, setBanks] = useState<Array<{ code: string; name: string }>>([]);
-  const [waOpen, setWaOpen] = useState(false);
-  const [pinOpen, setPinOpen] = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
   const [photoOpen, setPhotoOpen] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   useEffect(() => {
