@@ -65,7 +65,7 @@ function RollingAmount({ value, invalid }: { value: string; invalid: boolean }) 
         "flex items-baseline justify-center font-semibold tabular-nums tracking-tight transition-colors",
         invalid ? "text-destructive" : value === "" ? "text-muted-foreground/50" : "text-foreground"
       )}
-      style={{ fontSize: 56, lineHeight: 1.05 }}
+      style={{ fontSize: "clamp(34px, 8dvh, 56px)", lineHeight: 1.05 }}
       aria-live="polite"
     >
       <span className="mr-1 text-[0.6em] font-medium opacity-70">₦</span>
