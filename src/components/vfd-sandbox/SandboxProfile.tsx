@@ -23,6 +23,7 @@ import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { useDeviceFingerprint } from "@/hooks/useDeviceFingerprint";
 import { sandboxSupabase } from "@/integrations/supabase/sandboxClient";
 import { RESET_PASSWORD } from "@/lib/appRoutes";
+import { loginPinAction } from "@/lib/loginPinApi";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 
@@ -368,7 +369,7 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
         <ProfileRow icon={Shield} label="Change password" onClick={() => setSheet("password")} />
         <ProfileRow icon={Fingerprint} label="Biometric login" helper="Set up inside Login PIN" onClick={() => setSheet("loginPin")} />
         <ProfileRow icon={Fingerprint} label="Use biometrics to confirm transfers" onClick={() => soon("Biometrics for transfers")} />
-        <ProfileRow icon={Timer} label="Auto-lock" value={autolockLabel(autolock)} onClick={() => setSheet("autolock")} />
+        <ProfileRow icon={Timer} label="Auto-lock" value={autolockLabel(autolock)} onClick={openAutolockSheet} />
         <ProfileRow icon={Smartphone} label="Manage devices" helper="One device at a time" onClick={() => setSheet("devices")} />
         <ProfileRow icon={LogOut} label="Sign out of all other devices" onClick={signOutOtherDevices} />
       </ProfileSection>
@@ -548,17 +549,28 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
           </>)}
           {sheet === "autolock" && (<>
             <SheetHeader><SheetTitle>Auto-lock</SheetTitle><SheetDescription>Automatically sign you out after you stop using the app.</SheetDescription></SheetHeader>
-            <div className="pt-3 space-y-1">
-              {AUTOLOCK_OPTIONS.map(o => (
-                <button key={o.value} onClick={() => applyAutolock(o.value)}
-                  className={cn("w-full text-left rounded-xl border px-4 py-3 flex items-center justify-between",
-                    autolock === o.value ? "border-primary bg-primary/5" : "border-border bg-card")}
-                >
-                  <span className="text-sm font-medium text-foreground">{o.label}</span>
-                  {autolock === o.value && <CheckCircle className="h-4 w-4 text-primary" />}
-                </button>
-              ))}
-            </div>
+            {hasLoginPin && !autolockUnlocked ? (
+              <div className="pt-3 space-y-3">
+                <p className="text-sm text-muted-foreground">Enter your 6-digit login PIN to change this setting.</p>
+                <Input type="password" inputMode="numeric" placeholder="6-digit login PIN"
+                  value={autolockPin} onChange={(e) => setAutolockPin(e.target.value.replace(/\D/g, "").slice(0, 6))} />
+                <Button className="w-full" onClick={verifyAutolockPin} disabled={autolockBusy}>
+                  {autolockBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Unlock setting"}
+                </Button>
+              </div>
+            ) : (
+              <div className="pt-3 space-y-1">
+                {AUTOLOCK_OPTIONS.map(o => (
+                  <button key={o.value} onClick={() => applyAutolock(o.value)}
+                    className={cn("w-full text-left rounded-xl border px-4 py-3 flex items-center justify-between",
+                      autolock === o.value ? "border-primary bg-primary/5" : "border-border bg-card")}
+                  >
+                    <span className="text-sm font-medium text-foreground">{o.label}</span>
+                    {autolock === o.value && <CheckCircle className="h-4 w-4 text-primary" />}
+                  </button>
+                ))}
+              </div>
+            )}
           </>)}
           {sheet === "devices" && (<>
             <SheetHeader>
