@@ -1,16 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import {
   Phone, ShieldCheck, IdCard, Landmark, BadgeCheck, Hash, FileText, KeyRound, Lock,
   Fingerprint, Timer, Smartphone, History, LogOut, MessageCircle, Bell, Mail, Palette,
-  Sparkles, Download, Trash2, AlertTriangle, LifeBuoy, HelpCircle, ClipboardList,
-  ScrollText, Shield, Info, Copy, Camera, Loader2,
+  Sparkles, Download, AlertTriangle, LifeBuoy, HelpCircle, ClipboardList,
+  ScrollText, Shield, Info, Copy, Camera, Loader2, CheckCircle, Monitor, Trash2,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { ProfileSection } from "./profile/ProfileSection";
 import { ProfileRow } from "./profile/ProfileRow";
@@ -18,9 +20,11 @@ import { LoginPinSettings } from "@/components/settings/LoginPinSettings";
 import { WhatsAppAlertSettings } from "@/components/settings/WhatsAppAlertSettings";
 import { useTransactionPin } from "@/hooks/useTransactionPin";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
+import { useDeviceFingerprint } from "@/hooks/useDeviceFingerprint";
 import { sandboxSupabase } from "@/integrations/supabase/sandboxClient";
 import { RESET_PASSWORD } from "@/lib/appRoutes";
 import { cn } from "@/lib/utils";
+import { formatDistanceToNow } from "date-fns";
 
 interface ProfileClient {
   full_name: string | null;
@@ -29,6 +33,15 @@ interface ProfileClient {
   nin: string | null;
   tier: string;
   vfd_account_number: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+interface WithdrawalBank {
+  bank_code: string;
+  bank_name: string;
+  account_number: string;
+  account_name: string;
+  set_at: string;
 }
 
 interface SandboxProfileProps {
@@ -36,13 +49,28 @@ interface SandboxProfileProps {
   email?: string | null;
   client: ProfileClient | null;
   avatarUrl: string | null;
+  banks?: Array<{ code: string; name: string }>;
+  onLoadBanks?: () => Promise<void> | void;
+  onValidateBeneficiary?: (account: string, bankCode: string) => Promise<string | null>;
   onChangePhoto: () => void;
   onNavigate: (view: string) => void;
   onSignOut: () => Promise<void> | void;
 }
 
 type SheetKey =
-  | null | "loginPin" | "txPin" | "whatsapp" | "soon" | "freeze" | "signout" | "tier" | "contact" | "password" | "doc";
+  | null | "loginPin" | "txPin" | "whatsapp" | "soon" | "freeze" | "signout" | "tier"
+  | "contact" | "password" | "doc" | "autolock" | "devices" | "withdrawbank" | "pushsetup";
+
+const AUTOLOCK_KEY = "vestara:autolock";
+const AUTOLOCK_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "1", label: "After 1 minute" },
+  { value: "2", label: "After 2 minutes" },
+  { value: "5", label: "After 5 minutes" },
+  { value: "10", label: "After 10 minutes" },
+  { value: "15", label: "After 15 minutes (default)" },
+  { value: "never", label: "Never (not recommended)" },
+];
+const autolockLabel = (v: string) => AUTOLOCK_OPTIONS.find(o => o.value === v)?.label.replace(" (default)", "") || "After 15 minutes";
 
 const mask = (v?: string | null, keep = 4) =>
   v ? `••••${v.replace(/\s/g, "").slice(-keep)}` : "Not added";
@@ -127,7 +155,7 @@ function TransactionPinSheet({ onDone }: { onDone: () => void }) {
   );
 }
 
-export function SandboxProfile({ userId, email, client, avatarUrl, onChangePhoto, onNavigate, onSignOut }: SandboxProfileProps) {
+export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], onLoadBanks, onValidateBeneficiary, onChangePhoto, onNavigate, onSignOut }: SandboxProfileProps) {
   const [doc, setDoc] = useState({ title: "", src: "" });
   const [resetSending, setResetSending] = useState(false);
   const sendReset = async () => {
@@ -141,6 +169,7 @@ export function SandboxProfile({ userId, email, client, avatarUrl, onChangePhoto
   };
   const { theme, setTheme } = useTheme();
   const push = usePushNotifications();
+  const device = useDeviceFingerprint();
   const [sheet, setSheet] = useState<SheetKey>(null);
   const [soonTitle, setSoonTitle] = useState("");
   const [wa, setWa] = useState<{ phone: string; opted_in: boolean } | null>(null);
@@ -148,6 +177,24 @@ export function SandboxProfile({ userId, email, client, avatarUrl, onChangePhoto
   const [threshold, setThreshold] = useState("");
   const [insightsOn, setInsightsOn] = useState(() => localStorage.getItem("vestara:insights") !== "off");
   const [signingOut, setSigningOut] = useState(false);
+  const [autolock, setAutolock] = useState<string>(() => localStorage.getItem(AUTOLOCK_KEY) || "15");
+
+  // Withdrawal bank state (read from client.metadata; immutable once set)
+  const withdrawalBank = useMemo<WithdrawalBank | null>(() => {
+    const meta = (client?.metadata || {}) as Record<string, unknown>;
+    const wb = meta.withdrawal_bank as WithdrawalBank | undefined;
+    return wb && wb.account_number && wb.bank_name ? wb : null;
+  }, [client?.metadata]);
+  const [wbBankCode, setWbBankCode] = useState("");
+  const [wbAccount, setWbAccount] = useState("");
+  const [wbName, setWbName] = useState("");
+  const [wbVerifying, setWbVerifying] = useState(false);
+  const [wbVerified, setWbVerified] = useState(false);
+  const [wbSaving, setWbSaving] = useState(false);
+
+  // Devices state
+  const [devices, setDevices] = useState<Array<{ id: string; device_fingerprint: string; device_name: string; browser: string | null; os: string | null; is_current: boolean; last_used_at: string }>>([]);
+  const [devicesLoading, setDevicesLoading] = useState(false);
 
   const loadWa = () => {
     if (!userId) return;
@@ -155,6 +202,84 @@ export function SandboxProfile({ userId, email, client, avatarUrl, onChangePhoto
       .then(({ data }) => setWa((data as { phone: string; opted_in: boolean } | null) ?? null));
   };
   useEffect(loadWa, [userId]);
+
+  const loadDevices = async () => {
+    setDevicesLoading(true);
+    try {
+      const { data } = await sandboxSupabase.functions.invoke("security-controls", { body: { action: "get_devices" } });
+      setDevices((data?.devices || []) as typeof devices);
+    } finally { setDevicesLoading(false); }
+  };
+
+  useEffect(() => {
+    if (sheet === "devices") void loadDevices();
+    if (sheet === "withdrawbank") { if (banks.length === 0 && onLoadBanks) void onLoadBanks(); }
+  }, [sheet]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Live validation for withdrawal bank form
+  useEffect(() => {
+    if (!wbBankCode || wbAccount.length !== 10 || !onValidateBeneficiary) { setWbVerified(false); setWbName(""); return; }
+    let active = true;
+    const t = setTimeout(async () => {
+      setWbVerifying(true);
+      try {
+        const name = await onValidateBeneficiary(wbAccount, wbBankCode);
+        if (!active) return;
+        if (name) { setWbName(name); setWbVerified(true); }
+        else { setWbName(""); setWbVerified(false); }
+      } finally { if (active) setWbVerifying(false); }
+    }, 450);
+    return () => { active = false; clearTimeout(t); };
+  }, [wbBankCode, wbAccount, onValidateBeneficiary]);
+
+  const saveWithdrawalBank = async () => {
+    if (!userId || !wbVerified || !wbName) return;
+    setWbSaving(true);
+    try {
+      const bankName = banks.find(b => b.code === wbBankCode)?.name || "";
+      const next: WithdrawalBank = {
+        bank_code: wbBankCode, bank_name: bankName,
+        account_number: wbAccount, account_name: wbName,
+        set_at: new Date().toISOString(),
+      };
+      const meta = { ...(client?.metadata || {}), withdrawal_bank: next };
+      const { error } = await sandboxSupabase.from("vfd_sandbox_clients").update({ metadata: meta as Record<string, unknown> as never }).eq("user_id", userId);
+      if (error) throw error;
+      toast.success("Withdrawal bank saved. Withdrawals will go to this account.");
+      setSheet(null);
+      // Force a refresh so the row reflects immediately
+      window.dispatchEvent(new Event("vestara:profile-updated"));
+    } catch (err) {
+      console.error(err);
+      toast.error("We couldn't save your bank. Please try again.");
+    } finally { setWbSaving(false); }
+  };
+
+  const applyAutolock = (v: string) => {
+    setAutolock(v);
+    localStorage.setItem(AUTOLOCK_KEY, v);
+    toast.success(`Auto-lock set to ${autolockLabel(v).toLowerCase()}`);
+  };
+
+  const signOutOtherDevices = async () => {
+    if (!device) return;
+    try {
+      const { data } = await sandboxSupabase.functions.invoke("security-controls", {
+        body: { action: "sign_out_other_devices", fingerprint: device.fingerprint },
+      });
+      toast.success(`Signed out ${data?.removed || 0} other device${(data?.removed || 0) === 1 ? "" : "s"}.`);
+      void loadDevices();
+    } catch {
+      toast.error("Couldn't sign out other devices. Please try again.");
+    }
+  };
+
+  const removeDevice = async (id: string, isCurrent: boolean) => {
+    if (isCurrent) return;
+    if (!confirm("Remove this device?")) return;
+    await sandboxSupabase.functions.invoke("security-controls", { body: { action: "remove_device", device_id: id } });
+    void loadDevices();
+  };
 
   const soon = (title: string) => { setSoonTitle(title); setSheet("soon"); };
   const name = client?.full_name || email?.split("@")[0] || "Vestara user";
@@ -165,6 +290,10 @@ export function SandboxProfile({ userId, email, client, avatarUrl, onChangePhoto
     await navigator.clipboard.writeText(client.vfd_account_number);
     toast.success("Account number copied");
   };
+
+  const withdrawBankRowValue = withdrawalBank
+    ? `${withdrawalBank.bank_name} ••${withdrawalBank.account_number.slice(-4)}`
+    : "Not set";
 
   return (
     <div className="space-y-6">
@@ -190,7 +319,13 @@ export function SandboxProfile({ userId, email, client, avatarUrl, onChangePhoto
         <ProfileRow icon={Phone} label="Mobile number" value={maskPhone(client?.phone)} />
         <ProfileRow icon={ShieldCheck} label="BVN" value={<span className="flex items-center gap-2 justify-end">{mask(client?.bvn)}{client?.bvn && <Chip tone="success">Verified</Chip>}</span>} />
         <ProfileRow icon={IdCard} label="NIN" value={mask(client?.nin)} />
-        <ProfileRow icon={Landmark} label="Withdrawal bank" onClick={() => soon("Withdrawal bank")} />
+        <ProfileRow
+          icon={Landmark}
+          label="Withdrawal bank"
+          helper={withdrawalBank ? withdrawalBank.account_name : "Set once — cannot be changed"}
+          value={withdrawBankRowValue}
+          onClick={withdrawalBank ? undefined : () => setSheet("withdrawbank")}
+        />
         <ProfileRow icon={BadgeCheck} label="Account tier and limits" value={tier} onClick={() => setSheet("tier")} />
         <ProfileRow
           icon={Hash}
@@ -209,10 +344,9 @@ export function SandboxProfile({ userId, email, client, avatarUrl, onChangePhoto
         <ProfileRow icon={Shield} label="Change password" onClick={() => setSheet("password")} />
         <ProfileRow icon={Fingerprint} label="Biometric login" helper="Set up inside Login PIN" onClick={() => setSheet("loginPin")} />
         <ProfileRow icon={Fingerprint} label="Use biometrics to confirm transfers" onClick={() => soon("Biometrics for transfers")} />
-        <ProfileRow icon={Timer} label="Auto-lock" value="After 2 min" onClick={() => soon("Auto-lock")} />
-        <ProfileRow icon={Smartphone} label="Manage devices" onClick={() => soon("Manage devices")} />
-        <ProfileRow icon={History} label="Login activity" onClick={() => soon("Login activity")} />
-        <ProfileRow icon={LogOut} label="Sign out of all devices" onClick={() => soon("Sign out of all devices")} />
+        <ProfileRow icon={Timer} label="Auto-lock" value={autolockLabel(autolock)} onClick={() => setSheet("autolock")} />
+        <ProfileRow icon={Smartphone} label="Manage devices" helper="One device at a time" onClick={() => setSheet("devices")} />
+        <ProfileRow icon={LogOut} label="Sign out of all other devices" onClick={signOutOtherDevices} />
       </ProfileSection>
 
       <ProfileSection title="Notifications">
@@ -226,9 +360,16 @@ export function SandboxProfile({ userId, email, client, avatarUrl, onChangePhoto
         <ProfileRow
           icon={Bell}
           label="Push notifications"
-          helper={push.permission === "denied" ? "Blocked in browser settings" : undefined}
+          helper={!push.supported ? "Not supported on this device" : push.permission === "denied" ? "Blocked in browser settings — enable it there to turn on" : push.isSubscribed ? "On" : "Tap to set up"}
+          onClick={!push.isSubscribed && push.supported && push.permission !== "denied" ? () => setSheet("pushsetup") : undefined}
           trailing={<Switch checked={push.isSubscribed} disabled={!push.supported || push.loading || push.permission === "denied"}
-            onCheckedChange={async (v) => { if (v) { if (await push.subscribe()) toast.success("Push notifications on"); } else { await push.unsubscribe(); toast.success("Push notifications off"); } }} aria-label="Push notifications" />}
+            onCheckedChange={async (v) => {
+              if (v) {
+                const ok = await push.subscribe();
+                if (ok) toast.success("Push notifications on");
+                else toast.error(push.permission === "denied" ? "Push is blocked in your browser. Enable it in site settings." : "Couldn't enable push.");
+              } else { await push.unsubscribe(); toast.success("Push notifications off"); }
+            }} aria-label="Push notifications" />}
         />
         <ProfileRow icon={Mail} label="Email statements" onClick={() => soon("Email statements")} />
       </ProfileSection>
@@ -253,7 +394,6 @@ export function SandboxProfile({ userId, email, client, avatarUrl, onChangePhoto
         <ProfileRow icon={Sparkles} label="Personalised insights" helper="Use your spending to suggest budgets and savings"
           trailing={<Switch checked={insightsOn} onCheckedChange={(v) => { setInsightsOn(v); localStorage.setItem("vestara:insights", v ? "on" : "off"); }} aria-label="Personalised insights" />} />
         <ProfileRow icon={Download} label="Download my data" onClick={() => soon("Download my data")} />
-        <ProfileRow icon={Trash2} label="Delete my account" onClick={() => soon("Delete my account")} />
       </ProfileSection>
 
       <ProfileSection title="Support">
@@ -332,6 +472,128 @@ export function SandboxProfile({ userId, email, client, avatarUrl, onChangePhoto
             <SheetHeader><SheetTitle>Contact Vestara</SheetTitle><SheetDescription>Our team will get back to you as soon as possible.</SheetDescription></SheetHeader>
             <div className="mt-4 divide-y divide-border rounded-2xl border border-border overflow-hidden">
               <ProfileRow icon={Mail} label="Email support" helper="support@vestara.ng" onClick={() => { window.location.href = "mailto:support@vestara.ng"; }} />
+            </div>
+          </>)}
+          {sheet === "withdrawbank" && (<>
+            <SheetHeader>
+              <SheetTitle>Set up your withdrawal bank</SheetTitle>
+              <SheetDescription>
+                Every withdrawal from Vestara goes to this account. For your safety, this cannot be changed later from the app — contact support if you need to update it.
+              </SheetDescription>
+            </SheetHeader>
+            <div className="space-y-3 pt-3">
+              <div>
+                <Label>Bank</Label>
+                <Select value={wbBankCode} onValueChange={setWbBankCode}>
+                  <SelectTrigger><SelectValue placeholder="Select bank" /></SelectTrigger>
+                  <SelectContent className="max-h-[300px]">
+                    {banks.map(b => (<SelectItem key={b.code} value={b.code}>{b.name}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Account number</Label>
+                <div className="relative">
+                  <Input inputMode="numeric" placeholder="10-digit account number" maxLength={10}
+                    value={wbAccount}
+                    onChange={e => { setWbAccount(e.target.value.replace(/\D/g, "").slice(0, 10)); setWbVerified(false); setWbName(""); }}
+                    className={wbVerified ? "pr-10 border-success" : ""}
+                  />
+                  {wbVerifying && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />}
+                  {wbVerified && !wbVerifying && <CheckCircle className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-success" />}
+                </div>
+              </div>
+              {wbName && wbVerified && (
+                <div>
+                  <Label>Account name (verified)</Label>
+                  <div className="p-3 bg-success/10 border border-success/20 rounded-lg">
+                    <p className="text-sm font-medium text-foreground">{wbName}</p>
+                  </div>
+                </div>
+              )}
+              {!wbName && wbBankCode && wbAccount.length === 10 && !wbVerifying && !wbVerified && (
+                <p className="text-xs text-destructive">Unable to verify account. Check the bank and account number.</p>
+              )}
+              <div className="flex gap-2 pt-2">
+                <Button variant="ghost" className="flex-1" onClick={() => setSheet(null)}>Cancel</Button>
+                <Button className="flex-1" onClick={saveWithdrawalBank} disabled={!wbVerified || wbSaving}>
+                  {wbSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save bank"}
+                </Button>
+              </div>
+            </div>
+          </>)}
+          {sheet === "autolock" && (<>
+            <SheetHeader><SheetTitle>Auto-lock</SheetTitle><SheetDescription>Automatically sign you out after you stop using the app.</SheetDescription></SheetHeader>
+            <div className="pt-3 space-y-1">
+              {AUTOLOCK_OPTIONS.map(o => (
+                <button key={o.value} onClick={() => applyAutolock(o.value)}
+                  className={cn("w-full text-left rounded-xl border px-4 py-3 flex items-center justify-between",
+                    autolock === o.value ? "border-primary bg-primary/5" : "border-border bg-card")}
+                >
+                  <span className="text-sm font-medium text-foreground">{o.label}</span>
+                  {autolock === o.value && <CheckCircle className="h-4 w-4 text-primary" />}
+                </button>
+              ))}
+            </div>
+          </>)}
+          {sheet === "devices" && (<>
+            <SheetHeader>
+              <SheetTitle>Manage devices</SheetTitle>
+              <SheetDescription>Vestara allows one active device at a time. Signing in on another device will sign you out here.</SheetDescription>
+            </SheetHeader>
+            <div className="pt-3 space-y-2">
+              {devicesLoading ? (
+                <div className="flex items-center justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+              ) : devices.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-6">No devices registered yet.</p>
+              ) : devices.map(d => {
+                const isCurrent = device?.fingerprint === d.device_fingerprint || d.is_current;
+                return (
+                  <div key={d.id} className={cn("rounded-xl border p-3 flex items-start gap-3", isCurrent ? "border-primary bg-primary/5" : "border-border bg-card")}>
+                    <span className="h-9 w-9 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+                      {d.os?.toLowerCase().includes("android") || d.os?.toLowerCase().includes("ios") ? <Smartphone className="h-4 w-4" /> : <Monitor className="h-4 w-4" />}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-foreground truncate">{d.device_name}</p>
+                        {isCurrent && <Chip tone="primary">This device</Chip>}
+                      </div>
+                      <p className="text-xs text-muted-foreground">{d.browser} · {d.os}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Last used {formatDistanceToNow(new Date(d.last_used_at), { addSuffix: true })}</p>
+                    </div>
+                    {!isCurrent && (
+                      <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => removeDevice(d.id, isCurrent)} aria-label="Remove device">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                );
+              })}
+              {devices.length > 1 && (
+                <Button variant="outline" className="w-full mt-2" onClick={signOutOtherDevices}>
+                  <LogOut className="h-4 w-4 mr-2" /> Sign out of all other devices
+                </Button>
+              )}
+            </div>
+          </>)}
+          {sheet === "pushsetup" && (<>
+            <SheetHeader>
+              <SheetTitle>Turn on push notifications</SheetTitle>
+              <SheetDescription>Get instant alerts for money in and out, Ajo updates and security events — even when the app is closed.</SheetDescription>
+            </SheetHeader>
+            <div className="pt-3 space-y-3">
+              <ul className="text-sm text-muted-foreground space-y-1.5 list-disc pl-5">
+                <li>You'll be asked for permission in your browser.</li>
+                <li>You can switch this off any time from this screen.</li>
+                <li>Push does not replace email — important alerts still go to {email}.</li>
+              </ul>
+              <Button className="w-full" disabled={push.loading} onClick={async () => {
+                const ok = await push.subscribe();
+                if (ok) { toast.success("Push notifications on"); setSheet(null); }
+                else toast.error(push.permission === "denied" ? "Push is blocked. Enable it in your browser's site settings and try again." : "Couldn't enable push.");
+              }}>
+                {push.loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Enable push notifications"}
+              </Button>
             </div>
           </>)}
           {sheet === "doc" && (<>

@@ -878,6 +878,93 @@ serve(async (req) => {
         break;
       }
 
+      // ==================== Single-Device Enforcement ====================
+      case 'enforce_single_device': {
+        if (!user) throw new Error('Authentication required');
+        const { fingerprint, device_name, browser, os, ip_address } = params;
+        if (!fingerprint) throw new Error('Device fingerprint is required');
+
+        const { data: existing } = await supabase
+          .from('user_devices')
+          .select('id, device_fingerprint, device_name, browser, os, last_used_at')
+          .eq('user_id', user.id);
+
+        const current = (existing || []).find((d: { device_fingerprint: string }) => d.device_fingerprint === fingerprint);
+        const others = (existing || []).filter((d: { device_fingerprint: string }) => d.device_fingerprint !== fingerprint);
+        const isNewDevice = !current;
+
+        if (current) {
+          await supabase
+            .from('user_devices')
+            .update({ last_used_at: new Date().toISOString(), is_current: true, is_trusted: true, ip_address: ip_address || null })
+            .eq('id', current.id);
+        } else {
+          await supabase.from('user_devices').insert({
+            user_id: user.id,
+            device_fingerprint: fingerprint,
+            device_name: device_name || 'Unknown Device',
+            browser: browser || null,
+            os: os || null,
+            ip_address: ip_address || null,
+            is_trusted: true,
+            is_current: true,
+          });
+        }
+
+        let removedCount = 0;
+        if (others.length > 0) {
+          const { count } = await supabase
+            .from('user_devices')
+            .delete({ count: 'exact' })
+            .eq('user_id', user.id)
+            .neq('device_fingerprint', fingerprint);
+          removedCount = count || others.length;
+        }
+
+        if (isNewDevice && others.length > 0 && user.email) {
+          try {
+            await sendBrandedEmail({
+              to: user.email,
+              subject: 'A new device signed in to your Vestara account',
+              preheader: 'If this was not you, change your password now.',
+              heading: 'New device signed in',
+              paragraphs: [
+                `We detected a sign-in on a new device: ${device_name || 'Unknown device'}${browser ? ` (${browser}${os ? ' · ' + os : ''})` : ''}.`,
+                'Vestara only allows one device at a time, so any other devices have been signed out automatically.',
+                'If this was you, no further action is needed. If you do not recognise this sign-in, change your password immediately and contact support.',
+              ],
+              cta: { label: 'Open Vestara', url: 'https://app.vestara.ng' },
+            });
+          } catch (e) {
+            console.error('new-device email failed', e);
+          }
+          try {
+            await supabase.rpc('log_audit_event', {
+              _user_id: user.id,
+              _action: 'single_device_enforced',
+              _resource_type: 'device',
+              _details: { fingerprint, device_name, removed: removedCount },
+            });
+          } catch (_e) { /* non-fatal */ }
+        }
+
+        result = { success: true, is_new_device: isNewDevice, removed_other_devices: removedCount };
+        break;
+      }
+
+      case 'sign_out_other_devices': {
+        if (!user) throw new Error('Authentication required');
+        const { fingerprint } = params;
+        if (!fingerprint) throw new Error('Device fingerprint is required');
+        const { count } = await supabase
+          .from('user_devices')
+          .delete({ count: 'exact' })
+          .eq('user_id', user.id)
+          .neq('device_fingerprint', fingerprint);
+        result = { success: true, removed: count || 0 };
+        break;
+      }
+
       default:
         throw new Error(`Unknown action: ${action}`);
     }

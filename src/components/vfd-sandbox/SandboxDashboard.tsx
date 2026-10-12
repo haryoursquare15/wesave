@@ -1,7 +1,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
-  Wallet, Lock, Users, Target, Heart, Receipt, Send,
+  Wallet, Lock, Users, Target, Heart, Receipt, Send, LayoutGrid,
   CreditCard, Eye, EyeOff, TrendingUp, Plus, ArrowDownLeft, ArrowUpRight,
   Shield, ChevronRight, ChevronLeft, PiggyBank,
   Clock, Copy, Check, Building2, Vault as VaultIcon, Zap, Gift, ShieldCheck,
@@ -481,13 +481,19 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
       >
         {[
           { key: "fund", label: "Add Money", icon: Plus, color: "bg-primary-soft text-primary" },
-          { key: "transfer", label: "Transfer", icon: Send, color: "bg-primary-soft text-primary" },
+          { key: "services", label: "Services", icon: LayoutGrid, color: "bg-primary-soft text-primary" },
           { key: "lock", label: "Lock", icon: Lock, color: "bg-primary-soft text-primary" },
           { key: "history", label: "History", icon: Clock, color: "bg-primary-soft text-primary" },
         ].map((action) => (
           <button
             key={action.key}
-            onClick={() => onNavigate(action.key)}
+            onClick={() => {
+              if (action.key === "services") {
+                document.getElementById("home-services")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                return;
+              }
+              onNavigate(action.key);
+            }}
             className="flex flex-col items-center gap-2 group"
           >
             <motion.div
@@ -659,9 +665,11 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
 
       {/* ═══ SERVICES (grouped categories) ═══ */}
       <motion.div
+        id="home-services"
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.25 }}
+        className="scroll-mt-20"
       >
         <h3 className="text-sm font-bold text-foreground mb-3">Services</h3>
         <div className="grid grid-cols-2 gap-2.5">
