@@ -46,6 +46,9 @@
     /* Brand ink (deep navy) for dark surfaces */
     --ink: 215 50% 12%;
     --ink-foreground: 0 0% 100%;
+    --ink-2: 215 47% 15%;
+    --ink-deep: 215 55% 9%;
+    --tonal-teal: 175 60% 35%;
     --primary-soft: 21 90% 95%;
 
     /* Custom Thrift Colors */
@@ -293,4 +296,12 @@
     padding-left: env(safe-area-inset-left, 0px);
     padding-right: env(safe-area-inset-right, 0px);
   }
+}
+@layer utilities {
+  .bg-gradient-ink { background-image: linear-gradient(180deg, hsl(var(--ink)) 0%, hsl(var(--ink-2)) 100%); }
+  .tonal-drift { animation: tonal-drift 30s ease-in-out infinite; }
+  .pin-shake { animation: pin-shake 360ms ease-out; }
+  @keyframes tonal-drift { 0%,100% { transform: translate3d(0,0,0); } 50% { transform: translate3d(8px,-6px,0); } }
+  @keyframes pin-shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 50% { transform: translateX(5px); } 75% { transform: translateX(-3px); } }
+  @media (prefers-reduced-motion: reduce) { .tonal-drift, .pin-shake { animation: none; } }
 }
