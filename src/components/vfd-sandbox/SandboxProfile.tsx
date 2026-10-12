@@ -474,6 +474,128 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
               <ProfileRow icon={Mail} label="Email support" helper="support@vestara.ng" onClick={() => { window.location.href = "mailto:support@vestara.ng"; }} />
             </div>
           </>)}
+          {sheet === "withdrawbank" && (<>
+            <SheetHeader>
+              <SheetTitle>Set up your withdrawal bank</SheetTitle>
+              <SheetDescription>
+                Every withdrawal from Vestara goes to this account. For your safety, this cannot be changed later from the app — contact support if you need to update it.
+              </SheetDescription>
+            </SheetHeader>
+            <div className="space-y-3 pt-3">
+              <div>
+                <Label>Bank</Label>
+                <Select value={wbBankCode} onValueChange={setWbBankCode}>
+                  <SelectTrigger><SelectValue placeholder="Select bank" /></SelectTrigger>
+                  <SelectContent className="max-h-[300px]">
+                    {banks.map(b => (<SelectItem key={b.code} value={b.code}>{b.name}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Account number</Label>
+                <div className="relative">
+                  <Input inputMode="numeric" placeholder="10-digit account number" maxLength={10}
+                    value={wbAccount}
+                    onChange={e => { setWbAccount(e.target.value.replace(/\D/g, "").slice(0, 10)); setWbVerified(false); setWbName(""); }}
+                    className={wbVerified ? "pr-10 border-success" : ""}
+                  />
+                  {wbVerifying && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />}
+                  {wbVerified && !wbVerifying && <CheckCircle className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-success" />}
+                </div>
+              </div>
+              {wbName && wbVerified && (
+                <div>
+                  <Label>Account name (verified)</Label>
+                  <div className="p-3 bg-success/10 border border-success/20 rounded-lg">
+                    <p className="text-sm font-medium text-foreground">{wbName}</p>
+                  </div>
+                </div>
+              )}
+              {!wbName && wbBankCode && wbAccount.length === 10 && !wbVerifying && !wbVerified && (
+                <p className="text-xs text-destructive">Unable to verify account. Check the bank and account number.</p>
+              )}
+              <div className="flex gap-2 pt-2">
+                <Button variant="ghost" className="flex-1" onClick={() => setSheet(null)}>Cancel</Button>
+                <Button className="flex-1" onClick={saveWithdrawalBank} disabled={!wbVerified || wbSaving}>
+                  {wbSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save bank"}
+                </Button>
+              </div>
+            </div>
+          </>)}
+          {sheet === "autolock" && (<>
+            <SheetHeader><SheetTitle>Auto-lock</SheetTitle><SheetDescription>Automatically sign you out after you stop using the app.</SheetDescription></SheetHeader>
+            <div className="pt-3 space-y-1">
+              {AUTOLOCK_OPTIONS.map(o => (
+                <button key={o.value} onClick={() => applyAutolock(o.value)}
+                  className={cn("w-full text-left rounded-xl border px-4 py-3 flex items-center justify-between",
+                    autolock === o.value ? "border-primary bg-primary/5" : "border-border bg-card")}
+                >
+                  <span className="text-sm font-medium text-foreground">{o.label}</span>
+                  {autolock === o.value && <CheckCircle className="h-4 w-4 text-primary" />}
+                </button>
+              ))}
+            </div>
+          </>)}
+          {sheet === "devices" && (<>
+            <SheetHeader>
+              <SheetTitle>Manage devices</SheetTitle>
+              <SheetDescription>Vestara allows one active device at a time. Signing in on another device will sign you out here.</SheetDescription>
+            </SheetHeader>
+            <div className="pt-3 space-y-2">
+              {devicesLoading ? (
+                <div className="flex items-center justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+              ) : devices.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-6">No devices registered yet.</p>
+              ) : devices.map(d => {
+                const isCurrent = device?.fingerprint === d.device_fingerprint || d.is_current;
+                return (
+                  <div key={d.id} className={cn("rounded-xl border p-3 flex items-start gap-3", isCurrent ? "border-primary bg-primary/5" : "border-border bg-card")}>
+                    <span className="h-9 w-9 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+                      {d.os?.toLowerCase().includes("android") || d.os?.toLowerCase().includes("ios") ? <Smartphone className="h-4 w-4" /> : <Monitor className="h-4 w-4" />}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-foreground truncate">{d.device_name}</p>
+                        {isCurrent && <Chip tone="primary">This device</Chip>}
+                      </div>
+                      <p className="text-xs text-muted-foreground">{d.browser} · {d.os}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Last used {formatDistanceToNow(new Date(d.last_used_at), { addSuffix: true })}</p>
+                    </div>
+                    {!isCurrent && (
+                      <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => removeDevice(d.id, isCurrent)} aria-label="Remove device">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                );
+              })}
+              {devices.length > 1 && (
+                <Button variant="outline" className="w-full mt-2" onClick={signOutOtherDevices}>
+                  <LogOut className="h-4 w-4 mr-2" /> Sign out of all other devices
+                </Button>
+              )}
+            </div>
+          </>)}
+          {sheet === "pushsetup" && (<>
+            <SheetHeader>
+              <SheetTitle>Turn on push notifications</SheetTitle>
+              <SheetDescription>Get instant alerts for money in and out, Ajo updates and security events — even when the app is closed.</SheetDescription>
+            </SheetHeader>
+            <div className="pt-3 space-y-3">
+              <ul className="text-sm text-muted-foreground space-y-1.5 list-disc pl-5">
+                <li>You'll be asked for permission in your browser.</li>
+                <li>You can switch this off any time from this screen.</li>
+                <li>Push does not replace email — important alerts still go to {email}.</li>
+              </ul>
+              <Button className="w-full" disabled={push.loading} onClick={async () => {
+                const ok = await push.subscribe();
+                if (ok) { toast.success("Push notifications on"); setSheet(null); }
+                else toast.error(push.permission === "denied" ? "Push is blocked. Enable it in your browser's site settings and try again." : "Couldn't enable push.");
+              }}>
+                {push.loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Enable push notifications"}
+              </Button>
+            </div>
+          </>)}
           {sheet === "doc" && (<>
             <SheetHeader><SheetTitle>{doc.title}</SheetTitle></SheetHeader>
             <iframe title={doc.title} src={doc.src} className="mt-3 w-full h-[70dvh] rounded-xl border border-border bg-background" />
