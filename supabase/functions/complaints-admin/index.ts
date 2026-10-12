@@ -42,8 +42,8 @@ Deno.serve(async (req) => {
       const { data, error } = await q;
       if (error) throw error;
       const ids = [...new Set((data ?? []).map((c) => c.user_id))];
-      const { data: profs } = ids.length ? await db.from("profiles").select("user_id,full_name,email").in("user_id", ids) : { data: [] };
-      const pm = new Map((profs ?? []).map((x: any) => [x.user_id, x]));
+      const { data: profs } = ids.length ? await db.from("profiles").select("id,full_name,email").in("id", ids) : { data: [] };
+      const pm = new Map((profs ?? []).map((x: any) => [x.id, x]));
       return json({ rows: (data ?? []).map((c) => ({ ...c, user_name: pm.get(c.user_id)?.full_name ?? null, user_email: pm.get(c.user_id)?.email ?? null })) });
     }
     if (b.action === "detail") {
@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
       const [{ data: ev }, { data: at }, { data: prof }, tx] = await Promise.all([
         db.from("complaint_events").select("*").eq("complaint_id", b.id).order("created_at"),
         db.from("complaint_attachments").select("*").eq("complaint_id", b.id),
-        db.from("profiles").select("full_name,email,phone").eq("user_id", c.user_id).maybeSingle(),
+        db.from("profiles").select("full_name,email,account_status").eq("id", c.user_id).maybeSingle(),
         c.transaction_id ? db.from("vfd_sandbox_transactions").select("id,transaction_type,amount,status,reference,vfd_reference,session_id,beneficiary_name,beneficiary_account,beneficiary_bank,description,created_at,reversed_at").eq("id", c.transaction_id).maybeSingle() : Promise.resolve({ data: null }),
       ]);
       const atts = await Promise.all((at ?? []).map(async (a) => ({ ...a, url: (await db.storage.from("complaint-attachments").createSignedUrl(a.storage_path, 900)).data?.signedUrl ?? null })));
@@ -68,7 +68,7 @@ Deno.serve(async (req) => {
       const { error } = await db.from("complaints").update(patch).eq("id", b.id);
       if (error) throw error;
       if (b.priority) await db.from("complaint_events").insert({ complaint_id: b.id, actor_type: "system", event_type: "internal_note", message: `Priority set to ${b.priority}` });
-      await db.from("audit_logs").insert({ user_id: uid, action: "complaint_update", entity_type: "complaint", entity_id: b.id, details: patch }).then(() => {}, () => {});
+      await db.from("audit_logs").insert({ user_id: uid, action: "complaint_update", resource_type: "complaint", resource_id: b.id, details: patch }).then(() => {}, () => {});
       return json({ ok: true });
     }
     if (b.action === "reply") {
