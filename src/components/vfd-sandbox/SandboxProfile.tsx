@@ -155,7 +155,7 @@ function TransactionPinSheet({ onDone }: { onDone: () => void }) {
   );
 }
 
-export function SandboxProfile({ userId, email, client, avatarUrl, onChangePhoto, onNavigate, onSignOut }: SandboxProfileProps) {
+export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], onLoadBanks, onValidateBeneficiary, onChangePhoto, onNavigate, onSignOut }: SandboxProfileProps) {
   const [doc, setDoc] = useState({ title: "", src: "" });
   const [resetSending, setResetSending] = useState(false);
   const sendReset = async () => {
@@ -169,6 +169,7 @@ export function SandboxProfile({ userId, email, client, avatarUrl, onChangePhoto
   };
   const { theme, setTheme } = useTheme();
   const push = usePushNotifications();
+  const device = useDeviceFingerprint();
   const [sheet, setSheet] = useState<SheetKey>(null);
   const [soonTitle, setSoonTitle] = useState("");
   const [wa, setWa] = useState<{ phone: string; opted_in: boolean } | null>(null);
@@ -176,6 +177,24 @@ export function SandboxProfile({ userId, email, client, avatarUrl, onChangePhoto
   const [threshold, setThreshold] = useState("");
   const [insightsOn, setInsightsOn] = useState(() => localStorage.getItem("vestara:insights") !== "off");
   const [signingOut, setSigningOut] = useState(false);
+  const [autolock, setAutolock] = useState<string>(() => localStorage.getItem(AUTOLOCK_KEY) || "15");
+
+  // Withdrawal bank state (read from client.metadata; immutable once set)
+  const withdrawalBank = useMemo<WithdrawalBank | null>(() => {
+    const meta = (client?.metadata || {}) as Record<string, unknown>;
+    const wb = meta.withdrawal_bank as WithdrawalBank | undefined;
+    return wb && wb.account_number && wb.bank_name ? wb : null;
+  }, [client?.metadata]);
+  const [wbBankCode, setWbBankCode] = useState("");
+  const [wbAccount, setWbAccount] = useState("");
+  const [wbName, setWbName] = useState("");
+  const [wbVerifying, setWbVerifying] = useState(false);
+  const [wbVerified, setWbVerified] = useState(false);
+  const [wbSaving, setWbSaving] = useState(false);
+
+  // Devices state
+  const [devices, setDevices] = useState<Array<{ id: string; device_fingerprint: string; device_name: string; browser: string | null; os: string | null; is_current: boolean; last_used_at: string }>>([]);
+  const [devicesLoading, setDevicesLoading] = useState(false);
 
   const loadWa = () => {
     if (!userId) return;
@@ -183,6 +202,84 @@ export function SandboxProfile({ userId, email, client, avatarUrl, onChangePhoto
       .then(({ data }) => setWa((data as { phone: string; opted_in: boolean } | null) ?? null));
   };
   useEffect(loadWa, [userId]);
+
+  const loadDevices = async () => {
+    setDevicesLoading(true);
+    try {
+      const { data } = await sandboxSupabase.functions.invoke("security-controls", { body: { action: "get_devices" } });
+      setDevices((data?.devices || []) as typeof devices);
+    } finally { setDevicesLoading(false); }
+  };
+
+  useEffect(() => {
+    if (sheet === "devices") void loadDevices();
+    if (sheet === "withdrawbank") { if (banks.length === 0 && onLoadBanks) void onLoadBanks(); }
+  }, [sheet]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Live validation for withdrawal bank form
+  useEffect(() => {
+    if (!wbBankCode || wbAccount.length !== 10 || !onValidateBeneficiary) { setWbVerified(false); setWbName(""); return; }
+    let active = true;
+    const t = setTimeout(async () => {
+      setWbVerifying(true);
+      try {
+        const name = await onValidateBeneficiary(wbAccount, wbBankCode);
+        if (!active) return;
+        if (name) { setWbName(name); setWbVerified(true); }
+        else { setWbName(""); setWbVerified(false); }
+      } finally { if (active) setWbVerifying(false); }
+    }, 450);
+    return () => { active = false; clearTimeout(t); };
+  }, [wbBankCode, wbAccount, onValidateBeneficiary]);
+
+  const saveWithdrawalBank = async () => {
+    if (!userId || !wbVerified || !wbName) return;
+    setWbSaving(true);
+    try {
+      const bankName = banks.find(b => b.code === wbBankCode)?.name || "";
+      const next: WithdrawalBank = {
+        bank_code: wbBankCode, bank_name: bankName,
+        account_number: wbAccount, account_name: wbName,
+        set_at: new Date().toISOString(),
+      };
+      const meta = { ...(client?.metadata || {}), withdrawal_bank: next };
+      const { error } = await sandboxSupabase.from("vfd_sandbox_clients").update({ metadata: meta }).eq("user_id", userId);
+      if (error) throw error;
+      toast.success("Withdrawal bank saved. Withdrawals will go to this account.");
+      setSheet(null);
+      // Force a refresh so the row reflects immediately
+      window.dispatchEvent(new Event("vestara:profile-updated"));
+    } catch (err) {
+      console.error(err);
+      toast.error("We couldn't save your bank. Please try again.");
+    } finally { setWbSaving(false); }
+  };
+
+  const applyAutolock = (v: string) => {
+    setAutolock(v);
+    localStorage.setItem(AUTOLOCK_KEY, v);
+    toast.success(`Auto-lock set to ${autolockLabel(v).toLowerCase()}`);
+  };
+
+  const signOutOtherDevices = async () => {
+    if (!device) return;
+    try {
+      const { data } = await sandboxSupabase.functions.invoke("security-controls", {
+        body: { action: "sign_out_other_devices", fingerprint: device.fingerprint },
+      });
+      toast.success(`Signed out ${data?.removed || 0} other device${(data?.removed || 0) === 1 ? "" : "s"}.`);
+      void loadDevices();
+    } catch {
+      toast.error("Couldn't sign out other devices. Please try again.");
+    }
+  };
+
+  const removeDevice = async (id: string, isCurrent: boolean) => {
+    if (isCurrent) return;
+    if (!confirm("Remove this device?")) return;
+    await sandboxSupabase.functions.invoke("security-controls", { body: { action: "remove_device", device_id: id } });
+    void loadDevices();
+  };
 
   const soon = (title: string) => { setSoonTitle(title); setSheet("soon"); };
   const name = client?.full_name || email?.split("@")[0] || "Vestara user";
@@ -193,6 +290,10 @@ export function SandboxProfile({ userId, email, client, avatarUrl, onChangePhoto
     await navigator.clipboard.writeText(client.vfd_account_number);
     toast.success("Account number copied");
   };
+
+  const withdrawBankRowValue = withdrawalBank
+    ? `${withdrawalBank.bank_name} ••${withdrawalBank.account_number.slice(-4)}`
+    : "Not set";
 
   return (
     <div className="space-y-6">
