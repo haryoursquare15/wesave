@@ -1,6 +1,7 @@
 import { useState, FormEvent, useEffect } from "react";
 import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { haptic } from "@/lib/haptics";
 import { Eye, EyeOff, ArrowLeft, Loader2, Users, PiggyBank, Send, Delete, Fingerprint } from "lucide-react";
 import { useSandboxAuth } from "@/contexts/SandboxAuthContext";
 import {
@@ -150,6 +151,7 @@ export default function SandboxAuth() {
   const [qpin, setQpin] = useState("");
   const [bioReady, setBioReady] = useState(false);
   const [shake, setShake] = useState(0);
+  const [pinOk, setPinOk] = useState(false);
   const [welcome] = useState(readWelcome);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showSplash, setShowSplash] = useState(() => {
@@ -214,6 +216,7 @@ export default function SandboxAuth() {
     if (k === "del") return setQpin((p) => p.slice(0, -1));
     if (qpin.length >= 6) return;
     const next = qpin + k;
+    void haptic("light");
     setQpin(next);
     if (next.length < 6) return;
     setIsLoading(true);
@@ -222,11 +225,14 @@ export default function SandboxAuth() {
       if (r.error) {
         setQpin("");
         setShake((n) => n + 1);
+        void haptic("error");
         if (r.reset) resetQuick();
         if (r.locked) setUsePassword(true);
         return setError(r.error);
       }
-      finish();
+      void haptic("success");
+      setPinOk(true);
+      setTimeout(finish, 220);
     } finally {
       setIsLoading(false);
     }
@@ -377,11 +383,13 @@ export default function SandboxAuth() {
             <p className="mt-1.5 text-center text-sm text-ink-foreground/65">Welcome back. Enter your PIN to continue.</p>
             <div key={shake} className={cn("my-9 flex gap-4", shake > 0 && "pin-shake")}>
               {[0, 1, 2, 3, 4, 5].map((k) => (
-                <span
+                <motion.span
                   key={k}
+                  animate={k < qpin.length ? { scale: [1, 1.2, 1] } : { scale: 1 }}
+                  transition={{ duration: 0.18, ease: "easeOut" }}
                   className={cn(
                     "h-3.5 w-3.5 rounded-full border transition-colors duration-200",
-                    k < qpin.length ? "border-primary bg-primary" : "border-ink-foreground/40 bg-transparent",
+                    pinOk ? "border-success bg-success" : k < qpin.length ? "border-primary bg-primary" : "border-ink-foreground/40 bg-transparent",
                   )}
                 />
               ))}

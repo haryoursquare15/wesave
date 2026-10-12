@@ -31,7 +31,7 @@ import { useSandboxSessionEnforcement } from "@/hooks/useSandboxSessionEnforceme
 import { useDeviceEnforcement } from "@/hooks/useDeviceEnforcement";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
-import { AnimatePresence } from "framer-motion";
+import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import { sandboxSupabase } from "@/integrations/supabase/sandboxClient";
 
 import { getUserFriendlyError } from "@/lib/errorMessages";
@@ -442,7 +442,9 @@ function VfdSandboxInner() {
     return name?.toString() || null;
   };
 
-  const goBack = () => setCurrentView("dashboard");
+  // Screen transition direction: forward slides in from the right, back from the left.
+  const navDir = useRef(1);
+  const goBack = () => { navDir.current = -1; setCurrentView("dashboard"); setTimeout(() => { navDir.current = 1; }, 300); };
 
   if (authLoading || (user && !clientChecked)) {
     return (
@@ -525,7 +527,13 @@ function VfdSandboxInner() {
             }}
           />
         ) : (
-          <>
+          <motion.div
+            key={currentView}
+            initial={{ opacity: 0, x: navDir.current * 16 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.22, ease: "easeOut" }}
+            className="space-y-5"
+          >
             {currentView === "dashboard" && (
               <SandboxDashboard
                 balance={balanceData}
@@ -614,7 +622,7 @@ function VfdSandboxInner() {
                 onOpenChange={(next) => { if (!next) setCurrentView("dashboard"); }}
               />
             )}
-          </>
+          </motion.div>
         )}
       </div>
       {kycDone && (
@@ -631,10 +639,24 @@ function VfdSandboxInner() {
                 key={t.label}
                 onClick={t.go}
                 aria-current={t.active ? "page" : undefined}
-                className={`flex flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium active:opacity-60 transition-colors ${t.active ? "text-primary" : "text-muted-foreground"}`}
+                className={`relative flex flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium transition-colors ${t.active ? "text-primary" : "text-muted-foreground"}`}
               >
-                <t.icon className="h-5 w-5" />
-                {t.label}
+                {t.active && (
+                  <motion.span
+                    layoutId="tab-pill"
+                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                    className="absolute inset-x-3 top-1 bottom-1 rounded-full bg-primary/10"
+                  />
+                )}
+                <motion.span
+                  className="relative inline-flex"
+                  animate={{ scale: t.active ? 1.1 : 1 }}
+                  whileTap={{ scale: 0.96 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                >
+                  <t.icon className="h-5 w-5" fill={t.active ? "currentColor" : "none"} fillOpacity={t.active ? 0.2 : 0} />
+                </motion.span>
+                <span className="relative">{t.label}</span>
               </button>
             ))}
           </div>
@@ -661,10 +683,12 @@ function SandboxSessionBridge({ children }: { children: React.ReactNode }) {
 
 export default function VfdSandbox() {
   return (
-    <SandboxAuthProvider>
-      <SandboxSessionBridge>
-        <VfdSandboxInner />
-      </SandboxSessionBridge>
-    </SandboxAuthProvider>
+    <MotionConfig reducedMotion="user">
+      <SandboxAuthProvider>
+        <SandboxSessionBridge>
+          <VfdSandboxInner />
+        </SandboxSessionBridge>
+      </SandboxAuthProvider>
+    </MotionConfig>
   );
 }
