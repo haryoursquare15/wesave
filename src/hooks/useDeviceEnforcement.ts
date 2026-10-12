@@ -20,8 +20,16 @@ export function useDeviceEnforcement(enabled: boolean) {
     let cancelled = false;
     let interval: ReturnType<typeof setInterval> | null = null;
 
+    // Only call the backend with a live session; an expired one would just fail.
+    const hasSession = async () => {
+      const { data } = await sandboxSupabase.auth.getSession();
+      const s = data.session;
+      return !!s && (!s.expires_at || s.expires_at * 1000 > Date.now() + 5_000);
+    };
+
     const register = async () => {
       try {
+        if (!(await hasSession())) return;
         await sandboxSupabase.functions.invoke("security-controls", {
           body: {
             action: "enforce_single_device",
@@ -38,10 +46,13 @@ export function useDeviceEnforcement(enabled: boolean) {
 
     const poll = async () => {
       try {
-        const { data } = await sandboxSupabase.functions.invoke("security-controls", {
+        if (!(await hasSession())) return;
+        const { data, error } = await sandboxSupabase.functions.invoke("security-controls", {
           body: { action: "get_devices" },
         });
-        const list = (data?.devices as Array<{ device_fingerprint?: string }> | undefined) || [];
+        // Never sign out on a failed check — only when the list loads and this device is gone.
+        if (error || !Array.isArray(data?.devices)) return;
+        const list = data.devices as Array<{ device_fingerprint?: string }>;
         const stillHere = list.some(d => d.device_fingerprint === device.fingerprint);
         if (!stillHere && !cancelled) {
           toast.info("You were signed out because your account was accessed from another device.");

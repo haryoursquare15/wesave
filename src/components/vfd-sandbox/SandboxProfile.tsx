@@ -20,6 +20,7 @@ import { LoginPinSettings } from "@/components/settings/LoginPinSettings";
 import { WhatsAppAlertSettings } from "@/components/settings/WhatsAppAlertSettings";
 import { useTransactionPin } from "@/hooks/useTransactionPin";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
+import { useBiometricToggle } from "@/hooks/useBiometricToggle";
 import { useDeviceFingerprint } from "@/hooks/useDeviceFingerprint";
 import { sandboxSupabase } from "@/integrations/supabase/sandboxClient";
 import { RESET_PASSWORD } from "@/lib/appRoutes";
@@ -170,6 +171,7 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
   };
   const { theme, setTheme } = useTheme();
   const push = usePushNotifications();
+  const bio = useBiometricToggle();
   const device = useDeviceFingerprint();
   const [sheet, setSheet] = useState<SheetKey>(null);
   const [soonTitle, setSoonTitle] = useState("");
@@ -367,7 +369,16 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
         <ProfileRow icon={KeyRound} label="Login PIN (6-digit)" helper="Used to open the app" onClick={() => setSheet("loginPin")} />
         <ProfileRow icon={Lock} label="Transaction PIN (4-digit)" helper="Used to approve payments and transfers" onClick={() => setSheet("txPin")} />
         <ProfileRow icon={Shield} label="Change password" onClick={() => setSheet("password")} />
-        <ProfileRow icon={Fingerprint} label="Biometric login" helper="Set up inside Login PIN" onClick={() => setSheet("loginPin")} />
+        <ProfileRow
+          icon={Fingerprint}
+          label="Fingerprint / Face ID login"
+          helper={!bio.supported ? "Not available on this phone or browser" : bio.on ? "On for this phone" : "Off — needs a login PIN"}
+          trailing={<Switch checked={bio.on} disabled={!bio.supported || bio.busy}
+            onCheckedChange={async (v) => {
+              const ok = await bio.toggle(v);
+              if (!ok && v) setSheet("loginPin");
+            }} aria-label="Fingerprint or Face ID login" />}
+        />
         <ProfileRow icon={Fingerprint} label="Use biometrics to confirm transfers" onClick={() => soon("Biometrics for transfers")} />
         <ProfileRow icon={Timer} label="Auto-lock" value={autolockLabel(autolock)} onClick={openAutolockSheet} />
         <ProfileRow icon={Smartphone} label="Manage devices" helper="One device at a time" onClick={() => setSheet("devices")} />
