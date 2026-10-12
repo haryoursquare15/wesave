@@ -1,13 +1,15 @@
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { useEffect } from "react";
 import vestaraIcon from "@/assets/vestara-v.png.asset.json";
+import { TonalBackground } from "./TonalBackground";
 
 interface SandboxSplashProps {
   onDone?: () => void;
   duration?: number;
 }
 
-export function SandboxSplash({ onDone, duration = 2200 }: SandboxSplashProps) {
+export function SandboxSplash({ onDone, duration = 2000 }: SandboxSplashProps) {
+  const reduce = useReducedMotion();
   useEffect(() => {
     const t = setTimeout(() => onDone?.(), duration);
     return () => clearTimeout(t);
@@ -17,24 +19,19 @@ export function SandboxSplash({ onDone, duration = 2200 }: SandboxSplashProps) {
     <motion.div
       initial={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      transition={{ duration: 0.4, ease: "easeInOut" }}
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-ink"
+      transition={{ duration: 0.3, ease: "easeOut" }}
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-ink pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
     >
+      <TonalBackground variant="splash" />
       <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: "easeOut" }}
-        className="flex flex-col items-center gap-4 px-6"
+        initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.96 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.7, ease: "easeOut" }}
+        className="relative flex flex-col items-center gap-3 px-6"
       >
-        <img
-          src={vestaraIcon.url}
-          alt="Vestara"
-          width={112}
-          height={112}
-          className="h-28 w-28 rounded-3xl object-contain"
-        />
+        <img src={vestaraIcon.url} alt="" width={96} height={96} decoding="async" className="h-24 w-24 object-contain" />
         <h1 className="text-4xl font-semibold tracking-tight text-ink-foreground">Vestara</h1>
-        <p className="text-sm text-ink-foreground/70">Grow your money smarter</p>
+        <p className="text-sm text-ink-foreground/60">Grow your money smarter</p>
       </motion.div>
     </motion.div>
   );
