@@ -23,7 +23,7 @@ const SECTIONS: Section[] = [
       { q: "Where does my withdrawal go?", a: "Withdrawals always go to the withdrawal bank you set up in Profile. You only set it once: choose your bank, enter your account number and we check the account name before saving." },
       { q: "Can I change my withdrawal bank?", a: "To keep your money safe, you can't change it in the app. Email support@vestara.ng from your registered email and we'll verify your identity and update it." },
       { q: "Why did my transfer fail?", a: "Common reasons are not enough available balance, going over your tier's daily limit, a wrong PIN, or the receiving bank being temporarily unavailable. If money left your wallet but didn't arrive, it is reversed automatically. Contact support if it hasn't come back within 24 hours." },
-      { q: "Are there transfer fees?", a: "Transfers between Vestara accounts are free. A small fee may apply to transfers to other banks, and you'll always see it before you confirm." },
+      { q: "Are there transfer fees?", a: "Any fee that applies is shown on the confirmation screen before you approve a transfer, so there are no surprises." },
     ],
   },
   {
