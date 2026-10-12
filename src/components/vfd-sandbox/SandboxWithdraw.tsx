@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { TransactionPinGate } from "@/components/security/TransactionPinGate";
 import { TransactionSuccessModal } from "@/components/feedback/TransactionSuccessModal";
 import { useToast } from "@/hooks/use-toast";
+import { useVfdBanking } from "@/hooks/useVfdBanking";
 import { sandboxSupabase } from "@/integrations/supabase/sandboxClient";
 import { cn } from "@/lib/utils";
 
@@ -31,17 +32,22 @@ interface SandboxWithdrawProps {
 }
 
 const MIN_AMOUNT = 1000;
-const WITHDRAWAL_FEE = 100;
 
 export function SandboxWithdraw({
   userId, accountNumber, availableBalance, onWithdraw, onBack, onSetupBank,
 }: SandboxWithdrawProps) {
   const { toast } = useToast();
+  const { quoteTransfer } = useVfdBanking();
   const [bank, setBank] = useState<WithdrawalBank | null>(null);
   const [bankLoaded, setBankLoaded] = useState(false);
   const [amount, setAmount] = useState("");
   const [pinOpen, setPinOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [quote, setQuote] = useState<{
+    transfer_fee: number; stamp_duty: number; total_fees: number;
+    total_debit: number; free_quota: number; free_remaining: number; tier_label?: string;
+  } | null>(null);
+  const [quoteLoading, setQuoteLoading] = useState(false);
   const [successPayload, setSuccessPayload] = useState<{
     title: string; description: string;
     details: Array<{ label: string; value: string; highlight?: boolean }>;
@@ -59,9 +65,41 @@ export function SandboxWithdraw({
   }, [userId]);
 
   const numericAmount = parseFloat(amount) || 0;
-  const totalDebit = numericAmount > 0 ? numericAmount + WITHDRAWAL_FEE : 0;
+
+  // Live fee quote from the backend (tiered transfer fee + stamp duty).
+  useEffect(() => {
+    if (!bank || numericAmount < MIN_AMOUNT) {
+      setQuote(null);
+      return;
+    }
+    let cancelled = false;
+    setQuoteLoading(true);
+    const t = setTimeout(async () => {
+      const r = await quoteTransfer({
+        toAccount: bank.account_number,
+        bankCode: bank.bank_code,
+        amount: numericAmount,
+      });
+      if (cancelled) return;
+      setQuoteLoading(false);
+      if (r?.data) {
+        const q = r.data as {
+          transfer_fee: number; stamp_duty: number; total_fees: number;
+          total_debit: number; free_quota: number; free_remaining: number; tier_label?: string;
+        };
+        setQuote(q);
+      }
+    }, 500);
+    return () => { cancelled = true; clearTimeout(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bank?.bank_code, bank?.account_number, numericAmount]);
+
+  const totalDebit = numericAmount > 0
+    ? (quote ? quote.total_debit : numericAmount)
+    : 0;
+  const quotePending = numericAmount >= MIN_AMOUNT && quoteLoading;
   const canSubmit =
-    !!bank && numericAmount >= MIN_AMOUNT && totalDebit <= availableBalance;
+    !!bank && numericAmount >= MIN_AMOUNT && !!quote && totalDebit <= availableBalance;
 
   const maskAccount = (acct: string) =>
     acct.length >= 4 ? `${"•".repeat(Math.max(0, acct.length - 4))}${acct.slice(-4)}` : acct;
@@ -219,7 +257,7 @@ export function SandboxWithdraw({
           <button
             type="button"
             onClick={() => {
-              const max = Math.floor((availableBalance - WITHDRAWAL_FEE) / 100) * 100;
+              const max = Math.floor(availableBalance / 100) * 100;
               if (max >= MIN_AMOUNT) setAmount(String(max));
             }}
             className="px-3 py-1.5 rounded-full text-xs font-medium border border-border text-muted-foreground hover:border-primary/40 transition-colors"
@@ -228,19 +266,37 @@ export function SandboxWithdraw({
           </button>
         </div>
         <div className="flex items-center justify-between text-xs">
-          <span className="text-muted-foreground">Bank transfer fee</span>
-          <span className="font-medium text-foreground">₦{WITHDRAWAL_FEE.toLocaleString()}</span>
+          <span className="text-muted-foreground">Transfer fee</span>
+          {quotePending || !quote ? (
+            <span className="text-muted-foreground">…</span>
+          ) : (
+            <span className="font-medium text-foreground">
+              {quote.transfer_fee === 0 ? "Free" : `₦${quote.transfer_fee.toLocaleString()}`}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">Stamp duty</span>
+          {quotePending || !quote ? (
+            <span className="text-muted-foreground">…</span>
+          ) : (
+            <span className="font-medium text-foreground">₦{quote.stamp_duty.toLocaleString()}</span>
+          )}
         </div>
         <div className="flex items-center justify-between text-sm font-semibold">
           <span className="text-foreground">Total debited</span>
           <span className="text-foreground tabular-nums">
-            ₦{totalDebit > 0 ? totalDebit.toLocaleString() : "0"}
+            {quote && !quotePending
+              ? `₦${totalDebit.toLocaleString()}`
+              : numericAmount > 0
+                ? `₦${numericAmount.toLocaleString()} + fees`
+                : "₦0"}
           </span>
         </div>
         {numericAmount > 0 && numericAmount < MIN_AMOUNT && (
           <p className="text-xs text-destructive">Minimum withdrawal is ₦{MIN_AMOUNT.toLocaleString()}.</p>
         )}
-        {totalDebit > availableBalance && (
+        {quote && totalDebit > availableBalance && (
           <p className="text-xs text-destructive">
             Not enough balance — you need ₦{totalDebit.toLocaleString()} including the fee.
           </p>
