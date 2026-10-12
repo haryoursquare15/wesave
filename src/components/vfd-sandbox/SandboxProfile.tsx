@@ -433,7 +433,6 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
         <ProfileRow icon={Shield} label="Privacy Policy" onClick={() => { setDoc({ title: "Privacy Policy", src: "/privacy" }); setSheet("doc"); }} />
         <ProfileRow icon={Info} label="App version" value="1.0.0" />
       </ProfileSection>
-      <p className="text-xs text-center text-muted-foreground">Banking services provided by VFD Microfinance Bank</p>
 
       <Button variant="outline" className="w-full h-12 rounded-2xl border-destructive/40 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setSheet("signout")}>
         <LogOut className="h-4 w-4 mr-2" /> Sign out
