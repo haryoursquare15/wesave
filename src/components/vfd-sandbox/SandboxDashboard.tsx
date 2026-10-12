@@ -115,7 +115,7 @@ const productBanners = [
     title: "Upfront Yield",
     subtitle: "Get your interest paid up front • 12–18% p.a.",
     cta: "Earn Upfront",
-    gradient: "from-amber-500 to-orange-600",
+    gradient: "from-amber-600 to-orange-700",
     icon: Gift,
     accent: "bg-amber-300/20",
   },
@@ -644,10 +644,10 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
                   </div>
 
                   <div className="flex items-end justify-between gap-2">
-                    <span className="inline-block text-[11px] font-semibold bg-ink-foreground/15 px-3 py-1.5 rounded-full">
+                    <span className="inline-block text-[11px] font-semibold bg-ink/25 px-3 py-1.5 rounded-full">
                       {banner.cta}
                     </span>
-                    <span className="text-[11px] font-semibold opacity-90 tabular-nums">
+                    <span className="text-[11px] font-semibold opacity-100 tabular-nums">
 
                       {holding && showBalance
                         ? `₦${holding.total.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
