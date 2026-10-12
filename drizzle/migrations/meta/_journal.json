@@ -71,6 +71,13 @@
       "when": 1791803899577,
       "tag": "0009_harden_process_split_payment",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791804167042,
+      "tag": "0010_split_payment_enforce_share",
+      "breakpoints": true
     }
   ]
 }
