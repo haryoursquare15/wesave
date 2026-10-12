@@ -6,7 +6,16 @@ import { toast } from "sonner";
 // Banking-app realistic timeouts. Short windows (2m) kicked users out
 // mid-form while filling SplitPay / Goal / Target / Transfer flows.
 const BACKGROUND_TIMEOUT = 30 * 60 * 1000; // 30 minutes in background
-const INACTIVITY_TIMEOUT = 15 * 60 * 1000; // 15 minutes no interaction
+const DEFAULT_INACTIVITY_MINUTES = 15;
+const AUTOLOCK_KEY = "vestara:autolock";
+function readInactivityTimeout(): number {
+  if (typeof window === "undefined") return DEFAULT_INACTIVITY_MINUTES * 60_000;
+  const raw = window.localStorage.getItem(AUTOLOCK_KEY);
+  if (raw === "never") return 24 * 60 * 60 * 1000;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return DEFAULT_INACTIVITY_MINUTES * 60_000;
+  return n * 60_000;
+}
 
 const ACTIVITY_EVENTS: (keyof DocumentEventMap)[] = [
   "touchstart", "touchmove", "mousedown", "mousemove",
@@ -39,7 +48,7 @@ export function useSandboxSessionEnforcement({ enabled = true }: { enabled?: boo
   const resetInactivityTimer = useCallback(() => {
     lastActiveRef.current = Date.now();
     if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
-    inactivityTimerRef.current = setTimeout(signOutAndRedirect, INACTIVITY_TIMEOUT);
+    inactivityTimerRef.current = setTimeout(signOutAndRedirect, readInactivityTimeout());
   }, [signOutAndRedirect]);
 
   useEffect(() => {
