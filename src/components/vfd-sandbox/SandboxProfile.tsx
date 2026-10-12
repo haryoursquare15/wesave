@@ -19,7 +19,7 @@ import { ProfileRow } from "./profile/ProfileRow";
 import { LoginPinSettings } from "@/components/settings/LoginPinSettings";
 import { WhatsAppAlertSettings } from "@/components/settings/WhatsAppAlertSettings";
 import { useTransactionPin } from "@/hooks/useTransactionPin";
-import { usePushNotifications } from "@/hooks/usePushNotifications";
+import { usePushNotifications, isIosBrowserTab } from "@/hooks/usePushNotifications";
 import { useBiometricToggle } from "@/hooks/useBiometricToggle";
 import { SandboxFAQ } from "./SandboxFAQ";
 import { openComplaints } from "./complaints/ComplaintsCenter";
@@ -409,7 +409,7 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
         <ProfileRow
           icon={Bell}
           label="Push notifications"
-          helper={!push.supported ? "Not supported on this device" : push.permission === "denied" ? "Blocked in browser settings — enable it there to turn on" : push.isSubscribed ? "On" : "Tap to set up"}
+          helper={!push.supported ? (isIosBrowserTab() ? "On iPhone: tap Share → Add to Home Screen, then open Vestara from your Home Screen" : "Not supported on this browser") : push.permission === "denied" ? "Blocked in browser settings — enable it there to turn on" : push.isSubscribed ? "On" : "Tap to set up"}
           onClick={!push.isSubscribed && push.supported && push.permission !== "denied" ? () => setSheet("pushsetup") : undefined}
           trailing={<Switch checked={push.isSubscribed} disabled={!push.supported || push.loading || push.permission === "denied"}
             onCheckedChange={async (v) => {

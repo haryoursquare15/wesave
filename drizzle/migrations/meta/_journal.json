@@ -57,6 +57,13 @@
       "when": 1791794882990,
       "tag": "0007_complaint_internal_notes_hidden",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791797590773,
+      "tag": "0008_push_subscriptions_grants",
+      "breakpoints": true
     }
   ]
 }

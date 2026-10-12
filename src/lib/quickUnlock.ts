@@ -35,6 +35,11 @@ export function clearQuickUnlock() {
   localStorage.removeItem(BIO_TOKEN_KEY);
 }
 
+/** Forget the PIN quick-unlock only; keep any biometric enrolment on this phone. */
+export function clearPinQuickUnlock() {
+  localStorage.removeItem(QU_KEY);
+}
+
 export function hasBiometricSetup(): boolean {
   return !!(localStorage.getItem(BIO_CRED_KEY) && localStorage.getItem(BIO_TOKEN_KEY));
 }

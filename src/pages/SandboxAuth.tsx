@@ -1,4 +1,4 @@
-import { useState, FormEvent, useEffect } from "react";
+import { useState, FormEvent, useEffect, useRef } from "react";
 import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { haptic } from "@/lib/haptics";
@@ -8,7 +8,7 @@ import {
   requestSignupOtp, verifySignupAndSignIn, unlockWithPin, unlockWithBiometricToken, loginPinAction,
 } from "@/lib/loginPinApi";
 import {
-  readQuickUnlock, saveQuickUnlock, clearQuickUnlock, clearBiometric, hasBiometricSetup,
+  readQuickUnlock, saveQuickUnlock, clearQuickUnlock, clearPinQuickUnlock, clearBiometric, hasBiometricSetup,
   biometricSupported, biometricAssert, type QuickUnlockState,
 } from "@/lib/quickUnlock";
 import { SandboxSplash } from "@/components/vfd-sandbox/SandboxSplash";
@@ -188,7 +188,7 @@ export default function SandboxAuth() {
       if (error) return setError(getUserFriendlyError(error.message));
       const st = await loginPinAction({ action: "get_status" });
       if (st?.has_pin) saveQuickUnlock(form.email.trim(), true);
-      else clearQuickUnlock();
+      else clearPinQuickUnlock();
       void sandboxSupabase.auth.getUser().then(({ data }) => saveWelcome(data.user?.user_metadata));
       toast.success("Welcome back to Vestara");
       finish();
@@ -205,7 +205,9 @@ export default function SandboxAuth() {
   };
 
   const forgotPin = () => {
-    resetQuick();
+    clearPinQuickUnlock();
+    setQuick(null);
+    setQpin("");
     setError(null);
     toast.message("Sign in with your password. You can set a new login PIN in the menu.");
   };
@@ -242,7 +244,7 @@ export default function SandboxAuth() {
     if (isLoading) return;
     setError(null);
     const token = await biometricAssert();
-    if (!token) return setError("Biometric check didn't complete. Use your PIN instead.");
+    if (!token) return setError(quick?.hasPin ? "Face ID / fingerprint didn't complete. Tap the fingerprint to retry, or use your PIN." : "Face ID / fingerprint didn't complete. Try again or use your password.");
     setIsLoading(true);
     try {
       const r = await unlockWithBiometricToken(token);
@@ -255,6 +257,16 @@ export default function SandboxAuth() {
       setIsLoading(false);
     }
   };
+
+  // Offer biometrics automatically once when the PIN screen opens.
+  const autoBioTried = useRef(false);
+  useEffect(() => {
+    if (!bioReady || autoBioTried.current || showSplash || isSignUp || usePassword || !quick?.hasPin) return;
+    autoBioTried.current = true;
+    const t = setTimeout(() => { void bioUnlock(); }, 400);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bioReady, showSplash, isSignUp, usePassword, quick?.hasPin]);
 
   const sendCode = async () => {
     setIsLoading(true);
@@ -415,7 +427,13 @@ export default function SandboxAuth() {
                 ),
               )}
             </div>
-            <button type="button" onClick={forgotPin} className="mt-5 min-h-11 text-sm text-ink-foreground/70">Forgot PIN?</button>
+            {bioReady && (
+              <button type="button" onClick={() => void bioUnlock()} disabled={isLoading}
+                className="mt-5 flex min-h-11 items-center gap-2 rounded-full border border-ink-foreground/20 px-5 text-sm font-medium text-ink-foreground active:scale-[0.97] transition">
+                <Fingerprint className="h-4 w-4" /> Use Face ID / fingerprint
+              </button>
+            )}
+            <button type="button" onClick={forgotPin} className="mt-3 min-h-11 text-sm text-ink-foreground/70">Forgot PIN?</button>
             <div className="flex items-center gap-4 text-xs text-ink-foreground/55">
               <button type="button" onClick={() => { setUsePassword(true); setError(null); }} className="min-h-11">Use password</button>
               <span aria-hidden>·</span>
@@ -460,6 +478,12 @@ export default function SandboxAuth() {
                 </div>
                 <ErrorLine />
                 <Primary>Sign in</Primary>
+                {bioReady && (
+                  <button type="button" onClick={() => void bioUnlock()} disabled={isLoading}
+                    className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl border border-border font-semibold text-foreground active:scale-[0.98] transition">
+                    <Fingerprint className="h-5 w-5 text-primary" /> Sign in with Face ID / fingerprint
+                  </button>
+                )}
               </form>
               <p className="mt-8 text-center text-sm text-muted-foreground">
                 New to Vestara?{" "}

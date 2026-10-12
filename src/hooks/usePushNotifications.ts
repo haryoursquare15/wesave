@@ -12,6 +12,13 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return outputArray;
 }
 
+export function isIosBrowserTab(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const standalone = window.matchMedia?.("(display-mode: standalone)").matches || (navigator as unknown as { standalone?: boolean }).standalone === true;
+  return ios && !standalone;
+}
+
 export function usePushNotifications() {
   const { session, client: supabase } = useSandboxAwareAuth();
   const user = session?.user ?? null;
@@ -22,6 +29,24 @@ export function usePushNotifications() {
   const [loading, setLoading] = useState(false);
   const [supported, setSupported] = useState(false);
 
+  const checkExistingSubscription = useCallback(async () => {
+    try {
+      const registration = await navigator.serviceWorker.getRegistration("/sw.js");
+      if (!registration) { setIsSubscribed(false); return; }
+      const sub = await registration.pushManager.getSubscription();
+      if (!sub || !user || Notification.permission !== "granted") { setIsSubscribed(false); return; }
+      // Self-heal: make sure the server knows about this phone's subscription.
+      const j = sub.toJSON();
+      const { error } = await supabase.from("push_subscriptions").upsert(
+        { user_id: user.id, endpoint: j.endpoint!, p256dh: j.keys!.p256dh!, auth_key: j.keys!.auth!, updated_at: new Date().toISOString() },
+        { onConflict: "user_id,endpoint" },
+      );
+      setIsSubscribed(!error);
+    } catch {
+      setIsSubscribed(false);
+    }
+  }, [user, supabase]);
+
   useEffect(() => {
     const isSupported =
       "serviceWorker" in navigator &&
@@ -31,21 +56,9 @@ export function usePushNotifications() {
 
     if (isSupported) {
       setPermission(Notification.permission);
-      checkExistingSubscription();
+      void checkExistingSubscription();
     }
-  }, [user]);
-
-  const checkExistingSubscription = useCallback(async () => {
-    try {
-      const registration = await navigator.serviceWorker.getRegistration("/sw.js");
-      if (registration) {
-        const sub = await registration.pushManager.getSubscription();
-        setIsSubscribed(!!sub);
-      }
-    } catch {
-      // Silent fail
-    }
-  }, []);
+  }, [user, checkExistingSubscription]);
 
   const registerServiceWorker = useCallback(async () => {
     const registration = await navigator.serviceWorker.register("/sw.js", {
