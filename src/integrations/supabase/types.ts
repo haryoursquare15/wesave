@@ -552,6 +552,166 @@ export type Database = {
         }
         Relationships: []
       }
+      complaint_attachments: {
+        Row: {
+          complaint_id: string
+          created_at: string
+          id: string
+          mime_type: string
+          size: number
+          storage_path: string
+        }
+        Insert: {
+          complaint_id: string
+          created_at?: string
+          id?: string
+          mime_type: string
+          size: number
+          storage_path: string
+        }
+        Update: {
+          complaint_id?: string
+          created_at?: string
+          id?: string
+          mime_type?: string
+          size?: number
+          storage_path?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "complaint_attachments_complaint_id_fkey"
+            columns: ["complaint_id"]
+            isOneToOne: false
+            referencedRelation: "complaints"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      complaint_categories: {
+        Row: {
+          active: boolean
+          id: string
+          issue_type: string
+          label: string
+          owner_team: string
+          priority: string
+          service: string
+          sla_hours: number
+          sort_order: number
+        }
+        Insert: {
+          active?: boolean
+          id?: string
+          issue_type: string
+          label: string
+          owner_team?: string
+          priority?: string
+          service: string
+          sla_hours?: number
+          sort_order?: number
+        }
+        Update: {
+          active?: boolean
+          id?: string
+          issue_type?: string
+          label?: string
+          owner_team?: string
+          priority?: string
+          service?: string
+          sla_hours?: number
+          sort_order?: number
+        }
+        Relationships: []
+      }
+      complaint_events: {
+        Row: {
+          actor_type: string
+          complaint_id: string
+          created_at: string
+          event_type: string
+          id: string
+          message: string | null
+        }
+        Insert: {
+          actor_type: string
+          complaint_id: string
+          created_at?: string
+          event_type: string
+          id?: string
+          message?: string | null
+        }
+        Update: {
+          actor_type?: string
+          complaint_id?: string
+          created_at?: string
+          event_type?: string
+          id?: string
+          message?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "complaint_events_complaint_id_fkey"
+            columns: ["complaint_id"]
+            isOneToOne: false
+            referencedRelation: "complaints"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      complaints: {
+        Row: {
+          assigned_to: string | null
+          created_at: string
+          description: string
+          freeze_requested: boolean
+          id: string
+          issue_type: string
+          priority: string
+          resolved_at: string | null
+          service: string
+          sla_due_at: string | null
+          status: string
+          ticket_no: string
+          transaction_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          created_at?: string
+          description: string
+          freeze_requested?: boolean
+          id?: string
+          issue_type: string
+          priority?: string
+          resolved_at?: string | null
+          service: string
+          sla_due_at?: string | null
+          status?: string
+          ticket_no: string
+          transaction_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          assigned_to?: string | null
+          created_at?: string
+          description?: string
+          freeze_requested?: boolean
+          id?: string
+          issue_type?: string
+          priority?: string
+          resolved_at?: string | null
+          service?: string
+          sla_due_at?: string | null
+          status?: string
+          ticket_no?: string
+          transaction_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       contribution_audit: {
         Row: {
           amount: number
@@ -7851,6 +8011,7 @@ export type Database = {
         }
         Returns: string
       }
+      next_complaint_ticket_no: { Args: never; Returns: string }
       process_contribution_atomic: {
         Args: { _amount: number; _group_id: string; _user_id: string }
         Returns: Json

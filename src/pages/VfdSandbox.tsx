@@ -35,6 +35,7 @@ import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import { sandboxSupabase } from "@/integrations/supabase/sandboxClient";
 
 import { getUserFriendlyError } from "@/lib/errorMessages";
+import { ComplaintsCenter } from "@/components/vfd-sandbox/complaints/ComplaintsCenter";
 interface LockConfig { id: string; duration_months: number; interest_rate: number; early_withdrawal_penalty: number; }
 interface UserBalance {
   total_balance: number; locked_balance: number; savings_balance: number; available_balance: number;
@@ -602,6 +603,7 @@ function VfdSandboxInner() {
             {currentView === "bills" && <ProductWrapper onBack={goBack}><SandboxBillsTab /></ProductWrapper>}
             {currentView === "card" && <ProductWrapper onBack={goBack}><SandboxCardTab /></ProductWrapper>}
             {currentView === "mandates" && <ProductWrapper onBack={goBack}><SandboxMandatesTab /></ProductWrapper>}
+            <ComplaintsCenter />
             {currentView === "profile" && (
               <SandboxProfile
                 userId={user?.id}
