@@ -24,8 +24,8 @@ const ACTIVITY_EVENTS: (keyof DocumentEventMap)[] = [
 
 /**
  * Sandbox-scoped inactivity sign-out.
- * Signs the user out of the sandbox after 2m of no interaction (foreground)
- * or 5m in the background, then redirects to the sandbox login page.
+ * Signs the user out after 1 minute of no interaction (foreground, default;
+ * user-configurable) or 30 minutes in the background, then redirects to sign-in.
  */
 export function useSandboxSessionEnforcement({ enabled = true }: { enabled?: boolean } = {}) {
   const navigate = useNavigate();

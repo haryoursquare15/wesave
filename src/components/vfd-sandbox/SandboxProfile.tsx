@@ -63,14 +63,14 @@ type SheetKey =
 
 const AUTOLOCK_KEY = "vestara:autolock";
 const AUTOLOCK_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: "1", label: "After 1 minute" },
+  { value: "1", label: "After 1 minute (default)" },
   { value: "2", label: "After 2 minutes" },
   { value: "5", label: "After 5 minutes" },
   { value: "10", label: "After 10 minutes" },
-  { value: "15", label: "After 15 minutes (default)" },
+  { value: "15", label: "After 15 minutes" },
   { value: "never", label: "Never (not recommended)" },
 ];
-const autolockLabel = (v: string) => AUTOLOCK_OPTIONS.find(o => o.value === v)?.label.replace(" (default)", "") || "After 15 minutes";
+const autolockLabel = (v: string) => AUTOLOCK_OPTIONS.find(o => o.value === v)?.label.replace(" (default)", "") || "After 1 minute";
 
 const mask = (v?: string | null, keep = 4) =>
   v ? `••••${v.replace(/\s/g, "").slice(-keep)}` : "Not added";
