@@ -177,7 +177,11 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
   const [threshold, setThreshold] = useState("");
   const [insightsOn, setInsightsOn] = useState(() => localStorage.getItem("vestara:insights") !== "off");
   const [signingOut, setSigningOut] = useState(false);
-  const [autolock, setAutolock] = useState<string>(() => localStorage.getItem(AUTOLOCK_KEY) || "15");
+  const [autolock, setAutolock] = useState<string>(() => localStorage.getItem(AUTOLOCK_KEY) || "1");
+  const [autolockUnlocked, setAutolockUnlocked] = useState(false);
+  const [autolockPin, setAutolockPin] = useState("");
+  const [autolockBusy, setAutolockBusy] = useState(false);
+  const [hasLoginPin, setHasLoginPin] = useState<boolean | null>(null);
 
   // Withdrawal bank state (read from client.metadata; immutable once set)
   const withdrawalBank = useMemo<WithdrawalBank | null>(() => {
