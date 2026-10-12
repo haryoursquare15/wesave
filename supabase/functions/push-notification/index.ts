@@ -6,81 +6,44 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Web Push crypto helpers — manual VAPID implementation for Deno
+import webpush from "npm:web-push@3.6.7";
+
+// Web Push via the standard web-push library (RFC 8291 payload encryption + VAPID).
+function rawVapidPrivateKey(privateKey: string): string {
+  const bytes = new Uint8Array(base64UrlDecode(privateKey));
+  if (bytes.length === 32) return privateKey;
+  // PKCS#8 P-256 key: the 32-byte private scalar follows the 0x04 0x20 marker.
+  for (let i = 0; i < bytes.length - 33; i++) {
+    if (bytes[i] === 0x04 && bytes[i + 1] === 0x20) {
+      const d = bytes.slice(i + 2, i + 34);
+      return btoa(String.fromCharCode(...d)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    }
+  }
+  return privateKey;
+}
+
 async function generatePushPayload(
   subscription: { endpoint: string; p256dh: string; auth_key: string },
   payload: string,
   vapidSubject: string,
   vapidPublicKey: string,
   vapidPrivateKey: string
-) {
-  // Use web-push compatible approach via fetch with VAPID headers
-  const vapidJwt = await createVapidJwt(
-    subscription.endpoint,
-    vapidSubject,
-    vapidPublicKey,
-    vapidPrivateKey
-  );
-
-  // For simplicity, send unencrypted payload via TTL 0 approach
-  // In production, you'd want full RFC 8291 encryption
-  const response = await fetch(subscription.endpoint, {
-    method: "POST",
-    headers: {
-      Authorization: `vapid t=${vapidJwt},k=${vapidPublicKey}`,
-      "Content-Type": "application/json",
-      TTL: "86400",
-      Urgency: "high",
-    },
-    body: payload,
-  });
-
-  return response;
-}
-
-async function createVapidJwt(
-  endpoint: string,
-  subject: string,
-  publicKey: string,
-  privateKey: string
-): Promise<string> {
-  const audience = new URL(endpoint).origin;
-  const expiration = Math.floor(Date.now() / 1000) + 12 * 60 * 60;
-
-  const header = { alg: "ES256", typ: "JWT" };
-  const payload = {
-    aud: audience,
-    exp: expiration,
-    sub: subject,
-  };
-
-  const headerB64 = btoa(JSON.stringify(header))
-    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-  const payloadB64 = btoa(JSON.stringify(payload))
-    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-
-  const unsignedToken = `${headerB64}.${payloadB64}`;
-
-  // Import the private key
-  const keyData = base64UrlDecode(privateKey);
-  const cryptoKey = await crypto.subtle.importKey(
-    "pkcs8",
-    keyData,
-    { name: "ECDSA", namedCurve: "P-256" },
-    false,
-    ["sign"]
-  );
-
-  const signature = await crypto.subtle.sign(
-    { name: "ECDSA", hash: "SHA-256" },
-    cryptoKey,
-    new TextEncoder().encode(unsignedToken)
-  );
-
-  const signatureB64 = btoa(String.fromCharCode(...new Uint8Array(signature)))
-    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-
-  return `${unsignedToken}.${signatureB64}`;
+): Promise<{ ok: boolean; status: number }> {
+  try {
+    const res = await webpush.sendNotification(
+      { endpoint: subscription.endpoint, keys: { p256dh: subscription.p256dh, auth: subscription.auth_key } },
+      payload,
+      {
+        vapidDetails: { subject: vapidSubject, publicKey: vapidPublicKey, privateKey: rawVapidPrivateKey(vapidPrivateKey) },
+        TTL: 86400,
+        urgency: "high",
+      },
+    );
+    return { ok: true, status: res.statusCode };
+  } catch (e: any) {
+    if (e?.statusCode) return { ok: false, status: e.statusCode };
+    throw e;
+  }
 }
 
 function base64UrlDecode(str: string): ArrayBuffer {
