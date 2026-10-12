@@ -179,6 +179,29 @@ Deno.serve(async (req) => {
         if (error) return json({ success: false, error: "Couldn't save your login PIN. Try again." }, 500);
         return json({ success: true });
       }
+      case "verify_pin": {
+        const pin = String(body.pin || "");
+        if (!/^\d{6}$/.test(pin)) return json({ success: false, error: "Enter your 6-digit login PIN." });
+        const { data: row } = await admin.from("login_pins").select("*").eq("user_id", user.id).maybeSingle();
+        if (!row) return json({ success: false, error: "No login PIN set." });
+        if (row.locked_until && new Date(row.locked_until) > new Date()) {
+          return json({ success: false, is_locked: true, error: `Too many wrong tries. Try again after ${new Date(row.locked_until).toLocaleTimeString("en-NG", { timeZone: "Africa/Lagos" })}.` });
+        }
+        if (!bcrypt.compareSync(pin, row.pin_hash)) {
+          const n = (row.failed_attempts || 0) + 1;
+          const upd: Record<string, unknown> = { failed_attempts: n, updated_at: new Date().toISOString() };
+          if (n >= MAX_ATTEMPTS) {
+            upd.locked_until = new Date(Date.now() + LOCKOUT_MINUTES * 60_000).toISOString();
+            upd.failed_attempts = 0;
+          }
+          await admin.from("login_pins").update(upd).eq("user_id", user.id);
+          if (upd.locked_until) return json({ success: false, is_locked: true, error: `Too many wrong tries. Login PIN locked for ${LOCKOUT_MINUTES} minutes.` });
+          const left = MAX_ATTEMPTS - n;
+          return json({ success: false, attempts_remaining: left, error: `Incorrect PIN. ${left} attempt${left === 1 ? "" : "s"} left.` });
+        }
+        await admin.from("login_pins").update({ failed_attempts: 0, locked_until: null, last_used_at: new Date().toISOString() }).eq("user_id", user.id);
+        return json({ success: true });
+      }
       case "change_pin": {
         const cur = String(body.current_pin || "");
         const next = String(body.new_pin || "");

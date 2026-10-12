@@ -6,7 +6,7 @@ import { toast } from "sonner";
 // Banking-app realistic timeouts. Short windows (2m) kicked users out
 // mid-form while filling SplitPay / Goal / Target / Transfer flows.
 const BACKGROUND_TIMEOUT = 30 * 60 * 1000; // 30 minutes in background
-const DEFAULT_INACTIVITY_MINUTES = 15;
+const DEFAULT_INACTIVITY_MINUTES = 1;
 const AUTOLOCK_KEY = "vestara:autolock";
 function readInactivityTimeout(): number {
   if (typeof window === "undefined") return DEFAULT_INACTIVITY_MINUTES * 60_000;
