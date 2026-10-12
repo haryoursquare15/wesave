@@ -319,7 +319,13 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
         <ProfileRow icon={Phone} label="Mobile number" value={maskPhone(client?.phone)} />
         <ProfileRow icon={ShieldCheck} label="BVN" value={<span className="flex items-center gap-2 justify-end">{mask(client?.bvn)}{client?.bvn && <Chip tone="success">Verified</Chip>}</span>} />
         <ProfileRow icon={IdCard} label="NIN" value={mask(client?.nin)} />
-        <ProfileRow icon={Landmark} label="Withdrawal bank" onClick={() => soon("Withdrawal bank")} />
+        <ProfileRow
+          icon={Landmark}
+          label="Withdrawal bank"
+          helper={withdrawalBank ? withdrawalBank.account_name : "Set once — cannot be changed"}
+          value={withdrawBankRowValue}
+          onClick={withdrawalBank ? undefined : () => setSheet("withdrawbank")}
+        />
         <ProfileRow icon={BadgeCheck} label="Account tier and limits" value={tier} onClick={() => setSheet("tier")} />
         <ProfileRow
           icon={Hash}
@@ -338,10 +344,9 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
         <ProfileRow icon={Shield} label="Change password" onClick={() => setSheet("password")} />
         <ProfileRow icon={Fingerprint} label="Biometric login" helper="Set up inside Login PIN" onClick={() => setSheet("loginPin")} />
         <ProfileRow icon={Fingerprint} label="Use biometrics to confirm transfers" onClick={() => soon("Biometrics for transfers")} />
-        <ProfileRow icon={Timer} label="Auto-lock" value="After 2 min" onClick={() => soon("Auto-lock")} />
-        <ProfileRow icon={Smartphone} label="Manage devices" onClick={() => soon("Manage devices")} />
-        <ProfileRow icon={History} label="Login activity" onClick={() => soon("Login activity")} />
-        <ProfileRow icon={LogOut} label="Sign out of all devices" onClick={() => soon("Sign out of all devices")} />
+        <ProfileRow icon={Timer} label="Auto-lock" value={autolockLabel(autolock)} onClick={() => setSheet("autolock")} />
+        <ProfileRow icon={Smartphone} label="Manage devices" helper="One device at a time" onClick={() => setSheet("devices")} />
+        <ProfileRow icon={LogOut} label="Sign out of all other devices" onClick={signOutOtherDevices} />
       </ProfileSection>
 
       <ProfileSection title="Notifications">
@@ -355,9 +360,16 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
         <ProfileRow
           icon={Bell}
           label="Push notifications"
-          helper={push.permission === "denied" ? "Blocked in browser settings" : undefined}
+          helper={!push.supported ? "Not supported on this device" : push.permission === "denied" ? "Blocked in browser settings — enable it there to turn on" : push.isSubscribed ? "On" : "Tap to set up"}
+          onClick={!push.isSubscribed && push.supported && push.permission !== "denied" ? () => setSheet("pushsetup") : undefined}
           trailing={<Switch checked={push.isSubscribed} disabled={!push.supported || push.loading || push.permission === "denied"}
-            onCheckedChange={async (v) => { if (v) { if (await push.subscribe()) toast.success("Push notifications on"); } else { await push.unsubscribe(); toast.success("Push notifications off"); } }} aria-label="Push notifications" />}
+            onCheckedChange={async (v) => {
+              if (v) {
+                const ok = await push.subscribe();
+                if (ok) toast.success("Push notifications on");
+                else toast.error(push.permission === "denied" ? "Push is blocked in your browser. Enable it in site settings." : "Couldn't enable push.");
+              } else { await push.unsubscribe(); toast.success("Push notifications off"); }
+            }} aria-label="Push notifications" />}
         />
         <ProfileRow icon={Mail} label="Email statements" onClick={() => soon("Email statements")} />
       </ProfileSection>
@@ -382,7 +394,6 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
         <ProfileRow icon={Sparkles} label="Personalised insights" helper="Use your spending to suggest budgets and savings"
           trailing={<Switch checked={insightsOn} onCheckedChange={(v) => { setInsightsOn(v); localStorage.setItem("vestara:insights", v ? "on" : "off"); }} aria-label="Personalised insights" />} />
         <ProfileRow icon={Download} label="Download my data" onClick={() => soon("Download my data")} />
-        <ProfileRow icon={Trash2} label="Delete my account" onClick={() => soon("Delete my account")} />
       </ProfileSection>
 
       <ProfileSection title="Support">
