@@ -65,7 +65,7 @@ function RollingAmount({ value, invalid }: { value: string; invalid: boolean }) 
         "flex items-baseline justify-center font-semibold tabular-nums tracking-tight transition-colors",
         invalid ? "text-destructive" : value === "" ? "text-muted-foreground/50" : "text-foreground"
       )}
-      style={{ fontSize: 56, lineHeight: 1.05 }}
+      style={{ fontSize: "clamp(34px, 8dvh, 56px)", lineHeight: 1.05 }}
       aria-live="polite"
     >
       <span className="mr-1 text-[0.6em] font-medium opacity-70">₦</span>
@@ -321,7 +321,8 @@ export function SandboxWithdraw({
         </span>
       </div>
 
-      <div className="flex-1 flex flex-col justify-center px-5 min-h-0">
+      <div className="flex-1 flex flex-col px-5 min-h-0 overflow-y-auto">
+        <div className="my-auto py-2">
         <RollingAmount value={amount} invalid={exceeds} />
         <div className="mt-3 h-5 text-center text-xs">
           {exceeds ? (
@@ -364,14 +365,15 @@ export function SandboxWithdraw({
             </div>
           </div>
         ) : <div className="mt-5 h-[76px] rounded-2xl bg-muted animate-pulse" />}
+        </div>
       </div>
 
-      <div className="grid grid-cols-3 justify-items-center gap-y-2 px-8 pt-2">
+      <div className="grid shrink-0 grid-cols-3 justify-items-center gap-y-1 px-8 pt-1">
         {["1","2","3","4","5","6","7","8","9",".","0","back"].map((k) => (
           <motion.button key={k} whileTap={{ scale: 0.92 }} onClick={() => press(k)}
             aria-label={k === "back" ? "Delete" : k === "." ? "Decimal point" : k}
-            className="h-[76px] w-[76px] rounded-full grid place-items-center text-2xl font-medium text-foreground active:bg-muted select-none">
-            {k === "back" ? <Delete className="h-6 w-6" /> : k}
+            className="h-[min(64px,9.5dvh)] w-[min(64px,9.5dvh)] min-h-11 min-w-11 rounded-full grid place-items-center text-xl font-medium text-foreground active:bg-muted select-none">
+            {k === "back" ? <Delete className="h-5 w-5" /> : k}
           </motion.button>
         ))}
       </div>
