@@ -21,6 +21,7 @@ import { WhatsAppAlertSettings } from "@/components/settings/WhatsAppAlertSettin
 import { useTransactionPin } from "@/hooks/useTransactionPin";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { useBiometricToggle } from "@/hooks/useBiometricToggle";
+import { SandboxFAQ } from "./SandboxFAQ";
 import { useDeviceFingerprint } from "@/hooks/useDeviceFingerprint";
 import { sandboxSupabase } from "@/integrations/supabase/sandboxClient";
 import { RESET_PASSWORD } from "@/lib/appRoutes";
@@ -61,7 +62,7 @@ interface SandboxProfileProps {
 
 type SheetKey =
   | null | "loginPin" | "txPin" | "whatsapp" | "soon" | "freeze" | "signout" | "tier"
-  | "contact" | "password" | "doc" | "autolock" | "devices" | "withdrawbank" | "pushsetup";
+  | "contact" | "password" | "doc" | "autolock" | "devices" | "withdrawbank" | "pushsetup" | "faq";
 
 const AUTOLOCK_KEY = "vestara:autolock";
 const AUTOLOCK_OPTIONS: Array<{ value: string; label: string }> = [
@@ -446,7 +447,7 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
       <ProfileSection title="Support">
         <ProfileRow icon={AlertTriangle} label="Report fraud / Freeze my account" destructive onClick={() => setSheet("freeze")} />
         <ProfileRow icon={LifeBuoy} label="Contact us" onClick={() => setSheet("contact")} />
-        <ProfileRow icon={HelpCircle} label="FAQ" onClick={() => soon("FAQ")} />
+        <ProfileRow icon={HelpCircle} label="FAQ" helper="Answers about every Vestara service" onClick={() => setSheet("faq")} />
         <ProfileRow icon={ClipboardList} label="Complaints" onClick={() => setSheet("contact")} />
       </ProfileSection>
 
@@ -513,6 +514,10 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
               <Button disabled={resetSending} onClick={sendReset}>{resetSending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send link"}</Button>
               <Button variant="ghost" onClick={() => setSheet(null)}>Cancel</Button>
             </div>
+          </>)}
+          {sheet === "faq" && (<>
+            <SheetHeader><SheetTitle>Frequently asked questions</SheetTitle><SheetDescription>Quick answers about your wallet, savings, thrift, bills and security.</SheetDescription></SheetHeader>
+            <SandboxFAQ />
           </>)}
           {sheet === "contact" && (<>
             <SheetHeader><SheetTitle>Contact Vestara</SheetTitle><SheetDescription>Our team will get back to you as soon as possible.</SheetDescription></SheetHeader>
