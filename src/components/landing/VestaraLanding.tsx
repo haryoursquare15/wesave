@@ -16,7 +16,8 @@ import {
   Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import vestaraLogo from "@/assets/vestara-v.png.asset.json";
+import vestaraLogoUrl from "@/assets/vestara-badge.jpg";
+const vestaraLogo = { url: vestaraLogoUrl };
 
 // ---- SEO helpers (no extra dependency) ----
 const setMeta = (key: string, content: string, attr: "name" | "property" = "name") => {

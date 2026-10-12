@@ -41,7 +41,8 @@ function greeting() {
   return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
 }
 
-import logoAsset from "@/assets/vestara-v.png.asset.json";
+import logoAssetUrl from "@/assets/vestara-badge.jpg";
+const logoAsset = { url: logoAssetUrl };
 const logo = logoAsset.url;
 const ONBOARD_KEY = "vestara_onboarding_seen";
 

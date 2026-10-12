@@ -1,6 +1,7 @@
 import { motion, useReducedMotion } from "framer-motion";
 import { useEffect } from "react";
-import vestaraIcon from "@/assets/vestara-v.png.asset.json";
+import vestaraIconUrl from "@/assets/vestara-badge.jpg";
+const vestaraIcon = { url: vestaraIconUrl };
 import { TonalBackground } from "./TonalBackground";
 
 interface SandboxSplashProps {
