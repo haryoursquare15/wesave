@@ -15,6 +15,30 @@ import { sandboxSupabase } from "@/integrations/supabase/sandboxClient";
 import { toast } from "sonner";
 import { getUserFriendlyError } from "@/lib/errorMessages";
 import { cn } from "@/lib/utils";
+import { TonalBackground } from "@/components/vfd-sandbox/TonalBackground";
+
+// Display-only welcome details for the PIN screen (first name + photo, never email).
+const WELCOME_KEY = "vestara_welcome";
+type Welcome = { firstName?: string; initials?: string; avatarUrl?: string };
+function readWelcome(): Welcome {
+  try { return JSON.parse(localStorage.getItem(WELCOME_KEY) || "{}"); } catch { return {}; }
+}
+function saveWelcome(meta?: Record<string, unknown>) {
+  const full = String(meta?.full_name || meta?.name || "").trim();
+  const parts = full.split(/\s+/).filter(Boolean);
+  const cap = (w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+  const w: Welcome = {
+    firstName: parts[0] ? cap(parts[0]) : undefined,
+    initials: parts.slice(0, 2).map((p) => p[0]?.toUpperCase()).join("") || undefined,
+    avatarUrl: typeof meta?.avatar_url === "string" ? meta.avatar_url : undefined,
+  };
+  localStorage.setItem(WELCOME_KEY, JSON.stringify(w));
+}
+function clearWelcome() { localStorage.removeItem(WELCOME_KEY); }
+function greeting() {
+  const h = new Date().getHours();
+  return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
+}
 
 import logoAsset from "@/assets/vestara-v.png.asset.json";
 const logo = logoAsset.url;
@@ -125,6 +149,8 @@ export default function SandboxAuth() {
   const [usePassword, setUsePassword] = useState(false);
   const [qpin, setQpin] = useState("");
   const [bioReady, setBioReady] = useState(false);
+  const [shake, setShake] = useState(0);
+  const [welcome] = useState(readWelcome);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showSplash, setShowSplash] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -161,6 +187,7 @@ export default function SandboxAuth() {
       const st = await loginPinAction({ action: "get_status" });
       if (st?.has_pin) saveQuickUnlock(form.email.trim(), true);
       else clearQuickUnlock();
+      void sandboxSupabase.auth.getUser().then(({ data }) => saveWelcome(data.user?.user_metadata));
       toast.success("Welcome back to Vestara");
       finish();
     } finally {
@@ -194,6 +221,7 @@ export default function SandboxAuth() {
       const r = await unlockWithPin(quick.email, next);
       if (r.error) {
         setQpin("");
+        setShake((n) => n + 1);
         if (r.reset) resetQuick();
         if (r.locked) setUsePassword(true);
         return setError(r.error);
@@ -302,7 +330,7 @@ export default function SandboxAuth() {
     <button
       type="submit"
       disabled={isLoading}
-      className="flex h-14 w-full items-center justify-center rounded-[14px] bg-primary font-semibold text-primary-foreground transition disabled:opacity-60 select-none"
+      className="flex h-14 w-full items-center justify-center rounded-2xl bg-primary font-semibold text-primary-foreground transition disabled:opacity-60 select-none"
     >
       {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : children}
     </button>
@@ -328,58 +356,82 @@ export default function SandboxAuth() {
       )}
 
       {!isSignUp && quick?.hasPin && !usePassword ? (
-        <div className="mx-auto flex min-h-[100dvh] max-w-md flex-col items-center px-4 pt-[max(env(safe-area-inset-top),32px)] pb-[max(env(safe-area-inset-bottom),16px)]">
-          <img src={logo} alt="Vestara" className="h-16 w-16 rounded-2xl object-contain" />
-          <h2 className="mt-4 text-xl font-semibold text-foreground">Welcome back</h2>
-          <p className="mt-1 text-center text-sm text-muted-foreground">Enter your 6-digit login PIN for {quick.email}</p>
-          <div className="my-8 flex gap-3">
-            {[0, 1, 2, 3, 4, 5].map((k) => (
-              <span key={k} className={cn("h-4 w-4 rounded-full border-2", k < qpin.length ? "border-primary bg-primary" : "border-muted-foreground/40")} />
-            ))}
-          </div>
-          <ErrorLine />
-          {isLoading && <Loader2 className="mt-2 h-5 w-5 animate-spin text-primary" />}
-          <div className="mt-auto grid w-full max-w-xs grid-cols-3 gap-4">
-            {[ "1", "2", "3", "4", "5", "6", "7", "8", "9", bioReady ? "bio" : "", "0", "del" ].map((k, idx) =>
-              k === "" ? <span key={idx} /> : (
-                <button
-                  key={idx}
-                  type="button"
-                  aria-label={k === "del" ? "Delete" : k === "bio" ? "Use Face ID or fingerprint" : k}
-                  onClick={() => (k === "bio" ? void bioUnlock() : pressQuick(k))}
-                  className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-muted text-2xl font-medium text-foreground active:bg-primary/20 select-none"
-                >
-                  {k === "del" ? <Delete className="h-6 w-6" /> : k === "bio" ? <Fingerprint className="h-7 w-7 text-primary" /> : k}
-                </button>
-              ),
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.25, ease: "easeOut" }}
+          className="relative min-h-[100dvh] overflow-hidden bg-ink text-ink-foreground"
+        >
+          <TonalBackground variant="pin" />
+          <div className="relative mx-auto flex min-h-[100dvh] max-w-md flex-col items-center px-6 pt-[max(env(safe-area-inset-top),48px)] pb-[max(env(safe-area-inset-bottom),20px)]">
+            {welcome.avatarUrl ? (
+              <img src={welcome.avatarUrl} alt="" className="h-20 w-20 rounded-full object-cover ring-1 ring-ink-foreground/15" />
+            ) : (
+              <div className="flex h-20 w-20 items-center justify-center rounded-full border border-ink-foreground/15 bg-ink-foreground/[0.08] text-2xl font-semibold">
+                {welcome.initials || <img src={logo} alt="" className="h-10 w-10 object-contain" />}
+              </div>
             )}
+            <h2 className="mt-5 text-[22px] font-semibold leading-tight">
+              {greeting()}{welcome.firstName ? `, ${welcome.firstName}` : ""}
+            </h2>
+            <p className="mt-1.5 text-center text-sm text-ink-foreground/65">Welcome back. Enter your PIN to continue.</p>
+            <div key={shake} className={cn("my-9 flex gap-4", shake > 0 && "pin-shake")}>
+              {[0, 1, 2, 3, 4, 5].map((k) => (
+                <span
+                  key={k}
+                  className={cn(
+                    "h-3.5 w-3.5 rounded-full border transition-colors duration-200",
+                    k < qpin.length ? "border-primary bg-primary" : "border-ink-foreground/40 bg-transparent",
+                  )}
+                />
+              ))}
+            </div>
+            <div className="min-h-6 text-center">
+              {error ? <p role="alert" className="text-sm text-destructive-soft">{error}</p> : isLoading ? <Loader2 className="mx-auto h-5 w-5 animate-spin text-ink-foreground/70" /> : null}
+            </div>
+            <div className="mt-auto grid w-full max-w-[300px] grid-cols-3 gap-x-6 gap-y-4 pt-6">
+              {["1", "2", "3", "4", "5", "6", "7", "8", "9", bioReady ? "bio" : "", "0", "del"].map((k, idx) =>
+                k === "" ? <span key={idx} /> : (
+                  <button
+                    key={idx}
+                    type="button"
+                    aria-label={k === "del" ? "Delete" : k === "bio" ? "Use Face ID or fingerprint" : k}
+                    onClick={() => { try { navigator.vibrate?.(8); } catch { /* ignore */ } if (k === "bio") void bioUnlock(); else pressQuick(k); }}
+                    className={cn(
+                      "mx-auto flex h-[76px] w-[76px] items-center justify-center rounded-full text-[28px] font-normal text-ink-foreground transition duration-150 ease-out select-none active:scale-[0.96]",
+                      k === "del" || k === "bio" ? "active:bg-ink-foreground/10" : "border border-ink-foreground/[0.14] bg-ink-foreground/[0.08] active:bg-ink-foreground/[0.16]",
+                    )}
+                  >
+                    {k === "del" ? <Delete className="h-6 w-6" /> : k === "bio" ? <Fingerprint className="h-7 w-7" /> : k}
+                  </button>
+                ),
+              )}
+            </div>
+            <button type="button" onClick={forgotPin} className="mt-5 min-h-11 text-sm text-ink-foreground/70">Forgot PIN?</button>
+            <div className="flex items-center gap-4 text-xs text-ink-foreground/55">
+              <button type="button" onClick={() => { setUsePassword(true); setError(null); }} className="min-h-11">Use password</button>
+              <span aria-hidden>·</span>
+              <button type="button" onClick={() => { resetQuick(); clearWelcome(); setError(null); }} className="min-h-11">Not you? Switch account</button>
+            </div>
           </div>
-          <div className="mt-4 flex w-full max-w-xs justify-between">
-            <button type="button" onClick={() => { setUsePassword(true); setError(null); }} className="min-h-11 text-sm font-medium text-primary">
-              Use password instead
-            </button>
-            <button type="button" onClick={forgotPin} className="min-h-11 text-sm text-muted-foreground">
-              Forgot PIN?
-            </button>
-          </div>
-        </div>
+        </motion.div>
       ) : !isSignUp ? (
         <div className="flex min-h-[100dvh] flex-col">
-          <div className="relative flex h-[40dvh] min-h-[240px] flex-col items-center justify-center bg-ink pt-[env(safe-area-inset-top)]">
-            <div className="absolute h-40 w-40 rounded-full bg-primary/30 blur-3xl" />
-            <img src={logo} alt="Vestara" className="relative h-20 w-20 rounded-2xl object-contain" />
-            <h1 className="relative mt-3 text-2xl font-semibold text-ink-foreground">Vestara</h1>
-            <p className="relative text-sm text-ink-foreground/70">Grow your money smarter</p>
+          <div className="relative flex h-[38dvh] min-h-[240px] flex-col items-center justify-center overflow-hidden bg-ink pb-6 pt-[env(safe-area-inset-top)]">
+            <TonalBackground variant="signin" />
+            <img src={logo} alt="" className="relative h-16 w-16 object-contain" />
+            <h1 className="relative mt-3 text-2xl font-semibold tracking-tight text-ink-foreground">Vestara</h1>
+            <p className="relative mt-0.5 text-sm text-ink-foreground/60">Grow your money smarter</p>
           </div>
           <motion.div
             initial={{ y: 30, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            transition={{ duration: 0.2 }}
-            className="-mt-7 flex-1 rounded-t-[28px] bg-background px-4 pt-8 pb-[max(env(safe-area-inset-bottom),24px)]"
+            transition={{ duration: 0.25, ease: "easeOut" }}
+            className="relative -mt-6 flex-1 rounded-t-[28px] bg-background px-6 pt-7 pb-[max(env(safe-area-inset-bottom),24px)]"
           >
             <div className="mx-auto w-full max-w-md">
-              <h2 className="text-xl font-semibold text-foreground">Sign in</h2>
-              <p className="mb-6 text-sm text-muted-foreground">Welcome back. Let's pick up where you left off.</p>
+              <h2 className="text-[28px] font-semibold leading-tight text-foreground">Sign in</h2>
+              <p className="mt-1 mb-6 text-sm text-muted-foreground">Welcome back. Let's pick up where you left off.</p>
               <form onSubmit={handleSignIn} className="space-y-4">
                 <FloatField id="email" label="Email" type="email" value={form.email} onChange={set("email")} autoComplete="email" />
                 <FloatField
