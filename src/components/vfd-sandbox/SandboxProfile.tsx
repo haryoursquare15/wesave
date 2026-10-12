@@ -265,6 +265,26 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
     toast.success(`Auto-lock set to ${autolockLabel(v).toLowerCase()}`);
   };
 
+  const openAutolockSheet = async () => {
+    setAutolockPin("");
+    setAutolockUnlocked(false);
+    setSheet("autolock");
+    if (hasLoginPin === null) {
+      const r = await loginPinAction({ action: "get_status" });
+      setHasLoginPin(!!r?.has_pin);
+    }
+  };
+
+  const verifyAutolockPin = async () => {
+    if (autolockPin.length !== 6) return toast.error("Enter your 6-digit login PIN.");
+    setAutolockBusy(true);
+    const r = await loginPinAction({ action: "verify_pin", pin: autolockPin });
+    setAutolockBusy(false);
+    if (!r?.success) return toast.error(r?.error || "Incorrect PIN.");
+    setAutolockUnlocked(true);
+    setAutolockPin("");
+  };
+
   const signOutOtherDevices = async () => {
     if (!device) return;
     try {
