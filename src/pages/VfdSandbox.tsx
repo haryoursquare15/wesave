@@ -631,10 +631,24 @@ function VfdSandboxInner() {
                 key={t.label}
                 onClick={t.go}
                 aria-current={t.active ? "page" : undefined}
-                className={`flex flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium active:opacity-60 transition-colors ${t.active ? "text-primary" : "text-muted-foreground"}`}
+                className={`relative flex flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium transition-colors ${t.active ? "text-primary" : "text-muted-foreground"}`}
               >
-                <t.icon className="h-5 w-5" />
-                {t.label}
+                {t.active && (
+                  <motion.span
+                    layoutId="tab-pill"
+                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                    className="absolute inset-x-3 top-1 bottom-1 rounded-full bg-primary/10"
+                  />
+                )}
+                <motion.span
+                  className="relative inline-flex"
+                  animate={{ scale: t.active ? 1.1 : 1 }}
+                  whileTap={{ scale: 0.96 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                >
+                  <t.icon className="h-5 w-5" fill={t.active ? "currentColor" : "none"} fillOpacity={t.active ? 0.2 : 0} />
+                </motion.span>
+                <span className="relative">{t.label}</span>
               </button>
             ))}
           </div>
