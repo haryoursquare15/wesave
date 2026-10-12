@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { openComplaints } from "./complaints/ComplaintsCenter";
 import { describeTransaction, cleanDisplayText } from "@/lib/transactionLabels";
 
 interface Transaction {
@@ -197,6 +198,10 @@ export function SandboxTransactions({ transactions, loading, onRefresh, onBack }
                           : <Copy className="h-3 w-3 shrink-0 opacity-60" />}
                       </button>
                     )}
+                    <button type="button" onClick={() => openComplaints({ txId: tx.id })}
+                      className="w-full text-left text-xs font-medium text-primary pt-1 min-h-[32px] active:opacity-70">
+                      Report a problem
+                    </button>
                   </div>
                 )}
               </motion.div>

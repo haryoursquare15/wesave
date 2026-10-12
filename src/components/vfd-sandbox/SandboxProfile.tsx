@@ -22,6 +22,7 @@ import { useTransactionPin } from "@/hooks/useTransactionPin";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { useBiometricToggle } from "@/hooks/useBiometricToggle";
 import { SandboxFAQ } from "./SandboxFAQ";
+import { openComplaints } from "./complaints/ComplaintsCenter";
 import { useDeviceFingerprint } from "@/hooks/useDeviceFingerprint";
 import { sandboxSupabase } from "@/integrations/supabase/sandboxClient";
 import { RESET_PASSWORD } from "@/lib/appRoutes";
@@ -448,7 +449,7 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
         <ProfileRow icon={AlertTriangle} label="Report fraud / Freeze my account" destructive onClick={() => setSheet("freeze")} />
         <ProfileRow icon={LifeBuoy} label="Contact us" onClick={() => setSheet("contact")} />
         <ProfileRow icon={HelpCircle} label="FAQ" helper="Answers about every Vestara service" onClick={() => setSheet("faq")} />
-        <ProfileRow icon={ClipboardList} label="Complaints" onClick={() => setSheet("contact")} />
+        <ProfileRow icon={ClipboardList} label="Complaints" helper="Report a problem and track it" onClick={() => openComplaints()} />
       </ProfileSection>
 
       <ProfileSection title="About">
@@ -495,7 +496,7 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
             <SheetHeader><SheetTitle>Report fraud or freeze your account</SheetTitle>
               <SheetDescription>Freezing stops all transfers, bill payments and card use until you unfreeze. Your savings keep earning. To unfreeze, contact support and verify your identity.</SheetDescription></SheetHeader>
             <div className="flex flex-col gap-2 pt-4">
-              <Button variant="destructive" onClick={() => setSheet("contact")}>Report to support now</Button>
+              <Button variant="destructive" onClick={() => { setSheet(null); openComplaints({ view: "new" }); }}>Report to support now</Button>
               <Button variant="ghost" onClick={() => setSheet(null)}>Cancel</Button>
             </div>
           </>)}
