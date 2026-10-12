@@ -365,14 +365,15 @@ export function SandboxWithdraw({
             </div>
           </div>
         ) : <div className="mt-5 h-[76px] rounded-2xl bg-muted animate-pulse" />}
+        </div>
       </div>
 
-      <div className="grid grid-cols-3 justify-items-center gap-y-2 px-8 pt-2">
+      <div className="grid shrink-0 grid-cols-3 justify-items-center gap-y-1 px-8 pt-1">
         {["1","2","3","4","5","6","7","8","9",".","0","back"].map((k) => (
           <motion.button key={k} whileTap={{ scale: 0.92 }} onClick={() => press(k)}
             aria-label={k === "back" ? "Delete" : k === "." ? "Decimal point" : k}
-            className="h-[76px] w-[76px] rounded-full grid place-items-center text-2xl font-medium text-foreground active:bg-muted select-none">
-            {k === "back" ? <Delete className="h-6 w-6" /> : k}
+            className="h-[min(64px,9.5dvh)] w-[min(64px,9.5dvh)] min-h-11 min-w-11 rounded-full grid place-items-center text-xl font-medium text-foreground active:bg-muted select-none">
+            {k === "back" ? <Delete className="h-5 w-5" /> : k}
           </motion.button>
         ))}
       </div>
