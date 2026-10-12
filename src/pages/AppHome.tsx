@@ -3,8 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowRight, Shield, Users, Zap, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import wesaveLogoUrl from "@/assets/vestara-badge.jpg";
-const wesaveLogo = { url: wesaveLogoUrl };
+import wesaveLogo from "@/assets/vestara-logo-official.png.asset.json";
 
 const slides = [
   {

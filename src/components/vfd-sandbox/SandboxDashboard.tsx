@@ -11,8 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import vestaraBadgeUrl from "@/assets/vestara-badge.jpg";
-const vestaraBadge = { url: vestaraBadgeUrl };
+import vestaraBadge from "@/assets/vestara-logo-official.png.asset.json";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { describeTransaction } from "@/lib/transactionLabels";
 import { supabase } from "@/integrations/supabase/client";
