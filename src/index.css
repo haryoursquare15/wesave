@@ -298,6 +298,7 @@
   }
 }
 @layer utilities {
+  .text-destructive-soft { color: hsl(0 85% 75%); }
   .bg-gradient-ink { background-image: linear-gradient(180deg, hsl(var(--ink)) 0%, hsl(var(--ink-2)) 100%); }
   .tonal-drift { animation: tonal-drift 30s ease-in-out infinite; }
   .pin-shake { animation: pin-shake 360ms ease-out; }
