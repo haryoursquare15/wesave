@@ -110,6 +110,12 @@ function DrawnCheck() {
   );
 }
 
+const Shell = ({ children }: { children: React.ReactNode }) => (
+  <div className="fixed inset-0 z-50 flex flex-col bg-background" style={{ minHeight: "100dvh" }}>
+    {children}
+  </div>
+);
+
 export function SandboxWithdraw({
   userId, accountNumber, availableBalance, sourceLabel = "Wallet", onWithdraw, onBack, onSetupBank,
 }: SandboxWithdrawProps) {
@@ -219,12 +225,6 @@ export function SandboxWithdraw({
   };
 
   const reset = () => { setResult(null); setShowDetails(false); setAmount(""); setQuote(null); };
-
-  const Shell = ({ children }: { children: React.ReactNode }) => (
-    <div className="fixed inset-0 z-50 flex flex-col bg-background" style={{ minHeight: "100dvh" }}>
-      {children}
-    </div>
-  );
 
   /* ── No saved bank ── */
   if (bankLoaded && !bank) {
