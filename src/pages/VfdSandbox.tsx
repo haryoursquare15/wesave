@@ -31,7 +31,7 @@ import { useSandboxSessionEnforcement } from "@/hooks/useSandboxSessionEnforceme
 import { useDeviceEnforcement } from "@/hooks/useDeviceEnforcement";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
-import { AnimatePresence } from "framer-motion";
+import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import { sandboxSupabase } from "@/integrations/supabase/sandboxClient";
 
 import { getUserFriendlyError } from "@/lib/errorMessages";
@@ -525,7 +525,13 @@ function VfdSandboxInner() {
             }}
           />
         ) : (
-          <>
+          <motion.div
+            key={currentView}
+            initial={{ opacity: 0, x: navDir.current * 16 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.22, ease: "easeOut" }}
+            className="space-y-5"
+          >
             {currentView === "dashboard" && (
               <SandboxDashboard
                 balance={balanceData}
@@ -675,10 +681,12 @@ function SandboxSessionBridge({ children }: { children: React.ReactNode }) {
 
 export default function VfdSandbox() {
   return (
-    <SandboxAuthProvider>
-      <SandboxSessionBridge>
-        <VfdSandboxInner />
-      </SandboxSessionBridge>
-    </SandboxAuthProvider>
+    <MotionConfig reducedMotion="user">
+      <SandboxAuthProvider>
+        <SandboxSessionBridge>
+          <VfdSandboxInner />
+        </SandboxSessionBridge>
+      </SandboxAuthProvider>
+    </MotionConfig>
   );
 }
