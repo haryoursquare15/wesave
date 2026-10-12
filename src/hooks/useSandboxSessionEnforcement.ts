@@ -6,7 +6,7 @@ import { toast } from "sonner";
 // Banking-app realistic timeouts. Short windows (2m) kicked users out
 // mid-form while filling SplitPay / Goal / Target / Transfer flows.
 const BACKGROUND_TIMEOUT = 30 * 60 * 1000; // 30 minutes in background
-const DEFAULT_INACTIVITY_MINUTES = 15;
+const DEFAULT_INACTIVITY_MINUTES = 1;
 const AUTOLOCK_KEY = "vestara:autolock";
 function readInactivityTimeout(): number {
   if (typeof window === "undefined") return DEFAULT_INACTIVITY_MINUTES * 60_000;
@@ -24,8 +24,8 @@ const ACTIVITY_EVENTS: (keyof DocumentEventMap)[] = [
 
 /**
  * Sandbox-scoped inactivity sign-out.
- * Signs the user out of the sandbox after 2m of no interaction (foreground)
- * or 5m in the background, then redirects to the sandbox login page.
+ * Signs the user out after 1 minute of no interaction (foreground, default;
+ * user-configurable) or 30 minutes in the background, then redirects to sign-in.
  */
 export function useSandboxSessionEnforcement({ enabled = true }: { enabled?: boolean } = {}) {
   const navigate = useNavigate();

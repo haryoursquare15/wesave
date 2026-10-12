@@ -23,6 +23,7 @@ import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { useDeviceFingerprint } from "@/hooks/useDeviceFingerprint";
 import { sandboxSupabase } from "@/integrations/supabase/sandboxClient";
 import { RESET_PASSWORD } from "@/lib/appRoutes";
+import { loginPinAction } from "@/lib/loginPinApi";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 
@@ -63,14 +64,14 @@ type SheetKey =
 
 const AUTOLOCK_KEY = "vestara:autolock";
 const AUTOLOCK_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: "1", label: "After 1 minute" },
+  { value: "1", label: "After 1 minute (default)" },
   { value: "2", label: "After 2 minutes" },
   { value: "5", label: "After 5 minutes" },
   { value: "10", label: "After 10 minutes" },
-  { value: "15", label: "After 15 minutes (default)" },
+  { value: "15", label: "After 15 minutes" },
   { value: "never", label: "Never (not recommended)" },
 ];
-const autolockLabel = (v: string) => AUTOLOCK_OPTIONS.find(o => o.value === v)?.label.replace(" (default)", "") || "After 15 minutes";
+const autolockLabel = (v: string) => AUTOLOCK_OPTIONS.find(o => o.value === v)?.label.replace(" (default)", "") || "After 1 minute";
 
 const mask = (v?: string | null, keep = 4) =>
   v ? `••••${v.replace(/\s/g, "").slice(-keep)}` : "Not added";
@@ -177,7 +178,11 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
   const [threshold, setThreshold] = useState("");
   const [insightsOn, setInsightsOn] = useState(() => localStorage.getItem("vestara:insights") !== "off");
   const [signingOut, setSigningOut] = useState(false);
-  const [autolock, setAutolock] = useState<string>(() => localStorage.getItem(AUTOLOCK_KEY) || "15");
+  const [autolock, setAutolock] = useState<string>(() => localStorage.getItem(AUTOLOCK_KEY) || "1");
+  const [autolockUnlocked, setAutolockUnlocked] = useState(false);
+  const [autolockPin, setAutolockPin] = useState("");
+  const [autolockBusy, setAutolockBusy] = useState(false);
+  const [hasLoginPin, setHasLoginPin] = useState<boolean | null>(null);
 
   // Withdrawal bank state (read from client.metadata; immutable once set)
   const withdrawalBank = useMemo<WithdrawalBank | null>(() => {
@@ -259,6 +264,26 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
     setAutolock(v);
     localStorage.setItem(AUTOLOCK_KEY, v);
     toast.success(`Auto-lock set to ${autolockLabel(v).toLowerCase()}`);
+  };
+
+  const openAutolockSheet = async () => {
+    setAutolockPin("");
+    setAutolockUnlocked(false);
+    setSheet("autolock");
+    if (hasLoginPin === null) {
+      const r = await loginPinAction({ action: "get_status" });
+      setHasLoginPin(!!r?.has_pin);
+    }
+  };
+
+  const verifyAutolockPin = async () => {
+    if (autolockPin.length !== 6) return toast.error("Enter your 6-digit login PIN.");
+    setAutolockBusy(true);
+    const r = await loginPinAction({ action: "verify_pin", pin: autolockPin });
+    setAutolockBusy(false);
+    if (!r?.success) return toast.error(r?.error || "Incorrect PIN.");
+    setAutolockUnlocked(true);
+    setAutolockPin("");
   };
 
   const signOutOtherDevices = async () => {
@@ -344,7 +369,7 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
         <ProfileRow icon={Shield} label="Change password" onClick={() => setSheet("password")} />
         <ProfileRow icon={Fingerprint} label="Biometric login" helper="Set up inside Login PIN" onClick={() => setSheet("loginPin")} />
         <ProfileRow icon={Fingerprint} label="Use biometrics to confirm transfers" onClick={() => soon("Biometrics for transfers")} />
-        <ProfileRow icon={Timer} label="Auto-lock" value={autolockLabel(autolock)} onClick={() => setSheet("autolock")} />
+        <ProfileRow icon={Timer} label="Auto-lock" value={autolockLabel(autolock)} onClick={openAutolockSheet} />
         <ProfileRow icon={Smartphone} label="Manage devices" helper="One device at a time" onClick={() => setSheet("devices")} />
         <ProfileRow icon={LogOut} label="Sign out of all other devices" onClick={signOutOtherDevices} />
       </ProfileSection>
@@ -524,17 +549,28 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
           </>)}
           {sheet === "autolock" && (<>
             <SheetHeader><SheetTitle>Auto-lock</SheetTitle><SheetDescription>Automatically sign you out after you stop using the app.</SheetDescription></SheetHeader>
-            <div className="pt-3 space-y-1">
-              {AUTOLOCK_OPTIONS.map(o => (
-                <button key={o.value} onClick={() => applyAutolock(o.value)}
-                  className={cn("w-full text-left rounded-xl border px-4 py-3 flex items-center justify-between",
-                    autolock === o.value ? "border-primary bg-primary/5" : "border-border bg-card")}
-                >
-                  <span className="text-sm font-medium text-foreground">{o.label}</span>
-                  {autolock === o.value && <CheckCircle className="h-4 w-4 text-primary" />}
-                </button>
-              ))}
-            </div>
+            {hasLoginPin && !autolockUnlocked ? (
+              <div className="pt-3 space-y-3">
+                <p className="text-sm text-muted-foreground">Enter your 6-digit login PIN to change this setting.</p>
+                <Input type="password" inputMode="numeric" placeholder="6-digit login PIN"
+                  value={autolockPin} onChange={(e) => setAutolockPin(e.target.value.replace(/\D/g, "").slice(0, 6))} />
+                <Button className="w-full" onClick={verifyAutolockPin} disabled={autolockBusy}>
+                  {autolockBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Unlock setting"}
+                </Button>
+              </div>
+            ) : (
+              <div className="pt-3 space-y-1">
+                {AUTOLOCK_OPTIONS.map(o => (
+                  <button key={o.value} onClick={() => applyAutolock(o.value)}
+                    className={cn("w-full text-left rounded-xl border px-4 py-3 flex items-center justify-between",
+                      autolock === o.value ? "border-primary bg-primary/5" : "border-border bg-card")}
+                  >
+                    <span className="text-sm font-medium text-foreground">{o.label}</span>
+                    {autolock === o.value && <CheckCircle className="h-4 w-4 text-primary" />}
+                  </button>
+                ))}
+              </div>
+            )}
           </>)}
           {sheet === "devices" && (<>
             <SheetHeader>
