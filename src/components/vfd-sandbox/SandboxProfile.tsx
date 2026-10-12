@@ -476,8 +476,8 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
             </div>
           </>)}
           {sheet === "tier" && (<>
-            <SheetHeader><SheetTitle>Account tier and limits</SheetTitle><SheetDescription>You're on {tier}. Upgrade to raise your limits.</SheetDescription></SheetHeader>
-            <Button className="w-full mt-4" onClick={() => { setSheet(null); onNavigate("kyc"); }}>Upgrade my tier</Button>
+            <SheetHeader><SheetTitle>Account tier and limits</SheetTitle><SheetDescription>{tier === "Tier 3" ? "You're on Tier 3 — the highest tier. No upgrade needed." : `You're on ${tier}. Upgrade to raise your limits.`}</SheetDescription></SheetHeader>
+            {tier !== "Tier 3" && <Button className="w-full mt-4" onClick={() => { setSheet(null); onNavigate("kyc"); }}>Upgrade my tier</Button>}
           </>)}
           {sheet === "freeze" && (<>
             <SheetHeader><SheetTitle>Report fraud or freeze your account</SheetTitle>
@@ -506,7 +506,10 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
           {sheet === "contact" && (<>
             <SheetHeader><SheetTitle>Contact Vestara</SheetTitle><SheetDescription>Our team will get back to you as soon as possible.</SheetDescription></SheetHeader>
             <div className="mt-4 divide-y divide-border rounded-2xl border border-border overflow-hidden">
-              <ProfileRow icon={Mail} label="Email support" helper="support@vestara.ng" onClick={() => { window.location.href = "mailto:support@vestara.ng"; }} />
+              <ProfileRow icon={Mail} label="Email us at" helper="support@vestara.ng"
+                trailing={<Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Copy email address"
+                  onClick={() => { void navigator.clipboard?.writeText("support@vestara.ng"); toast.success("Email address copied"); }}>
+                  <Copy className="h-4 w-4" /></Button>} />
             </div>
           </>)}
           {sheet === "withdrawbank" && (<>
