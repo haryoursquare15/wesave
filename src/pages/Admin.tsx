@@ -20,6 +20,7 @@ import { AuditLogsTab } from "@/components/admin/AuditLogsTab";
 import { ContributionsTab } from "@/components/admin/ContributionsTab";
 import { PaymentAuthTab } from "@/components/admin/PaymentAuthTab";
 import { WithdrawalsTab } from "@/components/admin/WithdrawalsTab";
+import { ComplaintsAdminTab } from "@/components/admin/ComplaintsAdminTab";
 import { SupportTab } from "@/components/admin/SupportTab";
 import { AdminEmailTab } from "@/components/admin/AdminEmailTab";
 import { VestaraRateConfigTab } from "@/components/admin/VestaraRateConfigTab";
@@ -164,6 +165,12 @@ export default function Admin() {
                 Support
               </TabsTrigger>
             )}
+            {hasPermission("support.view") && (
+              <TabsTrigger value="complaints" className="flex items-center gap-1">
+                <MessageSquare className="h-4 w-4" />
+                Complaints
+              </TabsTrigger>
+            )}
             {hasPermission("compliance.view") && (
               <TabsTrigger value="kyc-review" className="flex items-center gap-1">
                 <ScanFace className="h-4 w-4" />
@@ -248,6 +255,10 @@ export default function Admin() {
 
           <TabsContent value="withdrawals">
             <WithdrawalsTab />
+          </TabsContent>
+
+          <TabsContent value="complaints">
+            <ComplaintsAdminTab />
           </TabsContent>
 
           <TabsContent value="support">
