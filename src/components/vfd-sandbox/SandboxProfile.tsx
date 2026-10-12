@@ -1,16 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import {
   Phone, ShieldCheck, IdCard, Landmark, BadgeCheck, Hash, FileText, KeyRound, Lock,
   Fingerprint, Timer, Smartphone, History, LogOut, MessageCircle, Bell, Mail, Palette,
-  Sparkles, Download, Trash2, AlertTriangle, LifeBuoy, HelpCircle, ClipboardList,
-  ScrollText, Shield, Info, Copy, Camera, Loader2,
+  Sparkles, Download, AlertTriangle, LifeBuoy, HelpCircle, ClipboardList,
+  ScrollText, Shield, Info, Copy, Camera, Loader2, CheckCircle, Monitor, Trash2,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { ProfileSection } from "./profile/ProfileSection";
 import { ProfileRow } from "./profile/ProfileRow";
@@ -18,9 +20,11 @@ import { LoginPinSettings } from "@/components/settings/LoginPinSettings";
 import { WhatsAppAlertSettings } from "@/components/settings/WhatsAppAlertSettings";
 import { useTransactionPin } from "@/hooks/useTransactionPin";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
+import { useDeviceFingerprint } from "@/hooks/useDeviceFingerprint";
 import { sandboxSupabase } from "@/integrations/supabase/sandboxClient";
 import { RESET_PASSWORD } from "@/lib/appRoutes";
 import { cn } from "@/lib/utils";
+import { formatDistanceToNow } from "date-fns";
 
 interface ProfileClient {
   full_name: string | null;
@@ -29,6 +33,15 @@ interface ProfileClient {
   nin: string | null;
   tier: string;
   vfd_account_number: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+interface WithdrawalBank {
+  bank_code: string;
+  bank_name: string;
+  account_number: string;
+  account_name: string;
+  set_at: string;
 }
 
 interface SandboxProfileProps {
@@ -36,13 +49,28 @@ interface SandboxProfileProps {
   email?: string | null;
   client: ProfileClient | null;
   avatarUrl: string | null;
+  banks?: Array<{ code: string; name: string }>;
+  onLoadBanks?: () => Promise<void> | void;
+  onValidateBeneficiary?: (account: string, bankCode: string) => Promise<string | null>;
   onChangePhoto: () => void;
   onNavigate: (view: string) => void;
   onSignOut: () => Promise<void> | void;
 }
 
 type SheetKey =
-  | null | "loginPin" | "txPin" | "whatsapp" | "soon" | "freeze" | "signout" | "tier" | "contact" | "password" | "doc";
+  | null | "loginPin" | "txPin" | "whatsapp" | "soon" | "freeze" | "signout" | "tier"
+  | "contact" | "password" | "doc" | "autolock" | "devices" | "withdrawbank" | "pushsetup";
+
+const AUTOLOCK_KEY = "vestara:autolock";
+const AUTOLOCK_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "1", label: "After 1 minute" },
+  { value: "2", label: "After 2 minutes" },
+  { value: "5", label: "After 5 minutes" },
+  { value: "10", label: "After 10 minutes" },
+  { value: "15", label: "After 15 minutes (default)" },
+  { value: "never", label: "Never (not recommended)" },
+];
+const autolockLabel = (v: string) => AUTOLOCK_OPTIONS.find(o => o.value === v)?.label.replace(" (default)", "") || "After 15 minutes";
 
 const mask = (v?: string | null, keep = 4) =>
   v ? `••••${v.replace(/\s/g, "").slice(-keep)}` : "Not added";
