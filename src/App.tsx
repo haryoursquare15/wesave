@@ -149,6 +149,7 @@ const App = () => {
             <OnboardingRedirect>
               <Routes>
                 <Route path="/" element={<Landing />} />
+                <Route path="/withdraw-preview" element={<WithdrawPreview />} />
                 <Route path="/app-home" element={<AppHome />} />
                 <Route path="/auth" element={<Auth />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
