@@ -52,6 +52,7 @@ import SandboxHealth from "./pages/SandboxHealth";
 import { SandboxAuthProvider } from "./contexts/SandboxAuthContext";
 import NotFound from "./pages/NotFound";
 import Unsubscribe from "./pages/Unsubscribe";
+import WithdrawPreview from "./pages/WithdrawPreview";
 import { ADMIN_BASE, ADMIN_LOGIN_PATH, ADMIN_CONSOLE_PATH, ADMIN_RECURRING_TEST_PATH } from "@/lib/adminRoutes";
 import { APP_HOME, SIGN_IN, FORGOT_PASSWORD, RESET_PASSWORD, JOIN } from "@/lib/appRoutes";
 
