@@ -29,19 +29,6 @@ export function usePushNotifications() {
   const [loading, setLoading] = useState(false);
   const [supported, setSupported] = useState(false);
 
-  useEffect(() => {
-    const isSupported =
-      "serviceWorker" in navigator &&
-      "PushManager" in window &&
-      "Notification" in window;
-    setSupported(isSupported);
-
-    if (isSupported) {
-      setPermission(Notification.permission);
-      void checkExistingSubscription();
-    }
-  }, [user, checkExistingSubscription]);
-
   const checkExistingSubscription = useCallback(async () => {
     try {
       const registration = await navigator.serviceWorker.getRegistration("/sw.js");
@@ -59,6 +46,19 @@ export function usePushNotifications() {
       setIsSubscribed(false);
     }
   }, [user, supabase]);
+
+  useEffect(() => {
+    const isSupported =
+      "serviceWorker" in navigator &&
+      "PushManager" in window &&
+      "Notification" in window;
+    setSupported(isSupported);
+
+    if (isSupported) {
+      setPermission(Notification.permission);
+      void checkExistingSubscription();
+    }
+  }, [user, checkExistingSubscription]);
 
   const registerServiceWorker = useCallback(async () => {
     const registration = await navigator.serviceWorker.register("/sw.js", {
