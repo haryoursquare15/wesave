@@ -321,7 +321,8 @@ export function SandboxWithdraw({
         </span>
       </div>
 
-      <div className="flex-1 flex flex-col justify-center px-5 min-h-0">
+      <div className="flex-1 flex flex-col px-5 min-h-0 overflow-y-auto">
+        <div className="my-auto py-2">
         <RollingAmount value={amount} invalid={exceeds} />
         <div className="mt-3 h-5 text-center text-xs">
           {exceeds ? (
