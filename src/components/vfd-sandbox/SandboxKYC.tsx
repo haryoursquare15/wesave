@@ -429,10 +429,12 @@ export function SandboxKYC({ vfd, onComplete }: SandboxKYCProps) {
           >
             <div className="text-center mb-2">
               <h2 className="text-lg font-bold">
-                {currentTierNum > 0 ? "Upgrade Your Account" : "Choose Your Account Tier"}
+                {currentTierNum >= 3 ? "You're on the highest tier" : currentTierNum > 0 ? "Upgrade Your Account" : "Choose Your Account Tier"}
               </h2>
               <p className="text-xs text-muted-foreground mt-1">
-                {currentTierNum > 0
+                {currentTierNum >= 3
+                  ? "Your account is fully verified on Tier 3. No upgrade is needed."
+                  : currentTierNum > 0
                   ? `Currently on Tier ${currentTierNum}. Select a higher tier to upgrade.`
                   : "Higher tiers unlock greater transaction limits"
                 }
