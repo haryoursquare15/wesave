@@ -1,7 +1,8 @@
 import { motion } from "framer-motion";
 import { CreditCard, Sparkles, ShieldCheck, KeyRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import wesaveLogo from "@/assets/vestara-v.png.asset.json";
+import wesaveLogoUrl from "@/assets/vestara-badge.jpg";
+const wesaveLogo = { url: wesaveLogoUrl };
 
 /* ─── Virtual Debit — Coming Soon ─── */
 export function SandboxCardTab() {
