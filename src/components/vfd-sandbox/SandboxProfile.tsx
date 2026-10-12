@@ -187,11 +187,22 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
   const [hasLoginPin, setHasLoginPin] = useState<boolean | null>(null);
 
   // Withdrawal bank state (read from client.metadata; immutable once set)
+  const [savedBank, setSavedBank] = useState<WithdrawalBank | null>(null);
   const withdrawalBank = useMemo<WithdrawalBank | null>(() => {
+    if (savedBank) return savedBank;
     const meta = (client?.metadata || {}) as Record<string, unknown>;
     const wb = meta.withdrawal_bank as WithdrawalBank | undefined;
     return wb && wb.account_number && wb.bank_name ? wb : null;
-  }, [client?.metadata]);
+  }, [client?.metadata, savedBank]);
+  // Pull the latest saved bank directly so the row is right even if the parent data is stale.
+  useEffect(() => {
+    if (!userId) return;
+    void sandboxSupabase.from("vfd_sandbox_clients").select("metadata").eq("user_id", userId).maybeSingle()
+      .then(({ data }) => {
+        const wb = (data?.metadata as Record<string, unknown> | null)?.withdrawal_bank as WithdrawalBank | undefined;
+        if (wb?.account_number && wb?.bank_name) setSavedBank(wb);
+      });
+  }, [userId]);
   const [wbBankCode, setWbBankCode] = useState("");
   const [wbAccount, setWbAccount] = useState("");
   const [wbName, setWbName] = useState("");
@@ -244,17 +255,17 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
     setWbSaving(true);
     try {
       const bankName = banks.find(b => b.code === wbBankCode)?.name || "";
-      const next: WithdrawalBank = {
-        bank_code: wbBankCode, bank_name: bankName,
-        account_number: wbAccount, account_name: wbName,
+      const { data, error } = await sandboxSupabase.rpc("set_own_withdrawal_bank", {
+        _bank_code: wbBankCode, _bank_name: bankName, _account_number: wbAccount, _account_name: wbName,
+      });
+      if (error) throw error;
+      const saved = (data as unknown as WithdrawalBank) || {
+        bank_code: wbBankCode, bank_name: bankName, account_number: wbAccount, account_name: wbName,
         set_at: new Date().toISOString(),
       };
-      const meta = { ...(client?.metadata || {}), withdrawal_bank: next };
-      const { error } = await sandboxSupabase.from("vfd_sandbox_clients").update({ metadata: meta as Record<string, unknown> as never }).eq("user_id", userId);
-      if (error) throw error;
+      setSavedBank(saved);
       toast.success("Withdrawal bank saved. Withdrawals will go to this account.");
       setSheet(null);
-      // Force a refresh so the row reflects immediately
       window.dispatchEvent(new Event("vestara:profile-updated"));
     } catch (err) {
       console.error(err);
