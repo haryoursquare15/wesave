@@ -4,7 +4,7 @@ import { press, spring } from "@/lib/motion";
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Wallet, Lock, Users, Target, Heart, Receipt, Send, LayoutGrid,
-  CreditCard, Eye, EyeOff, TrendingUp, Plus, ArrowDownLeft, ArrowUpRight,
+  CreditCard, Eye, EyeOff, TrendingUp, Plus, ArrowDownLeft, ArrowUpRight, Banknote,
   Shield, ChevronRight, ChevronLeft, PiggyBank,
   Clock, Copy, Check, Building2, Vault as VaultIcon, Zap, Gift, ShieldCheck,
 } from "lucide-react";
@@ -484,10 +484,11 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.15 }}
-        className="grid grid-cols-4 gap-3"
+        className="grid grid-cols-5 gap-2"
       >
         {[
           { key: "fund", label: "Add Money", icon: Plus, color: "bg-primary-soft text-primary", tap: { rotate: [0, 90] } },
+          { key: "withdraw", label: "Withdraw", icon: Banknote, color: "bg-primary-soft text-primary", tap: { y: [0, -3, 0], rotate: [0, 8, 0] } },
           { key: "services", label: "Services", icon: LayoutGrid, color: "bg-primary-soft text-primary", tap: { x: [0, 3, 0], y: [0, -3, 0] } },
           { key: "lock", label: "Lock", icon: Lock, color: "bg-primary-soft text-primary", tap: { y: [0, 2, 0], scale: [1, 0.92, 1] } },
           { key: "history", label: "History", icon: Clock, color: "bg-primary-soft text-primary", tap: { rotate: [0, 90, 90] } },

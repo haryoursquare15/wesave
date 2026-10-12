@@ -14,6 +14,7 @@ import { SandboxKYC } from "@/components/vfd-sandbox/SandboxKYC";
 import { SandboxSavings } from "@/components/vfd-sandbox/SandboxSavings";
 import { SandboxFund } from "@/components/vfd-sandbox/SandboxFund";
 import { SandboxTransfer } from "@/components/vfd-sandbox/SandboxTransfer";
+import { SandboxWithdraw } from "@/components/vfd-sandbox/SandboxWithdraw";
 import { SandboxTransactions } from "@/components/vfd-sandbox/SandboxTransactions";
 import { SandboxAjoTab } from "@/components/vfd-sandbox/SandboxAjoTab";
 import { SandboxTargetTab } from "@/components/vfd-sandbox/SandboxTargetTab";
@@ -42,7 +43,7 @@ interface UserBalance {
   no_vfd_account?: boolean; stale?: boolean;
 }
 
-type View = "dashboard" | "fund" | "transfer" | "lock" | "history" | "ajo" | "target" | "goal" | "split" | "association" | "bills" | "card" | "kyc" | "mandates" | "insights" | "profile";
+type View = "dashboard" | "fund" | "transfer" | "withdraw" | "lock" | "history" | "ajo" | "target" | "goal" | "split" | "association" | "bills" | "card" | "kyc" | "mandates" | "insights" | "profile";
 
 function ProductWrapper({ children, onBack }: { children: React.ReactNode; onBack: () => void }) {
   return (
@@ -58,7 +59,7 @@ function ProductWrapper({ children, onBack }: { children: React.ReactNode; onBac
   );
 }
 
-const VALID_VIEWS: View[] = ["dashboard", "fund", "transfer", "lock", "history", "ajo", "target", "goal", "split", "association", "bills", "card", "kyc", "mandates", "insights", "profile"];
+const VALID_VIEWS: View[] = ["dashboard", "fund", "transfer", "withdraw", "lock", "history", "ajo", "target", "goal", "split", "association", "bills", "card", "kyc", "mandates", "insights", "profile"];
 
 function VfdSandboxInner() {
   const navigate = useNavigate();
@@ -577,6 +578,16 @@ function VfdSandboxInner() {
                 onValidate={handleValidateBeneficiary}
                 onTransfer={handleTransfer}
                 onBack={goBack}
+              />
+            )}
+            {currentView === "withdraw" && (
+              <SandboxWithdraw
+                userId={user?.id || ""}
+                accountNumber={balanceData.accountNumber}
+                availableBalance={vestaraBalance?.available_balance ?? 0}
+                onWithdraw={handleTransfer}
+                onBack={goBack}
+                onSetupBank={() => setCurrentView("profile")}
               />
             )}
             {currentView === "lock" && (
