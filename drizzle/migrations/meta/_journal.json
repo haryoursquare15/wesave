@@ -78,6 +78,13 @@
       "when": 1791804167042,
       "tag": "0010_split_payment_enforce_share",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791804242133,
+      "tag": "0011_ledger_snapshot_inc_20261012",
+      "breakpoints": true
     }
   ]
 }
