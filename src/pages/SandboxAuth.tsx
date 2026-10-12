@@ -186,8 +186,8 @@ export default function SandboxAuth() {
       if (error) return setError(getUserFriendlyError(error.message));
       const st = await loginPinAction({ action: "get_status" });
       if (st?.has_pin) saveQuickUnlock(form.email.trim(), true);
-      void sandboxSupabase.auth.getUser().then(({ data }) => saveWelcome(data.user?.user_metadata));
       else clearQuickUnlock();
+      void sandboxSupabase.auth.getUser().then(({ data }) => saveWelcome(data.user?.user_metadata));
       toast.success("Welcome back to Vestara");
       finish();
     } finally {

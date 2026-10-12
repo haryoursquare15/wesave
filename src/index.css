@@ -49,6 +49,7 @@
     --ink-2: 215 47% 15%;
     --ink-deep: 215 55% 9%;
     --tonal-teal: 175 60% 35%;
+    --destructive-soft: 0 85% 75%;
     --primary-soft: 21 90% 95%;
 
     /* Custom Thrift Colors */
@@ -298,7 +299,7 @@
   }
 }
 @layer utilities {
-  .text-destructive-soft { color: hsl(0 85% 75%); }
+  .text-destructive-soft { color: hsl(var(--destructive-soft)); }
   .bg-gradient-ink { background-image: linear-gradient(180deg, hsl(var(--ink)) 0%, hsl(var(--ink-2)) 100%); }
   .tonal-drift { animation: tonal-drift 30s ease-in-out infinite; }
   .pin-shake { animation: pin-shake 360ms ease-out; }
