@@ -632,22 +632,23 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
               <button
                 key={banner.key}
                 onClick={() => onNavigate(banner.routeKey)}
-                className={`flex-none w-[80%] min-w-[260px] snap-center rounded-2xl bg-gradient-to-br ${banner.gradient} p-5 shadow-sm text-left relative overflow-hidden active:scale-[0.99] transition-transform`}
+                className={`flex-none w-[80%] min-w-[260px] snap-center rounded-2xl bg-gradient-to-br ${banner.gradient} p-4 shadow-sm text-left text-ink-foreground relative overflow-hidden active:scale-[0.99] transition-transform`}
               >
-                <div className={`absolute top-3 right-3 w-16 h-16 rounded-2xl ${banner.accent} flex items-center justify-center`}>
-                  <banner.icon className="h-8 w-8 opacity-80" />
+                <div className={`absolute top-3 right-3 w-14 h-14 rounded-2xl ${banner.accent} flex items-center justify-center`}>
+                  <banner.icon className="h-7 w-7 opacity-90" />
                 </div>
-                <div className="relative z-10 min-h-[132px] flex flex-col justify-between">
+                <div className="relative z-10 min-h-[118px] flex flex-col justify-between">
                   <div>
-                    <h4 className="text-base font-semibold mb-1">{banner.title}</h4>
-                    <p className="text-sm opacity-80 max-w-[75%] leading-relaxed">{banner.subtitle}</p>
+                    <h4 className="text-sm font-semibold mb-1 tracking-tight">{banner.title}</h4>
+                    <p className="text-xs opacity-90 max-w-[80%] leading-relaxed">{banner.subtitle}</p>
                   </div>
 
-                  <div className="flex items-end justify-between">
-                    <span className="inline-block text-xs font-semibold bg-background/20 px-3 py-1.5 rounded-full">
+                  <div className="flex items-end justify-between gap-2">
+                    <span className="inline-block text-[11px] font-semibold bg-ink-foreground/15 px-3 py-1.5 rounded-full">
                       {banner.cta}
                     </span>
-                    <span className="text-xs font-semibold opacity-90 tabular-nums">
+                    <span className="text-[11px] font-semibold opacity-90 tabular-nums">
+
                       {holding && showBalance
                         ? `₦${holding.total.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
                         : holding && !showBalance
