@@ -1,4 +1,6 @@
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence , useReducedMotion} from "framer-motion";
+import { haptic } from "@/lib/haptics";
+import { press, spring } from "@/lib/motion";
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Wallet, Lock, Users, Target, Heart, Receipt, Send, LayoutGrid,
@@ -201,6 +203,7 @@ function getTxMeta(type: string) {
 /* ─── Main Dashboard Component ─── */
 export function SandboxDashboard({ balance, onNavigate, recentTransactions = [], tier, upgradePending = false, avatarUrl }: SandboxDashboardProps) {
   const [showBalance, setShowBalance] = useState(true);
+  const [tapped, setTapped] = useState<{ key: string; n: number } | null>(null);
   const [copied, setCopied] = useState(false);
   const [activeBanner, setActiveBanner] = useState(0);
   const [carouselPaused, setCarouselPaused] = useState(false);
