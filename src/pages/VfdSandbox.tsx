@@ -442,7 +442,9 @@ function VfdSandboxInner() {
     return name?.toString() || null;
   };
 
-  const goBack = () => setCurrentView("dashboard");
+  // Screen transition direction: forward slides in from the right, back from the left.
+  const navDir = useRef(1);
+  const goBack = () => { navDir.current = -1; setCurrentView("dashboard"); setTimeout(() => { navDir.current = 1; }, 300); };
 
   if (authLoading || (user && !clientChecked)) {
     return (
@@ -620,7 +622,7 @@ function VfdSandboxInner() {
                 onOpenChange={(next) => { if (!next) setCurrentView("dashboard"); }}
               />
             )}
-          </>
+          </motion.div>
         )}
       </div>
       {kycDone && (
