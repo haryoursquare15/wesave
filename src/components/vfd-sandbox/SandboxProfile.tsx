@@ -243,7 +243,7 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
         set_at: new Date().toISOString(),
       };
       const meta = { ...(client?.metadata || {}), withdrawal_bank: next };
-      const { error } = await sandboxSupabase.from("vfd_sandbox_clients").update({ metadata: meta }).eq("user_id", userId);
+      const { error } = await sandboxSupabase.from("vfd_sandbox_clients").update({ metadata: meta as Record<string, unknown> as never }).eq("user_id", userId);
       if (error) throw error;
       toast.success("Withdrawal bank saved. Withdrawals will go to this account.");
       setSheet(null);
