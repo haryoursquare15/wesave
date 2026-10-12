@@ -28,6 +28,7 @@ import { SandboxProfile } from "@/components/vfd-sandbox/SandboxProfile";
 import { SandboxGroupInviteModal } from "@/components/vfd-sandbox/SandboxGroupInviteModal";
 import { SandboxSplash } from "@/components/vfd-sandbox/SandboxSplash";
 import { useSandboxSessionEnforcement } from "@/hooks/useSandboxSessionEnforcement";
+import { useDeviceEnforcement } from "@/hooks/useDeviceEnforcement";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { AnimatePresence } from "framer-motion";
@@ -104,6 +105,8 @@ function VfdSandboxInner() {
 
   // Inactivity sign-out (2m foreground / 5m background) → /signin
   useSandboxSessionEnforcement({ enabled: !!user });
+  // Single-device enforcement: register fingerprint + sign out if evicted elsewhere.
+  useDeviceEnforcement(!!user);
 
   // Vestara-driven balance (single source of truth)
   const [vestaraBalance, setVestaraBalance] = useState<UserBalance | null>(null);
@@ -597,6 +600,9 @@ function VfdSandboxInner() {
                 email={user?.email}
                 client={vfd.client}
                 avatarUrl={avatarUrl}
+                banks={banks}
+                onLoadBanks={handleLoadBanks}
+                onValidateBeneficiary={handleValidateBeneficiary}
                 onChangePhoto={() => setPhotoOpen(true)}
                 onNavigate={(v) => setCurrentView(v as View)}
                 onSignOut={async () => { await signOut(); navigate("/signin"); }}
