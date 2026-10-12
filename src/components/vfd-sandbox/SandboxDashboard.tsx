@@ -759,10 +759,6 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
       </motion.div>
 
 
-      {/* ═══ TRUST LINE ═══ */}
-      <p className="text-center text-[10px] text-muted-foreground">
-        Banking services provided by VFD Microfinance Bank
-      </p>
     </div>
   );
 }
