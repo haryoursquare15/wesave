@@ -53,26 +53,27 @@ const TIER_INFO: Record<string, { short: string; daily: string }> = {
 };
 
 /* ─── Animated Counter ─── */
+// Counts up over 600ms once per session; later changes update instantly.
+const COUNTED_KEY = "vestara_balance_counted";
 function AnimatedNumber({ value, prefix = "₦" }: { value: number; prefix?: string }) {
-  const [display, setDisplay] = useState(0);
-  const prevRef = useRef(0);
+  const reduce = useReducedMotion();
+  const [display, setDisplay] = useState(() =>
+    reduce || sessionStorage.getItem(COUNTED_KEY) ? value : 0,
+  );
 
   useEffect(() => {
-    const start = prevRef.current;
-    const diff = value - start;
-    if (diff === 0) return;
-    const duration = 700;
-    const startTime = Date.now();
-    const animate = () => {
-      const elapsed = Date.now() - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      setDisplay(Math.round(start + diff * eased));
-      if (progress < 1) requestAnimationFrame(animate);
-      else prevRef.current = value;
+    if (reduce || sessionStorage.getItem(COUNTED_KEY) || value === 0) { setDisplay(value); return; }
+    let raf = 0;
+    const startTime = performance.now();
+    const step = (now: number) => {
+      const p = Math.min((now - startTime) / 600, 1);
+      setDisplay(Math.round(value * (1 - Math.pow(1 - p, 3))));
+      if (p < 1) raf = requestAnimationFrame(step);
+      else sessionStorage.setItem(COUNTED_KEY, "1");
     };
-    requestAnimationFrame(animate);
-  }, [value]);
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [value, reduce]);
 
   return <>{prefix}{display.toLocaleString()}</>;
 }
@@ -352,22 +353,25 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
               <Wallet className="h-4 w-4 opacity-70" />
               <span className="text-xs font-medium opacity-70 tracking-wide uppercase">Total Balance</span>
             </div>
-            <button
+            <motion.button
+              whileTap={press}
+              transition={spring}
               onClick={() => setShowBalance(!showBalance)}
               className="p-1.5 hover:bg-primary-foreground/10 rounded-full transition-colors"
               aria-label={showBalance ? "Hide balance" : "Show balance"}
             >
               {showBalance ? <Eye className="h-4 w-4 opacity-70" /> : <EyeOff className="h-4 w-4 opacity-70" />}
-            </button>
+            </motion.button>
           </div>
 
-          {/* Primary figure — Total */}
-          <AnimatePresence mode="wait">
+          {/* Primary figure — Total (crossfade with a light blur) */}
+          <AnimatePresence mode="wait" initial={false}>
             <motion.h2
               key={showBalance ? "shown" : "hidden"}
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
+              initial={{ opacity: 0, filter: "blur(4px)" }}
+              animate={{ opacity: 1, filter: "blur(0px)" }}
+              exit={{ opacity: 0, filter: "blur(4px)" }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
               className="text-[2.5rem] font-semibold tracking-tight mb-3 leading-none"
             >
               {showBalance ? <AnimatedNumber value={balance.totalBalance} /> : "₦ ••••••"}
@@ -480,27 +484,39 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
         className="grid grid-cols-4 gap-3"
       >
         {[
-          { key: "fund", label: "Add Money", icon: Plus, color: "bg-primary-soft text-primary" },
-          { key: "services", label: "Services", icon: LayoutGrid, color: "bg-primary-soft text-primary" },
-          { key: "lock", label: "Lock", icon: Lock, color: "bg-primary-soft text-primary" },
-          { key: "history", label: "History", icon: Clock, color: "bg-primary-soft text-primary" },
+          { key: "fund", label: "Add Money", icon: Plus, color: "bg-primary-soft text-primary", tap: { rotate: [0, 90] } },
+          { key: "services", label: "Services", icon: LayoutGrid, color: "bg-primary-soft text-primary", tap: { x: [0, 3, 0], y: [0, -3, 0] } },
+          { key: "lock", label: "Lock", icon: Lock, color: "bg-primary-soft text-primary", tap: { y: [0, 2, 0], scale: [1, 0.92, 1] } },
+          { key: "history", label: "History", icon: Clock, color: "bg-primary-soft text-primary", tap: { rotate: [0, 90, 90] } },
         ].map((action) => (
           <button
             key={action.key}
             onClick={() => {
+              void haptic("light");
+              setTapped({ key: action.key, n: Date.now() });
               if (action.key === "services") {
                 document.getElementById("home-services")?.scrollIntoView({ behavior: "smooth", block: "start" });
                 return;
               }
-              onNavigate(action.key);
+              // Let the icon cue play briefly; never block input.
+              setTimeout(() => onNavigate(action.key), 160);
             }}
             className="flex flex-col items-center gap-2 group"
           >
             <motion.div
-              whileTap={{ scale: 0.9 }}
-              className={`w-14 h-14 rounded-2xl ${action.color} flex items-center justify-center transition-transform active:scale-95`}
+              whileTap={press}
+              transition={spring}
+              className={`w-14 h-14 rounded-2xl ${action.color} flex items-center justify-center`}
             >
-              <action.icon className="h-5 w-5" />
+              <motion.span
+                key={tapped?.key === action.key ? tapped.n : 0}
+                initial={false}
+                animate={tapped?.key === action.key ? action.tap : undefined}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+                className="inline-flex"
+              >
+                <action.icon className="h-5 w-5" />
+              </motion.span>
             </motion.div>
             <span className="text-xs font-medium text-foreground">{action.label}</span>
           </button>
