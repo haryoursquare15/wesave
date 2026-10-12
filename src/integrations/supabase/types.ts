@@ -7948,6 +7948,15 @@ export type Database = {
         Args: { _split_request_id: string; _target_user_id: string }
         Returns: Json
       }
+      set_own_withdrawal_bank: {
+        Args: {
+          _account_name: string
+          _account_number: string
+          _bank_code: string
+          _bank_name: string
+        }
+        Returns: Json
+      }
       spendlock_get_insights: {
         Args: { _end_date?: string; _start_date?: string }
         Returns: Json
