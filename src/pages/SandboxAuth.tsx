@@ -41,8 +41,7 @@ function greeting() {
   return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
 }
 
-import logoAssetUrl from "@/assets/vestara-badge.jpg";
-const logoAsset = { url: logoAssetUrl };
+import logoAsset from "@/assets/vestara-logo-official.png.asset.json";
 const logo = logoAsset.url;
 const ONBOARD_KEY = "vestara_onboarding_seen";
 
@@ -446,7 +445,7 @@ export default function SandboxAuth() {
         <div className="flex min-h-[100dvh] flex-col">
           <div className="relative flex h-[38dvh] min-h-[240px] flex-col items-center justify-center overflow-hidden bg-ink pb-6 pt-[env(safe-area-inset-top)]">
             <TonalBackground variant="signin" />
-            <img src={logo} alt="" className="relative h-16 w-16 object-contain" />
+            <img src={logo} alt="Vestara logo" className="relative h-28 w-28 object-contain" />
             <h1 className="relative mt-3 text-2xl font-semibold tracking-tight text-ink-foreground">Vestara</h1>
             <p className="relative mt-0.5 text-sm text-ink-foreground/60">Grow your money smarter</p>
           </div>

@@ -2,8 +2,7 @@ import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import type { ReactNode } from "react";
-import vestaraLogoUrl from "@/assets/vestara-logo-transparent.png";
-const vestaraLogo = { url: vestaraLogoUrl };
+import vestaraLogo from "@/assets/vestara-logo-official.png.asset.json";
 import { SandboxNotificationBell } from "./SandboxNotificationBell";
 import { BillDeliveryPopupListener } from "./BillDeliveryPopupListener";
 
