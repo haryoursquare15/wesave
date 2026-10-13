@@ -204,7 +204,9 @@ function TxPicker({ service, onPick }: { service: string; onPick: (id: string | 
   const [rows, setRows] = useState<Tx[] | null>(null);
   useEffect(() => {
     (async () => {
-      const { data } = await sb.from("vfd_sandbox_transactions").select("id,transaction_type,amount,status,created_at,description,reversed_at,beneficiary_name").order("created_at", { ascending: false }).limit(100);
+      const { data: { user } } = await sb.auth.getUser();
+      if (!user) { setRows([]); return; }
+      const { data } = await sb.from("vfd_sandbox_transactions").select("id,transaction_type,amount,status,created_at,description,reversed_at,beneficiary_name").eq("user_id", user.id).order("created_at", { ascending: false }).limit(100);
       const all = (data as Tx[]) ?? [];
       const kw = SERVICES.find((s) => s.key === service)?.kw ?? [];
       const hit = kw.length ? all.filter((t) => kw.some((k) => `${t.transaction_type} ${t.description ?? ""}`.toLowerCase().includes(k))) : all;
