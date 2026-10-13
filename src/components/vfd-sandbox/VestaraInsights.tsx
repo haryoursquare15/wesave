@@ -99,10 +99,20 @@ export function VestaraInsights({ name, onNavigate }: { name: string; onNavigate
   const improving = components.filter(c => c.value !== null && c.value < 100);
   const newUser = !score || score.details.state === "new" || noData.length === 4;
   const next = score && score.level < 5 ? Math.max(0, thresholds[score.level] - score.score) : 0;
+  const firstName = (() => {
+    let raw = name?.trim();
+    if (!raw || raw === "—") return "";
+    // VFD bakes a corporate prefix into the registered name (e.g. "VES-DANIEL ...");
+    // greet the human, not the org.
+    if (raw.includes("-")) raw = raw.slice(raw.lastIndexOf("-") + 1).trim();
+    const first = raw.split(/\s+/)[0];
+    if (!first) return "";
+    return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
+  })();
   if (loading) return <div aria-label="Loading your Money Pulse" className="space-y-5"><Skeleton className="h-12 w-2/3" /><Skeleton className="h-80 w-full rounded-lg" /><div className="grid grid-cols-2 gap-3">{pillars.map(p => <Skeleton key={p.key} className="h-36 rounded-lg" />)}</div><Skeleton className="h-40 w-full" /></div>;
   return <motion.div initial={reduced ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 pb-6">
     <header className="flex items-start justify-between gap-3">
-      <div className="min-w-0"><p className="text-xs text-muted-foreground">{name ? `Hi ${name.split(" ")[0]}` : "Your money health"}</p><h1 className="mt-1 break-words text-2xl font-semibold">Vestara Money Pulse</h1><p className="mt-1 text-xs text-muted-foreground">{new Intl.DateTimeFormat("en-NG", { month: "short", day: "numeric", timeZone: "Africa/Lagos" }).format(new Date(Date.now() - 29 * 86400000))} – {new Intl.DateTimeFormat("en-NG", { month: "short", day: "numeric", timeZone: "Africa/Lagos" }).format(now)} · Last 30 days</p></div>
+      <div className="min-w-0"><p className="text-xs text-muted-foreground">{firstName ? `Hi ${firstName}` : "Your money health"}</p><h1 className="mt-1 break-words text-2xl font-semibold">Vestara Money Pulse</h1><p className="mt-1 text-xs text-muted-foreground">{new Intl.DateTimeFormat("en-NG", { month: "short", day: "numeric", timeZone: "Africa/Lagos" }).format(new Date(Date.now() - 29 * 86400000))} – {new Intl.DateTimeFormat("en-NG", { month: "short", day: "numeric", timeZone: "Africa/Lagos" }).format(now)} · Last 30 days</p></div>
       <div className="flex shrink-0 items-center gap-1"><span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-2 text-xs font-medium text-primary"><Flame className="h-3.5 w-3.5" />{streak.current_weeks} wk</span><Button variant="ghost" size="icon" aria-label="Refresh Money Pulse" className="h-11 w-11" disabled={refreshing} onClick={async () => { setRefreshing(true); await refresh(); setRefreshing(false); }}><RefreshCw className="h-4 w-4" /></Button></div>
     </header>
     {error && <div role="status" className="flex items-center justify-between gap-3 rounded-lg border border-border p-3 text-xs text-muted-foreground"><span>{error}</span><Button variant="ghost" className="min-h-11 shrink-0 text-primary" onClick={() => void refresh()}>Retry</Button></div>}
