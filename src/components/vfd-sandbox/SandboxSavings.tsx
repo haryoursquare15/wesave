@@ -19,7 +19,7 @@ import { TransactionSuccessModal, TransactionSuccessPayload } from "@/components
 import { GoalSavingsV2Wizard } from "./GoalSavingsV2Wizard";
 import { SavingsPlanCard, planState, PlanState, ARCHIVED_STATES, saveTabOf, type SaveTab } from "./SavingsPlanCard";
 import { useMandates, type MandateRow } from "@/hooks/useMandates";
-import { supabase } from "@/integrations/supabase/client";
+import { sandboxSupabase as supabase } from "@/integrations/supabase/sandboxClient";
 import { MandateStatusSheet } from "./MandateStatusSheet";
 import { MandateAuthorizationDialog, type MandateSubject } from "./MandateAuthorizationDialog";
 
