@@ -18,6 +18,21 @@ const DEFAULT_MESSAGE =
 
 // Ordered: more specific phrases first.
 const ERROR_MAP: Array<[string, string]> = [
+  // ─── Connectivity / platform ────────────────────────────────────────────
+  ["failed to fetch", "We couldn't reach Vestara. Check your internet connection and try again."],
+  ["networkerror", "We couldn't reach Vestara. Check your internet connection and try again."],
+  ["network request failed", "We couldn't reach Vestara. Check your internet connection and try again."],
+  ["load failed", "We couldn't reach Vestara. Check your internet connection and try again."],
+  ["timeout", "This is taking longer than usual. Please try again in a moment."],
+  ["timed out", "This is taking longer than usual. Please try again in a moment."],
+  ["settlement_funding_unconfirmed", "We're still confirming this payment. Please check your transactions shortly before trying again."],
+  ["settlement_funding_failed", "We couldn't move your funds right now. Nothing was charged — please try again shortly."],
+  ["invalid wallet token", "We're reconnecting to your wallet. Please try again in a moment."],
+  ["jwt expired", "Your session has ended. Please sign in again to continue."],
+  ["invalid jwt", "Your session has ended. Please sign in again to continue."],
+  ["permission denied", "You don't have permission to do that."],
+  ["row-level security", "You don't have permission to do that."],
+  ["duplicate key", "This has already been done. Please refresh to see the latest."],
   // ─── Auth / Session ─────────────────────────────────────────────────────
   ["already registered", "This email is already registered. Please sign in instead."],
   ["invalid login credentials", "That email or password didn't match. Please try again or reset your password."],
@@ -388,7 +403,8 @@ export function getUserFriendlyError(error: unknown): string {
 
   // If the raw message is already short and human (no stack-trace / id / json), keep it.
   const looksTechnical =
-    /[{}\[\]]|stack|undefined|null is not|cannot read|at .* \(|0x[a-f0-9]/i.test(raw) ||
+    /[{}\[\]<>]|stack|undefined|null is not|cannot read|at .* \(|0x[a-f0-9]|edge function|non-2xx|supabase|postgres|pgrst|rpc|sql|relation |column |violates|constraint|function .*does not exist|schema|jwt|token|http ?\d{3}|status code|\b[45]\d\d\b|exception|typeerror|referenceerror|syntaxerror|internal server|vfd|nibss|api|payload|json|uuid|[0-9a-f]{8}-[0-9a-f]{4}-/i.test(raw) ||
+    /\b[A-Z]{2,}(_[A-Z0-9]+)+\b/.test(raw) ||
     raw.length > 160;
 
   return looksTechnical ? DEFAULT_MESSAGE : raw;
@@ -399,4 +415,10 @@ export function getUserFriendlyError(error: unknown): string {
  */
 export function toastError(error: unknown): string {
   return getUserFriendlyError(error);
+}
+
+/** Returns a customer-safe message for any toast text; friendly text passes through unchanged. */
+export function sanitizeUserMessage(text: unknown): unknown {
+  if (typeof text !== "string" || !text.trim()) return text;
+  return getUserFriendlyError(text);
 }
