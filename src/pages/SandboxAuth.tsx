@@ -41,8 +41,8 @@ function greeting() {
   return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
 }
 
-import logoAsset from "@/assets/vestara-logo-official.png.asset.json";
-const logo = logoAsset.url;
+import logoAsset from "@/assets/vestara-mark.png";
+const logo = logoAsset;
 const ONBOARD_KEY = "vestara_onboarding_seen";
 
 function FloatField({

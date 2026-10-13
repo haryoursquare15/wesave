@@ -62,11 +62,11 @@ const SECTIONS: Section[] = [
     ],
   },
   {
-    title: "Spending limits (SpendLock) & insights",
+    title: "Spending limits (SpendLock) & Money Pulse",
     items: [
       { q: "What is SpendLock?", a: "SpendLock lets you set a weekly or monthly budget for bank transfers and bill payments. Money moved into savings doesn't count towards it. Your limit can't be higher than your tier's limit." },
       { q: "Can I unlock my limit?", a: "Yes, you're always in control. You can unlock straight away with your PIN, or choose a 30-minute cooling-off period first." },
-      { q: "What are Insights?", a: "Insights look at your spending patterns, such as repeating payments, upcoming bills and your average weekly spend. They suggest a limit and point you to savings products that may suit you. They never change your settings on their own." },
+      { q: "What is Vestara Money Pulse?", a: "Vestara Money Pulse scores your money health across four pillars — Save, Circle, Grow and Pay — using your own activity. It suggests a spending limit and points you to savings products that may suit you. It never changes your settings on its own." },
     ],
   },
   {

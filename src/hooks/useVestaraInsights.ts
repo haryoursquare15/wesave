@@ -44,7 +44,7 @@ export function useVestaraInsights() {
       setEnabled(results[4].data?.insights_enabled !== false);
       if (engine.error) setError("Your last saved insights are shown. Try refreshing again shortly.");
     } catch {
-      setError("We couldn't load your insights. Please try again.");
+      setError("We couldn't load your Money Pulse. Please try again.");
     } finally { setLoading(false); }
   }, [user?.id]);
   useEffect(() => { void refresh(); }, [refresh]);
