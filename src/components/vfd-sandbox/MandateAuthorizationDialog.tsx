@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useVfdSandboxProducts } from "@/hooks/useVfdSandboxProducts";
 import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
 import { Copy, Check, RefreshCw, Building2, ShieldCheck, AlertTriangle, Clock } from "lucide-react";
+import { mandateAuthorizationDetails } from "@/lib/mandateAuthorizationDetails";
 
 // VFD-aligned CBN bank codes (from VFD DDM docs §"Bank codes").
 const VFD_BANKS: { code: string; name: string }[] = [
@@ -146,6 +147,7 @@ export function MandateAuthorizationDialog({ subject, onClose, onAuthorized }: P
   }, [cooldown]);
 
   const selectedBank = useMemo(() => VFD_BANKS.find((b) => b.code === form.bankCode), [form.bankCode]);
+  const receivingDetails = mandateAuthorizationDetails(mandate?.nibssMessage);
   const mandateAmount = subject ? Math.max(1000, Number(subject.contribution_amount) || 0) : 0;
   const aboveMin = subject ? Number(subject.contribution_amount) >= 1000 : true;
 
@@ -325,6 +327,8 @@ export function MandateAuthorizationDialog({ subject, onClose, onAuthorized }: P
               </div>
 
               <div className="p-4 rounded-xl border-2 border-dashed border-primary/40 bg-primary/5 space-y-2">
+                <div className="flex justify-between items-start gap-3"><span className="text-muted-foreground shrink-0">Receiving bank</span><span className="font-medium text-right min-w-0 break-words">{receivingDetails.bank}</span></div>
+                <div className="flex justify-between items-start gap-3"><span className="text-muted-foreground shrink-0">Account name</span><span className="font-medium text-right min-w-0 break-words">{receivingDetails.accountName}</span></div>
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Account Number</span>
                   <div className="flex items-center gap-2">
