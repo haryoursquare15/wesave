@@ -66,9 +66,10 @@ interface Props {
   onEarlyWithdraw: (s: VS) => void;
   onTryAgain?: (s: VS) => void;
   onOpenMandate?: (m: MandateRow) => void;
+  onLinkBank?: () => void;
 }
 
-export function SavingsPlanCard({ savings: s, mandate, busy, onMature, onEarlyWithdraw, onTryAgain, onOpenMandate }: Props) {
+export function SavingsPlanCard({ savings: s, mandate, busy, onMature, onEarlyWithdraw, onTryAgain, onOpenMandate, onLinkBank }: Props) {
   const [open, setOpen] = useState(false);
   const state = planState(s, mandate);
   const meta = STATE_META[state];
@@ -141,6 +142,11 @@ export function SavingsPlanCard({ savings: s, mandate, busy, onMature, onEarlyWi
         {(state === "setup" || state === "attention") && mandate && onOpenMandate && (
           <Button className="w-full h-11 rounded-2xl active:scale-[0.96] transition-transform" variant={mandateAwaitingTransfer ? "default" : "outline"} onClick={() => onOpenMandate(mandate)}>
             {mandateAwaitingTransfer ? "Authorize bank account" : "View status"}
+          </Button>
+        )}
+        {state === "setup" && !mandate && onLinkBank && (
+          <Button className="w-full h-11 rounded-2xl active:scale-[0.96] transition-transform" onClick={onLinkBank}>
+            Authorize bank account
           </Button>
         )}
         {state === "ready" && (

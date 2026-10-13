@@ -20,6 +20,7 @@ import { GoalSavingsV2Wizard } from "./GoalSavingsV2Wizard";
 import { SavingsPlanCard, planState, PlanState, ARCHIVED_STATES, saveTabOf, type SaveTab } from "./SavingsPlanCard";
 import { useMandates, type MandateRow } from "@/hooks/useMandates";
 import { MandateStatusSheet } from "./MandateStatusSheet";
+import { MandateAuthorizationDialog, type MandateSubject } from "./MandateAuthorizationDialog";
 
 interface UserBalance {
   total_balance: number; locked_balance: number; savings_balance: number; available_balance: number;
@@ -54,6 +55,7 @@ export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductC
   const { findFor: findMandate, refresh: refreshMandates } = useMandates();
   const [mandateView, setMandateView] = useState<{ mandate: MandateRow; plan: VS } | null>(null);
   const [tab, setTab] = useState<SaveTab | null>(null);
+  const [linkSubject, setLinkSubject] = useState<MandateSubject | null>(null);
 
   const [products, setProducts] = useState<VestaraProduct[]>([]);
   const [savings, setSavings] = useState<VS[]>([]);
@@ -400,9 +402,15 @@ export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductC
           onClose={() => { setShowGoalV2(false); loadAll(); onRefresh(); }}
           onCreated={() => { loadAll(); onRefresh(); }}
           walletAvailable={availableBalance}
+          products={products}
+          onPickProduct={(code) => {
+            const p = products.find(x => x.code === code);
+            setShowGoalV2(false);
+            if (p) { setSelectedProduct(p); setShowCreate(true); setStep("amount"); }
+          }}
         />
       ) : !showCreate ? (
-        <Button onClick={() => setShowCreate(true)} className="w-full h-14 rounded-2xl text-base font-semibold active:scale-[0.96] transition-transform">
+        <Button onClick={() => setShowGoalV2(true)} className="w-full h-14 rounded-2xl text-base font-semibold active:scale-[0.96] transition-transform">
           Start saving
         </Button>
       ) : (
@@ -675,7 +683,7 @@ export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductC
           <div className="bg-card rounded-[20px] border border-border p-8 text-center space-y-3">
             <p className="text-sm font-medium">Your first plan is one tap away.</p>
             <p className="text-xs text-muted-foreground">Pick a goal, set an amount, and we'll handle the rest.</p>
-            <Button onClick={() => setShowCreate(true)} className="w-full h-14 rounded-2xl">Start saving</Button>
+            <Button onClick={() => setShowGoalV2(true)} className="w-full h-14 rounded-2xl">Start saving</Button>
           </div>
         ) : tabbed[currentTab].length === 0 ? (
           <p className="text-xs text-muted-foreground text-center py-6">No {currentTab} plans.</p>
@@ -691,11 +699,24 @@ export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductC
                 onEarlyWithdraw={handleEarlyWithdraw}
                 onTryAgain={handleTryAgain}
                 onOpenMandate={(m) => setMandateView({ mandate: m, plan: s })}
+                onLinkBank={() => setLinkSubject({
+                  kind: "goalsave", id: s.id,
+                  name: String((s.metadata as Record<string, unknown>)?.goal_name || "GoalSave"),
+                  contribution_amount: Number(s.commitment_amount || 0),
+                  period: s.commitment_frequency || "monthly",
+                  total_cycles: Number(s.tenor_count || 1),
+                })}
               />
             ))}
           </div>
         )}
       </div>
+
+      <MandateAuthorizationDialog
+        subject={linkSubject}
+        onClose={() => { setLinkSubject(null); void refreshMandates(); loadAll(); }}
+        onAuthorized={() => { setLinkSubject(null); void refreshMandates(); loadAll(); }}
+      />
 
       <MandateStatusSheet
         open={!!mandateView}
