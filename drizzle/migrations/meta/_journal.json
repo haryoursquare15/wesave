@@ -85,6 +85,13 @@
       "when": 1791804242133,
       "tag": "0011_ledger_snapshot_inc_20261012",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1791880318679,
+      "tag": "0012_cancel_pending_savings_plan",
+      "breakpoints": true
     }
   ]
 }

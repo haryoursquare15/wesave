@@ -61,6 +61,7 @@ const STATE_META: Record<PlanState, { label: string; chip: string }> = {
 interface Props {
   savings: VS;
   mandate?: MandateRow | null;
+  onCancel?: (s: VS) => void;
   busy?: boolean;
   onMature: (s: VS) => void;
   onEarlyWithdraw: (s: VS) => void;
@@ -69,8 +70,9 @@ interface Props {
   onLinkBank?: () => void;
 }
 
-export function SavingsPlanCard({ savings: s, mandate, busy, onMature, onEarlyWithdraw, onTryAgain, onOpenMandate, onLinkBank }: Props) {
+export function SavingsPlanCard({ savings: s, mandate, busy, onMature, onEarlyWithdraw, onTryAgain, onOpenMandate, onLinkBank, onCancel }: Props) {
   const [open, setOpen] = useState(false);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
   const state = planState(s, mandate);
   const meta = STATE_META[state];
   const isClosed = ARCHIVED_STATES.includes(state);
@@ -148,6 +150,31 @@ export function SavingsPlanCard({ savings: s, mandate, busy, onMature, onEarlyWi
           <Button className="w-full h-11 rounded-2xl active:scale-[0.96] transition-transform" onClick={onLinkBank}>
             Authorize bank account
           </Button>
+        )}
+        {(state === "pending" || state === "setup" || state === "attention") && onCancel && (
+          confirmingCancel ? (
+            <div className="rounded-[14px] border border-destructive/30 bg-destructive/5 p-3 space-y-2">
+              <p className="text-xs text-muted-foreground leading-snug">
+                Cancel this plan? Nothing has been debited, so there's nothing to refund.
+              </p>
+              <div className="flex gap-2">
+                <Button variant="destructive" size="sm" className="flex-1 rounded-[12px]" disabled={busy} onClick={() => { setConfirmingCancel(false); onCancel(s); }}>
+                  Yes, cancel plan
+                </Button>
+                <Button variant="outline" size="sm" className="flex-1 rounded-[12px]" onClick={() => setConfirmingCancel(false)}>
+                  Keep it
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmingCancel(true)}
+              className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+            >
+              Cancel this plan
+            </button>
+          )
         )}
         {state === "ready" && (
           <Button className="w-full h-11 rounded-2xl" onClick={() => onMature(s)} disabled={busy}>Withdraw to wallet</Button>

@@ -7617,6 +7617,10 @@ export type Database = {
         Args: { _group_id: string; _user_id: string }
         Returns: boolean
       }
+      cancel_pending_savings_plan: {
+        Args: { p_plan_id: string }
+        Returns: undefined
+      }
       cancel_split_request: {
         Args: { _creator_id: string; _split_request_id: string }
         Returns: Json
