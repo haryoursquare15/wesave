@@ -3740,6 +3740,9 @@ Deno.serve(async (req) => {
     }
 
     const action = body.action || actionFromPath;
+    if (isMoneyAction(action) && await isAccountFrozen(getSupabaseAdmin(), userId)) {
+      return jsonResponse({ error: FROZEN_MESSAGE, code: "ACCOUNT_FROZEN" }, 403);
+    }
 
     switch (action) {
       case "bvn_lookup":

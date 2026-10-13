@@ -11337,6 +11337,9 @@ Deno.serve(async (req) => {
 
     const user = await getUserFromRequest(req);
     const userId = user.id;
+    if (isMoneyAction(action) && await isAccountFrozen(getSupabaseAdmin(), userId)) {
+      return jsonResponse({ error: FROZEN_MESSAGE, code: "ACCOUNT_FROZEN" }, 403);
+    }
 
     switch (action) {
       // Thrift Groups (full parity)
