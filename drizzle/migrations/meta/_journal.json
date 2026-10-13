@@ -106,6 +106,13 @@
       "when": 1791895190579,
       "tag": "0014_insights_step2_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1791896484847,
+      "tag": "0015_insights_engine_fix_streak",
+      "breakpoints": true
     }
   ]
 }
