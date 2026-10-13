@@ -85,7 +85,12 @@ async function enquire(accountNo: string): Promise<{ balance: number | null; err
       return { balance: null, error: `VFD ${response.status} (non-JSON)` };
     }
     const data = await response.json();
-    if (response.status >= 400) return { balance: null, error: `VFD ${response.status}` };
+    if (response.status >= 400) {
+      console.error(
+        `[subaccount-sweep] enquiry failed mode=${VFD_MODE} account=${accountNo} status=${response.status} body=${JSON.stringify(data).slice(0, 300)}`,
+      );
+      return { balance: null, error: `VFD ${response.status}` };
+    }
     return { balance: extractVfdBalance(data), error: null };
   } catch (e) {
     return { balance: null, error: e instanceof Error ? e.message : String(e) };
