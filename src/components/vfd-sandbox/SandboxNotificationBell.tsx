@@ -231,23 +231,25 @@ export function SandboxNotificationBell() {
         </Button>
       </SheetTrigger>
       <SheetContent side="bottom" className="h-[85dvh] rounded-t-3xl bg-background p-0 flex flex-col">
-        <SheetHeader className="px-4 pt-4 pb-3 border-b border-border">
-          <div className="flex items-center justify-between">
-            <div>
+        <SheetHeader className="shrink-0 px-4 pt-4 pb-3 pr-14 border-b border-border text-left">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+            <div className="min-w-0">
               <SheetTitle className="text-base">Notifications</SheetTitle>
               <p className="text-[10px] text-muted-foreground">Read alerts clear after 24 hours</p>
             </div>
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               onClick={markAllRead}
               disabled={!hasUnreadInTray && unreadCount === 0}
-              className="mr-8 text-xs font-medium text-primary transition-opacity hover:opacity-80 disabled:text-muted-foreground disabled:opacity-60"
+              className="h-11 shrink-0 whitespace-nowrap px-2 text-xs font-medium text-primary disabled:text-muted-foreground disabled:opacity-100"
             >
               Mark all as read
-            </button>
+            </Button>
           </div>
         </SheetHeader>
-        <ScrollArea className="flex-1">
+        <ScrollArea className="min-h-0 flex-1">
           {loading && isEmpty ? (
             <div className="py-10 text-center text-xs text-muted-foreground">Loading…</div>
           ) : isEmpty ? (
