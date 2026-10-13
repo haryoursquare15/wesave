@@ -8193,6 +8193,10 @@ export type Database = {
       }
     }
     Functions: {
+      admin_account_action: {
+        Args: { _action: string; _reason?: string; _user_id: string }
+        Returns: Json
+      }
       admin_assign_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -8228,6 +8232,16 @@ export type Database = {
           _role: Database["public"]["Enums"]["app_role"]
         }
         Returns: Json
+      }
+      admin_list_account_statuses: {
+        Args: never
+        Returns: {
+          account_status: string
+          freeze_reason: string
+          frozen_at: string
+          id: string
+          risk_level: string
+        }[]
       }
       admin_list_card_tokens: {
         Args: { _limit?: number }
