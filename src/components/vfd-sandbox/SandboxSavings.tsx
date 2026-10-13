@@ -17,8 +17,9 @@ import {
 import { TransactionPinGate } from "@/components/security/TransactionPinGate";
 import { TransactionSuccessModal, TransactionSuccessPayload } from "@/components/feedback/TransactionSuccessModal";
 import { GoalSavingsV2Wizard } from "./GoalSavingsV2Wizard";
-import { SavingsPlanCard, planState, PlanState, ARCHIVED_STATES } from "./SavingsPlanCard";
-import { useMandates } from "@/hooks/useMandates";
+import { SavingsPlanCard, planState, PlanState, ARCHIVED_STATES, saveTabOf, type SaveTab } from "./SavingsPlanCard";
+import { useMandates, type MandateRow } from "@/hooks/useMandates";
+import { MandateStatusSheet } from "./MandateStatusSheet";
 
 interface UserBalance {
   total_balance: number; locked_balance: number; savings_balance: number; available_balance: number;
@@ -50,7 +51,9 @@ const PRODUCT_GRADIENTS: Record<VestaraProductCode, string> = {
 export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductCode }: Props) {
   const { toast } = useToast();
   const vestara = useVestaraLedger();
-  const { findFor: findMandate } = useMandates();
+  const { findFor: findMandate, refresh: refreshMandates } = useMandates();
+  const [mandateView, setMandateView] = useState<{ mandate: MandateRow; plan: VS } | null>(null);
+  const [tab, setTab] = useState<SaveTab | null>(null);
 
   const [products, setProducts] = useState<VestaraProduct[]>([]);
   const [savings, setSavings] = useState<VS[]>([]);
