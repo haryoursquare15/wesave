@@ -79,7 +79,7 @@ export function SpendLockInsightsDetail({ open, onOpenChange }: Props) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="h-[100dvh] w-screen max-w-md gap-0 overflow-x-hidden overflow-y-auto rounded-none border-[hsl(var(--spendlock-border))] bg-[hsl(var(--spendlock-surface))] p-0 text-[hsl(var(--spendlock-foreground))] [&>button]:bg-[hsl(var(--spendlock-surface-soft))] [&>button]:text-[hsl(var(--spendlock-foreground))] sm:h-auto sm:max-h-[85vh] sm:w-full sm:rounded-2xl"
+        className="h-[100dvh] w-screen max-w-md gap-0 overflow-x-hidden overflow-y-auto rounded-none border-[hsl(var(--spendlock-border))] bg-[hsl(var(--spendlock-surface))] p-0 text-[hsl(var(--spendlock-foreground))] [&>button]:z-20 [&>button]:bg-[hsl(var(--spendlock-surface-soft))] [&>button]:text-[hsl(var(--spendlock-foreground))] sm:h-auto sm:max-h-[85vh] sm:w-full sm:rounded-2xl"
       >
         <div className="sticky top-0 z-10 border-b border-[hsl(var(--spendlock-border))] bg-[hsl(var(--spendlock-surface))] px-4 py-4 pr-14 sm:px-5">
           <h2 className="text-base font-semibold">Your spending breakdown</h2>

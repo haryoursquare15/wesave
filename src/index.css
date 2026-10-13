@@ -51,6 +51,11 @@
     --tonal-teal: 175 60% 35%;
     --destructive-soft: 0 85% 75%;
     --primary-soft: 21 90% 95%;
+    /* Insights pillar roles stay consistent across tiles and trends. */
+    --insights-save: 21 90% 48%;
+    --insights-circle: 190 68% 32%;
+    --insights-grow: 215 50% 30%;
+    --insights-pay: 38 85% 32%;
 
     /* Custom Thrift Colors */
     --success: 142 76% 36%;
@@ -145,6 +150,10 @@
     --border: 0 0% 32%;
     --input: 0 0% 32%;
     --ring: 27 95% 60%;
+    --insights-save: 27 95% 60%;
+    --insights-circle: 190 60% 65%;
+    --insights-grow: 215 65% 73%;
+    --insights-pay: 38 85% 65%;
 
     --sidebar-background: 200 25% 10%;
     --sidebar-foreground: 0 0% 98%;
