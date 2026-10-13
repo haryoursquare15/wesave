@@ -210,7 +210,7 @@ export function GoalSavingsV2Wizard({ onClose, onCreated, walletAvailable, produ
                           <span className="block text-sm font-semibold">{p.name}</span>
                           {p.description && <span className="block text-xs text-muted-foreground line-clamp-1">{p.description}</span>}
                           <span className="block text-xs text-muted-foreground mt-1">
-                            Up to {p.max_user_rate}% p.a. · {p.min_tenor_days}–{p.max_tenor_days} days
+                            Up to {p.max_user_rate}% p.a. · {p.code === "goalsave" ? "7 days – 24 months" : `${p.min_tenor_days}–${p.max_tenor_days} days`}
                           </span>
                         </span>
                         {sel && <span className="h-6 w-6 rounded-full bg-primary flex items-center justify-center"><Check className="h-4 w-4 text-primary-foreground" /></span>}
