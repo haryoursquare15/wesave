@@ -99,6 +99,13 @@
       "when": 1791892803835,
       "tag": "0013_subaccount_balance_sweep",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1791895190579,
+      "tag": "0014_insights_step2_schema",
+      "breakpoints": true
     }
   ]
 }
