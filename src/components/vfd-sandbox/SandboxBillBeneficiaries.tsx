@@ -1,3 +1,4 @@
+import { invokeWithGatewayRetry } from "@/lib/productsRetry";
 import { useEffect, useState, useCallback } from "react";
 import { Trash2, Loader2, Users, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -26,9 +27,9 @@ export function SandboxBillBeneficiaries() {
     const { data: s } = await client.auth.getSession();
     const token = s?.session?.access_token;
     if (!token) return null;
-    const resp = await client.functions.invoke("vfd-sandbox-products", {
+    const resp = await invokeWithGatewayRetry(action, body, () => client.functions.invoke("vfd-sandbox-products", {
       body: { action, ...body }, headers: { Authorization: `Bearer ${token}` },
-    });
+    }));
     return resp.data;
   }, [client]);
 
