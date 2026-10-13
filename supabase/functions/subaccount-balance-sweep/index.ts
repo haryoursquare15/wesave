@@ -212,6 +212,34 @@ Deno.serve(async (req) => {
 
     const snapshots = [];
     const problems: string[] = [];
+
+    // Pool: self-enquiry (the only corporate balance VFD exposes to us).
+    const self = await enquireSelf();
+    snapshots.push({
+      account_label: "Vestara Corporate Pool",
+      account_number: self.accountNo ?? poolNuban,
+      live_balance: self.balance,
+      internal_expected: null,
+      drift: null,
+      error: self.error,
+    });
+    if (self.error) problems.push(`• Vestara Corporate Pool — balance enquiry failed: ${self.error}`);
+
+    // Main collection account + product sub-accounts: only enquireable if VFD
+    // grants the wallet credential visibility. Until then, record the state
+    // but do NOT page admins every 15 minutes — alert only when the error
+    // state is new (previous snapshot had no error).
+    const { data: prevRows } = await supabase
+      .from("subaccount_balance_snapshots")
+      .select("account_number, error, fetched_at")
+      .order("fetched_at", { ascending: false })
+      .limit(50);
+    const prevError = new Map<string, string | null>();
+    for (const r of prevRows ?? []) {
+      const key = String(r.account_number);
+      if (!prevError.has(key)) prevError.set(key, (r.error as string | null) ?? null);
+    }
+
     for (const t of targets) {
       const live = await enquire(t.accountNumber);
       const drift =
@@ -226,8 +254,9 @@ Deno.serve(async (req) => {
         drift,
         error: live.error,
       });
+      const wasFailing = !!prevError.get(t.accountNumber);
       if (live.error) {
-        problems.push(`• ${t.label} (${t.accountNumber}) — balance enquiry failed: ${live.error}`);
+        if (!wasFailing) problems.push(`• ${t.label} (${t.accountNumber}) — balance enquiry failed: ${live.error}`);
       } else if (drift !== null && Math.abs(drift) > DRIFT_THRESHOLD) {
         problems.push(
           `• ${t.label} (${t.accountNumber}) — live ${money(live.balance!)} vs expected ${money(t.expected!)} (drift ${money(drift)})`,
