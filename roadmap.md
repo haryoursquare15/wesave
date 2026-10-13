@@ -11,3 +11,4 @@
 - [x] Rename the Insights feature to Vestara Money Pulse (nav label Pulse), including Profile preference and FAQ wording; route unchanged.
 - [x] Repair logos that referenced hosted asset pointers (broken in preview) by bundling the supplied transparent logo and a square V mark derived from it.
 - [x] Default appearance to light (user choice still remembered); verified fresh browser and signed-in Profile show Light selected.
+- [x] Stop the sign-in page from jumping up when the username field is tapped; shell now tracks the visible viewport while the keyboard opens.
