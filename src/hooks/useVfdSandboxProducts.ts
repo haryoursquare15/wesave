@@ -3,6 +3,7 @@ import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
 import { useToast } from "@/hooks/use-toast";
 
 import { getUserFriendlyError } from "@/lib/errorMessages";
+import { GATEWAY_STATUSES, PRODUCTS_UNAVAILABLE_MESSAGE, isRetrySafe, retryDelay } from "@/lib/productsRetry";
 export function useVfdSandboxProducts() {
   const { session, client } = useSandboxAwareAuth();
   const { toast } = useToast();
@@ -60,6 +61,15 @@ export function useVfdSandboxProducts() {
           resp = await doFetch();
         }
 
+        // Service briefly unavailable (start-up failure): retry only actions
+        // that can't move money twice.
+        if (GATEWAY_STATUSES.has(resp.status) && isRetrySafe(action, body)) {
+          for (let i = 0; i < 2 && GATEWAY_STATUSES.has(resp.status); i++) {
+            await retryDelay(i);
+            try { resp = await doFetch(); } catch { /* keep last response */ }
+          }
+        }
+
         let data: any = null;
         const text = await resp.text();
         if (text) {
@@ -67,7 +77,9 @@ export function useVfdSandboxProducts() {
         }
 
         if (!resp.ok) {
-          const msg = data?.error || data?.message || `Request failed (${resp.status})`;
+          const msg = GATEWAY_STATUSES.has(resp.status)
+            ? PRODUCTS_UNAVAILABLE_MESSAGE
+            : data?.error || data?.message || `Request failed (${resp.status})`;
           toast({ title: "Error", description: getUserFriendlyError(msg), variant: "destructive" });
           return { error: msg, status: resp.status };
         }
