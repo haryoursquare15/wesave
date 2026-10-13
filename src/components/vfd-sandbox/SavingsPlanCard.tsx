@@ -151,6 +151,23 @@ export function SavingsPlanCard({ savings: s, mandate, busy, onMature, onEarlyWi
             Authorize bank account
           </Button>
         )}
+        {state === "ready" && (
+          <Button className="w-full h-11 rounded-2xl" onClick={() => onMature(s)} disabled={busy}>Withdraw to wallet</Button>
+        )}
+        {state === "expired" && onTryAgain && (
+          <Button variant="outline" className="w-full h-11 rounded-2xl" onClick={() => onTryAgain(s)}>
+            <RotateCcw className="h-4 w-4 mr-2" /> Start a new plan
+          </Button>
+        )}
+
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+        >
+          Details <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
+        </button>
+
         {(state === "pending" || state === "setup" || state === "attention") && onCancel && (
           confirmingCancel ? (
             <div className="rounded-[14px] border border-destructive/30 bg-destructive/5 p-3 space-y-2">
@@ -170,28 +187,12 @@ export function SavingsPlanCard({ savings: s, mandate, busy, onMature, onEarlyWi
             <button
               type="button"
               onClick={() => setConfirmingCancel(true)}
-              className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+              className="block w-full text-center text-xs text-muted-foreground hover:text-destructive transition-colors"
             >
               Cancel this plan
             </button>
           )
         )}
-        {state === "ready" && (
-          <Button className="w-full h-11 rounded-2xl" onClick={() => onMature(s)} disabled={busy}>Withdraw to wallet</Button>
-        )}
-        {state === "expired" && onTryAgain && (
-          <Button variant="outline" className="w-full h-11 rounded-2xl" onClick={() => onTryAgain(s)}>
-            <RotateCcw className="h-4 w-4 mr-2" /> Start a new plan
-          </Button>
-        )}
-
-        <button
-          type="button"
-          onClick={() => setOpen(o => !o)}
-          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-        >
-          Details <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
-        </button>
       </div>
 
       {open && (
