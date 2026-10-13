@@ -63,37 +63,55 @@ function money(n: number) {
   return `NGN ${Number(n).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+async function vfdGet(path: string, query?: Record<string, string>): Promise<{ data: unknown; status: number }> {
+  const accessToken = await getGatewayAccessToken();
+  if (!accessToken) throw new Error("No gateway token");
+  const url = new URL(`${VFD_BASE_URL}${path}`);
+  if (query) for (const [k, v] of Object.entries(query)) url.searchParams.set(k, v);
+  const init = { method: "GET", headers: { "Content-Type": "application/json", AccessToken: accessToken } };
+  let response = await vfdFetch(url.toString(), init);
+  for (let attempt = 0; attempt < 2 && [502, 503, 504].includes(response.status); attempt += 1) {
+    await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+    response = await vfdFetch(url.toString(), init);
+  }
+  const data = await response.json().catch(() => null);
+  return { data, status: response.status };
+}
+
+// The wallet credential can only see customer NUBANs and its OWN corporate
+// account. Enquiring another corporate NUBAN returns 401 "Account Not Found".
+const NOT_VISIBLE = "not visible to wallet credential — needs VFD entitlement";
+
 async function enquire(accountNo: string): Promise<{ balance: number | null; error: string | null }> {
   try {
-    const accessToken = await getGatewayAccessToken();
-    if (!accessToken) return { balance: null, error: "No gateway token" };
-    const url = new URL(`${VFD_BASE_URL}/account/enquiry`);
-    url.searchParams.set("accountNumber", accountNo);
-    let response = await vfdFetch(url.toString(), {
-      method: "GET",
-      headers: { "Content-Type": "application/json", AccessToken: accessToken },
-    });
-    for (let attempt = 0; attempt < 2 && [502, 503, 504].includes(response.status); attempt += 1) {
-      await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
-      response = await vfdFetch(url.toString(), {
-        method: "GET",
-        headers: { "Content-Type": "application/json", AccessToken: accessToken },
-      });
-    }
-    const contentType = response.headers.get("content-type") || "";
-    if (!contentType.includes("application/json")) {
-      return { balance: null, error: `VFD ${response.status} (non-JSON)` };
-    }
-    const data = await response.json();
-    if (response.status >= 400) {
-      console.error(
-        `[subaccount-sweep] enquiry failed mode=${VFD_MODE} account=${accountNo} status=${response.status} body=${JSON.stringify(data).slice(0, 300)}`,
-      );
-      return { balance: null, error: `VFD ${response.status}` };
+    const { data, status } = await vfdGet("/account/enquiry", { accountNumber: accountNo });
+    if (status >= 400) {
+      const msg = String((data as Record<string, unknown> | null)?.message ?? "");
+      const notVisible = status === 401 || /account not found/i.test(msg);
+      console.error(`[subaccount-sweep] enquiry failed mode=${VFD_MODE} account=${accountNo} status=${status} body=${JSON.stringify(data).slice(0, 300)}`);
+      return { balance: null, error: notVisible ? NOT_VISIBLE : `VFD ${status}` };
     }
     return { balance: extractVfdBalance(data), error: null };
   } catch (e) {
     return { balance: null, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+// Self-enquiry (no accountNumber) returns the wallet credential's own
+// corporate account — the Vestara pool. This is the only corporate balance
+// VFD exposes to us today.
+async function enquireSelf(): Promise<{ balance: number | null; accountNo: string | null; error: string | null }> {
+  try {
+    const { data, status } = await vfdGet("/account/enquiry");
+    if (status >= 400) return { balance: null, accountNo: null, error: `VFD ${status}` };
+    const inner = ((data as Record<string, unknown> | null)?.data ?? {}) as Record<string, unknown>;
+    return {
+      balance: extractVfdBalance(data),
+      accountNo: (inner.accountNo as string) ?? null,
+      error: null,
+    };
+  } catch (e) {
+    return { balance: null, accountNo: null, error: e instanceof Error ? e.message : String(e) };
   }
 }
 
