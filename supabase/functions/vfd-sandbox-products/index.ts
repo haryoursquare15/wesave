@@ -8206,11 +8206,17 @@ async function handleListPendingGroupInvitees(userId: string, body: Record<strin
 // =============================================
 async function handleListNotifications(userId: string) {
   const db = getSupabaseAdmin();
+  // Bell retention: unread items live up to 7 days; read items fade after 24h.
+  // Rows are kept in the database for history — only hidden from the tray.
+  const unreadCutoff = new Date(Date.now() - 7 * 24 * 3600_000).toISOString();
+  const readCutoff = new Date(Date.now() - 24 * 3600_000).toISOString();
   const { data } = await db.from("vfd_sandbox_notifications")
     .select("*").eq("user_id", userId)
+    .gte("created_at", unreadCutoff)
     .order("created_at", { ascending: false }).limit(50);
 
-  const rows = data || [];
+  const rows = (data || []).filter((n: { is_read?: boolean | null; notification_type?: string | null; created_at: string }) =>
+    !n.is_read || n.notification_type === "group_invite" || n.created_at >= readCutoff);
   const inviteGroupIds = rows
     .filter((n: { notification_type?: string | null; group_id?: string | null }) => n.notification_type === "group_invite" && n.group_id)
     .map((n: { group_id: string }) => n.group_id);
