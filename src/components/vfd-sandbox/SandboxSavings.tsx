@@ -300,6 +300,13 @@ export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductC
     };
   }, [savings]);
 
+  const tabbed = useMemo(() => {
+    const t: Record<SaveTab, VS[]> = { active: [], pending: [], closed: [] };
+    for (const s of savings) t[saveTabOf(s)].push(s);
+    return t;
+  }, [savings]);
+  const currentTab: SaveTab = tab ?? (tabbed.active.length === 0 && tabbed.pending.length > 0 ? "pending" : "active");
+
   const liveSavings = useMemo(
     () => savings.filter(s => !ARCHIVED_STATES.includes(planState(s))),
     [savings],
