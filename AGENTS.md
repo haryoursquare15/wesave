@@ -4,3 +4,4 @@
 - Profile photos use the current auth context's client and user-scoped avatar paths; why: the customer app and legacy account views must save to the correct session.
 - Customer branding imports the supplied logo and extracted V asset pointers; why: all views share original artwork rather than independently drawn logos.
 - In-app notifications (vfd_sandbox_notifications) reach WhatsApp through a DB trigger → whatsapp-dispatch, which maps notification types to approved templates and falls back to the general alert; why: one best-effort path that never touches money flows.
+- Vestara Insights scoring lives in SQL (insights_compute_user) reading only insights_* views and user_balance_snapshots; the insights-engine edge function only orchestrates; why: table renames only touch view definitions and money data is never mutated.

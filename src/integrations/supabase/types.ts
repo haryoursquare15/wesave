@@ -1472,6 +1472,42 @@ export type Database = {
         }
         Relationships: []
       }
+      insight_run_logs: {
+        Row: {
+          created_at: string
+          error_summary: Json
+          finished_at: string | null
+          insights_created: number
+          run_id: string
+          started_at: string
+          trigger: string
+          users_failed: number
+          users_processed: number
+        }
+        Insert: {
+          created_at?: string
+          error_summary?: Json
+          finished_at?: string | null
+          insights_created?: number
+          run_id?: string
+          started_at?: string
+          trigger?: string
+          users_failed?: number
+          users_processed?: number
+        }
+        Update: {
+          created_at?: string
+          error_summary?: Json
+          finished_at?: string | null
+          insights_created?: number
+          run_id?: string
+          started_at?: string
+          trigger?: string
+          users_failed?: number
+          users_processed?: number
+        }
+        Relationships: []
+      }
       internal_cron_tokens: {
         Row: {
           created_at: string
@@ -3571,6 +3607,7 @@ export type Database = {
           rule_id: string
           status: string
           title: string
+          trigger_key: string
           type: string
           updated_at: string
           user_id: string
@@ -3585,6 +3622,7 @@ export type Database = {
           rule_id: string
           status?: string
           title: string
+          trigger_key?: string
           type: string
           updated_at?: string
           user_id: string
@@ -3599,6 +3637,7 @@ export type Database = {
           rule_id?: string
           status?: string
           title?: string
+          trigger_key?: string
           type?: string
           updated_at?: string
           user_id?: string
@@ -3791,11 +3830,13 @@ export type Database = {
           created_at: string
           details: Json
           grow_score: number
+          last_run_id: string | null
           level: number
           pay_score: number
           previous_score: number | null
           save_score: number
           score: number
+          state: string
           updated_at: string
           user_id: string
           xp: number
@@ -3806,11 +3847,13 @@ export type Database = {
           created_at?: string
           details?: Json
           grow_score?: number
+          last_run_id?: string | null
           level?: number
           pay_score?: number
           previous_score?: number | null
           save_score?: number
           score?: number
+          state?: string
           updated_at?: string
           user_id: string
           xp?: number
@@ -3821,11 +3864,13 @@ export type Database = {
           created_at?: string
           details?: Json
           grow_score?: number
+          last_run_id?: string | null
           level?: number
           pay_score?: number
           previous_score?: number | null
           save_score?: number
           score?: number
+          state?: string
           updated_at?: string
           user_id?: string
           xp?: number
@@ -5725,6 +5770,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "vfd_sandbox_contribution_audit_cycle_id_fkey"
+            columns: ["cycle_id"]
+            isOneToOne: false
+            referencedRelation: "insights_thrift_dues"
+            referencedColumns: ["cycle_id"]
+          },
           {
             foreignKeyName: "vfd_sandbox_contribution_audit_cycle_id_fkey"
             columns: ["cycle_id"]
@@ -7812,6 +7864,7 @@ export type Database = {
           amount: number | null
           biller_name: string | null
           category: string | null
+          is_betting: boolean | null
           is_recurring: boolean | null
           occurred_at: string | null
           recurring_bill_id: string | null
@@ -7820,14 +7873,30 @@ export type Database = {
         }
         Relationships: []
       }
+      insights_credit_classification: {
+        Row: {
+          amount: number | null
+          counterpart_account_type: string | null
+          counterpart_owner: string | null
+          description: string | null
+          occurred_at: string | null
+          source_class: string | null
+          source_id: string | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
       insights_eligible_users: {
         Row: {
+          account_created_at: string | null
           user_id: string | null
         }
         Insert: {
+          account_created_at?: string | null
           user_id?: string | null
         }
         Update: {
+          account_created_at?: string | null
           user_id?: string | null
         }
         Relationships: []
@@ -7835,8 +7904,10 @@ export type Database = {
       insights_external_inflow: {
         Row: {
           amount: number | null
+          counterpart_account_type: string | null
           description: string | null
           occurred_at: string | null
+          source_class: string | null
           source_id: string | null
           user_id: string | null
         }
@@ -7847,6 +7918,38 @@ export type Database = {
           amount: number | null
           category: string | null
           occurred_at: string | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
+      insights_product_rates: {
+        Row: {
+          max_user_rate: number | null
+          min_user_rate: number | null
+          name: string | null
+          product_code: string | null
+        }
+        Insert: {
+          max_user_rate?: number | null
+          min_user_rate?: number | null
+          name?: string | null
+          product_code?: never
+        }
+        Update: {
+          max_user_rate?: number | null
+          min_user_rate?: number | null
+          name?: string | null
+          product_code?: never
+        }
+        Relationships: []
+      }
+      insights_qualifying_savings_deposits: {
+        Row: {
+          amount: number | null
+          occurred_at: string | null
+          product_code: string | null
+          savings_id: string | null
+          source_id: string | null
           user_id: string | null
         }
         Relationships: []
@@ -7906,6 +8009,19 @@ export type Database = {
         }
         Relationships: []
       }
+      insights_scorable_bill_payments: {
+        Row: {
+          amount: number | null
+          biller_name: string | null
+          category: string | null
+          is_recurring: boolean | null
+          occurred_at: string | null
+          recurring_bill_id: string | null
+          source_id: string | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
       insights_split_settlements: {
         Row: {
           amount: number | null
@@ -7933,6 +8049,30 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "vfd_sandbox_group_contributions_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "vfd_sandbox_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      insights_thrift_dues: {
+        Row: {
+          amount_due: number | null
+          completed_at: string | null
+          contributed: boolean | null
+          contribution_deadline: string | null
+          cycle_id: string | null
+          cycle_number: number | null
+          cycle_status: string | null
+          group_id: string | null
+          on_time: boolean | null
+          paid_at: string | null
+          user_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vfd_sandbox_contribution_cycles_group_id_fkey"
             columns: ["group_id"]
             isOneToOne: false
             referencedRelation: "vfd_sandbox_groups"
@@ -8326,6 +8466,7 @@ export type Database = {
       }
       gen_random_bytes: { Args: { n: number }; Returns: string }
       gen_random_uuid: { Args: never; Returns: string }
+      get_insight_ui_config: { Args: never; Returns: Json }
       get_own_card_tokens: {
         Args: never
         Returns: {
@@ -8571,7 +8712,30 @@ export type Database = {
         Args: { p_days?: number }
         Returns: number
       }
+      insights_cfg_num: {
+        Args: { p_default: number; p_key: string }
+        Returns: number
+      }
+      insights_compute_user: {
+        Args: { p_dry_run?: boolean; p_run_id?: string; p_user: string }
+        Returns: Json
+      }
+      insights_emit: {
+        Args: {
+          p_action: string
+          p_body: string
+          p_payload: Json
+          p_per_event: boolean
+          p_rule: string
+          p_title: string
+          p_trigger_key: string
+          p_type: string
+          p_user: string
+        }
+        Returns: number
+      }
       insights_snapshot_balances: { Args: never; Returns: number }
+      insights_weighted: { Args: { p: Json }; Returns: number }
       is_admin: { Args: never; Returns: boolean }
       is_any_admin: { Args: { _user_id?: string }; Returns: boolean }
       is_backend_role: { Args: never; Returns: boolean }
