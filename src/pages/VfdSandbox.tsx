@@ -464,7 +464,11 @@ function VfdSandboxInner() {
   const navDir = useRef(1);
   const goBack = () => { navDir.current = -1; setCurrentView("dashboard"); setTimeout(() => { navDir.current = 1; }, 300); };
 
-  if (authLoading || (user && !clientChecked)) {
+  // Never paint onboarding/dashboard until we know the user is signed in this
+  // session and their account status is loaded — prevents a flash before the
+  // redirect to sign-in.
+  const signedInThisSession = typeof window !== "undefined" && !!sessionStorage.getItem("vestara_sandbox_signed_in");
+  if (authLoading || !user || !signedInThisSession || !clientChecked) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
