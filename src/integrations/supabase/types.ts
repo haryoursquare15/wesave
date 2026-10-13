@@ -2945,6 +2945,39 @@ export type Database = {
           },
         ]
       }
+      subaccount_balance_snapshots: {
+        Row: {
+          account_label: string
+          account_number: string
+          drift: number | null
+          error: string | null
+          fetched_at: string
+          id: string
+          internal_expected: number | null
+          live_balance: number | null
+        }
+        Insert: {
+          account_label: string
+          account_number: string
+          drift?: number | null
+          error?: string | null
+          fetched_at?: string
+          id?: string
+          internal_expected?: number | null
+          live_balance?: number | null
+        }
+        Update: {
+          account_label?: string
+          account_number?: string
+          drift?: number | null
+          error?: string | null
+          fetched_at?: string
+          id?: string
+          internal_expected?: number | null
+          live_balance?: number | null
+        }
+        Relationships: []
+      }
       support_ticket_comments: {
         Row: {
           author_id: string
