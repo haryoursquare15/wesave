@@ -255,6 +255,42 @@ export type Database = {
         }
         Relationships: []
       }
+      badges: {
+        Row: {
+          created_at: string
+          criteria: Json
+          description: string | null
+          id: string
+          key: string
+          pillar: string | null
+          sort_order: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          criteria?: Json
+          description?: string | null
+          id?: string
+          key: string
+          pillar?: string | null
+          sort_order?: number
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          criteria?: Json
+          description?: string | null
+          id?: string
+          key?: string
+          pillar?: string | null
+          sort_order?: number
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       bank_change_otps: {
         Row: {
           attempt_count: number
@@ -1384,6 +1420,54 @@ export type Database = {
           detected_at?: string | null
           id?: string
           occurrences?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      insight_config: {
+        Row: {
+          created_at: string
+          description: string | null
+          key: string
+          updated_at: string
+          value: Json
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          key: string
+          updated_at?: string
+          value: Json
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          key?: string
+          updated_at?: string
+          value?: Json
+        }
+        Relationships: []
+      }
+      insight_preferences: {
+        Row: {
+          created_at: string
+          insights_enabled: boolean
+          nudges_enabled: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          insights_enabled?: boolean
+          nudges_enabled?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          insights_enabled?: boolean
+          nudges_enabled?: boolean
+          updated_at?: string
           user_id?: string
         }
         Relationships: []
@@ -2527,6 +2611,48 @@ export type Database = {
         }
         Relationships: []
       }
+      quests: {
+        Row: {
+          active: boolean
+          created_at: string
+          description: string | null
+          id: string
+          key: string
+          period: string
+          pillar: string
+          reward_xp: number
+          target_value: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          description?: string | null
+          id?: string
+          key: string
+          period?: string
+          pillar: string
+          reward_xp?: number
+          target_value?: number
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          description?: string | null
+          id?: string
+          key?: string
+          period?: string
+          pillar?: string
+          reward_xp?: number
+          target_value?: number
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       rate_limits: {
         Row: {
           created_at: string
@@ -3324,6 +3450,74 @@ export type Database = {
         }
         Relationships: []
       }
+      user_badges: {
+        Row: {
+          badge_id: string
+          created_at: string
+          earned_at: string
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          badge_id: string
+          created_at?: string
+          earned_at?: string
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          badge_id?: string
+          created_at?: string
+          earned_at?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_badges_badge_id_fkey"
+            columns: ["badge_id"]
+            isOneToOne: false
+            referencedRelation: "badges"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_balance_snapshots: {
+        Row: {
+          available_balance: number
+          created_at: string
+          id: string
+          is_backfilled: boolean
+          locked_balance: number
+          savings_balance: number
+          snapshot_date: string
+          user_id: string
+        }
+        Insert: {
+          available_balance?: number
+          created_at?: string
+          id?: string
+          is_backfilled?: boolean
+          locked_balance?: number
+          savings_balance?: number
+          snapshot_date: string
+          user_id: string
+        }
+        Update: {
+          available_balance?: number
+          created_at?: string
+          id?: string
+          is_backfilled?: boolean
+          locked_balance?: number
+          savings_balance?: number
+          snapshot_date?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_devices: {
         Row: {
           browser: string | null
@@ -3362,6 +3556,51 @@ export type Database = {
           is_trusted?: boolean
           last_used_at?: string
           os?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_insights: {
+        Row: {
+          action_key: string | null
+          body: string
+          cooldown_until: string | null
+          created_at: string
+          id: string
+          payload: Json
+          rule_id: string
+          status: string
+          title: string
+          type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          action_key?: string | null
+          body: string
+          cooldown_until?: string | null
+          created_at?: string
+          id?: string
+          payload?: Json
+          rule_id: string
+          status?: string
+          title: string
+          type: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          action_key?: string | null
+          body?: string
+          cooldown_until?: string | null
+          created_at?: string
+          id?: string
+          payload?: Json
+          rule_id?: string
+          status?: string
+          title?: string
+          type?: string
+          updated_at?: string
           user_id?: string
         }
         Relationships: []
@@ -3441,6 +3680,47 @@ export type Database = {
         }
         Relationships: []
       }
+      user_quests: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          id: string
+          progress: number
+          quest_id: string
+          updated_at: string
+          user_id: string
+          week_start: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          progress?: number
+          quest_id: string
+          updated_at?: string
+          user_id: string
+          week_start: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          progress?: number
+          quest_id?: string
+          updated_at?: string
+          user_id?: string
+          week_start?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_quests_quest_id_fkey"
+            columns: ["quest_id"]
+            isOneToOne: false
+            referencedRelation: "quests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string | null
@@ -3458,6 +3738,123 @@ export type Database = {
           created_at?: string | null
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_score_history: {
+        Row: {
+          circle_score: number
+          created_at: string
+          grow_score: number
+          id: string
+          level: number
+          month: string
+          pay_score: number
+          save_score: number
+          score: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          circle_score: number
+          created_at?: string
+          grow_score: number
+          id?: string
+          level: number
+          month: string
+          pay_score: number
+          save_score: number
+          score: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          circle_score?: number
+          created_at?: string
+          grow_score?: number
+          id?: string
+          level?: number
+          month?: string
+          pay_score?: number
+          save_score?: number
+          score?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_scores: {
+        Row: {
+          circle_score: number
+          computed_at: string
+          created_at: string
+          details: Json
+          grow_score: number
+          level: number
+          pay_score: number
+          previous_score: number | null
+          save_score: number
+          score: number
+          updated_at: string
+          user_id: string
+          xp: number
+        }
+        Insert: {
+          circle_score?: number
+          computed_at?: string
+          created_at?: string
+          details?: Json
+          grow_score?: number
+          level?: number
+          pay_score?: number
+          previous_score?: number | null
+          save_score?: number
+          score?: number
+          updated_at?: string
+          user_id: string
+          xp?: number
+        }
+        Update: {
+          circle_score?: number
+          computed_at?: string
+          created_at?: string
+          details?: Json
+          grow_score?: number
+          level?: number
+          pay_score?: number
+          previous_score?: number | null
+          save_score?: number
+          score?: number
+          updated_at?: string
+          user_id?: string
+          xp?: number
+        }
+        Relationships: []
+      }
+      user_streaks: {
+        Row: {
+          best_weeks: number
+          created_at: string
+          current_weeks: number
+          last_qualifying_week: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          best_weeks?: number
+          created_at?: string
+          current_weeks?: number
+          last_qualifying_week?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          best_weeks?: number
+          created_at?: string
+          current_weeks?: number
+          last_qualifying_week?: string | null
+          updated_at?: string
           user_id?: string
         }
         Relationships: []
@@ -6974,6 +7371,20 @@ export type Database = {
             foreignKeyName: "vfd_savings_debit_schedule_savings_id_fkey"
             columns: ["savings_id"]
             isOneToOne: false
+            referencedRelation: "insights_savings_holdings"
+            referencedColumns: ["savings_id"]
+          },
+          {
+            foreignKeyName: "vfd_savings_debit_schedule_savings_id_fkey"
+            columns: ["savings_id"]
+            isOneToOne: false
+            referencedRelation: "insights_savings_withdrawals"
+            referencedColumns: ["savings_id"]
+          },
+          {
+            foreignKeyName: "vfd_savings_debit_schedule_savings_id_fkey"
+            columns: ["savings_id"]
+            isOneToOne: false
             referencedRelation: "vestara_savings"
             referencedColumns: ["id"]
           },
@@ -7008,6 +7419,20 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "vfd_savings_mandate_events_savings_id_fkey"
+            columns: ["savings_id"]
+            isOneToOne: false
+            referencedRelation: "insights_savings_holdings"
+            referencedColumns: ["savings_id"]
+          },
+          {
+            foreignKeyName: "vfd_savings_mandate_events_savings_id_fkey"
+            columns: ["savings_id"]
+            isOneToOne: false
+            referencedRelation: "insights_savings_withdrawals"
+            referencedColumns: ["savings_id"]
+          },
           {
             foreignKeyName: "vfd_savings_mandate_events_savings_id_fkey"
             columns: ["savings_id"]
@@ -7381,6 +7806,139 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: []
+      }
+      insights_bill_payments: {
+        Row: {
+          amount: number | null
+          biller_name: string | null
+          category: string | null
+          is_recurring: boolean | null
+          occurred_at: string | null
+          recurring_bill_id: string | null
+          source_id: string | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
+      insights_eligible_users: {
+        Row: {
+          user_id: string | null
+        }
+        Insert: {
+          user_id?: string | null
+        }
+        Update: {
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      insights_external_inflow: {
+        Row: {
+          amount: number | null
+          description: string | null
+          occurred_at: string | null
+          source_id: string | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
+      insights_outflow_by_category: {
+        Row: {
+          amount: number | null
+          category: string | null
+          occurred_at: string | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
+      insights_recurring_bill_status: {
+        Row: {
+          amount: number | null
+          category: string | null
+          consecutive_failures: number | null
+          frequency: string | null
+          is_late: boolean | null
+          last_run_at: string | null
+          last_run_status: string | null
+          next_run_at: string | null
+          recurring_bill_id: string | null
+          status: string | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
+      insights_savings_deposits: {
+        Row: {
+          amount: number | null
+          occurred_at: string | null
+          product_code: string | null
+          savings_id: string | null
+          source_id: string | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
+      insights_savings_holdings: {
+        Row: {
+          accrued_interest: number | null
+          matured_at: string | null
+          maturity_date: string | null
+          principal: number | null
+          product_code: string | null
+          savings_id: string | null
+          start_date: string | null
+          status: string | null
+          tenor_days: number | null
+          user_id: string | null
+          user_rate: number | null
+        }
+        Relationships: []
+      }
+      insights_savings_withdrawals: {
+        Row: {
+          amount: number | null
+          is_early_withdrawal: boolean | null
+          occurred_at: string | null
+          penalty_amount: number | null
+          product_code: string | null
+          savings_id: string | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
+      insights_split_settlements: {
+        Row: {
+          amount: number | null
+          hours_to_settle: number | null
+          paid_at: string | null
+          requested_at: string | null
+          source: string | null
+          source_id: string | null
+          status: string | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
+      insights_thrift_contributions: {
+        Row: {
+          amount: number | null
+          contribution_deadline: string | null
+          cycle_number: number | null
+          group_id: string | null
+          on_time: boolean | null
+          paid_at: string | null
+          source_id: string | null
+          user_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vfd_sandbox_group_contributions_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "vfd_sandbox_groups"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles_public: {
         Row: {
@@ -8009,6 +8567,11 @@ export type Database = {
         }
         Returns: undefined
       }
+      insights_backfill_balance_snapshots: {
+        Args: { p_days?: number }
+        Returns: number
+      }
+      insights_snapshot_balances: { Args: never; Returns: number }
       is_admin: { Args: never; Returns: boolean }
       is_any_admin: { Args: { _user_id?: string }; Returns: boolean }
       is_backend_role: { Args: never; Returns: boolean }
