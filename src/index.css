@@ -309,8 +309,9 @@
 }
 @layer utilities {
   .text-destructive-soft { color: hsl(var(--destructive-soft)); }
-  /* Sign-in stays within the visible screen; other pages retain natural scrolling. */
-  .auth-screen { position: fixed; inset: 0; height: var(--auth-height, 100dvh); overflow: hidden; }
+  /* Sign-in stays within the visible screen; other pages retain natural scrolling.
+     --auth-offset counteracts the keyboard panning the visual viewport up. */
+  .auth-screen { position: fixed; inset: 0; height: var(--auth-height, 100dvh); overflow: hidden; transform: translateY(var(--auth-offset, 0px)); will-change: transform; }
   .auth-brand h1 { letter-spacing: 0; }
   @media (max-height: 700px) {
     .auth-form { padding-top: 16px; padding-bottom: max(env(safe-area-inset-bottom), 8px); }
