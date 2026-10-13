@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import vestaraBadge from "@/assets/vestara-mark.png";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { describeTransaction } from "@/lib/transactionLabels";
+import { cleanCustomerName, customerFirstName } from "@/lib/customerName";
 import { supabase } from "@/integrations/supabase/client";
 import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
 import { SpendLockCard } from "@/components/vfd-sandbox/SpendLockCard";
@@ -297,24 +298,13 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
   })();
 
   const firstName = (() => {
-    let raw = balance.fullName?.trim();
-    if (!raw || raw === "—") return "there";
-    // VFD returns the NUBAN's registered name with the corporate prefix
-    // baked into `firstname` (e.g. "WeSave Ng Ltd-SAMIR ADEBAYO ALAMUKII").
-    // Strip anything before the last hyphen so we greet the human, not the org.
-    if (raw.includes("-")) raw = raw.slice(raw.lastIndexOf("-") + 1).trim();
-    const first = raw.split(/\s+/)[0];
-    if (!first) return "there";
-    return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
+    const first = customerFirstName(balance.fullName, "");
+    return first || "there";
   })();
 
   // Interim cosmetic mask: VFD registers sub-accounts as "<Corporate>-<NAME>".
   // Until VFD updates the merchant name, hide the legacy corporate prefix.
-  const displayAccountName = (() => {
-    const raw = balance.fullName?.trim();
-    if (!raw || raw === "—") return raw || "—";
-    return raw.includes("-") ? raw.slice(raw.lastIndexOf("-") + 1).trim() : raw;
-  })();
+  const displayAccountName = cleanCustomerName(balance.fullName?.trim()) || balance.fullName || "—";
 
   return (
     <div className="space-y-6">
