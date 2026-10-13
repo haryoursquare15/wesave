@@ -48,9 +48,9 @@ const MIN_AMOUNT = 1000;
 const QUICK = [1000, 2500, 5000, 10000, 25000];
 const DAYS_PER: Record<Frequency, number> = { daily: 1, weekly: 7, monthly: 30 };
 const CANDIDATES: Record<Frequency, number[]> = {
-  daily: [7, 14, 30, 60, 90, 120, 180, 270, 365],
-  weekly: [4, 8, 13, 26, 39, 52],
-  monthly: [1, 3, 6, 9, 12, 24],
+  daily: [7, 14, 30, 60, 90],
+  weekly: [4, 8, 12, 24, 52],
+  monthly: [1, 3, 6, 12, 24],
 };
 const UNIT: Record<Frequency, [string, string]> = { daily: ["day", "days"], weekly: ["week", "weeks"], monthly: ["month", "months"] };
 
@@ -72,14 +72,9 @@ export function GoalSavingsV2Wizard({ onClose, onCreated, walletAvailable, produ
   const [amount, setAmount] = useState("5000");
   const [frequency, setFrequency] = useState<Frequency>("weekly");
 
-  // Only durations allowed by the GoalSave product's tenor range.
-  const tenorOptions = useMemo(() => {
-    const min = goalsave?.min_tenor_days ?? 0;
-    const max = goalsave?.max_tenor_days ?? Infinity;
-    const ok = CANDIDATES[frequency].filter(n => n * DAYS_PER[frequency] >= min && n * DAYS_PER[frequency] <= max);
-    return ok.length ? ok : CANDIDATES[frequency];
-  }, [frequency, goalsave]);
-  const [tenor, setTenor] = useState<number>(13);
+  // Original GoalSave 2.0 tenor options and minimums (unchanged product rules).
+  const tenorOptions = useMemo(() => CANDIDATES[frequency], [frequency]);
+  const [tenor, setTenor] = useState<number>(4);
   useEffect(() => {
     if (!tenorOptions.includes(tenor)) setTenor(tenorOptions[Math.min(1, tenorOptions.length - 1)]);
   }, [tenorOptions, tenor]);
@@ -108,9 +103,8 @@ export function GoalSavingsV2Wizard({ onClose, onCreated, walletAvailable, produ
     return () => clearTimeout(t);
   }, [amtNum, frequency, tenor, tenorOptions, invoke]);
 
-  const earlyRule = goalsave?.allow_early_withdrawal
-    ? `you can exit early. You get your saved amount back in full; up to ${goalsave.early_withdrawal_penalty_pct}% of interest earned is deducted`
-    : "your savings stay locked until the maturity date";
+  // GoalSave 2.0 rule: locked until maturity — no withdrawals, partial withdrawals or cancellation.
+  const earlyRule = "not allowed. This plan is locked until the maturity date — no withdrawals, partial withdrawals or cancellation";
 
   const back = () => {
     void haptic("light");
@@ -317,9 +311,7 @@ export function GoalSavingsV2Wizard({ onClose, onCreated, walletAvailable, produ
                   <Checkbox checked={ack} onCheckedChange={v => setAck(!!v)} className="mt-0.5" />
                   <span className="text-sm leading-relaxed">
                     I understand {fmt(quote.total_contributions)} will be saved {frequency} from my linked bank account and
-                    {goalsave?.allow_early_withdrawal
-                      ? ` if I exit before ${fmtDate(quote.maturity_date)}, up to ${goalsave.early_withdrawal_penalty_pct}% of interest earned is deducted.`
-                      : ` can't be withdrawn before ${fmtDate(quote.maturity_date)}.`}
+ can't be withdrawn, partially withdrawn or cancelled before {fmtDate(quote.maturity_date)}.
                   </span>
                 </label>
                 <p className="text-xs text-muted-foreground">You'll enter your 4-digit transaction PIN next.</p>

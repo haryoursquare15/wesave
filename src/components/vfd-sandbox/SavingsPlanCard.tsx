@@ -95,7 +95,7 @@ export function SavingsPlanCard({ savings: s, mandate, busy, onMature, onEarlyWi
       ? Math.min(100, Math.max(0, ((Date.now() - startMs) / Math.max(1, endMs - startMs)) * 100))
       : 0;
 
-  const allowEarly = s.vestara_products?.allow_early_withdrawal ?? false;
+  const allowEarly = s.vestara_products?.allow_early_withdrawal ?? true;
   const mandateAwaitingTransfer = mandate && mandate.status === "pending";
 
   return (
