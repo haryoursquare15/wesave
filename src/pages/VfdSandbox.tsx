@@ -105,6 +105,22 @@ function VfdSandboxInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
+  // Safety net: a stale session can make a background edge call reject with
+  // "session expired". Never let that blank the screen — sign out cleanly.
+  useEffect(() => {
+    const onRejection = (e: PromiseRejectionEvent) => {
+      const msg = String((e.reason as Error)?.message || e.reason || "");
+      if (/session has expired|session has ended|non-2xx|edge function returned 4/i.test(msg)) {
+        e.preventDefault();
+        sessionStorage.removeItem("vestara_sandbox_signed_in");
+        void signOut().finally(() => navigate("/signin"));
+      }
+    };
+    window.addEventListener("unhandledrejection", onRejection);
+    return () => window.removeEventListener("unhandledrejection", onRejection);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Inactivity sign-out (2m foreground / 5m background) → /signin
   useSandboxSessionEnforcement({ enabled: !!user });
   // Single-device enforcement: register fingerprint + sign out if evicted elsewhere.
