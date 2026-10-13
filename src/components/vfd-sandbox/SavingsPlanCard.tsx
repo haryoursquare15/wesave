@@ -167,6 +167,32 @@ export function SavingsPlanCard({ savings: s, mandate, busy, onMature, onEarlyWi
         >
           Details <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
         </button>
+
+        {(state === "pending" || state === "setup" || state === "attention") && onCancel && (
+          confirmingCancel ? (
+            <div className="rounded-[14px] border border-destructive/30 bg-destructive/5 p-3 space-y-2">
+              <p className="text-xs text-muted-foreground leading-snug">
+                Cancel this plan? Nothing has been debited, so there's nothing to refund.
+              </p>
+              <div className="flex gap-2">
+                <Button variant="destructive" size="sm" className="flex-1 rounded-[12px]" disabled={busy} onClick={() => { setConfirmingCancel(false); onCancel(s); }}>
+                  Yes, cancel plan
+                </Button>
+                <Button variant="outline" size="sm" className="flex-1 rounded-[12px]" onClick={() => setConfirmingCancel(false)}>
+                  Keep it
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmingCancel(true)}
+              className="block w-full text-center text-xs text-muted-foreground hover:text-destructive transition-colors"
+            >
+              Cancel this plan
+            </button>
+          )
+        )}
       </div>
 
       {open && (
