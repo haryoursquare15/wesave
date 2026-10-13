@@ -317,7 +317,7 @@
     .auth-form h2 { font-size: 24px; }
     .auth-intro { margin-bottom: 12px; }
     .auth-form form { display: flex; flex-direction: column; gap: 8px; }
-    .auth-form form > * { margin-top: 0; }
+    .auth-form form > :not([hidden]) ~ :not([hidden]) { margin-top: 0; margin-bottom: 0; }
     .auth-brand h1 { margin-top: 4px; font-size: 20px; }
     .auth-brand > p { display: none; }
     .auth-pin-content > img, .auth-pin-content > div:first-child { height: 48px; width: 48px; flex-shrink: 0; }
@@ -329,6 +329,8 @@
   @media (max-height: 480px) {
     .auth-brand { display: none; }
     .auth-form { margin-top: 0; border-radius: 0; }
+    .auth-intro { display: none; }
+    .auth-create { margin-top: 8px; }
     .auth-screen:has(input:focus) .auth-intro,
     .auth-screen:has(input:focus) .auth-create,
     .auth-screen:has(input:focus) .auth-form h2,
