@@ -19,6 +19,7 @@ import { TransactionSuccessModal, TransactionSuccessPayload } from "@/components
 import { GoalSavingsV2Wizard } from "./GoalSavingsV2Wizard";
 import { SavingsPlanCard, planState, PlanState, ARCHIVED_STATES, saveTabOf, type SaveTab } from "./SavingsPlanCard";
 import { useMandates, type MandateRow } from "@/hooks/useMandates";
+import { supabase } from "@/integrations/supabase/client";
 import { MandateStatusSheet } from "./MandateStatusSheet";
 import { MandateAuthorizationDialog, type MandateSubject } from "./MandateAuthorizationDialog";
 
@@ -343,6 +344,18 @@ export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductC
     const p = products.find(x => x.code === s.product_code);
     if (p) { setSelectedProduct(p); setShowCreate(true); setStep("amount"); }
     else setShowCreate(true);
+  };
+
+  /** Cancel a plan that was never concluded (awaiting review or bank authorization incomplete). */
+  const handleCancelPlan = async (s: VS) => {
+    const { error } = await supabase.rpc("cancel_pending_savings_plan", { p_plan_id: s.id });
+    if (error) {
+      toast({ title: "Couldn't cancel", description: error.message || "Please try again.", variant: "destructive" });
+      return;
+    }
+    toast({ title: "Plan cancelled", description: "Nothing was debited, so there's nothing to refund." });
+    void refreshMandates();
+    loadAll();
   };
 
   // Group visible plans by product, active plans first inside each group
@@ -698,6 +711,7 @@ export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductC
                 onMature={handleMature}
                 onEarlyWithdraw={handleEarlyWithdraw}
                 onTryAgain={handleTryAgain}
+                onCancel={handleCancelPlan}
                 onOpenMandate={(m) => setMandateView({ mandate: m, plan: s })}
                 onLinkBank={() => setLinkSubject({
                   kind: "goalsave", id: s.id,
