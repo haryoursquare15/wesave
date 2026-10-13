@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +22,18 @@ import { exportToCSV } from "@/lib/exportUtils";
 import { adminActionReasonSchema, validateInput } from "@/lib/validation";
 
 type AppRole = Database["public"]["Enums"]["app_role"];
+
+interface AccountStatusInfo { id: string; account_status: string | null; risk_level: string | null; frozen_at: string | null; freeze_reason: string | null; }
+
+function StatusBadge({ info }: { info?: AccountStatusInfo }) {
+  const st = info?.account_status ?? "active";
+  const since = info?.frozen_at ? format(new Date(info.frozen_at), "MMM d") : null;
+  const title = info?.freeze_reason || undefined;
+  if (st === "frozen") return <Badge title={title} className="bg-primary/10 text-primary border-primary/30 gap-1" variant="outline"><Snowflake className="h-3 w-3" /> Frozen{since ? ` · ${since}` : ""}</Badge>;
+  if (st === "suspended") return <Badge title={title} variant="destructive" className="gap-1"><UserX className="h-3 w-3" /> Suspended{since ? ` · ${since}` : ""}</Badge>;
+  if (info?.risk_level === "high") return <Badge variant="outline" className="border-destructive/40 text-destructive gap-1"><AlertTriangle className="h-3 w-3" /> Risk flagged</Badge>;
+  return <Badge variant="outline" className="text-muted-foreground">Active</Badge>;
+}
 
 interface UserActionsDialogProps {
   user: {
@@ -59,55 +71,28 @@ function UserActionsDialog({ user, onClose, onAction }: UserActionsDialogProps) 
     try {
       const sanitizedReason = reason.trim().slice(0, 500);
       
-      await supabase.from("audit_logs").insert({
-        user_id: user.id,
-        action: `admin_${action}`,
-        resource_type: "user",
-        resource_id: user.id,
-        details: { reason: sanitizedReason, target_email: user.email },
-      });
+      const RPC_ACTIONS: Record<string, string> = {
+        freeze: "Wallet frozen — payments, transfers and withdrawals are now blocked.",
+        unfreeze: "Account restored — the customer can move money again.",
+        suspend: "Account suspended — all money movement is blocked.",
+        flag_risk: "Flagged — transfers and withdrawals are paused for review.",
+        clear_risk: "Risk flag cleared — transfers and withdrawals restored.",
+        remove_from_groups: "",
+      };
 
       switch (action) {
-        case "freeze":
-          await supabase.from("profiles").update({
-            account_status: "frozen",
-            frozen_at: new Date().toISOString(),
-            freeze_reason: sanitizedReason,
-          }).eq("id", user.id);
-          toast({ title: "User Frozen", description: `${user.full_name || user.email}'s account has been frozen.` });
+        case "freeze": case "unfreeze": case "suspend": case "flag_risk": case "clear_risk": case "remove_from_groups": {
+          const { data, error } = await supabase.rpc("admin_account_action", {
+            _user_id: user.id, _action: action, _reason: sanitizedReason || null,
+          });
+          if (error) throw error;
+          const affected = Number((data as any)?.affected ?? 0);
+          const desc = action === "remove_from_groups"
+            ? (affected ? `Removed from ${affected} group(s) that had not started. Running groups are untouched to protect payouts.` : "No unstarted groups to remove from. Running groups are untouched to protect payouts.")
+            : RPC_ACTIONS[action];
+          toast({ title: user.full_name || user.email || "User updated", description: desc });
           break;
-        case "unfreeze":
-          await supabase.from("profiles").update({
-            account_status: "active",
-            frozen_at: null,
-            frozen_by: null,
-            freeze_reason: null,
-          }).eq("id", user.id);
-          toast({ title: "User Unfrozen", description: `${user.full_name || user.email}'s account has been unfrozen.` });
-          break;
-        case "flag_risk":
-          await supabase.from("profiles").update({ risk_level: "high" }).eq("id", user.id);
-          toast({ title: "User Flagged", description: `${user.full_name || user.email} has been flagged for risk review.` });
-          break;
-        case "clear_risk":
-          await supabase.from("profiles").update({ risk_level: "low" }).eq("id", user.id);
-          toast({ title: "Risk Cleared", description: `${user.full_name || user.email}'s risk flag has been cleared.` });
-          break;
-        case "remove_from_groups":
-          await supabase.from("group_memberships")
-            .update({ status: "removed" as any })
-            .eq("user_id", user.id)
-            .eq("status", "active");
-          toast({ title: "Removed from Groups", description: `${user.full_name || user.email} has been removed from all active groups.` });
-          break;
-        case "suspend":
-          await supabase.from("profiles").update({
-            account_status: "suspended",
-            frozen_at: new Date().toISOString(),
-            freeze_reason: sanitizedReason || "Suspended by admin",
-          }).eq("id", user.id);
-          toast({ title: "User Suspended", description: `${user.full_name || user.email}'s account has been suspended.` });
-          break;
+        }
         case "set_temp_password": {
           if (!tempPassword || tempPassword.length < 8) {
             toast({ title: "Invalid password", description: "Min 8 characters.", variant: "destructive" });
@@ -302,14 +287,14 @@ function UserDetailsRow({ userId }: UserDetailsRowProps) {
   if (loading) {
     return (
       <TableRow>
-        <TableCell colSpan={8} className="p-4 bg-muted/30"><Skeleton className="h-16 w-full" /></TableCell>
+        <TableCell colSpan={9} className="p-4 bg-muted/30"><Skeleton className="h-16 w-full" /></TableCell>
       </TableRow>
     );
   }
 
   return (
     <TableRow className="bg-muted/30 hover:bg-muted/30">
-      <TableCell colSpan={8} className="p-4">
+      <TableCell colSpan={9} className="p-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
             <h4 className="text-sm font-semibold flex items-center gap-2"><Wallet className="h-4 w-4" /> Wallet</h4>
@@ -352,6 +337,16 @@ export function UserManagementTab() {
   const { assignRole, removeRole, loading: roleLoading } = useAdminRoles();
   const { hasPermission } = useAdminPermissions();
   const { toast } = useToast();
+  const [statuses, setStatuses] = useState<Record<string, AccountStatusInfo>>({});
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  const loadStatuses = useCallback(async () => {
+    const { data } = await supabase.rpc("admin_list_account_statuses");
+    const map: Record<string, AccountStatusInfo> = {};
+    (data ?? []).forEach((r: any) => { map[r.id] = r; });
+    setStatuses(map);
+  }, []);
+  useEffect(() => { loadStatuses(); }, [loadStatuses, users]);
 
   // Real-time: auto-refresh user list when profiles or wallets change
   useEffect(() => {
@@ -371,7 +366,16 @@ export function UserManagementTab() {
     };
   }, [refetch]);
 
+  const statusOf = (id: string) => {
+    const st = statuses[id];
+    if (st?.account_status === "frozen" || st?.account_status === "suspended") return st.account_status;
+    if (st?.risk_level === "high") return "flagged";
+    return "active";
+  };
+  const counts = users.reduce((acc, u) => { const k = statusOf(u.id); acc[k] = (acc[k] || 0) + 1; return acc; }, {} as Record<string, number>);
+
   const filteredUsers = users.filter(user => {
+    if (statusFilter !== "all" && statusOf(user.id) !== statusFilter) return false;
     const searchLower = search.toLowerCase();
     return (
       user.full_name?.toLowerCase().includes(searchLower) ||
@@ -435,6 +439,21 @@ export function UserManagementTab() {
         </div>
       </CardHeader>
       <CardContent>
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-4">
+          {[
+            { k: "all", label: "All users", n: users.length },
+            { k: "active", label: "Active", n: counts.active || 0 },
+            { k: "frozen", label: "Frozen", n: counts.frozen || 0 },
+            { k: "suspended", label: "Suspended", n: counts.suspended || 0 },
+            { k: "flagged", label: "Risk flagged", n: counts.flagged || 0 },
+          ].map((c) => (
+            <button key={c.k} onClick={() => setStatusFilter(c.k)}
+              className={`text-left rounded-xl border p-3 transition-colors ${statusFilter === c.k ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"}`}>
+              <div className="text-xs text-muted-foreground">{c.label}</div>
+              <div className="text-xl font-semibold text-foreground">{c.n}</div>
+            </button>
+          ))}
+        </div>
         {loading ? (
           <div className="space-y-2">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
         ) : (
@@ -447,6 +466,7 @@ export function UserManagementTab() {
                   <TableHead>Username</TableHead>
                   <TableHead>Tier</TableHead>
                   <TableHead>Credit Score</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Joined</TableHead>
                   <TableHead>Actions</TableHead>
@@ -470,6 +490,7 @@ export function UserManagementTab() {
                       <TableCell>@{user.username || "—"}</TableCell>
                       <TableCell><Badge variant="outline" className="capitalize">{user.membership_tier}</Badge></TableCell>
                       <TableCell>{user.credit_score || 0}</TableCell>
+                      <TableCell><StatusBadge info={statuses[user.id]} /></TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
                         {hasPermission("roles.manage") ? (
                           <Select value={user.role || "none"} onValueChange={(value) => handleRoleChange(user.id, value, user.role)} disabled={roleLoading}>
@@ -501,7 +522,7 @@ export function UserManagementTab() {
                             </Button>
                           </DialogTrigger>
                           {selectedUser?.id === user.id && (
-                            <UserActionsDialog user={user} onClose={() => setSelectedUser(null)} onAction={refetch} />
+                            <UserActionsDialog user={user} onClose={() => setSelectedUser(null)} onAction={() => { refetch(); loadStatuses(); }} />
                           )}
                         </Dialog>
                       </TableCell>
