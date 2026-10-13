@@ -26,6 +26,7 @@ import { AdminEmailTab } from "@/components/admin/AdminEmailTab";
 import { VestaraRateConfigTab } from "@/components/admin/VestaraRateConfigTab";
 import { VestaraInvestmentsTab } from "@/components/admin/VestaraInvestmentsTab";
 import { InvestmentApprovalsTab } from "@/components/admin/InvestmentApprovalsTab";
+import { SubAccountActivityTab } from "@/components/admin/SubAccountActivityTab";
 import { VestaraAuditExportTab } from "@/components/admin/VestaraAuditExportTab";
 import { VfdWebhookDlqTab } from "@/components/admin/VfdWebhookDlqTab";
 import { VfdAuditTab } from "@/components/admin/VfdAuditTab";
@@ -190,6 +191,10 @@ export default function Admin() {
               <PiggyBank className="h-4 w-4" />
               Investments
             </TabsTrigger>
+            <TabsTrigger value="sub-accounts" className="flex items-center gap-1">
+              <Wallet className="h-4 w-4" />
+              Sub-Accounts
+            </TabsTrigger>
             <TabsTrigger value="investment-approvals" className="flex items-center gap-1">
               <PiggyBank className="h-4 w-4" />
               Approvals
@@ -280,6 +285,10 @@ export default function Admin() {
 
           <TabsContent value="vestara-investments">
             <VestaraInvestmentsTab />
+          </TabsContent>
+
+          <TabsContent value="sub-accounts">
+            <SubAccountActivityTab />
           </TabsContent>
 
           <TabsContent value="investment-approvals">
