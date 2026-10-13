@@ -27,9 +27,16 @@ export function isMoneyAction(action: unknown): boolean {
   return typeof action === "string" && MONEY_ACTIONS.has(action);
 }
 
-/** Returns true when the user's account is frozen or suspended by an admin. */
-export async function isAccountFrozen(db: Db, userId: string): Promise<boolean> {
-  const { data } = await db.from("profiles").select("account_status").eq("id", userId).maybeSingle();
+// Outflows paused while an admin has flagged the customer for risk review.
+const RISK_OUTFLOWS = new Set<string>([
+  "transfer", "withdraw", "transfer_initiate", "independent_withdrawal",
+  "withdraw_campaign_escrow", "early_withdraw_savings", "break_lock",
+]);
+
+/** True when an admin freeze/suspension (or risk flag, for outflows) blocks this action. */
+export async function isAccountFrozen(db: Db, userId: string, action?: unknown): Promise<boolean> {
+  const { data } = await db.from("profiles").select("account_status, risk_level").eq("id", userId).maybeSingle();
   const s = (data?.account_status ?? "active") as string;
-  return s === "frozen" || s === "suspended";
+  if (s === "frozen" || s === "suspended") return true;
+  return data?.risk_level === "high" && typeof action === "string" && RISK_OUTFLOWS.has(action);
 }

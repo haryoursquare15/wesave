@@ -244,7 +244,7 @@ serve(async (req) => {
       );
       if (authErr || !user) return err("Unauthorized", 401);
       userId = user.id;
-      if (isMoneyAction(action) && await isAccountFrozen(supabase, userId)) {
+      if (isMoneyAction(action) && await isAccountFrozen(supabase, userId, action)) {
         return err(FROZEN_MESSAGE, 403);
       }
     }
