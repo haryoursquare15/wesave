@@ -139,7 +139,7 @@ const App = () => {
   }, []);
 
   return (
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem storageKey="vestara-theme">
+    <ThemeProvider attribute="class" defaultTheme="light" enableSystem storageKey="vestara-theme">
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <TooltipProvider>
