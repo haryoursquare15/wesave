@@ -403,7 +403,7 @@ export function getUserFriendlyError(error: unknown): string {
 
   // If the raw message is already short and human (no stack-trace / id / json), keep it.
   const looksTechnical =
-    /[{}\[\]<>]|stack|undefined|null is not|cannot read|at .* \(|0x[a-f0-9]|edge function|non-2xx|supabase|postgres|pgrst|rpc|sql|relation |column |violates|constraint|function .*does not exist|schema|jwt|token|http ?\d{3}|status code|\b[45]\d\d\b|exception|typeerror|referenceerror|syntaxerror|internal server|\bapi\b|payload|json|uuid|[0-9a-f]{8}-[0-9a-f]{4}-/i.test(raw) ||
+    /[{}\[\]<>]|stack|undefined|null is not|cannot read|at .* \(|0x[a-f0-9]|edge function|non-2xx|supabase|postgres|pgrst|rpc|sql|relation |column |violates|constraint|function .*does not exist|schema|jwt|token|http ?\d{3}|status code|exception|typeerror|referenceerror|syntaxerror|internal server|\bapi\b|payload|json|uuid|[0-9a-f]{8}-[0-9a-f]{4}-/i.test(raw) ||
     /\b[A-Z]{2,}(_[A-Z0-9]+)+\b/.test(raw) ||
     raw.length > 160;
 
