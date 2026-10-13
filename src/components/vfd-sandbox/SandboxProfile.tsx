@@ -104,9 +104,9 @@ function Chip({ tone = "muted", children }: { tone?: "success" | "muted" | "prim
 const WEAK = new Set(["0000", "1111", "2222", "3333", "4444", "5555", "6666", "7777", "8888", "9999", "1234", "4321", "2345", "3456", "4567", "5678", "6789", "9876", "8765", "7654", "6543", "5432", "0123", "3210"]);
 const four = (v: string) => v.replace(/\D/g, "").slice(0, 4);
 
-function TransactionPinSheet({ onDone }: { onDone: () => void }) {
-  const { changePin, loading } = useTransactionPin();
-  const [mode, setMode] = useState<"menu" | "change" | "forgot">("menu");
+function TransactionPinSheet({ onDone, hasPin = true }: { onDone: () => void; hasPin?: boolean }) {
+  const { changePin, setPin, loading } = useTransactionPin();
+  const [mode, setMode] = useState<"menu" | "change" | "forgot" | "set">(hasPin ? "menu" : "set");
   const [cur, setCur] = useState("");
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -125,6 +125,28 @@ function TransactionPinSheet({ onDone }: { onDone: () => void }) {
     toast.success("Transaction PIN changed");
     onDone();
   };
+
+  const submitSet = async () => {
+    setErr(null);
+    if (next.length !== 4) return setErr("Your transaction PIN must be 4 digits.");
+    if (WEAK.has(next)) return setErr("That PIN is too easy to guess. Avoid repeated or sequential digits.");
+    if (next !== confirm) return setErr("The PINs don't match.");
+    const r = await setPin(next);
+    if (!r?.success) return setErr("We couldn't save your PIN. Please try again.");
+    toast.success("Transaction PIN set");
+    onDone();
+  };
+
+  if (mode === "set") {
+    return (
+      <div className="space-y-3 pt-2">
+        <Input type="password" inputMode="numeric" placeholder="New 4-digit transaction PIN" value={next} onChange={(e) => setNext(four(e.target.value))} />
+        <Input type="password" inputMode="numeric" placeholder="Confirm transaction PIN" value={confirm} onChange={(e) => setConfirm(four(e.target.value))} />
+        {err && <p className="text-sm text-destructive">{err}</p>}
+        <Button onClick={submitSet} disabled={loading} className="w-full">{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Set transaction PIN"}</Button>
+      </div>
+    );
+  }
 
   if (mode === "change") {
     return (
@@ -188,6 +210,14 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
   const [autolockPin, setAutolockPin] = useState("");
   const [autolockBusy, setAutolockBusy] = useState(false);
   const [hasLoginPin, setHasLoginPin] = useState<boolean | null>(null);
+  const [hasTxPin, setHasTxPin] = useState<boolean | null>(null);
+  const { getStatus: getTxPinStatus } = useTransactionPin();
+  const refreshPinStatus = async () => {
+    const [lp, tp] = await Promise.all([loginPinAction({ action: "get_status" }).catch(() => null), getTxPinStatus().catch(() => null)]);
+    if (lp && typeof lp.has_pin !== "undefined") setHasLoginPin(!!lp.has_pin);
+    if (tp) setHasTxPin(tp.has_pin);
+  };
+  useEffect(() => { refreshPinStatus(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Withdrawal bank state (read from client.metadata; immutable once set)
   const [savedBank, setSavedBank] = useState<WithdrawalBank | null>(null);
@@ -356,6 +386,32 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
         </div>
       </div>
 
+      {(() => {
+        const items: { label: string; helper: string; onClick: () => void }[] = [];
+        if (tier !== "Tier 3") items.push({ label: `Upgrade from ${tier}`, helper: "Submit your documents to raise your limits", onClick: () => onNavigate("kyc") });
+        if (hasLoginPin === false) items.push({ label: "Set your login PIN", helper: "6 digits to open the app quickly", onClick: () => setSheet("loginPin") });
+        if (hasTxPin === false) items.push({ label: "Set your transaction PIN", helper: "4 digits to approve payments", onClick: () => setSheet("txPin") });
+        if (!items.length) return null;
+        return (
+          <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4">
+            <p className="text-sm font-semibold text-foreground">Action required</p>
+            <p className="text-xs text-muted-foreground">Complete {items.length === 1 ? "this step" : `these ${items.length} steps`} to get the most out of Vestara.</p>
+            <div className="mt-3 space-y-2">
+              {items.map((it) => (
+                <button key={it.label} type="button" onClick={it.onClick} className="w-full flex items-center gap-3 rounded-xl bg-card border border-border px-3 min-h-[52px] text-left active:scale-[0.99] transition-transform">
+                  <span className="h-2 w-2 rounded-full bg-primary animate-pulse shrink-0" />
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-sm font-medium text-foreground truncate">{it.label}</span>
+                    <span className="block text-xs text-muted-foreground truncate">{it.helper}</span>
+                  </span>
+                  <span className="text-xs font-semibold text-primary shrink-0">Fix now</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
       <ProfileSection title="Account">
         <ProfileRow icon={Phone} label="Mobile number" value={maskPhone(client?.phone)} />
         <ProfileRow icon={ShieldCheck} label="BVN" value={<span className="flex items-center gap-2 justify-end">{mask(client?.bvn)}{client?.bvn && <Chip tone="success">Verified</Chip>}</span>} />
@@ -367,7 +423,7 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
           value={withdrawBankRowValue}
           onClick={withdrawalBank ? undefined : () => setSheet("withdrawbank")}
         />
-        <ProfileRow icon={BadgeCheck} label="Account tier and limits" value={tier} onClick={() => setSheet("tier")} />
+        <ProfileRow icon={BadgeCheck} label="Account tier and limits" value={tier} attention={tier !== "Tier 3" ? "Upgrade available" : undefined} onClick={() => setSheet("tier")} />
         <ProfileRow
           icon={Hash}
           label="My VFD account number"
@@ -380,8 +436,8 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
       </ProfileSection>
 
       <ProfileSection title="Security">
-        <ProfileRow icon={KeyRound} label="Login PIN (6-digit)" helper="Used to open the app" onClick={() => setSheet("loginPin")} />
-        <ProfileRow icon={Lock} label="Transaction PIN (4-digit)" helper="Used to approve payments and transfers" onClick={() => setSheet("txPin")} />
+        <ProfileRow icon={KeyRound} label="Login PIN (6-digit)" helper="Used to open the app" attention={hasLoginPin === false ? "Not set — action required" : undefined} onClick={() => setSheet("loginPin")} />
+        <ProfileRow icon={Lock} label="Transaction PIN (4-digit)" helper="Used to approve payments and transfers" attention={hasTxPin === false ? "Not set — action required" : undefined} onClick={() => setSheet("txPin")} />
         <ProfileRow icon={Shield} label="Change password" onClick={() => setSheet("password")} />
         <ProfileRow
           icon={Fingerprint}
@@ -463,7 +519,7 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
         <LogOut className="h-4 w-4 mr-2" /> Sign out
       </Button>
 
-      <Sheet open={sheet !== null} onOpenChange={(o) => { if (!o) { setSheet(null); loadWa(); } }}>
+      <Sheet open={sheet !== null} onOpenChange={(o) => { if (!o) { setSheet(null); loadWa(); refreshPinStatus(); } }}>
         <SheetContent side="bottom" className="rounded-t-2xl max-h-[90dvh] overflow-y-auto">
           {sheet === "loginPin" && (<>
             <SheetHeader><SheetTitle>Login PIN (6-digit)</SheetTitle><SheetDescription>Used to open the app. Not the same as your 4-digit transaction PIN.</SheetDescription></SheetHeader>
@@ -472,7 +528,7 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
           </>)}
           {sheet === "txPin" && (<>
             <SheetHeader><SheetTitle>Transaction PIN (4-digit)</SheetTitle><SheetDescription>Used to approve payments and transfers. Not the same as your 6-digit login PIN.</SheetDescription></SheetHeader>
-            <TransactionPinSheet onDone={() => setSheet(null)} />
+            <TransactionPinSheet hasPin={hasTxPin !== false} onDone={() => { setSheet(null); refreshPinStatus(); }} />
           </>)}
           {sheet === "whatsapp" && (<>
             <SheetHeader><SheetTitle>WhatsApp alerts</SheetTitle><SheetDescription>Get important alerts on WhatsApp.</SheetDescription></SheetHeader>

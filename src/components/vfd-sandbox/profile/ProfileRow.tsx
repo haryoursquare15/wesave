@@ -12,6 +12,7 @@ interface ProfileRowProps {
   onClick?: () => void;
   destructive?: boolean;
   disabled?: boolean;
+  attention?: string;
 }
 
 export function ProfileRow({
@@ -23,6 +24,7 @@ export function ProfileRow({
   onClick,
   destructive,
   disabled,
+  attention,
 }: ProfileRowProps) {
   const Comp = onClick ? "button" : "div";
   return (
@@ -32,6 +34,7 @@ export function ProfileRow({
         "w-full flex items-center gap-3 px-4 min-h-[56px] text-left transition-colors",
         onClick && !disabled && "active:bg-muted/60 hover:bg-muted/40",
         destructive && "bg-destructive/5",
+        attention && "bg-primary/5 border-l-[3px] border-primary",
         disabled && "opacity-60"
       )}
     >
@@ -48,6 +51,12 @@ export function ProfileRow({
           {label}
         </p>
         {helper && <p className="text-xs text-muted-foreground truncate">{helper}</p>}
+        {attention && (
+          <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-[11px] font-semibold text-primary">
+            <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+            {attention}
+          </span>
+        )}
       </div>
       {value !== undefined && (
         <div className="text-sm text-muted-foreground max-w-[55%] truncate text-right">{value}</div>
