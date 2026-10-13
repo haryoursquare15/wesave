@@ -173,7 +173,7 @@ function UserActionsDialog({ user, onClose, onAction }: UserActionsDialogProps) 
           )}
           {hasPermission("groups.resolve_disputes") && (
             <Button variant={action === "remove_from_groups" ? "destructive" : "outline"} size="sm" onClick={() => setAction("remove_from_groups")} className="flex items-center gap-2">
-              <Trash2 className="h-4 w-4" /> Remove from All Groups
+              <Trash2 className="h-4 w-4" /> Remove from Unstarted Groups
             </Button>
           )}
           <Button variant={action === "set_temp_password" ? "default" : "outline"} size="sm" onClick={() => { setAction("set_temp_password"); setRecoveryLink(null); }} className="flex items-center gap-2">
