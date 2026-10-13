@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import vestaraBadge from "@/assets/vestara-mark.png";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { describeTransaction } from "@/lib/transactionLabels";
+import { cleanCustomerName, customerFirstName } from "@/lib/customerName";
 import { supabase } from "@/integrations/supabase/client";
 import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
 import { SpendLockCard } from "@/components/vfd-sandbox/SpendLockCard";
