@@ -96,13 +96,33 @@ export function SandboxNotificationBell() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Opening the sheet marks everything read, which clears the badge.
+  // Invites already seen in the tray stop counting toward the badge.
+  const [seenInvites, setSeenInvites] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem("vst_seen_invites") || "[]")); } catch { return new Set(); }
+  });
+
+  const markAllRead = useCallback(async () => {
+    // Optimistic: clear locally first, then persist on the server.
+    setItems((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    setInvites((cur) => {
+      setSeenInvites((prev) => {
+        const next = new Set(prev);
+        cur.forEach((i) => next.add(i.id));
+        try { localStorage.setItem("vst_seen_invites", JSON.stringify([...next].slice(-200))); } catch { /* ignore */ }
+        return next;
+      });
+      return cur;
+    });
+    const res = await markAllNotificationsRead();
+    if (res?.error) toast.error("Couldn't sync read status. We'll retry next time.");
+  }, [markAllNotificationsRead]);
+
+  // Opening the sheet marks everything read on the server, then reloads.
   useEffect(() => {
     if (!open) return;
-    refresh();
     (async () => {
-      await markAllNotificationsRead();
-      setItems((prev) => prev.map((n) => ({ ...n, is_read: true })));
+      await markAllRead();
+      await refresh();
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -164,7 +184,9 @@ export function SandboxNotificationBell() {
     n.notification_type !== "group_invite" || (n.group_id && inviteGroupIds.has(n.group_id))
   );
 
-  const unreadCount = items.filter(n => n.notification_type !== "group_invite" && !n.is_read).length + actionableInvites.length;
+  const unreadCount = items.filter(n => n.notification_type !== "group_invite" && !n.is_read).length
+    + actionableInvites.filter((i) => !seenInvites.has(i.id)).length;
+  const hasUnreadInTray = items.some((n) => !n.is_read);
   const isEmpty = visibleNotifs.length === 0 && actionableInvites.length === 0;
 
   const todayNotifs = visibleNotifs.filter((n) => isToday(new Date(n.created_at)));
@@ -173,17 +195,20 @@ export function SandboxNotificationBell() {
   const renderNotif = (n: Notification) => {
     const copy = friendlyNotification(n);
     return (
-      <li key={n.id} className="flex items-start gap-3 px-4 py-3">
-        <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10">
-          <BellRing className="h-4 w-4 text-primary" />
+      <li
+        key={n.id}
+        className={`flex items-start gap-3 px-4 py-3 transition-colors duration-300 ${n.is_read ? "bg-transparent" : "bg-primary/5"}`}
+      >
+        <span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${n.is_read ? "bg-muted" : "bg-primary/10"}`}>
+          <BellRing className={`h-4 w-4 ${n.is_read ? "text-muted-foreground" : "text-primary"}`} />
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
-            <p className="text-sm font-semibold text-foreground leading-snug">{copy.title}</p>
+            <p className={`text-sm leading-snug ${n.is_read ? "font-medium text-foreground/70" : "font-semibold text-foreground"}`}>{copy.title}</p>
             {!n.is_read && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary" aria-label="Unread" />}
           </div>
           {copy.body && (
-            <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed line-clamp-2">{copy.body}</p>
+            <p className={`mt-0.5 text-xs leading-relaxed line-clamp-2 ${n.is_read ? "text-muted-foreground/80" : "text-muted-foreground"}`}>{copy.body}</p>
           )}
           <p className="mt-1 text-[10px] text-muted-foreground">
             {formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}
@@ -209,6 +234,14 @@ export function SandboxNotificationBell() {
         <SheetHeader className="px-4 pt-4 pb-3 border-b border-border">
           <div className="flex items-center justify-between">
             <SheetTitle className="text-base">Notifications</SheetTitle>
+            <button
+              type="button"
+              onClick={markAllRead}
+              disabled={!hasUnreadInTray && unreadCount === 0}
+              className="mr-8 text-xs font-medium text-primary transition-opacity hover:opacity-80 disabled:text-muted-foreground disabled:opacity-60"
+            >
+              Mark all as read
+            </button>
           </div>
         </SheetHeader>
         <ScrollArea className="flex-1">
