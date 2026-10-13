@@ -1,3 +1,4 @@
+import { invokeWithGatewayRetry } from "@/lib/productsRetry";
 import { useEffect, useState, useCallback } from "react";
 import { Receipt, Loader2, Clock, RefreshCw } from "lucide-react";
 import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
@@ -35,10 +36,10 @@ export function SandboxBillReceipts() {
     const { data: s } = await client.auth.getSession();
     const token = s?.session?.access_token;
     if (!token) return null;
-    const resp = await client.functions.invoke("vfd-sandbox-products", {
+    const resp = await invokeWithGatewayRetry(action, body, () => client.functions.invoke("vfd-sandbox-products", {
       body: { action, ...body },
       headers: { Authorization: `Bearer ${token}` },
-    });
+    }));
     return resp.data;
   }, [client]);
 
