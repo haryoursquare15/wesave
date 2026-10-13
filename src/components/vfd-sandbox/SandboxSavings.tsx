@@ -715,7 +715,7 @@ export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductC
         open={!!mandateView}
         onOpenChange={(o) => { if (!o) { setMandateView(null); void refreshMandates(); } }}
         mandateId={mandateView?.mandate.id || null}
-        planLabel={mandateView ? `${mandateView.plan.vestara_products?.name || "GoalSave"} · ${mandateView.plan.goal_name || "My plan"}` : ""}
+        planLabel={mandateView ? `${mandateView.plan.vestara_products?.name || "GoalSave"} · ${String((mandateView.plan.metadata as Record<string, unknown>)?.goal_name || "My plan")}` : ""}
         firstDebitAt={mandateView?.plan.next_debit_at || mandateView?.plan.start_date || null}
       />
 
