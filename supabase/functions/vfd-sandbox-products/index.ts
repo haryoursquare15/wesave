@@ -8266,8 +8266,12 @@ async function handleMarkNotificationRead(userId: string, body: Record<string, u
 
 async function handleMarkAllNotificationsRead(userId: string) {
   const db = getSupabaseAdmin();
-  await db.from("vfd_sandbox_notifications").update({ is_read: true })
+  const { error } = await db.from("vfd_sandbox_notifications").update({ is_read: true })
     .eq("user_id", userId).eq("is_read", false);
+  if (error) {
+    console.error("[mark_all_notifications_read] failed", error.message);
+    return jsonResponse({ error: "Could not update notifications" }, 500);
+  }
   return jsonResponse({ data: { success: true } });
 }
 
