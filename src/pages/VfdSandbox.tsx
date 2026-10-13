@@ -24,7 +24,7 @@ import { SandboxAssociationTab } from "@/components/vfd-sandbox/SandboxAssociati
 import { SandboxBillsTab } from "@/components/vfd-sandbox/SandboxBillsTab";
 import { SandboxCardTab } from "@/components/vfd-sandbox/SandboxCardTab";
 import { SandboxMandatesTab } from "@/components/vfd-sandbox/SandboxMandatesTab";
-import { SpendLockInsightsDetail } from "@/components/vfd-sandbox/SpendLockInsightsDetail";
+import { VestaraInsights } from "@/components/vfd-sandbox/VestaraInsights";
 import { SandboxProfile } from "@/components/vfd-sandbox/SandboxProfile";
 import { SandboxGroupInviteModal } from "@/components/vfd-sandbox/SandboxGroupInviteModal";
 import { SandboxSplash } from "@/components/vfd-sandbox/SandboxSplash";
@@ -646,9 +646,14 @@ function VfdSandboxInner() {
               />
             )}
             {currentView === "insights" && (
-              <SpendLockInsightsDetail
-                open
-                onOpenChange={(next) => { if (!next) setCurrentView("dashboard"); }}
+              <VestaraInsights
+                name={balanceData.fullName}
+                onNavigate={(view, product) => {
+                  if (VALID_VIEWS.includes(view as View)) {
+                    setInitialSavingsProduct(product ?? null);
+                    setCurrentView(view as View);
+                  }
+                }}
               />
             )}
           </motion.div>

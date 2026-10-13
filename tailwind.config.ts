@@ -14,6 +14,10 @@ export default {
   	},
   	extend: {
   		colors: {
+        'insights-save': 'hsl(var(--insights-save))',
+        'insights-circle': 'hsl(var(--insights-circle))',
+        'insights-grow': 'hsl(var(--insights-grow))',
+        'insights-pay': 'hsl(var(--insights-pay))',
   			border: 'hsl(var(--border))',
   			input: 'hsl(var(--input))',
   			ring: 'hsl(var(--ring))',
