@@ -666,7 +666,7 @@ function VfdSandboxInner() {
               { label: "Home", icon: Home, active: currentView === "dashboard", go: () => setCurrentView("dashboard") },
               { label: "Save", icon: PiggyBank, active: currentView === "lock", go: () => { setInitialSavingsProduct(null); setCurrentView("lock"); } },
               { label: "Pay", icon: CreditCard, active: currentView === "bills" || currentView === "transfer", go: () => setCurrentView("bills") },
-              { label: "Insights", icon: Sparkles, active: currentView === "insights", go: () => setCurrentView("insights") },
+              { label: "Pulse", icon: Sparkles, active: currentView === "insights", go: () => setCurrentView("insights") },
               { label: "Profile", icon: User, active: currentView === "profile", go: () => setCurrentView("profile") },
             ]).map((t) => (
               <button

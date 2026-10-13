@@ -440,8 +440,8 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
       </ProfileSection>
 
       <ProfileSection title="Privacy and data">
-        <ProfileRow icon={Sparkles} label="Personalised insights" helper="Use your spending to suggest budgets and savings"
-          trailing={<Switch checked={insightsOn} onCheckedChange={(v) => { setInsightsOn(v); localStorage.setItem("vestara:insights", v ? "on" : "off"); }} aria-label="Personalised insights" />} />
+        <ProfileRow icon={Sparkles} label="Vestara Money Pulse" helper="Your money-health score, pillars and personalised tips"
+          trailing={<Switch checked={insightsOn} onCheckedChange={(v) => { setInsightsOn(v); localStorage.setItem("vestara:insights", v ? "on" : "off"); }} aria-label="Vestara Money Pulse" />} />
         <ProfileRow icon={Download} label="Download my data" onClick={() => soon("Download my data")} />
       </ProfileSection>
 
