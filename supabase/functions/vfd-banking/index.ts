@@ -1,4 +1,5 @@
 // vfd-banking edge function — quote_transfer action enabled
+import { isMoneyAction, isAccountFrozen, FROZEN_MESSAGE } from "../_shared/account-freeze.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { vfdFetch, getGatewayAccessToken } from "../_shared/vfd-gateway.ts";
 import { checkSpendLock } from "../_shared/spend-lock.ts";
