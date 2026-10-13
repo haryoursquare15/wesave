@@ -17,8 +17,9 @@ import {
 import { TransactionPinGate } from "@/components/security/TransactionPinGate";
 import { TransactionSuccessModal, TransactionSuccessPayload } from "@/components/feedback/TransactionSuccessModal";
 import { GoalSavingsV2Wizard } from "./GoalSavingsV2Wizard";
-import { SavingsPlanCard, planState, PlanState, ARCHIVED_STATES } from "./SavingsPlanCard";
-import { useMandates } from "@/hooks/useMandates";
+import { SavingsPlanCard, planState, PlanState, ARCHIVED_STATES, saveTabOf, type SaveTab } from "./SavingsPlanCard";
+import { useMandates, type MandateRow } from "@/hooks/useMandates";
+import { MandateStatusSheet } from "./MandateStatusSheet";
 
 interface UserBalance {
   total_balance: number; locked_balance: number; savings_balance: number; available_balance: number;
@@ -50,7 +51,9 @@ const PRODUCT_GRADIENTS: Record<VestaraProductCode, string> = {
 export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductCode }: Props) {
   const { toast } = useToast();
   const vestara = useVestaraLedger();
-  const { findFor: findMandate } = useMandates();
+  const { findFor: findMandate, refresh: refreshMandates } = useMandates();
+  const [mandateView, setMandateView] = useState<{ mandate: MandateRow; plan: VS } | null>(null);
+  const [tab, setTab] = useState<SaveTab | null>(null);
 
   const [products, setProducts] = useState<VestaraProduct[]>([]);
   const [savings, setSavings] = useState<VS[]>([]);
@@ -297,6 +300,13 @@ export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductC
     };
   }, [savings]);
 
+  const tabbed = useMemo(() => {
+    const t: Record<SaveTab, VS[]> = { active: [], pending: [], closed: [] };
+    for (const s of savings) t[saveTabOf(s)].push(s);
+    return t;
+  }, [savings]);
+  const currentTab: SaveTab = tab ?? (tabbed.active.length === 0 && tabbed.pending.length > 0 ? "pending" : "active");
+
   const liveSavings = useMemo(
     () => savings.filter(s => !ARCHIVED_STATES.includes(planState(s))),
     [savings],
@@ -352,59 +362,35 @@ export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductC
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={onBack}>
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div className="flex-1">
-          <h2 className="text-base font-semibold">All Active Savings</h2>
-          <p className="text-xs text-muted-foreground">Every investment, in one place</p>
-        </div>
-        <Button variant="ghost" size="icon" onClick={() => { loadAll(); onRefresh(); }} disabled={loadingData || vestara.loading}>
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-bold">Save</h2>
+        <Button variant="ghost" size="icon" aria-label="Refresh" onClick={() => { loadAll(); onRefresh(); void refreshMandates(); }} disabled={loadingData || vestara.loading}>
           <RefreshCw className={`h-4 w-4 ${(loadingData || vestara.loading) ? "animate-spin" : ""}`} />
         </Button>
       </div>
 
-      {/* Balance Summary */}
+      {/* Navy hero */}
       {userBalance ? (
-        <div className="bg-card rounded-2xl border border-border/50 p-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-muted-foreground">Available to Save</span>
-            <Lock className="h-4 w-4 text-muted-foreground" />
-          </div>
-          <p className="text-2xl font-bold">₦{availableBalance.toLocaleString()}</p>
-          <div className="flex items-center gap-4 mt-2 text-[11px] text-muted-foreground">
-            <span>Locked: ₦{Number(userBalance.locked_balance).toLocaleString()}</span>
-            <span>Interest: ₦{Number(userBalance.savings_balance).toLocaleString()}</span>
-          </div>
-        </div>
-      ) : (
-        <Skeleton className="h-24 rounded-2xl" />
-      )}
-
-      {/* Portfolio Overview */}
-      {!loadingData && savings.length > 0 && (
-        <div className="rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-success/5 border border-primary/20 p-4 space-y-3">
-          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Portfolio</span>
+        <div className="rounded-[20px] bg-gradient-ink text-ink-foreground p-5 space-y-3">
           <div>
-            <p className="text-[10px] text-muted-foreground">Total locked</p>
+            <p className="text-xs opacity-70">Total saved</p>
             <p className="text-3xl font-bold tabular-nums leading-tight">
               ₦{totals.principal.toLocaleString(undefined, { maximumFractionDigits: 2 })}
             </p>
           </div>
-          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-primary/10">
-            <div>
-              <p className="text-[10px] text-muted-foreground">Interest earned</p>
-              <p className="text-sm font-bold text-success">
-                +₦{totals.interest.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-              </p>
-            </div>
-            <div>
-              <p className="text-[10px] text-muted-foreground">Active plans</p>
-              <p className="text-sm font-bold">{totals.activeCount}</p>
-            </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full bg-ink-foreground/10 px-3 py-1 text-[11px] font-medium">
+              Available to save ₦{availableBalance.toLocaleString()}
+            </span>
+            {totals.interest > 0 && (
+              <span className="text-[11px] opacity-80">
+                Interest earned +₦{totals.interest.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+              </span>
+            )}
           </div>
         </div>
+      ) : (
+        <Skeleton className="h-32 rounded-[20px]" />
       )}
 
       {/* Create flow */}
@@ -416,8 +402,8 @@ export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductC
           walletAvailable={availableBalance}
         />
       ) : !showCreate ? (
-        <Button onClick={() => setShowCreate(true)} className="w-full h-12" variant="hero">
-          <Sparkles className="h-4 w-4 mr-2" /> Start a New Savings
+        <Button onClick={() => setShowCreate(true)} className="w-full h-14 rounded-2xl text-base font-semibold active:scale-[0.96] transition-transform">
+          Start saving
         </Button>
       ) : (
         <AnimatePresence mode="wait">
@@ -657,78 +643,67 @@ export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductC
         </AnimatePresence>
       )}
 
-      {/* My Savings */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold">
-            My Savings {savings.length > 0 && <span className="text-muted-foreground font-normal">({liveSavings.length} live)</span>}
-          </h3>
-        </div>
-
-        {/* Live vs. history */}
-        {!loadingData && archivedSavings.length > 0 && (
-          <div className="flex gap-2 pb-2">
-            <FilterChip active={planView === "live"} onClick={() => setPlanView("live")} label={`Active · ${liveSavings.length}`} />
-            <FilterChip active={planView === "archive"} onClick={() => setPlanView("archive")} label={`Closed & expired · ${archivedSavings.length}`} />
-          </div>
-        )}
-
-        {/* Product filter chips */}
-        {!loadingData && productChips.length > 1 && (
-          <div className="flex gap-2 overflow-x-auto pb-3 -mx-1 px-1 scrollbar-none">
-            <FilterChip active={planFilter === "all"} onClick={() => setPlanFilter("all")} label={`All · ${(planView === "live" ? liveSavings : archivedSavings).length}`} />
-            {productChips.map(c => (
-              <FilterChip
-                key={c.code}
-                active={planFilter === c.code}
-                onClick={() => setPlanFilter(c.code)}
-                label={`${c.label} · ${c.count}`}
-              />
+      {/* My Savings — Active / Pending / Closed */}
+      <div className="space-y-3">
+        {!loadingData && savings.length > 0 && (
+          <div className="grid grid-cols-3 rounded-[14px] bg-muted p-1" role="tablist">
+            {([
+              ["active", "Active", tabbed.active.length],
+              ["pending", "Pending", tabbed.pending.length],
+              ["closed", "Closed", tabbed.closed.length],
+            ] as const).map(([key, label, n]) => (
+              <button
+                key={key}
+                role="tab"
+                aria-selected={currentTab === key}
+                onClick={() => setTab(key)}
+                className={`h-10 rounded-[12px] text-xs font-semibold transition-all duration-200 active:scale-[0.96] ${
+                  currentTab === key ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
+                }`}
+              >
+                {label} · {n}
+              </button>
             ))}
           </div>
         )}
 
         {loadingData ? (
           <div className="space-y-3">
-            {[1, 2].map(i => <Skeleton key={i} className="h-32 rounded-2xl" />)}
+            {[1, 2].map(i => <Skeleton key={i} className="h-32 rounded-[20px]" />)}
           </div>
         ) : savings.length === 0 ? (
-          <div className="bg-card rounded-2xl border border-border/50 p-8 text-center">
-            <Lock className="h-8 w-8 text-muted-foreground mx-auto mb-3 opacity-40" />
-            <p className="text-sm font-medium text-muted-foreground">No savings yet</p>
-            <p className="text-xs text-muted-foreground mt-1">Start a new savings to grow your money.</p>
+          <div className="bg-card rounded-[20px] border border-border p-8 text-center space-y-3">
+            <p className="text-sm font-medium">Your first plan is one tap away.</p>
+            <p className="text-xs text-muted-foreground">Pick a goal, set an amount, and we'll handle the rest.</p>
+            <Button onClick={() => setShowCreate(true)} className="w-full h-14 rounded-2xl">Start saving</Button>
           </div>
+        ) : tabbed[currentTab].length === 0 ? (
+          <p className="text-xs text-muted-foreground text-center py-6">No {currentTab} plans.</p>
         ) : (
-          <div className="space-y-5">
-            {grouped.map(group => {
-              const activeInGroup = group.items.filter(
-                s => planState(s) === "active" || planState(s) === "ready",
-              ).length;
-              return (
-                <div key={group.label} className="space-y-2.5">
-                  <div className="flex items-center gap-2 sticky top-0 bg-background/90 backdrop-blur-sm py-1 z-10">
-                    <h4 className="text-xs font-semibold uppercase tracking-wide">{group.label}</h4>
-                    <span className="text-[11px] text-muted-foreground">
-                      {activeInGroup} active{group.items.length !== activeInGroup ? ` · ${group.items.length - activeInGroup} other` : ""}
-                    </span>
-                  </div>
-                  {group.items.map(s => (
-                    <SavingsPlanCard
-                      key={s.id}
-                      savings={s}
-                      mandate={findMandate("fd_investment", s.id)}
-                      busy={vestara.loading}
-                      onMature={handleMature}
-                      onEarlyWithdraw={handleEarlyWithdraw}
-                      onTryAgain={handleTryAgain}
-                    />
-                  ))}
-                </div>
-              );
-            })}
+          <div className="space-y-3">
+            {tabbed[currentTab].map(s => (
+              <SavingsPlanCard
+                key={s.id}
+                savings={s}
+                mandate={findMandate("fd_investment", s.id)}
+                busy={vestara.loading}
+                onMature={handleMature}
+                onEarlyWithdraw={handleEarlyWithdraw}
+                onTryAgain={handleTryAgain}
+                onOpenMandate={(m) => setMandateView({ mandate: m, plan: s })}
+              />
+            ))}
           </div>
         )}
       </div>
+
+      <MandateStatusSheet
+        open={!!mandateView}
+        onOpenChange={(o) => { if (!o) { setMandateView(null); void refreshMandates(); } }}
+        mandateId={mandateView?.mandate.id || null}
+        planLabel={mandateView ? `${mandateView.plan.vestara_products?.name || "GoalSave"} · ${String((mandateView.plan.metadata as Record<string, unknown>)?.goal_name || "My plan")}` : ""}
+        firstDebitAt={mandateView?.plan.next_debit_at || mandateView?.plan.start_date || null}
+      />
 
       {/* Transaction PIN gate */}
       <TransactionPinGate
