@@ -483,7 +483,7 @@ function VfdSandboxInner() {
     lockedBalance: vestaraBalance ? vestaraBalance.locked_balance : 0,
     savingsBalance: vestaraBalance ? vestaraBalance.savings_balance : 0,
     accountNumber: vfd.client?.vfd_account_number || "—",
-    fullName: vfd.client?.full_name || "—",
+    fullName: cleanCustomerName(vfd.client?.full_name) || "—",
     noVfdAccount: vestaraBalance ? !!vestaraBalance.no_vfd_account : false,
     stale: vestaraBalance ? !!vestaraBalance.stale : false,
   };
@@ -531,7 +531,7 @@ function VfdSandboxInner() {
           >
             <Avatar className="h-9 w-9">
               <AvatarImage src={avatarUrl || undefined} alt="Your profile photo" className="object-cover" />
-              <AvatarFallback>{(vfd.client?.full_name || user?.email || "V").replace(/^.*-/, "").trim().charAt(0).toUpperCase()}</AvatarFallback>
+              <AvatarFallback>{(cleanCustomerName(vfd.client?.full_name) || user?.email || "V").trim().charAt(0).toUpperCase()}</AvatarFallback>
             </Avatar>
           </Button>
         }
