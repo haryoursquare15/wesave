@@ -22,6 +22,7 @@ import { useMandates, type MandateRow } from "@/hooks/useMandates";
 import { sandboxSupabase as supabase } from "@/integrations/supabase/sandboxClient";
 import { MandateStatusSheet } from "./MandateStatusSheet";
 import { MandateAuthorizationDialog, type MandateSubject } from "./MandateAuthorizationDialog";
+import { FundingChip, ProductTermsBox } from "./ProductTerms";
 
 interface UserBalance {
   total_balance: number; locked_balance: number; savings_balance: number; available_balance: number;
@@ -481,6 +482,7 @@ export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductC
                           <p className="text-[11px] text-muted-foreground mt-2">{p.description}</p>
                         )}
                         <div className="flex flex-wrap gap-1.5 mt-2">
+                          <FundingChip code={p.code} />
                           {p.is_upfront_yield && (
                             <Badge variant="outline" className="text-[9px] py-0 px-1.5 border-amber-500/40 text-amber-600">Upfront interest</Badge>
                           )}
@@ -516,8 +518,12 @@ export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductC
               </div>
               <div>
                 <h3 className="text-sm font-semibold">Step 2: Enter Amount</h3>
-                <p className="text-[11px] text-muted-foreground mt-0.5">{selectedProduct.name}</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <p className="text-[11px] text-muted-foreground">{selectedProduct.name}</p>
+                  <FundingChip code={selectedProduct.code} />
+                </div>
               </div>
+              <ProductTermsBox product={selectedProduct} />
               <Input
                 type="number"
                 value={amount}

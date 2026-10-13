@@ -11,6 +11,7 @@ import { TransactionPinGate } from "@/components/security/TransactionPinGate";
 import { MandateAuthorizationDialog, type MandateSubject } from "./MandateAuthorizationDialog";
 import { haptic } from "@/lib/haptics";
 import { cn } from "@/lib/utils";
+import { FundingChip, ProductTermsBox } from "./ProductTerms";
 
 type Frequency = "daily" | "weekly" | "monthly";
 type Step = 1 | 2 | 3 | 4 | "done";
@@ -212,6 +213,7 @@ export function GoalSavingsV2Wizard({ onClose, onCreated, walletAvailable, produ
                           <span className="block text-xs text-muted-foreground mt-1">
                             Up to {p.max_user_rate}% p.a. · {p.code === "goalsave" ? "7 days – 24 months" : `${p.min_tenor_days}–${p.max_tenor_days} days`}
                           </span>
+                          <FundingChip code={p.code} className="mt-2" />
                         </span>
                         {sel && <span className="h-6 w-6 rounded-full bg-primary flex items-center justify-center"><Check className="h-4 w-4 text-primary-foreground" /></span>}
                       </button>
@@ -224,6 +226,7 @@ export function GoalSavingsV2Wizard({ onClose, onCreated, walletAvailable, produ
             {step === 2 && (
               <motion.div key="s2" {...anim} className="space-y-5">
                 <h2 className="text-2xl font-bold">Set it up</h2>
+                {goalsave && <ProductTermsBox product={goalsave} />}
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Goal name</label>
                   <Input value={goalName} onChange={e => setGoalName(e.target.value)} placeholder="e.g. New laptop" maxLength={80} className="h-12 rounded-2xl mt-1" />
