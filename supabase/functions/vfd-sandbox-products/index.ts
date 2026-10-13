@@ -5959,10 +5959,13 @@ async function resolveBillMsisdn(
     const fromClient = clean((client as { phone?: string } | null)?.phone);
     if (fromClient && looksLikePhone(fromClient)) return fromClient;
 
-    const { data: profile } = await db.from("profiles")
-      .select("phone").eq("id", userId).maybeSingle();
-    const fromProfile = clean((profile as { phone?: string } | null)?.phone);
-    if (fromProfile && looksLikePhone(fromProfile)) return fromProfile;
+    // profiles has no plaintext phone column; fall back to the sign-up phone in auth.
+    const { data: authUser } = await db.auth.admin.getUserById(userId);
+    const meta = authUser?.user?.user_metadata as Record<string, unknown> | undefined;
+    for (const cand of [authUser?.user?.phone, meta?.phone, meta?.phone_number]) {
+      const v = clean(cand as string | null);
+      if (v && looksLikePhone(v)) return v;
+    }
   } catch (e) {
     console.error("[bills] resolveBillMsisdn lookup failed", e);
   }

@@ -137,11 +137,10 @@ export function SandboxAjoTab() {
   const [deleteBusy, setDeleteBusy] = useState(false);
 
   // A group can only be deleted by its admin while it is still being set up:
-  // not started (pending / swap window) and no cycle run yet.
+  // not started (pending / swap window). New groups default to cycle 1.
   const canDeleteGroup = (g: Group) =>
     !!currentUserId && g.admin_id === currentUserId &&
-    (g.status === "pending" || g.status === "swap_window") &&
-    (g.current_cycle ?? 0) < 1;
+    (g.status === "pending" || g.status === "swap_window");
 
   const confirmDeleteGroup = async () => {
     if (!deleteTarget) return;

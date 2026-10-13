@@ -31,7 +31,7 @@ function PushNotificationSettings() {
   if (!supported) return (
     <section>
       <h2 className="text-sm font-medium text-muted-foreground mb-3 px-1">Notifications</h2>
-      <WhatsAppAlertSettings />
+      <WhatsAppAlertSettings session="main" />
     </section>
   );
 
@@ -81,7 +81,7 @@ function PushNotificationSettings() {
           />
         </div>
       </motion.div>
-      <WhatsAppAlertSettings />
+      <WhatsAppAlertSettings session="main" />
     </section>
   );
 }

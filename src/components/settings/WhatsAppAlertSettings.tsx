@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { MessageCircle } from "lucide-react";
 import { toast } from "sonner";
-import { sandboxSupabase as supabase } from "@/integrations/supabase/sandboxClient";
+import { sandboxSupabase } from "@/integrations/supabase/sandboxClient";
+import { supabase as mainSupabase } from "@/integrations/supabase/client";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -13,7 +14,9 @@ function normalise(raw: string): string | null {
   return /^[0-9]{10,15}$/.test(d) ? d : null;
 }
 
-export function WhatsAppAlertSettings({ onSaved }: { onSaved?: (optedIn: boolean) => void }) {
+export function WhatsAppAlertSettings({ onSaved, session = "sandbox" }: { onSaved?: (optedIn: boolean) => void; session?: "sandbox" | "main" }) {
+  // Use the client that owns the signed-in session for the current view.
+  const supabase = session === "main" ? mainSupabase : sandboxSupabase;
   const [user, setUser] = useState<{ id: string } | null>(null);
   useEffect(() => { supabase.auth.getUser().then(({ data }) => setUser(data.user)); }, []);
   const [phone, setPhone] = useState("");
