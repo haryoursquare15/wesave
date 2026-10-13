@@ -63,6 +63,14 @@ Deno.serve(async (req) => {
     const enquiry = `${WALLET_BASE}/account/enquiry?accountNumber=${encodeURIComponent(accountNumber)}`;
     if (gwToken) results.push(await probe("enquiry_pool_gateway_token", enquiry, gwToken));
     if (gwToken) results.push(await probe("enquiry_self_gateway_token", `${WALLET_BASE}/account/enquiry`, gwToken));
+    if (gwToken && (requestBody as { full?: boolean }).full) {
+      const selfRes = await vfdFetch(`${WALLET_BASE}/account/enquiry`, { method: "GET", headers: { "Content-Type": "application/json", AccessToken: gwToken } });
+      results.push({ label: "enquiry_self_full", http: selfRes.status, body: await selfRes.json().catch(() => null) });
+      const subRes = await vfdFetch(`${WALLET_BASE}/sub-accounts?entity=corporate&page=1&size=50`, { method: "GET", headers: { "Content-Type": "application/json", AccessToken: gwToken } });
+      results.push({ label: "sub_accounts_corporate_full", http: subRes.status, body: await subRes.json().catch(() => null) });
+      const subRes2 = await vfdFetch(`${WALLET_BASE}/sub-accounts?entity=individual&page=1&size=50`, { method: "GET", headers: { "Content-Type": "application/json", AccessToken: gwToken } });
+      results.push({ label: "sub_accounts_individual_full", http: subRes2.status, body: await subRes2.json().catch(() => null) });
+    }
     if (gwToken) results.push(await probe("bank_list_gateway_token", `${WALLET_BASE}/bank`, gwToken));
     // Read-only surface map: which API families still respond.
     if (gwToken) {

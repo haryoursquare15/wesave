@@ -4590,7 +4590,18 @@ async function handleAdminProductAccountBalances(userId: string) {
     }
   };
 
-  const pool = await enquire(poolNuban);
+  // The wallet credential can only see customer NUBANs and its OWN corporate
+  // account — the pool. Enquiring the pool by number returns 401 "Account Not
+  // Found", so use self-enquiry (no accountNumber) for it.
+  const pool = await (async () => {
+    try {
+      const { data, status } = await vfdRequest("/account/enquiry", "GET");
+      if (status >= 400) return { balance: null as number | null, error: `VFD ${status}` };
+      return { balance: extractVfdBalance(data), error: null as string | null };
+    } catch (e) {
+      return { balance: null as number | null, error: e instanceof Error ? e.message : String(e) };
+    }
+  })();
 
   const accounts = [];
   for (const p of products ?? []) {
