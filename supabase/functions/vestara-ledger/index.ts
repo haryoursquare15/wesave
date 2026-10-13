@@ -1,3 +1,4 @@
+import { isMoneyAction, isAccountFrozen, FROZEN_MESSAGE } from "../_shared/account-freeze.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -243,6 +244,9 @@ serve(async (req) => {
       );
       if (authErr || !user) return err("Unauthorized", 401);
       userId = user.id;
+      if (isMoneyAction(action) && await isAccountFrozen(supabase, userId, action)) {
+        return err(FROZEN_MESSAGE, 403);
+      }
     }
 
     // Caller-context helpers for high-privilege actions

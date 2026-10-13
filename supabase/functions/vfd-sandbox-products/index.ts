@@ -1,3 +1,4 @@
+import { isMoneyAction, isAccountFrozen, FROZEN_MESSAGE } from "../_shared/account-freeze.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { vfdFetch, getGatewayAccessToken, isUncertainTransaction } from "../_shared/vfd-gateway.ts";
 import { notifyMandateApproved } from "../_shared/mandate-notify.ts";
@@ -11337,6 +11338,9 @@ Deno.serve(async (req) => {
 
     const user = await getUserFromRequest(req);
     const userId = user.id;
+    if (isMoneyAction(action) && await isAccountFrozen(getSupabaseAdmin(), userId, action)) {
+      return jsonResponse({ error: FROZEN_MESSAGE, code: "ACCOUNT_FROZEN" }, 403);
+    }
 
     switch (action) {
       // Thrift Groups (full parity)
