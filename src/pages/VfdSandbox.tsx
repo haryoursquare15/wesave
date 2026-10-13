@@ -36,6 +36,7 @@ import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import { sandboxSupabase } from "@/integrations/supabase/sandboxClient";
 
 import { getUserFriendlyError } from "@/lib/errorMessages";
+import { cleanCustomerName } from "@/lib/customerName";
 import { ComplaintsCenter } from "@/components/vfd-sandbox/complaints/ComplaintsCenter";
 interface LockConfig { id: string; duration_months: number; interest_rate: number; early_withdrawal_penalty: number; }
 interface UserBalance {

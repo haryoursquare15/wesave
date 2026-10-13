@@ -28,6 +28,7 @@ import { sandboxSupabase } from "@/integrations/supabase/sandboxClient";
 import { RESET_PASSWORD } from "@/lib/appRoutes";
 import { loginPinAction } from "@/lib/loginPinApi";
 import { cn } from "@/lib/utils";
+import { cleanCustomerName } from "@/lib/customerName";
 import { formatDistanceToNow } from "date-fns";
 
 interface ProfileClient {
