@@ -1,8 +1,8 @@
 # Requested updates
-- [ ] Remove customer-facing ledger errors and correct non-card payment decline wording.
-- [ ] Align notification tray actions and verify readability.
-- [ ] Fit password and PIN sign-in screens without page scrolling on phones.
-- [ ] Investigate the failed IKEDC payment using provider evidence; move no funds.
+- [x] Remove customer-facing ledger errors and correct non-card payment decline wording; six regression tests passed.
+- [x] Align notification tray actions and verify readability in signed-in preview.
+- [x] Fit password and PIN sign-in screens without page scrolling on tested phone sizes.
+- [x] Investigate failed IKEDC payment: customer validation passed, provider declined without a specific reason; refund remained held at inspection. No funds moved.
 - [x] Stop WhatsApp transaction notifications; preserve reminders and other existing channels.
 - [x] Unify logos using the supplied Vestara artwork and extracted V.
 - [x] Enable customer profile-photo selection and removal.
