@@ -142,13 +142,20 @@ export default function SandboxAuth() {
   const authRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const viewport = window.visualViewport;
-    const resize = () => authRef.current?.style.setProperty("--auth-height", `${viewport?.height ?? window.innerHeight}px`);
-    resize();
-    viewport?.addEventListener("resize", resize);
-    window.addEventListener("resize", resize);
+    if (!viewport) return;
+    const update = () => {
+      const el = authRef.current;
+      if (!el) return;
+      el.style.setProperty("--auth-height", `${viewport.height}px`);
+      // Keep the shell glued to the visible area when the keyboard pans the viewport up.
+      el.style.setProperty("--auth-offset", `${viewport.offsetTop}px`);
+    };
+    update();
+    viewport.addEventListener("resize", update);
+    viewport.addEventListener("scroll", update);
     return () => {
-      viewport?.removeEventListener("resize", resize);
-      window.removeEventListener("resize", resize);
+      viewport.removeEventListener("resize", update);
+      viewport.removeEventListener("scroll", update);
     };
   }, []);
   const [step, setStep] = useState(1);
