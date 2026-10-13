@@ -18,6 +18,9 @@ const DEFAULT_MESSAGE =
 
 // Ordered: more specific phrases first.
 const ERROR_MAP: Array<[string, string]> = [
+  ["ledger", "We couldn't complete this right now. Please check your transactions before trying again, or contact Support."],
+  ["balance integrity", "We couldn't complete this right now. Please contact Support so we can help."],
+  ["balance mismatch", "We're checking your balance. Please try again shortly or contact Support."],
   // ─── Connectivity / platform ────────────────────────────────────────────
   ["failed to fetch", "We couldn't reach Vestara. Check your internet connection and try again."],
   ["networkerror", "We couldn't reach Vestara. Check your internet connection and try again."],
@@ -26,7 +29,7 @@ const ERROR_MAP: Array<[string, string]> = [
   ["timeout", "This is taking longer than usual. Please try again in a moment."],
   ["timed out", "This is taking longer than usual. Please try again in a moment."],
   ["settlement_funding_unconfirmed", "We're still confirming this payment. Please check your transactions shortly before trying again."],
-  ["settlement_funding_failed", "We couldn't move your funds right now. Nothing was charged — please try again shortly."],
+  ["settlement_funding_failed", "We couldn't confirm this payment. Please check your transactions before trying again, or contact Support."],
   ["invalid wallet token", "We're reconnecting to your wallet. Please try again in a moment."],
   ["jwt expired", "Your session has ended. Please sign in again to continue."],
   ["invalid jwt", "Your session has ended. Please sign in again to continue."],
@@ -143,7 +146,9 @@ const ERROR_MAP: Array<[string, string]> = [
 
   // ─── Cards ──────────────────────────────────────────────────────────────
   ["restricted card", "Your card has been restricted. Please use a different card or contact your bank."],
-  ["declined", "Your card was declined. Please try a different card or contact your bank."],
+  ["card was declined", "Your card was declined. Please try a different card or contact your bank."],
+  ["card declined", "Your card was declined. Please try a different card or contact your bank."],
+  ["declined", "This payment was declined. Please check the payment details and your transactions before trying again."],
   ["card expired", "Your card has expired. Please update your card details."],
   ["no card token", "We couldn't use this card. Please try adding it again."],
   ["card already authorized", "This card is already linked to that group."],
@@ -403,7 +408,7 @@ export function getUserFriendlyError(error: unknown): string {
 
   // If the raw message is already short and human (no stack-trace / id / json), keep it.
   const looksTechnical =
-    /[{}\[\]<>]|stack|undefined|null is not|cannot read|at .* \(|0x[a-f0-9]|edge function|non-2xx|supabase|postgres|pgrst|rpc|sql|relation |column |violates|constraint|function .*does not exist|schema|jwt|token|http ?\d{3}|status code|exception|typeerror|referenceerror|syntaxerror|internal server|\bapi\b|payload|json|uuid|[0-9a-f]{8}-[0-9a-f]{4}-/i.test(raw) ||
+    /[{}\[\]<>]|stack|undefined|null is not|cannot read|at .* \(|0x[a-f0-9]|edge function|non-2xx|supabase|postgres|pgrst|rpc|sql|relation |column |violates|constraint|function .*does not exist|schema|jwt|token|http ?\d{3}|status code|exception|typeerror|referenceerror|syntaxerror|internal server|\bapi\b|reconcil|drift|double.entry|payload|json|uuid|[0-9a-f]{8}-[0-9a-f]{4}-/i.test(raw) ||
     /\b[A-Z]{2,}(_[A-Z0-9]+)+\b/.test(raw) ||
     raw.length > 160;
 

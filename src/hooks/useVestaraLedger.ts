@@ -177,14 +177,14 @@ export function useVestaraLedger() {
           const msg = error.message || "";
           const status = (error as unknown as { context?: { status?: number } })?.context?.status;
           if (status === 401 || status === 403 || /401|403|unauthor/i.test(msg)) return null;
-          toast({ title: "Ledger Error", description: getUserFriendlyError(msg), variant: "destructive" });
+          toast({ title: "Unable to complete request", description: getUserFriendlyError(msg), variant: "destructive" });
           return null;
         }
 
 
         if (data?.error) {
           if (/unauthor/i.test(String(data.error))) return null;
-          toast({ title: "Ledger Error", description: getUserFriendlyError(data.error), variant: "destructive" });
+          toast({ title: "Unable to complete request", description: getUserFriendlyError(data.error), variant: "destructive" });
           return null;
         }
 
@@ -192,7 +192,7 @@ export function useVestaraLedger() {
         return data;
       } catch (err) {
         const message = err instanceof Error ? err.message : "Unknown error";
-        toast({ title: "Request failed", description: message, variant: "destructive" });
+        toast({ title: "Unable to complete request", description: getUserFriendlyError(message), variant: "destructive" });
         return null;
       } finally {
         setLoading(false);

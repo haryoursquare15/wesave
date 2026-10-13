@@ -16,6 +16,7 @@ import { sandboxSupabase } from "@/integrations/supabase/sandboxClient";
 import { toast } from "sonner";
 import { getUserFriendlyError } from "@/lib/errorMessages";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { TonalBackground } from "@/components/vfd-sandbox/TonalBackground";
 
 // Display-only welcome details for the PIN screen (first name + photo, never email).
@@ -138,6 +139,18 @@ export default function SandboxAuth() {
   const [searchParams] = useSearchParams();
   const { signIn } = useSandboxAuth();
   const [isSignUp, setIsSignUp] = useState(() => searchParams.get("mode") === "signup");
+  const authRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    const resize = () => authRef.current?.style.setProperty("--auth-height", `${viewport?.height ?? window.innerHeight}px`);
+    resize();
+    viewport?.addEventListener("resize", resize);
+    window.addEventListener("resize", resize);
+    return () => {
+      viewport?.removeEventListener("resize", resize);
+      window.removeEventListener("resize", resize);
+    };
+  }, []);
   const [step, setStep] = useState(1);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -345,20 +358,20 @@ export default function SandboxAuth() {
   const pwLabel = ["Too weak", "Weak", "Fair", "Good", "Strong"][pw];
 
   const Primary = ({ children }: { children: React.ReactNode }) => (
-    <button
+    <Button
       type="submit"
       disabled={isLoading}
       className="flex h-14 w-full items-center justify-center rounded-2xl bg-primary font-semibold text-primary-foreground transition disabled:opacity-60 select-none"
     >
       {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : children}
-    </button>
+    </Button>
   );
 
   const ErrorLine = () =>
-    error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null;
+    error ? <p role="alert" className="text-sm text-destructive">{getUserFriendlyError(error)}</p> : null;
 
   return (
-    <div className="min-h-[100dvh] bg-background overscroll-none">
+    <div ref={authRef} className={cn("bg-background overscroll-none", !isSignUp && "auth-screen")}>
       <AnimatePresence>
         {showSplash && (
           <SandboxSplash
@@ -378,10 +391,10 @@ export default function SandboxAuth() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.25, ease: "easeOut" }}
-          className="relative min-h-[100dvh] overflow-hidden bg-ink text-ink-foreground"
+          className="auth-pin relative h-full overflow-hidden bg-ink text-ink-foreground"
         >
           <TonalBackground variant="pin" />
-          <div className="relative mx-auto flex min-h-[100dvh] max-w-md flex-col items-center px-6 pt-[max(env(safe-area-inset-top),48px)] pb-[max(env(safe-area-inset-bottom),20px)]">
+          <div className="auth-pin-content relative mx-auto flex h-full max-w-md flex-col items-center px-6 pt-[max(env(safe-area-inset-top),24px)] pb-[max(env(safe-area-inset-bottom),12px)]">
             {welcome.avatarUrl ? (
               <img src={welcome.avatarUrl} alt="" className="h-20 w-20 rounded-full object-cover ring-1 ring-ink-foreground/15" />
             ) : (
@@ -407,9 +420,9 @@ export default function SandboxAuth() {
               ))}
             </div>
             <div className="min-h-6 text-center">
-              {error ? <p role="alert" className="text-sm text-destructive-soft">{error}</p> : isLoading ? <Loader2 className="mx-auto h-5 w-5 animate-spin text-ink-foreground/70" /> : null}
+              {error ? <p role="alert" className="text-sm text-destructive-soft">{getUserFriendlyError(error)}</p> : isLoading ? <Loader2 className="mx-auto h-5 w-5 animate-spin text-ink-foreground/70" /> : null}
             </div>
-            <div className="mt-auto grid w-full max-w-[300px] grid-cols-3 gap-x-6 gap-y-4 pt-6">
+            <div className="auth-keypad mt-auto grid w-full max-w-[300px] grid-cols-3 gap-x-6 gap-y-3 pt-4">
               {["1", "2", "3", "4", "5", "6", "7", "8", "9", bioReady ? "bio" : "", "0", "del"].map((k, idx) =>
                 k === "" ? <span key={idx} /> : (
                   <button
@@ -418,7 +431,7 @@ export default function SandboxAuth() {
                     aria-label={k === "del" ? "Delete" : k === "bio" ? "Use Face ID or fingerprint" : k}
                     onClick={() => { try { navigator.vibrate?.(8); } catch { /* ignore */ } if (k === "bio") void bioUnlock(); else pressQuick(k); }}
                     className={cn(
-                      "mx-auto flex h-[76px] w-[76px] items-center justify-center rounded-full text-[28px] font-normal text-ink-foreground transition duration-150 ease-out select-none active:scale-[0.96]",
+                      "mx-auto flex h-[clamp(44px,9dvh,76px)] w-[clamp(44px,9dvh,76px)] items-center justify-center rounded-full text-[28px] font-normal text-ink-foreground transition duration-150 ease-out select-none active:scale-[0.96]",
                       k === "del" || k === "bio" ? "active:bg-ink-foreground/10" : "border border-ink-foreground/[0.14] bg-ink-foreground/[0.08] active:bg-ink-foreground/[0.16]",
                     )}
                   >
@@ -427,12 +440,6 @@ export default function SandboxAuth() {
                 ),
               )}
             </div>
-            {bioReady && (
-              <button type="button" onClick={() => void bioUnlock()} disabled={isLoading}
-                className="mt-5 flex min-h-11 items-center gap-2 rounded-full border border-ink-foreground/20 px-5 text-sm font-medium text-ink-foreground active:scale-[0.97] transition">
-                <Fingerprint className="h-4 w-4" /> Use Face ID / fingerprint
-              </button>
-            )}
             <button type="button" onClick={forgotPin} className="mt-3 min-h-11 text-sm text-ink-foreground/70">Forgot PIN?</button>
             <div className="flex items-center gap-4 text-xs text-ink-foreground/55">
               <button type="button" onClick={() => { setUsePassword(true); setError(null); }} className="min-h-11">Use password</button>
@@ -442,10 +449,10 @@ export default function SandboxAuth() {
           </div>
         </motion.div>
       ) : !isSignUp ? (
-        <div className="flex min-h-[100dvh] flex-col">
-          <div className="relative flex h-[38dvh] min-h-[240px] flex-col items-center justify-center overflow-hidden bg-ink pb-6 pt-[env(safe-area-inset-top)]">
+        <div className="flex h-full flex-col">
+          <div className="auth-brand relative flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden bg-ink pb-6 pt-[env(safe-area-inset-top)]">
             <TonalBackground variant="signin" />
-            <img src={logo} alt="Vestara logo" className="relative h-28 w-28 object-contain" />
+            <img src={logo} alt="Vestara logo" className="relative h-[clamp(48px,12dvh,112px)] w-[clamp(48px,12dvh,112px)] object-contain" />
             <h1 className="relative mt-3 text-2xl font-semibold tracking-tight text-ink-foreground">Vestara</h1>
             <p className="relative mt-0.5 text-sm text-ink-foreground/60">Grow your money smarter</p>
           </div>
@@ -453,11 +460,11 @@ export default function SandboxAuth() {
             initial={{ y: 30, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ duration: 0.25, ease: "easeOut" }}
-            className="relative -mt-6 flex-1 rounded-t-[28px] bg-background px-6 pt-7 pb-[max(env(safe-area-inset-bottom),24px)]"
+            className="auth-form relative -mt-6 shrink-0 rounded-t-[28px] bg-background px-6 pt-6 pb-[max(env(safe-area-inset-bottom),16px)]"
           >
             <div className="mx-auto w-full max-w-md">
               <h2 className="text-[28px] font-semibold leading-tight text-foreground">Sign in</h2>
-              <p className="mt-1 mb-6 text-sm text-muted-foreground">Welcome back. Let's pick up where you left off.</p>
+              <p className="auth-intro mt-1 mb-5 text-sm text-muted-foreground">Welcome back. Let's pick up where you left off.</p>
               <form onSubmit={handleSignIn} className="space-y-4">
                 <FloatField id="email" label="Email" type="email" value={form.email} onChange={set("email")} autoComplete="email" />
                 <FloatField
@@ -485,7 +492,7 @@ export default function SandboxAuth() {
                   </button>
                 )}
               </form>
-              <p className="mt-8 text-center text-sm text-muted-foreground">
+              <p className="auth-create mt-4 text-center text-sm text-muted-foreground">
                 New to Vestara?{" "}
                 <button type="button" onClick={() => { setIsSignUp(true); setStep(1); setError(null); }} className="font-semibold text-primary">
                   Create account
