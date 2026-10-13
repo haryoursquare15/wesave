@@ -61,6 +61,7 @@ const STATE_META: Record<PlanState, { label: string; chip: string }> = {
 interface Props {
   savings: VS;
   mandate?: MandateRow | null;
+  onCancel?: (s: VS) => void;
   busy?: boolean;
   onMature: (s: VS) => void;
   onEarlyWithdraw: (s: VS) => void;
