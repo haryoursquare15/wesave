@@ -233,7 +233,10 @@ export function SandboxNotificationBell() {
       <SheetContent side="bottom" className="h-[85dvh] rounded-t-3xl bg-background p-0 flex flex-col">
         <SheetHeader className="px-4 pt-4 pb-3 border-b border-border">
           <div className="flex items-center justify-between">
-            <SheetTitle className="text-base">Notifications</SheetTitle>
+            <div>
+              <SheetTitle className="text-base">Notifications</SheetTitle>
+              <p className="text-[10px] text-muted-foreground">Read alerts clear after 24 hours</p>
+            </div>
             <button
               type="button"
               onClick={markAllRead}
