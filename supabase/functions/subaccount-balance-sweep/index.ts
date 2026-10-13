@@ -199,7 +199,7 @@ Deno.serve(async (req) => {
     if (collectionNuban && collectionNuban !== poolNuban) {
       targets.push({ label: "Main Collection Account", accountNumber: collectionNuban, expected: null });
     }
-    targets.push({ label: "Vestara Corporate Pool", accountNumber: poolNuban, expected: null });
+    // Pool is handled via self-enquiry below, not by account number.
     for (const p of products ?? []) {
       const nuban = (p.sub_account_nuban as string | null) || "";
       if (!nuban) continue;
