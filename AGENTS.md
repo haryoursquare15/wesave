@@ -1,4 +1,5 @@
 - WhatsApp alerts are sent best-effort from send-notification-email via _shared/whatsapp-notify.ts, only to opted-in users (whatsapp_preferences); why: never block or alter email/push delivery.
+- Mandate authorization views share a parser for receiving-bank details from provider instructions; why: show the actual destination consistently without confusing it with the payer bank.
 - All WhatsApp sending paths use the shared reminder/security allowlist; why: transaction alerts cannot leak through a fallback template.
 - Profile photos use the current auth context's client and user-scoped avatar paths; why: the customer app and legacy account views must save to the correct session.
 - Customer branding imports the supplied logo and extracted V asset pointers; why: all views share original artwork rather than independently drawn logos.

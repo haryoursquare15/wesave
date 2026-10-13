@@ -8,6 +8,7 @@ import { haptic } from "@/lib/haptics";
 import { cn } from "@/lib/utils";
 import { openComplaints } from "./complaints/ComplaintsCenter";
 import { fmtDate } from "./SavingsPlanCard";
+import { mandateAuthorizationDetails } from "@/lib/mandateAuthorizationDetails";
 
 interface Row {
   id: string;
@@ -88,6 +89,7 @@ export function MandateStatusSheet({ open, onOpenChange, mandateId, planLabel, f
 
   const last4 = row?.payer_account_number?.slice(-4) || "••••";
   const amt = tokenAmount(row?.nibss_message || null);
+  const receivingDetails = mandateAuthorizationDetails(row?.nibss_message);
   const view = row ? viewOf(row.status) : null;
 
   const copy = async () => {
@@ -126,8 +128,8 @@ export function MandateStatusSheet({ open, onOpenChange, mandateId, planLabel, f
 
               <div className="rounded-[20px] border border-border bg-card divide-y divide-border text-sm">
                 <RowItem label="From" value={`Your bank ••••${last4}`} />
-                <RowItem label="To" value="Nigeria Inter-Bank Settlement System Plc" />
-                <RowItem label="Bank" value="Paystack - Titan" />
+                <RowItem label="Account name" value={receivingDetails.accountName} />
+                <RowItem label="Receiving bank" value={receivingDetails.bank} />
                 <div className="flex items-center justify-between px-4 py-3">
                   <div>
                     <p className="text-xs text-muted-foreground">Account number</p>
@@ -205,8 +207,8 @@ export function MandateStatusSheet({ open, onOpenChange, mandateId, planLabel, f
 function RowItem({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-3 px-4 py-3">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      <span className="font-medium text-right">{value}</span>
+      <span className="text-xs text-muted-foreground shrink-0">{label}</span>
+      <span className="font-medium text-right min-w-0 break-words">{value}</span>
     </div>
   );
 }
