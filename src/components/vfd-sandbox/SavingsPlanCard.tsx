@@ -70,8 +70,9 @@ interface Props {
   onLinkBank?: () => void;
 }
 
-export function SavingsPlanCard({ savings: s, mandate, busy, onMature, onEarlyWithdraw, onTryAgain, onOpenMandate, onLinkBank }: Props) {
+export function SavingsPlanCard({ savings: s, mandate, busy, onMature, onEarlyWithdraw, onTryAgain, onOpenMandate, onLinkBank, onCancel }: Props) {
   const [open, setOpen] = useState(false);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
   const state = planState(s, mandate);
   const meta = STATE_META[state];
   const isClosed = ARCHIVED_STATES.includes(state);
