@@ -11,7 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import vestaraBadge from "@/assets/vestara-logo-official.png.asset.json";
+import vestaraBadge from "@/assets/vestara-mark.png";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { describeTransaction } from "@/lib/transactionLabels";
 import { supabase } from "@/integrations/supabase/client";
@@ -327,7 +327,7 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
       >
         <Avatar className="h-12 w-12 shrink-0 ring-2 ring-primary/20">
           <AvatarImage src={avatarUrl || undefined} alt="Your profile photo" className="object-cover" />
-          <AvatarFallback className="bg-background"><img src={vestaraBadge.url} alt="Vestara" className="h-9 w-9 object-contain" /></AvatarFallback>
+          <AvatarFallback className="bg-background"><img src={vestaraBadge} alt="Vestara" className="h-9 w-9 object-contain" /></AvatarFallback>
         </Avatar>
         <div>
           <p className="text-sm text-muted-foreground">{greeting},</p>

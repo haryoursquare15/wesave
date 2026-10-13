@@ -16,7 +16,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import vestaraLogo from "@/assets/vestara-logo-official.png.asset.json";
+import vestaraLogo from "@/assets/vestara-mark.png";
 
 // ---- SEO helpers (no extra dependency) ----
 const setMeta = (key: string, content: string, attr: "name" | "property" = "name") => {
@@ -196,7 +196,7 @@ export default function VestaraLanding() {
       <nav className="sticky top-0 z-40 backdrop-blur-xl bg-background/70 border-b border-border">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <a href="/" className="flex items-center gap-2" aria-label="Vestara home">
-            <img src={vestaraLogo.url} alt="Vestara logo" className="h-9 w-9 object-contain" />
+            <img src={vestaraLogo} alt="Vestara logo" className="h-9 w-9 object-contain" />
             <span className="font-bold text-lg tracking-tight">Vestara</span>
           </a>
           <div className="flex items-center gap-2">
@@ -378,7 +378,7 @@ export default function VestaraLanding() {
         <div className="container mx-auto px-4 flex flex-col md:flex-row gap-4 items-center justify-between text-sm text-muted-foreground">
           <div className="flex flex-col md:flex-row items-center gap-3">
             <div className="flex items-center gap-2">
-              <img src={vestaraLogo.url} alt="Vestara logo" className="h-7 w-7 object-contain" />
+              <img src={vestaraLogo} alt="Vestara logo" className="h-7 w-7 object-contain" />
               <span>© {new Date().getFullYear()} Vestara. All rights reserved.</span>
             </div>
             <span className="hidden md:inline text-border">|</span>

@@ -1,6 +1,6 @@
 import { useState } from "react";
-import logoAsset from "@/assets/vestara-logo-official.png.asset.json";
-const wesaveLogoNew = logoAsset.url;
+import logoAsset from "@/assets/vestara-mark.png";
+const wesaveLogoNew = logoAsset;
 import { motion } from "framer-motion";
 import { Mail, ArrowLeft, Users } from "lucide-react";
 import { Link } from "react-router-dom";

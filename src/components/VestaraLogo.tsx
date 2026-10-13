@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import wesaveLogo from "@/assets/vestara-logo-official.png.asset.json";
+import wesaveLogo from "@/assets/vestara-logo-transparent.png";
 
 interface VestaraLogoProps {
   className?: string;
@@ -10,7 +10,7 @@ interface VestaraLogoProps {
 export function VestaraLogo({ className = "h-10", showTagline = false, linkTo }: VestaraLogoProps) {
   const content = (
     <div className="flex items-center gap-2">
-      <img src={wesaveLogo.url} alt="Vestara" className={className} />
+      <img src={wesaveLogo} alt="Vestara" className={className} />
       {showTagline && (
         <span className="text-sm text-muted-foreground">Transparency & control</span>
       )}

@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { CreditCard, Sparkles, ShieldCheck, KeyRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import wesaveLogo from "@/assets/vestara-logo-official.png.asset.json";
+import wesaveLogo from "@/assets/vestara-logo-transparent.png";
 
 /* ─── Virtual Debit — Coming Soon ─── */
 export function SandboxCardTab() {
@@ -22,7 +22,7 @@ export function SandboxCardTab() {
             <div className="w-9 h-6 rounded bg-gradient-to-br from-amber-300/80 to-amber-500/60 border border-amber-400/30" />
           </div>
           <div className="absolute top-3 right-4">
-            <img src={wesaveLogo.url} alt="Vestara" className="h-6 object-contain" />
+            <img src={wesaveLogo} alt="Vestara" className="h-6 object-contain" />
           </div>
           <div className="absolute bottom-9 left-4 right-4">
             <p className="text-[12px] font-mono text-white/60 tracking-[0.18em]">•••• •••• •••• ••••</p>

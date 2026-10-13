@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import logoAsset from "@/assets/vestara-logo-official.png.asset.json";
-const wesaveLogoNew = logoAsset.url;
+import logoAsset from "@/assets/vestara-mark.png";
+const wesaveLogoNew = logoAsset;
 import { motion } from "framer-motion";
 import { Mail, Lock, User, Eye, EyeOff, ArrowRight, Users, CheckCircle } from "lucide-react";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";

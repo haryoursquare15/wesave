@@ -1,6 +1,6 @@
 import { motion, useReducedMotion } from "framer-motion";
 import { useEffect } from "react";
-import vestaraIcon from "@/assets/vestara-logo-official.png.asset.json";
+import vestaraIcon from "@/assets/vestara-mark.png";
 import { TonalBackground } from "./TonalBackground";
 
 interface SandboxSplashProps {
@@ -29,7 +29,7 @@ export function SandboxSplash({ onDone, duration = 2000 }: SandboxSplashProps) {
         transition={{ duration: 0.7, ease: "easeOut" }}
         className="relative flex flex-col items-center gap-3 px-6"
       >
-        <img src={vestaraIcon.url} alt="" width={96} height={96} decoding="async" className="h-24 w-24 object-contain" />
+        <img src={vestaraIcon} alt="" width={96} height={96} decoding="async" className="h-24 w-24 object-contain" />
         <h1 className="text-4xl font-semibold tracking-tight text-ink-foreground">Vestara</h1>
         <p className="text-sm text-ink-foreground/60">Grow your money smarter</p>
       </motion.div>
