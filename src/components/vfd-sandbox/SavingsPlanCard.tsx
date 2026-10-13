@@ -175,7 +175,7 @@ export function SavingsPlanCard({ savings: s, mandate, busy, onMature, onEarlyWi
           <div className="text-xs text-muted-foreground">
             <p className="font-semibold text-foreground mb-0.5">Rules</p>
             {allowEarly
-              ? `Early exit allowed. A ${s.vestara_products?.early_withdrawal_penalty_pct ?? 0}% charge applies to interest earned.`
+              ? `Early exit allowed. You get your saved amount back in full; up to ${s.vestara_products?.early_withdrawal_penalty_pct ?? 0}% of interest earned is deducted.`
               : "Funds stay locked until the maturity date."}
           </div>
           {state === "active" && (allowEarly ? (
