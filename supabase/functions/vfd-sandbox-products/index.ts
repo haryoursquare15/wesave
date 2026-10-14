@@ -3112,7 +3112,7 @@ async function settleSplitBill(split: Record<string, any>): Promise<{ delivered:
   }
 
   const amount = Number(split.total_amount);
-  const reference = `vestara-split-bill-${split.id.slice(0, 8)}-${Date.now()}`;
+  const reference = vfdBillReference();
   const displayBillerName = billerName || String(billerId).toUpperCase();
   // Fix B: the split's stored bill_metadata can carry a biller ID that VFD has
   // since renamed. Resolve it against the live /billerlist before anything
@@ -5827,6 +5827,14 @@ async function handleBillsItems(body: Record<string, unknown>) {
   return jsonResponse({ data: await safeJson(resp) });
 }
 
+// VFD's reference format for bill payments: "txn-" + 22 lowercase alphanumerics
+// (matches the sample VFD supplied for a successful IKEDC vend).
+function vfdBillReference(): string {
+  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+  const bytes = crypto.getRandomValues(new Uint8Array(22));
+  return "txn-" + Array.from(bytes, (b) => chars[b % chars.length]).join("");
+}
+
 // --- Backend customer-validation gate (source of truth for ALL pay paths) ---
 // The frontend may validate for UX, but its verdict is never trusted: every
 // path that reaches VFD /pay runs this first.
@@ -6499,7 +6507,7 @@ async function handleBillsPay(userId: string, body: Record<string, unknown>) {
   const token = await getVfdAccessToken();
   if (!token) return jsonResponse({ error: "VFD auth failed" }, 500);
 
-  const reference = `vestara-bill-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const reference = vfdBillReference();
   const requestId = crypto.randomUUID();
   const payCategory = ((body.category as string) || "").toLowerCase();
   void payCategory;

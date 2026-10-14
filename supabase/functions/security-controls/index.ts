@@ -995,11 +995,13 @@ serve(async (req) => {
         userMessage = error.message;
     }
     
+    const isAuth = error instanceof Error && error.message.toLowerCase().includes('authentication required');
     return new Response(JSON.stringify({
       success: false,
       error: userMessage,
+      code: isAuth ? 'SESSION_EXPIRED' : undefined,
     }), {
-      status: 400,
+      status: isAuth ? 401 : 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
