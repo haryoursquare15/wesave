@@ -282,10 +282,16 @@ export async function enforceBillCustomerValidation(args: EnforceArgs): Promise<
     (body?.customerName ?? inner?.customerName ?? inner?.customer_name ?? "") || "",
   ) || null;
 
+  // VFD can return status "00" with NO customer name for an account/meter it
+  // cannot actually vend to — the vend then declines with an opaque status 99
+  // AFTER money has moved (confirmed by VFD on a failed IKEDC vend where
+  // customervalidate said "Customer details retrieved successfully" but the
+  // meter was invalid). A validation without a customer name is not a pass.
+  const nameConfirmed = !!customerName && customerName.trim().length > 1;
   const record: ValidationRecord = {
     ...base,
     performed: true,
-    passed: ok && status === "00",
+    passed: ok && status === "00" && nameConfirmed,
     validation_request_id: requestId,
     validation_status: status,
     validation_message: message,
@@ -295,7 +301,10 @@ export async function enforceBillCustomerValidation(args: EnforceArgs): Promise<
   };
 
   if (!record.passed) {
-    const detail = message && message.length < 160 ? message : "the biller could not confirm this account";
+    const nameMissing = ok && status === "00" && !nameConfirmed;
+    const detail = nameMissing
+      ? "the biller could not confirm this account number"
+      : message && message.length < 160 ? message : "the biller could not confirm this account";
     return {
       allowed: false,
       code: policy.confident ? "CUSTOMER_VALIDATION_FAILED" : "BILLER_CONFIG_REVIEW",
