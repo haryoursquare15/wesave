@@ -12,6 +12,11 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import {
+  getUserFriendlyError,
+  insufficientBalanceMessage,
+  isInsufficientBalanceError,
+} from "@/lib/errorMessages";
 import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
 import { SandboxBillReceipts } from "./SandboxBillReceipts";
 import { SandboxBillBeneficiaries } from "./SandboxBillBeneficiaries";
