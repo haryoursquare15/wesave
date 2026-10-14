@@ -177,7 +177,7 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
       // Expected business outcomes (e.g. low balance) are returned, not thrown,
       // so they show as a friendly message instead of an app error.
       if (data?.code === "INSUFFICIENT_BALANCE") {
-        return { error: data.error, code: data.code, shortfall: data.shortfall };
+        return { error: data.error, code: data.code, shortfall: data.shortfall, required: data.required, available: data.available };
       }
       throw new Error(data?.error || data?.message || `Request failed (${response.status})`);
     }
@@ -409,14 +409,22 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
 
 
       } else {
+        const insufficient = isInsufficientBalanceError(result);
         toast({
-          title: result?.code === "INSUFFICIENT_BALANCE" ? "Not enough balance" : "Payment Failed",
-          description: result?.error || resData?.message || "Transaction could not be processed",
+          title: insufficient ? "Insufficient balance" : "Payment Failed",
+          description: insufficient
+            ? insufficientBalanceMessage(result)
+            : getUserFriendlyError(result?.error || resData?.message || "Transaction could not be processed"),
           variant: "destructive",
         });
       }
     } catch (err) {
-      toast({ title: "Error", description: err instanceof Error ? err.message : "Payment failed", variant: "destructive" });
+      const insufficient = isInsufficientBalanceError(err);
+      toast({
+        title: insufficient ? "Insufficient balance" : "Payment failed",
+        description: insufficient ? insufficientBalanceMessage() : getUserFriendlyError(err),
+        variant: "destructive",
+      });
     } finally {
       setPaying(false);
     }
