@@ -5920,10 +5920,24 @@ async function handleBillsValidate(body: Record<string, unknown>) {
     { headers: { AccessToken: token } }
   );
   const data = await safeJson(resp) as Record<string, unknown>;
-  // Production: return the biller's real verdict. Sandbox keeps the tolerance
-  // so VFD test inputs ("Contact Admin") don't block the flow.
+  // Production: return the biller's real verdict — but a "00" with no
+  // customer name is NOT a pass. VFD confirms such accounts fail at vend
+  // time with an opaque decline after money moves.
   const isProd = (Deno.env.get("VFD_MODE") || "sandbox").toLowerCase() === "production";
-  if (isProd) return jsonResponse({ data });
+  if (isProd) {
+    const inner = (data?.data && typeof data.data === "object" ? data.data as Record<string, unknown> : null);
+    const name = String(data?.customerName ?? inner?.customerName ?? inner?.customer_name ?? "") || "";
+    if (data?.status === "00" && name.trim().length <= 1) {
+      return jsonResponse({
+        data: {
+          ...data,
+          status: "99",
+          message: "We couldn't confirm this account/meter number with the biller. Please check the number and try again.",
+        },
+      });
+    }
+    return jsonResponse({ data });
+  }
   const normalized = data?.status === "00"
     ? data
     : { ...data, status: "00", message: "Customer validated (sandbox)", customerName: (data as Record<string, unknown>)?.customerName || "Sandbox Customer" };
