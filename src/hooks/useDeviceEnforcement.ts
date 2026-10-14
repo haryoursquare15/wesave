@@ -20,11 +20,16 @@ export function useDeviceEnforcement(enabled: boolean) {
     let cancelled = false;
     let interval: ReturnType<typeof setInterval> | null = null;
 
-    // Only call the backend with a live session; an expired one would just fail.
+    // Only call the backend with a live session. If the stored token is near
+    // expiry, refresh it first; if refresh fails, skip quietly (the auth
+    // listener handles sign-out) rather than firing a request that will 401.
     const hasSession = async () => {
       const { data } = await sandboxSupabase.auth.getSession();
       const s = data.session;
-      return !!s && (!s.expires_at || s.expires_at * 1000 > Date.now() + 5_000);
+      if (!s) return false;
+      if (!s.expires_at || s.expires_at * 1000 > Date.now() + 30_000) return true;
+      const { data: r, error } = await sandboxSupabase.auth.refreshSession();
+      return !error && !!r.session;
     };
 
     const register = async () => {
