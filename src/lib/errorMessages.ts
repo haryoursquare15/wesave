@@ -427,3 +427,37 @@ export function sanitizeUserMessage(text: unknown): unknown {
   if (typeof text !== "string" || !text.trim()) return text;
   return getUserFriendlyError(text);
 }
+
+/** Formats a naira amount without floating-point tails (₦257.36, not ₦257.3600000000001). */
+export function formatNaira(value: unknown): string {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return "0";
+  return n.toLocaleString("en-NG", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
+/** True when a backend rejection simply means the customer doesn't have enough funds. */
+export function isInsufficientBalanceError(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null | undefined)?.code;
+  if (typeof code === "string" && code.toUpperCase() === "INSUFFICIENT_BALANCE") return true;
+  const raw =
+    typeof error === "string" ? error
+      : error instanceof Error ? error.message
+      : typeof (error as { error?: unknown })?.error === "string" ? String((error as { error: string }).error)
+      : typeof (error as { message?: unknown })?.message === "string" ? String((error as { message: string }).message)
+      : "";
+  return /insufficient|not enough (?:funds|balance)|fund your wallet/i.test(raw);
+}
+
+/** Plain-English copy for a low-balance rejection, using the backend's own shortfall when present. */
+export function insufficientBalanceMessage(info?: { shortfall?: unknown; required?: unknown; available?: unknown } | null): string {
+  const shortfall = Number(info?.shortfall);
+  if (Number.isFinite(shortfall) && shortfall > 0) {
+    return `You need ₦${formatNaira(shortfall)} more in your wallet to complete this. Fund your wallet and try again.`;
+  }
+  const required = Number(info?.required);
+  if (Number.isFinite(required) && required > 0) {
+    return `This needs ₦${formatNaira(required)} in your wallet. Fund your wallet and try again.`;
+  }
+  return "You don't have enough funds in your wallet for this. Please top up and try again.";
+}
+
