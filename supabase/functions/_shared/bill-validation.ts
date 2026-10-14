@@ -279,19 +279,16 @@ export async function enforceBillCustomerValidation(args: EnforceArgs): Promise<
   const message = body && typeof body.message !== "undefined" ? String(body.message) : null;
   const inner = (body?.data && typeof body.data === "object" ? body.data as Record<string, unknown> : null);
   const customerName = String(
-    (body?.customerName ?? inner?.customerName ?? inner?.customer_name ?? "") || "",
+    (body?.customerName ?? inner?.customerName ?? inner?.customer_name ?? inner?.name ?? body?.name ?? "") || "",
   ) || null;
 
-  // VFD can return status "00" with NO customer name for an account/meter it
-  // cannot actually vend to — the vend then declines with an opaque status 99
-  // AFTER money has moved (confirmed by VFD on a failed IKEDC vend where
-  // customervalidate said "Customer details retrieved successfully" but the
-  // meter was invalid). A validation without a customer name is not a pass.
-  const nameConfirmed = !!customerName && customerName.trim().length > 1;
+  // NOTE: VFD's /customervalidate does NOT return a customer name for any
+  // biller (confirmed across completed DSTV, EKEDC and SportyBet payments), so
+  // a missing name must not be treated as a failure — status "00" is the pass.
   const record: ValidationRecord = {
     ...base,
     performed: true,
-    passed: ok && status === "00" && nameConfirmed,
+    passed: ok && status === "00",
     validation_request_id: requestId,
     validation_status: status,
     validation_message: message,
@@ -301,10 +298,7 @@ export async function enforceBillCustomerValidation(args: EnforceArgs): Promise<
   };
 
   if (!record.passed) {
-    const nameMissing = ok && status === "00" && !nameConfirmed;
-    const detail = nameMissing
-      ? "the biller could not confirm this account number"
-      : message && message.length < 160 ? message : "the biller could not confirm this account";
+    const detail = message && message.length < 160 ? message : "the biller could not confirm this account";
     return {
       allowed: false,
       code: policy.confident ? "CUSTOMER_VALIDATION_FAILED" : "BILLER_CONFIG_REVIEW",

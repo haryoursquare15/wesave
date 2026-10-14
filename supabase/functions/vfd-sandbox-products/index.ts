@@ -5920,22 +5920,10 @@ async function handleBillsValidate(body: Record<string, unknown>) {
     { headers: { AccessToken: token } }
   );
   const data = await safeJson(resp) as Record<string, unknown>;
-  // Production: return the biller's real verdict — but a "00" with no
-  // customer name is NOT a pass. VFD confirms such accounts fail at vend
-  // time with an opaque decline after money moves.
+  // Production: return the biller's real verdict. VFD does not return a
+  // customer name on success, so status "00" alone is the pass signal.
   const isProd = (Deno.env.get("VFD_MODE") || "sandbox").toLowerCase() === "production";
   if (isProd) {
-    const inner = (data?.data && typeof data.data === "object" ? data.data as Record<string, unknown> : null);
-    const name = String(data?.customerName ?? inner?.customerName ?? inner?.customer_name ?? "") || "";
-    if (data?.status === "00" && name.trim().length <= 1) {
-      return jsonResponse({
-        data: {
-          ...data,
-          status: "99",
-          message: "We couldn't confirm this account/meter number with the biller. Please check the number and try again.",
-        },
-      });
-    }
     return jsonResponse({ data });
   }
   const normalized = data?.status === "00"
