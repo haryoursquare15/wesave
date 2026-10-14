@@ -301,7 +301,10 @@ export async function enforceBillCustomerValidation(args: EnforceArgs): Promise<
   };
 
   if (!record.passed) {
-    const detail = message && message.length < 160 ? message : "the biller could not confirm this account";
+    const nameMissing = ok && status === "00" && !nameConfirmed;
+    const detail = nameMissing
+      ? "the biller could not confirm this account number"
+      : message && message.length < 160 ? message : "the biller could not confirm this account";
     return {
       allowed: false,
       code: policy.confident ? "CUSTOMER_VALIDATION_FAILED" : "BILLER_CONFIG_REVIEW",
