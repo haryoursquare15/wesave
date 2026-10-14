@@ -323,7 +323,7 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
         const d = result?.data as Record<string, any> | undefined;
         if (d?.status === "00") {
           const name = String(
-            d?.customerName ?? d?.customer_name ?? d?.data?.customerName ?? d?.name ?? ""
+            d?.customerName ?? d?.customer_name ?? d?.data?.customerName ?? d?.data?.responseData?.customer?.customerName ?? d?.name ?? ""
           ).trim();
           setValidatedName(name || null);
           setValidationResult("valid");
