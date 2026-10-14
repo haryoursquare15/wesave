@@ -278,8 +278,11 @@ export async function enforceBillCustomerValidation(args: EnforceArgs): Promise<
   const status = body && typeof body.status !== "undefined" ? String(body.status) : null;
   const message = body && typeof body.message !== "undefined" ? String(body.message) : null;
   const inner = (body?.data && typeof body.data === "object" ? body.data as Record<string, unknown> : null);
+  // VFD nests the biller's record at data.responseData.customer for some billers.
+  const rd = (inner?.responseData && typeof inner.responseData === "object" ? inner.responseData as Record<string, unknown> : null);
+  const cust = (rd?.customer && typeof rd.customer === "object" ? rd.customer as Record<string, unknown> : null);
   const customerName = String(
-    (body?.customerName ?? inner?.customerName ?? inner?.customer_name ?? inner?.name ?? body?.name ?? "") || "",
+    (body?.customerName ?? inner?.customerName ?? inner?.customer_name ?? cust?.customerName ?? inner?.name ?? body?.name ?? "") || "",
   ) || null;
 
   // NOTE: VFD's /customervalidate does NOT return a customer name for any
