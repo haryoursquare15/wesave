@@ -234,7 +234,7 @@ function TxPicker({ service, onPick }: { service: string; onPick: (id: string | 
           </button>
         );
       })}
-      {!rows.length && <p className="text-sm text-muted-foreground text-center pt-4">No failed transactions found.</p>
+      {!rows.length && <p className="text-sm text-muted-foreground text-center pt-4">No failed transactions found.</p>}
     </div>
   );
 }
