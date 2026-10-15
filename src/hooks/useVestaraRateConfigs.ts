@@ -94,11 +94,13 @@ export function useVestaraRateConfigs() {
     async (id: string, patch: Partial<RateConfigInput>) => {
       setLoading(true);
       try {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from("vestara_rate_configs")
           .update(patch)
-          .eq("id", id);
+          .eq("id", id)
+          .select("id");
         if (error) throw error;
+        if (!data?.length) throw new Error("You don't have permission to change this rate.");
         toast({ title: "Rate tier updated" });
         await fetchConfigs();
         return true;

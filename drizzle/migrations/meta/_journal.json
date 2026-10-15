@@ -120,6 +120,13 @@
       "when": 1791914286901,
       "tag": "0016_admin_account_actions",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1792060348215,
+      "tag": "0017_super_admin_inherits_admin_and_rate_sync",
+      "breakpoints": true
     }
   ]
 }
