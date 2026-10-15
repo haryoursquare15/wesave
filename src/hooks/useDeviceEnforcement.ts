@@ -35,7 +35,7 @@ export function useDeviceEnforcement(enabled: boolean) {
     const register = async () => {
       try {
         if (!(await hasSession())) return;
-        await sandboxSupabase.functions.invoke("security-controls", {
+        const call = () => sandboxSupabase.functions.invoke("security-controls", {
           body: {
             action: "enforce_single_device",
             fingerprint: device.fingerprint,
@@ -44,6 +44,12 @@ export function useDeviceEnforcement(enabled: boolean) {
             os: device.os,
           },
         });
+        const { error } = await call();
+        // Server says the session is stale: renew once, retry, else stay quiet.
+        if ((error as { context?: Response } | null)?.context?.status === 401) {
+          const { error: rErr } = await sandboxSupabase.auth.refreshSession();
+          if (!rErr) await call();
+        }
       } catch (err) {
         console.warn("device enforcement register failed", err);
       }
@@ -56,6 +62,10 @@ export function useDeviceEnforcement(enabled: boolean) {
           body: { action: "get_devices" },
         });
         // Never sign out on a failed check — only when the list loads and this device is gone.
+        if ((error as { context?: Response } | null)?.context?.status === 401) {
+          await sandboxSupabase.auth.refreshSession().catch(() => undefined);
+          return;
+        }
         if (error || !Array.isArray(data?.devices)) return;
         const list = data.devices as Array<{ device_fingerprint?: string }>;
         const stillHere = list.some(d => d.device_fingerprint === device.fingerprint);

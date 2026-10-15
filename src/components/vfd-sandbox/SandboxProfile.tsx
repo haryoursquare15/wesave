@@ -29,6 +29,7 @@ import { RESET_PASSWORD } from "@/lib/appRoutes";
 import { loginPinAction } from "@/lib/loginPinApi";
 import { cn } from "@/lib/utils";
 import { cleanCustomerName } from "@/lib/customerName";
+import { syncWelcome } from "@/lib/welcomeCache";
 import { formatDistanceToNow } from "date-fns";
 
 interface ProfileClient {
@@ -354,6 +355,7 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
 
   const soon = (title: string) => { setSoonTitle(title); setSheet("soon"); };
   const name = cleanCustomerName(client?.full_name) || email?.split("@")[0] || "Vestara user";
+  useEffect(() => { if (client?.full_name || avatarUrl) syncWelcome(cleanCustomerName(client?.full_name), avatarUrl); }, [client?.full_name, avatarUrl]);
   const tier = client?.tier ? `Tier ${String(client.tier).replace(/\D/g, "") || client.tier}` : "Tier 1";
 
   const copyNuban = async () => {

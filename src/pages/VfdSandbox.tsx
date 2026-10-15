@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { syncWelcome } from "@/lib/welcomeCache";
+import { cleanCustomerName as __clean } from "@/lib/customerName";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { SandboxAuthProvider, useSandboxAuth } from "@/contexts/SandboxAuthContext";
 import { SandboxModeContext } from "@/hooks/useSandboxAwareAuth";
@@ -93,6 +95,10 @@ function VfdSandboxInner() {
     window.addEventListener("vestara:profile-updated", loadPhoto);
     return () => { active = false; window.removeEventListener("vestara:profile-updated", loadPhoto); };
   }, [user?.id]);
+  // Keep the PIN sign-in welcome (first name + photo) in sync with this account.
+  useEffect(() => {
+    if (vfd.client?.full_name || avatarUrl) syncWelcome(__clean(vfd.client?.full_name), avatarUrl);
+  }, [vfd.client?.full_name, avatarUrl]);
 
   // Deep-link support: /app?view=lock (or ajo|target|split|...) opens that
   // section directly so menu links land on the right screen.
