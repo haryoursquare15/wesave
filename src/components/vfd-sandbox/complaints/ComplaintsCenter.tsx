@@ -206,7 +206,7 @@ function TxPicker({ service, onPick }: { service: string; onPick: (id: string | 
     (async () => {
       const { data: { user } } = await sb.auth.getUser();
       if (!user) { setRows([]); return; }
-      const { data } = await sb.from("vfd_sandbox_transactions").select("id,transaction_type,amount,status,created_at,description,reversed_at,beneficiary_name").eq("user_id", user.id).order("created_at", { ascending: false }).limit(100);
+      const { data } = await sb.from("vfd_sandbox_transactions").select("id,transaction_type,amount,status,created_at,description,reversed_at,beneficiary_name").eq("user_id", user.id).in("status", ["failed", "reversed", "refunded"]).order("created_at", { ascending: false }).limit(100);
       const all = (data as Tx[]) ?? [];
       const kw = SERVICES.find((s) => s.key === service)?.kw ?? [];
       const hit = kw.length ? all.filter((t) => kw.some((k) => `${t.transaction_type} ${t.description ?? ""}`.toLowerCase().includes(k))) : all;
@@ -219,14 +219,22 @@ function TxPicker({ service, onPick }: { service: string; onPick: (id: string | 
       <button onClick={() => onPick(null)} className={cn(tile, "w-full p-4 text-left text-sm font-medium")}>Not about a transaction</button>
       {rows.map((t) => {
         const info = describeTransaction(t as never);
+        const st = (t.status ?? "").toLowerCase();
+        const reversed = !!t.reversed_at || st.includes("revers") || st === "refunded";
         return (
           <button key={t.id} onClick={() => onPick(t.id)} className={cn(tile, "w-full flex items-center gap-3 p-4 text-left")}>
-            <div className="flex-1 min-w-0"><p className="text-sm font-medium truncate">{info?.title ?? t.transaction_type}</p><p className="text-xs text-muted-foreground">{dt(t.created_at)}</p></div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">{info?.title ?? t.transaction_type}</p>
+              <p className="text-xs text-muted-foreground">{dt(t.created_at)}</p>
+              <p className={cn("text-[11px] font-medium mt-0.5", reversed ? "text-success" : "text-destructive")}>
+                {reversed ? `Reversed${t.reversed_at ? ` on ${dt(t.reversed_at)}` : ""} · money returned to your wallet` : "Failed · not yet reversed"}
+              </p>
+            </div>
             <span className="text-sm font-semibold">{naira(t.amount)}</span>
           </button>
         );
       })}
-      {!rows.length && <p className="text-sm text-muted-foreground text-center pt-4">No recent transactions found.</p>}
+      {!rows.length && <p className="text-sm text-muted-foreground text-center pt-4">No failed transactions found.</p>
     </div>
   );
 }
