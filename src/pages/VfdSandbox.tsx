@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { syncWelcome } from "@/lib/welcomeCache";
+import { cleanCustomerName as __clean } from "@/lib/customerName";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { SandboxAuthProvider, useSandboxAuth } from "@/contexts/SandboxAuthContext";
 import { SandboxModeContext } from "@/hooks/useSandboxAwareAuth";
