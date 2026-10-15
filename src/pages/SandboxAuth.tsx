@@ -209,7 +209,7 @@ export default function SandboxAuth() {
       const st = await loginPinAction({ action: "get_status" });
       if (st?.has_pin) saveQuickUnlock(form.email.trim(), true);
       else clearPinQuickUnlock();
-      void sandboxSupabase.auth.getUser().then(({ data }) => saveWelcome(data.user?.user_metadata));
+      void sandboxSupabase.auth.getUser().then(({ data }) => { if (!localStorage.getItem(WELCOME_KEY)) saveWelcome(data.user?.user_metadata); });
       toast.success("Welcome back to Vestara");
       finish();
     } finally {
