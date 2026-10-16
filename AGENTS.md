@@ -8,3 +8,4 @@
 - The customer Insights tab reads user-scoped score tables through sandboxSupabase and retains SpendLock as a separate breakdown; why: money-health scoring cannot replace budget controls or mix customer sessions.
 - Customer sign-in uses a route-scoped visible-viewport shell with compact-height layouts; why: fit password/PIN controls without disabling scrolling elsewhere.
 - Admin freeze/suspend/risk-flag is enforced server-side by _shared/account-freeze.ts in vfd-banking, vfd-sandbox-products and vestara-ledger; admin actions go through the admin_account_action RPC; why: admin buttons must actually block money movement, not just set a label.
+- Complaint transaction selection uses the exclusive classifier in complaintTransactions and never falls back to all transactions; why: empty service categories must not show unrelated failures.
