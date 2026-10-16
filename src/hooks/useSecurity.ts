@@ -1,3 +1,4 @@
+import { invokeSecurityControls } from "@/lib/securityControls";
 import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -41,7 +42,7 @@ export function useSecurity() {
     setLoading(true);
     setError(null);
     try {
-      const { data, error: invokeError } = await supabase.functions.invoke("security-controls", {
+      const { data, error: invokeError } = await invokeSecurityControls(supabase, {
         body: { action: "setup_2fa" },
       });
 
@@ -62,7 +63,7 @@ export function useSecurity() {
     setLoading(true);
     setError(null);
     try {
-      const { data, error: invokeError } = await supabase.functions.invoke("security-controls", {
+      const { data, error: invokeError } = await invokeSecurityControls(supabase, {
         body: { action: "verify_2fa_setup", token },
       });
 
@@ -83,7 +84,7 @@ export function useSecurity() {
     setLoading(true);
     setError(null);
     try {
-      const { data, error: invokeError } = await supabase.functions.invoke("security-controls", {
+      const { data, error: invokeError } = await invokeSecurityControls(supabase, {
         body: { action: "verify_2fa", token, purpose },
       });
 
@@ -103,7 +104,7 @@ export function useSecurity() {
     setLoading(true);
     setError(null);
     try {
-      const { data, error: invokeError } = await supabase.functions.invoke("security-controls", {
+      const { data, error: invokeError } = await invokeSecurityControls(supabase, {
         body: { action: "disable_2fa", token },
       });
 
@@ -122,7 +123,7 @@ export function useSecurity() {
 
   const get2FAStatus = useCallback(async (): Promise<{ is_enabled: boolean; verified_at: string | null }> => {
     try {
-      const { data, error: invokeError } = await supabase.functions.invoke("security-controls", {
+      const { data, error: invokeError } = await invokeSecurityControls(supabase, {
         body: { action: "get_2fa_status" },
       });
 
@@ -145,7 +146,7 @@ export function useSecurity() {
     ip_address?: string;
   }): Promise<{ is_new_device: boolean; is_trusted: boolean; requires_verification: boolean }> => {
     try {
-      const { data, error: invokeError } = await supabase.functions.invoke("security-controls", {
+      const { data, error: invokeError } = await invokeSecurityControls(supabase, {
         body: { 
           action: "register_device", 
           fingerprint,
@@ -167,7 +168,7 @@ export function useSecurity() {
 
   const getDevices = useCallback(async (): Promise<DeviceInfo[]> => {
     try {
-      const { data, error: invokeError } = await supabase.functions.invoke("security-controls", {
+      const { data, error: invokeError } = await invokeSecurityControls(supabase, {
         body: { action: "get_devices" },
       });
 
@@ -182,7 +183,7 @@ export function useSecurity() {
   const trustDevice = useCallback(async (fingerprint: string, token?: string): Promise<{ success: boolean; error?: string }> => {
     setLoading(true);
     try {
-      const { data, error: invokeError } = await supabase.functions.invoke("security-controls", {
+      const { data, error: invokeError } = await invokeSecurityControls(supabase, {
         body: { action: "trust_device", fingerprint, token },
       });
 
@@ -201,7 +202,7 @@ export function useSecurity() {
   const removeDevice = useCallback(async (deviceId: string): Promise<{ success: boolean; error?: string }> => {
     setLoading(true);
     try {
-      const { data, error: invokeError } = await supabase.functions.invoke("security-controls", {
+      const { data, error: invokeError } = await invokeSecurityControls(supabase, {
         body: { action: "remove_device", device_id: deviceId },
       });
 
@@ -220,7 +221,7 @@ export function useSecurity() {
   // ==================== Withdrawal Functions ====================
   const checkWithdrawal = useCallback(async (amount: number): Promise<WithdrawalCheckResult> => {
     try {
-      const { data, error: invokeError } = await supabase.functions.invoke("security-controls", {
+      const { data, error: invokeError } = await invokeSecurityControls(supabase, {
         body: { action: "check_withdrawal", amount },
       });
 
@@ -238,7 +239,7 @@ export function useSecurity() {
   const setBankCooldown = useCallback(async (): Promise<{ success: boolean; cooldown_until?: string; error?: string }> => {
     setLoading(true);
     try {
-      const { data, error: invokeError } = await supabase.functions.invoke("security-controls", {
+      const { data, error: invokeError } = await invokeSecurityControls(supabase, {
         body: { action: "set_bank_cooldown" },
       });
 
@@ -260,7 +261,7 @@ export function useSecurity() {
   // ==================== Credit Score Functions ====================
   const getCreditScoreHistory = useCallback(async () => {
     try {
-      const { data, error: invokeError } = await supabase.functions.invoke("security-controls", {
+      const { data, error: invokeError } = await invokeSecurityControls(supabase, {
         body: { action: "get_score_history" },
       });
 
