@@ -1,3 +1,4 @@
+import { invokeSecurityControls } from "@/lib/securityControls";
 import { useEffect, useMemo, useState } from "react";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
@@ -258,7 +259,8 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
   const loadDevices = async () => {
     setDevicesLoading(true);
     try {
-      const { data } = await sandboxSupabase.functions.invoke("security-controls", { body: { action: "get_devices" } });
+      const { data, error } = await invokeSecurityControls(sandboxSupabase, { body: { action: "get_devices" } });
+      if (error) { toast.error(error.message); return; }
       setDevices((data?.devices || []) as typeof devices);
     } finally { setDevicesLoading(false); }
   };
@@ -336,9 +338,10 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
   const signOutOtherDevices = async () => {
     if (!device) return;
     try {
-      const { data } = await sandboxSupabase.functions.invoke("security-controls", {
+      const { data, error } = await invokeSecurityControls(sandboxSupabase, {
         body: { action: "sign_out_other_devices", fingerprint: device.fingerprint },
       });
+      if (error) { toast.error(error.message); return; }
       toast.success(`Signed out ${data?.removed || 0} other device${(data?.removed || 0) === 1 ? "" : "s"}.`);
       void loadDevices();
     } catch {
@@ -349,7 +352,8 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
   const removeDevice = async (id: string, isCurrent: boolean) => {
     if (isCurrent) return;
     if (!confirm("Remove this device?")) return;
-    await sandboxSupabase.functions.invoke("security-controls", { body: { action: "remove_device", device_id: id } });
+    const { error } = await invokeSecurityControls(sandboxSupabase, { body: { action: "remove_device", device_id: id } });
+    if (error) { toast.error(error.message); return; }
     void loadDevices();
   };
 

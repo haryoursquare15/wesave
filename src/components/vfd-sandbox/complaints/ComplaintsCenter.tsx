@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { sandboxSupabase as sb } from "@/integrations/supabase/sandboxClient";
 import { describeTransaction } from "@/lib/transactionLabels";
+import { failedComplaintTransactions } from "@/lib/complaintTransactions";
 import { cn } from "@/lib/utils";
 
 /** Open the complaints flow from anywhere: openComplaints({ txId }) */
@@ -39,7 +40,7 @@ const STATUS: Record<string, { label: string; cls: string }> = {
 };
 
 type Cat = { service: string; issue_type: string; label: string; sla_hours: number };
-type Tx = { id: string; transaction_type: string; amount: number; status: string; created_at: string; description: string | null; reversed_at: string | null; beneficiary_name?: string | null };
+type Tx = { id: string; transaction_type: string; amount: number; status: string; created_at: string; description: string | null; reference?: string | null; reversed_at: string | null; beneficiary_name?: string | null };
 type Complaint = { id: string; ticket_no: string; service: string; issue_type: string; status: string; priority: string; created_at: string; resolved_at: string | null; sla_due_at: string | null; transaction_id: string | null; description: string };
 type Ev = { id: string; actor_type: string; event_type: string; message: string | null; created_at: string };
 
@@ -200,39 +201,26 @@ function IssueList({ service, onPick }: { service: string; onPick: (c: Cat) => v
   );
 }
 
-/** Map a transaction's human-readable category onto a complaint service. */
-function serviceForTx(t: Tx): string | null {
-  const cat = describeTransaction(t as never).category.toLowerCase();
-  if (["airtime", "data", "utility", "cable tv", "betting", "internet", "government & utilities", "bill"].includes(cat)) return "bills";
-  if (cat === "transfer") return "transfers";
-  if (cat === "funding") return "add_money";
-  if (cat === "thrift" || cat === "target") return "ajo";
-  if (cat === "savings" || cat === "lock") return "savings";
-  if (cat === "split bill") return "split";
-  if (cat === "fee" || cat === "refund") return "fees";
-  if (cat === "goals") return "savings";
-  return null;
-}
-
 function TxPicker({ service, onPick }: { service: string; onPick: (id: string | null) => void; onOpenExisting: (id: string) => void }) {
   const [rows, setRows] = useState<Tx[] | null>(null);
   useEffect(() => {
+    let cancelled = false;
+    setRows(null);
     (async () => {
       const { data: { user } } = await sb.auth.getUser();
-      if (!user) { setRows([]); return; }
-      const { data } = await sb.from("vfd_sandbox_transactions").select("id,transaction_type,amount,status,created_at,description,reversed_at,beneficiary_name").eq("user_id", user.id).in("status", ["failed", "reversed", "refunded"]).order("created_at", { ascending: false }).limit(100);
+      if (!user) { if (!cancelled) setRows([]); return; }
+      const { data } = await sb.from("vfd_sandbox_transactions").select("id,transaction_type,amount,status,created_at,description,reference,reversed_at,beneficiary_name").eq("user_id", user.id).in("status", ["failed", "reversed", "refunded"]).order("created_at", { ascending: false }).limit(100);
       const all = (data as Tx[]) ?? [];
-      // Categorise each failed transaction (bill payment → bills, wallet credit → add money, etc.)
-      const hit = all.filter((t) => serviceForTx(t) === service);
-      setRows((hit.length ? hit : all).slice(0, 10));
+      if (!cancelled) setRows(failedComplaintTransactions(all, service).slice(0, 10));
     })();
+    return () => { cancelled = true; };
   }, [service]);
   if (!rows) return <ListSkeleton />;
   return (
     <div className="space-y-2">
       <button onClick={() => onPick(null)} className={cn(tile, "w-full p-4 text-left text-sm font-medium")}>Not about a transaction</button>
       {rows.map((t) => {
-        const info = describeTransaction(t as never);
+        const info = describeTransaction(t);
         const st = (t.status ?? "").toLowerCase();
         const reversed = !!t.reversed_at || st.includes("revers") || st === "refunded";
         return (

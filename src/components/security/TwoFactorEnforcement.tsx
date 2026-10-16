@@ -1,3 +1,4 @@
+import { invokeSecurityControls } from "@/lib/securityControls";
 import { useState, useEffect, useCallback } from "react";
 import { Shield, Smartphone, AlertTriangle } from "lucide-react";
 import {
@@ -46,7 +47,7 @@ export function TwoFactorEnforcement({ onComplete }: TwoFactorEnforcementProps) 
         }
 
         // Session is available, invoke the function
-        const { data, error } = await supabase.functions.invoke("security-controls", {
+        const { data, error } = await invokeSecurityControls(supabase, {
           body: { action: "get_2fa_status" },
         });
 

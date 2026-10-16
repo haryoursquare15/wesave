@@ -1,3 +1,4 @@
+import { invokeSecurityControls } from "@/lib/securityControls";
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { AlertTriangle, Trash2, ArrowLeft } from "lucide-react";
@@ -23,7 +24,7 @@ export default function DeleteAccount() {
 
     try {
       // Call edge function to handle account deletion server-side
-      const { data, error } = await supabase.functions.invoke("security-controls", {
+      const { data, error } = await invokeSecurityControls(supabase, {
         body: { action: "delete_account" },
       });
 
