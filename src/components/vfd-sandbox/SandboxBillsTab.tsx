@@ -1,4 +1,17 @@
 import { useState, useCallback, useEffect } from "react";
+
+// Bill catalogue cache (billers/items rarely change): 12h, shown instantly then refreshed.
+const BILL_CACHE_TTL = 12 * 60 * 60 * 1000;
+function readBillCache<T>(key: string): T | null {
+  try {
+    const raw = JSON.parse(localStorage.getItem(key) || "null");
+    if (raw && raw.t && Date.now() - raw.t < BILL_CACHE_TTL) return raw.v as T;
+  } catch { /* ignore */ }
+  return null;
+}
+function writeBillCache(key: string, v: unknown) {
+  try { localStorage.setItem(key, JSON.stringify({ t: Date.now(), v })); } catch { /* ignore */ }
+}
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Smartphone, Tv, Wifi, Zap, Globe, ArrowLeft, ChevronRight,
@@ -230,15 +243,22 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
     setSelectedCategory(category);
     setBillerSearch("");
     const cacheKey = `vestara_billers_${category}`;
-    let cachedList: Biller[] | null = null;
-    try { cachedList = JSON.parse(sessionStorage.getItem(cacheKey) || "null"); } catch { cachedList = null; }
-    if (cachedList?.length) { setBillers(cachedList); setStep("billers"); return; }
+    const cachedList = readBillCache<Biller[]>(cacheKey);
+    if (cachedList?.length) {
+      // Show instantly, refresh quietly in the background.
+      setBillers(cachedList); setStep("billers");
+      void callProducts("bills_billers", { categoryName: category }).then((result) => {
+        const list = result?.data?.data;
+        if (Array.isArray(list) && list.length) { writeBillCache(cacheKey, list); setBillers(list); }
+      }).catch(() => { /* keep cached */ });
+      return;
+    }
     setLoading(true);
     try {
       const result = await callProducts("bills_billers", { categoryName: category });
       const list = result?.data?.data || [];
       setBillers(Array.isArray(list) ? list : []);
-      if (Array.isArray(list) && list.length) { try { sessionStorage.setItem(cacheKey, JSON.stringify(list)); } catch { /* ignore */ } }
+      if (Array.isArray(list) && list.length) writeBillCache(cacheKey, list);
       if (!Array.isArray(list) || list.length === 0) {
         const msg = result?.data?.message || result?.raw?.message || `No ${category} billers available right now`;
         toast({ title: "No billers", description: String(msg) });
@@ -256,7 +276,10 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
   /* ─── Step 3: Load Items ─── */
   const loadItems = useCallback(async (biller: Biller) => {
     setSelectedBiller(biller);
-    setLoading(true);
+    const cacheKey = `vestara_items_${biller.id}_${biller.division}_${biller.product}`;
+    const cachedItems = readBillCache<BillerItem[]>(cacheKey);
+    if (!cachedItems?.length) setLoading(true);
+    else { setItems(cachedItems); setStep("items"); }
     try {
       const result = await callProducts("bills_items", {
         billerId: biller.id,
@@ -264,6 +287,11 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
         productId: biller.product,
       });
       const paymentItems = result?.data?.data?.paymentitems || [];
+      if (paymentItems.length) writeBillCache(cacheKey, paymentItems);
+      if (cachedItems?.length) {
+        if (paymentItems.length) setItems(paymentItems);
+        return;
+      }
 
       // If VFD returns no items, create a synthetic custom-amount item so the user can still pay
       if (paymentItems.length === 0) {
@@ -293,8 +321,7 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
         setStep("items");
       }
     } catch {
-      setItems([]);
-      setStep("items");
+      if (!cachedItems?.length) { setItems([]); setStep("items"); }
     } finally {
       setLoading(false);
     }
