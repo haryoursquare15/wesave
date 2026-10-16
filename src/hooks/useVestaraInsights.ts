@@ -23,30 +23,35 @@ export function useVestaraInsights() {
   const [enabled, setEnabled] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const load = useCallback(async () => {
+    if (!user) return;
+    const results = await Promise.all([
+      sandboxSupabase.from("user_scores").select("*").eq("user_id", user.id).maybeSingle(),
+      sandboxSupabase.from("user_score_history").select("*").eq("user_id", user.id).order("month", { ascending: false }).limit(6),
+      sandboxSupabase.from("user_insights").select("*").eq("user_id", user.id).in("status", ["new", "seen"]).order("created_at", { ascending: false }).limit(12),
+      sandboxSupabase.from("user_streaks").select("current_weeks,best_weeks").eq("user_id", user.id).maybeSingle(),
+      sandboxSupabase.from("insight_preferences").select("insights_enabled,nudges_enabled").eq("user_id", user.id).maybeSingle(),
+    ]);
+    const failed = results.find(r => r.error);
+    if (failed?.error) throw failed.error;
+    setScore(results[0].data as unknown as MoneyScore | null);
+    setHistory(((results[1].data ?? []) as unknown as ScoreMonth[]).reverse());
+    setInsights((results[2].data ?? []) as unknown as MoneyInsight[]);
+    setStreak(results[3].data ?? { current_weeks: 0, best_weeks: 0 });
+    setEnabled(results[4].data?.insights_enabled !== false);
+  }, [user?.id]);
   const refresh = useCallback(async () => {
     if (!user) { setLoading(false); return; }
     setError(null);
+    // Show saved Pulse immediately; recompute in the background, then reload.
+    try { await load(); } catch { setError("We couldn't load your Money Pulse. Please try again."); }
+    finally { setLoading(false); }
     try {
       const engine = await sandboxSupabase.functions.invoke("insights-engine", { body: {} });
-      const results = await Promise.all([
-        sandboxSupabase.from("user_scores").select("*").eq("user_id", user.id).maybeSingle(),
-        sandboxSupabase.from("user_score_history").select("*").eq("user_id", user.id).order("month", { ascending: false }).limit(6),
-        sandboxSupabase.from("user_insights").select("*").eq("user_id", user.id).in("status", ["new", "seen"]).order("created_at", { ascending: false }).limit(12),
-        sandboxSupabase.from("user_streaks").select("current_weeks,best_weeks").eq("user_id", user.id).maybeSingle(),
-        sandboxSupabase.from("insight_preferences").select("insights_enabled,nudges_enabled").eq("user_id", user.id).maybeSingle(),
-      ]);
-      const failed = results.find(r => r.error);
-      if (failed?.error) throw failed.error;
-      setScore(results[0].data as unknown as MoneyScore | null);
-      setHistory(((results[1].data ?? []) as unknown as ScoreMonth[]).reverse());
-      setInsights((results[2].data ?? []) as unknown as MoneyInsight[]);
-      setStreak(results[3].data ?? { current_weeks: 0, best_weeks: 0 });
-      setEnabled(results[4].data?.insights_enabled !== false);
-      if (engine.error) setError("Your last saved insights are shown. Try refreshing again shortly.");
-    } catch {
-      setError("We couldn't load your Money Pulse. Please try again.");
-    } finally { setLoading(false); }
-  }, [user?.id]);
+      if (engine.error) return;
+      await load();
+    } catch { /* keep saved data */ }
+  }, [user?.id, load]);
   useEffect(() => { void refresh(); }, [refresh]);
   const updateInsight = async (id: string, status: "dismissed" | "acted") => {
     if (!user) return false;
