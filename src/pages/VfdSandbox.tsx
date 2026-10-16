@@ -29,6 +29,7 @@ import { SandboxMandatesTab } from "@/components/vfd-sandbox/SandboxMandatesTab"
 import { VestaraInsights } from "@/components/vfd-sandbox/VestaraInsights";
 import { SandboxProfile } from "@/components/vfd-sandbox/SandboxProfile";
 import { SandboxGroupInviteModal } from "@/components/vfd-sandbox/SandboxGroupInviteModal";
+import { SandboxSplitInviteModal } from "@/components/vfd-sandbox/SandboxSplitInviteModal";
 import { SandboxSplash } from "@/components/vfd-sandbox/SandboxSplash";
 import { useSandboxSessionEnforcement } from "@/hooks/useSandboxSessionEnforcement";
 import { useDeviceEnforcement } from "@/hooks/useDeviceEnforcement";
@@ -545,6 +546,7 @@ function VfdSandboxInner() {
       />
       <ProfilePictureUpload open={photoOpen} onOpenChange={setPhotoOpen} />
       {kycDone && <SandboxGroupInviteModal onAccepted={() => { /* downstream UIs poll on their own */ }} />}
+      {kycDone && <SandboxSplitInviteModal onOpenSplit={() => { setCurrentView("split"); window.dispatchEvent(new Event("vestara:open-split")); }} />}
       <div className="max-w-lg mx-auto px-4 py-5 pb-32 space-y-5">
         {!kycDone ? (
           <SandboxKYC

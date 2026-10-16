@@ -70,6 +70,17 @@ export function SandboxSplitTab() {
 
   useEffect(() => { loadSplits(); refreshWallet(); }, []); // eslint-disable-line
 
+  // Open a split accepted from the in-app invite pop-up.
+  useEffect(() => {
+    const openPending = () => {
+      const id = sessionStorage.getItem("vestara.openSplit");
+      if (id) { sessionStorage.removeItem("vestara.openSplit"); setDetailId(id); loadSplits(); }
+    };
+    openPending();
+    window.addEventListener("vestara:open-split", openPending);
+    return () => window.removeEventListener("vestara:open-split", openPending);
+  }, []); // eslint-disable-line
+
   const handleCreate = async () => {
     if (!form.purpose.trim()) { toast({ title: "Purpose is required", variant: "destructive" }); return; }
     if (totalAmount < 1000) { toast({ title: "Minimum ₦1,000", description: "The total bill must be at least ₦1,000.", variant: "destructive" }); return; }
