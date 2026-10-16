@@ -18,7 +18,7 @@ export default function PrivacyPolicy({ embedded = false }: { embedded?: boolean
         </div>
       </header>}
 
-      <main className={embedded ? "px-1 py-4" : "container mx-auto px-4 py-8 max-w-3xl"} data-x=" prose prose-sm dark:prose-invert">
+      <main className={embedded ? "px-1 py-4" : "container mx-auto px-4 py-8 max-w-3xl"}>
         <h1 className="text-2xl font-bold text-foreground mb-6">VESTARA – PRIVACY POLICY</h1>
 
         <section className="space-y-6">

@@ -1,3 +1,5 @@
+import PrivacyPolicy from "@/pages/PrivacyPolicy";
+import TermsOfService from "@/pages/TermsOfService";
 import { invokeSecurityControls } from "@/lib/securityControls";
 import { useEffect, useMemo, useState } from "react";
 import { useTheme } from "next-themes";
@@ -727,7 +729,7 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
           </>)}
           {sheet === "doc" && (<>
             <SheetHeader><SheetTitle>{doc.title}</SheetTitle></SheetHeader>
-            <iframe title={doc.title} src={doc.src} className="mt-3 w-full h-[70dvh] rounded-xl border border-border bg-background" />
+            <div className="mt-3 max-h-[70dvh] overflow-y-auto rounded-xl border border-border px-3">{doc.src === "/privacy" ? <PrivacyPolicy embedded /> : <TermsOfService embedded />}</div>
           </>)}
           {sheet === "soon" && (<>
             <SheetHeader><SheetTitle>{soonTitle}</SheetTitle><SheetDescription>This is coming soon. We'll let you know when it's ready.</SheetDescription></SheetHeader>

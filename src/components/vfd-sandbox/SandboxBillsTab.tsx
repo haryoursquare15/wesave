@@ -209,17 +209,20 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
 
   /* ─── Step 1: Load Categories ─── */
   const loadCategories = useCallback(async () => {
-    setLoading(true);
+    // Show cached/default categories instantly; refresh quietly in the background.
+    const fallback = ["Airtime", "Cable TV", "Data", "Utility", "Internet Subscription", "Education", "Betting"];
+    let cached: string[] | null = null;
+    try { cached = JSON.parse(localStorage.getItem("vestara_bill_categories") || "null"); } catch { cached = null; }
+    setCategories(cached?.length ? cached : fallback);
+    setLoading(false);
     try {
       const result = await callProducts("bills_categories");
       const cats = result?.data?.data?.map((c: { category: string }) => c.category) || [];
-      setCategories(cats.length > 0 ? cats : ["Airtime", "Cable TV", "Data", "Utility", "Internet Subscription", "Education", "Betting"]);
-    } catch {
-      // Fallback categories
-      setCategories(["Airtime", "Cable TV", "Data", "Utility", "Internet Subscription", "Education", "Betting"]);
-    } finally {
-      setLoading(false);
-    }
+      if (cats.length > 0) {
+        setCategories(cats);
+        try { localStorage.setItem("vestara_bill_categories", JSON.stringify(cats)); } catch { /* ignore */ }
+      }
+    } catch { /* keep shown categories */ }
   }, [callProducts]);
 
   /* ─── Step 2: Load Billers ─── */
