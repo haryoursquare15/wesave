@@ -1,27 +1,27 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://www.vestara.ng/</loc>
+    <loc>https://vestara.ng/</loc>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://www.vestara.ng/terms</loc>
+    <loc>https://vestara.ng/terms</loc>
     <changefreq>monthly</changefreq>
     <priority>0.4</priority>
   </url>
   <url>
-    <loc>https://www.vestara.ng/privacy</loc>
+    <loc>https://vestara.ng/privacy</loc>
     <changefreq>monthly</changefreq>
     <priority>0.4</priority>
   </url>
   <url>
-    <loc>https://www.vestara.ng/kyc-policy</loc>
+    <loc>https://vestara.ng/kyc-policy</loc>
     <changefreq>monthly</changefreq>
     <priority>0.3</priority>
   </url>
   <url>
-    <loc>https://www.vestara.ng/aml-policy</loc>
+    <loc>https://vestara.ng/aml-policy</loc>
     <changefreq>monthly</changefreq>
     <priority>0.3</priority>
   </url>
