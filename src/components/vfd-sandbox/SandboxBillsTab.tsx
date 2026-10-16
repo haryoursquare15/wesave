@@ -228,12 +228,17 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
   /* ─── Step 2: Load Billers ─── */
   const loadBillers = useCallback(async (category: string) => {
     setSelectedCategory(category);
-    setLoading(true);
     setBillerSearch("");
+    const cacheKey = `vestara_billers_${category}`;
+    let cachedList: Biller[] | null = null;
+    try { cachedList = JSON.parse(sessionStorage.getItem(cacheKey) || "null"); } catch { cachedList = null; }
+    if (cachedList?.length) { setBillers(cachedList); setStep("billers"); return; }
+    setLoading(true);
     try {
       const result = await callProducts("bills_billers", { categoryName: category });
       const list = result?.data?.data || [];
       setBillers(Array.isArray(list) ? list : []);
+      if (Array.isArray(list) && list.length) { try { sessionStorage.setItem(cacheKey, JSON.stringify(list)); } catch { /* ignore */ } }
       if (!Array.isArray(list) || list.length === 0) {
         const msg = result?.data?.message || result?.raw?.message || `No ${category} billers available right now`;
         toast({ title: "No billers", description: String(msg) });
