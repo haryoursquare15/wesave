@@ -2,12 +2,12 @@ import { ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
-export default function TermsOfService() {
+export default function TermsOfService({ embedded = false }: { embedded?: boolean } = {}) {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen min-h-[100dvh] bg-background pb-8">
-      <header className="bg-card border-b border-border sticky top-0 z-40">
+    <div className={embedded ? "bg-background" : "min-h-screen min-h-[100dvh] bg-background pb-8"}>
+      {!embedded && <header className="bg-card border-b border-border sticky top-0 z-40">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
@@ -16,9 +16,9 @@ export default function TermsOfService() {
             <h1 className="text-xl font-bold text-foreground">Terms of Service</h1>
           </div>
         </div>
-      </header>
+      </header>}
 
-      <main className="container mx-auto px-4 py-8 max-w-3xl prose prose-sm dark:prose-invert">
+      <main className={embedded ? "px-1 py-4" : "container mx-auto px-4 py-8 max-w-3xl"}>
         <h1 className="text-2xl font-bold text-foreground mb-2">VESTARA – TERMS OF SERVICE</h1>
         <p className="text-muted-foreground mb-6">Platform Name: Vestara | Owned By: LLH Premium Enterprise</p>
 

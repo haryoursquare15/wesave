@@ -127,6 +127,13 @@
       "when": 1792060348215,
       "tag": "0017_super_admin_inherits_admin_and_rate_sync",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1792150922802,
+      "tag": "0018_migration",
+      "breakpoints": true
     }
   ]
 }
