@@ -74,7 +74,7 @@ export function SandboxSplitTab() {
   useEffect(() => {
     const openPending = () => {
       const id = sessionStorage.getItem("vestara.openSplit");
-      if (id) { sessionStorage.removeItem("vestara.openSplit"); setDetailId(id); loadSplits(); }
+      if (id) { sessionStorage.removeItem("vestara.openSplit"); loadDetail(id); }
     };
     openPending();
     window.addEventListener("vestara:open-split", openPending);
