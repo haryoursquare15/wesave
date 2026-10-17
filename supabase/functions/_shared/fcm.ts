@@ -33,14 +33,14 @@ async function authenticate() {
   try { return await pendingAuth; } finally { pendingAuth = undefined; }
 }
 
-export async function sendAndroidPush(client: SupabaseClient, userId: string, url: string, tag: string) {
+export async function sendAndroidPush(client: SupabaseClient, userId: string, url: string, tag: string, title?: string, body?: string) {
   const counts = { sent: 0, failed: 0, removed: 0 };
   const { data: devices, error } = await client.from("device_tokens").select("id,token").eq("user_id", userId);
   if (error) throw new Error("Unable to load Android notification devices");
   if (!devices?.length) return counts;
   try {
     const auth = await authenticate();
-    const data = androidPushData(url, tag);
+    const data = androidPushData(url, tag, title, body);
     for (const device of devices) {
       try {
         const response = await fetch(`https://fcm.googleapis.com/v1/projects/${auth.projectId}/messages:send`, {
