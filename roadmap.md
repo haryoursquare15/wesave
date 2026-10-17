@@ -1,4 +1,6 @@
 # Requested updates
+- [ ] Reduce repeated bill catalogue waits and verify loading.
+- [ ] Remove lottery across category/provider variants and normalize betting lettering.
 - [x] Replace blank full-screen syncing displays with the shared fluid loader; verified 320px/mobile/desktop layout, reduced motion and signed-in loading completion without page errors.
 - [x] Add Android token registration, launch sync and device-only sign-out cleanup; verified registration readback and sign-out on the requesting account with a simulated wrapper.
 - [x] Deploy owner-scoped device_tokens and internal FCM delivery alongside Web Push; secure service account saved, sender rejects user calls, eleven rule tests passed.
