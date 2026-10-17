@@ -144,7 +144,7 @@ Deno.serve(async (req) => {
     });
     const parsed = schema.safeParse(await req.json().catch(() => null));
     if (!parsed.success) return Response.json({ error: "Invalid notification request" }, { status: 400, headers: corsHeaders });
-    const { action, user_id, title, body, url, tag, notification_id, category } = parsed.data;
+    const { action, user_id, title, body, url, tag, notification_id, category, broadcast } = parsed.data;
     const supabaseAdmin = adminClient();
     const internal = await isInternalCaller(req, supabaseAdmin);
 
