@@ -71,7 +71,6 @@ const categoryConfig: Record<string, { icon: typeof Smartphone; color: string; b
   Data: { icon: Signal, color: "text-emerald-600", bg: "bg-emerald-500/10" },
   Utility: { icon: Zap, color: "text-amber-600", bg: "bg-amber-500/10" },
   "Internet Subscription": { icon: Globe, color: "text-rose-600", bg: "bg-rose-500/10" },
-  Education: { icon: GraduationCap, color: "text-cyan-600", bg: "bg-cyan-500/10" },
   Betting: { icon: Dices, color: "text-orange-600", bg: "bg-orange-500/10" },
 };
 
@@ -84,8 +83,14 @@ const CATEGORY_PRESENTATION: Record<string, { label: string; order: number }> = 
   Utility: { label: "Electricity", order: 2 },
   "Cable TV": { label: "Cable TV", order: 3 },
   "Internet Subscription": { label: "Internet", order: 4 },
-  Betting: { label: "Betting and gaming", order: 5 },
+  Betting: { label: "Betting & Gaming", order: 5 },
 };
+
+/* Education billers are no longer offered; lottery billers are excluded too. */
+const EXCLUDED_CATEGORIES = new Set(["education"]);
+const EXCLUDED_BILLER_RE = /(lotto|lottery)/i;
+const visibleCategories = (cats: string[]) => cats.filter((c) => !EXCLUDED_CATEGORIES.has(c.trim().toLowerCase()));
+const visibleBillers = (list: Biller[]) => list.filter((b) => !EXCLUDED_BILLER_RE.test(b.name || ""));
 const categoryLabel = (cat: string) => CATEGORY_PRESENTATION[cat]?.label || cat;
 const categoryOrder = (cat: string) => CATEGORY_PRESENTATION[cat]?.order ?? 100;
 
