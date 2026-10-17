@@ -117,6 +117,9 @@ export function usePushNotifications() {
           endpoint: subJson.endpoint!,
           p256dh: subJson.keys!.p256dh!,
           auth_key: subJson.keys!.auth!,
+          platform: detectPlatform(),
+          user_agent: navigator.userAgent,
+          last_seen: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         },
         { onConflict: "user_id,endpoint" }
@@ -164,6 +167,23 @@ export function usePushNotifications() {
     }
   }, [user]);
 
+  // Delete only this device's subscription row (used on logout).
+  const removeCurrentDevice = useCallback(async () => {
+    try {
+      const registration = await navigator.serviceWorker.getRegistration("/sw.js");
+      const sub = await registration?.pushManager.getSubscription();
+      if (sub && user) {
+        await supabase
+          .from("push_subscriptions")
+          .delete()
+          .eq("user_id", user.id)
+          .eq("endpoint", sub.endpoint);
+      }
+    } catch {
+      // Best-effort; never block sign-out.
+    }
+  }, [user, supabase]);
+
   return {
     supported,
     permission,
@@ -171,5 +191,6 @@ export function usePushNotifications() {
     loading,
     subscribe,
     unsubscribe,
+    removeCurrentDevice,
   };
 }
