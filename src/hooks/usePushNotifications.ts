@@ -45,17 +45,17 @@ export function usePushNotifications() {
       // If the VAPID key pair changed since this device subscribed, the old
       // subscription can't receive pushes — drop it and ask to re-subscribe.
       const knownKey = localStorage.getItem("vapid_public_key");
-      if (knownKey) {
-        try {
-          const { data } = await supabase.functions.invoke("push-notification", { body: { action: "get_vapid_key" } });
-          if (data?.vapid_public_key && data.vapid_public_key !== knownKey) {
-            await supabase.from("push_subscriptions").delete().eq("user_id", user.id).eq("endpoint", sub.endpoint);
-            await sub.unsubscribe();
-            setIsSubscribed(false);
-            return;
-          }
-        } catch { /* best-effort; keep current state on failure */ }
-      }
+      try {
+        const { data } = await supabase.functions.invoke("push-notification", { body: { action: "get_vapid_key" } });
+        // No stored key means this subscription predates key tracking (old pair);
+        // a mismatch means keys rotated. Either way it can't receive pushes.
+        if (data?.vapid_public_key && data.vapid_public_key !== knownKey) {
+          await supabase.from("push_subscriptions").delete().eq("user_id", user.id).eq("endpoint", sub.endpoint);
+          await sub.unsubscribe();
+          setIsSubscribed(false);
+          return;
+        }
+      } catch { /* best-effort; keep current state on failure */ }
       // Self-heal: make sure the server knows about this phone's subscription.
       const j = sub.toJSON();
       const { error } = await supabase.from("push_subscriptions").upsert(
