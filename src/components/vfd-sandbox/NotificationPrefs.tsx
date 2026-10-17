@@ -94,6 +94,11 @@ export function NotificationPrefs({ userId }: { userId: string | null }) {
           />
         </div>
       ))}
+      <div className="py-2">
+        <Button variant="outline" size="sm" className="w-full" onClick={() => void sendTestPush()} disabled={testing}>
+          {testing ? "Sending…" : "Send test push to this device"}
+        </Button>
+      </div>
     </div>
   );
 }
