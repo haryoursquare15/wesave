@@ -11,6 +11,7 @@ import { RefreshCw, LogOut, MessageCircle, Home, PiggyBank, CreditCard, Sparkles
 import { ProfilePictureUpload } from "@/components/settings/ProfilePictureUpload";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { SandboxHeader } from "@/components/vfd-sandbox/SandboxHeader";
+import { PushNotificationPrompt } from "@/components/PushNotificationPrompt";
 import { SandboxDashboard } from "@/components/vfd-sandbox/SandboxDashboard";
 import { SandboxKYC } from "@/components/vfd-sandbox/SandboxKYC";
 import { SandboxSavings } from "@/components/vfd-sandbox/SandboxSavings";
@@ -565,6 +566,7 @@ function VfdSandboxInner() {
             transition={{ duration: 0.22, ease: "easeOut" }}
             className="space-y-5"
           >
+            {currentView === "dashboard" && <PushNotificationPrompt />}
             {currentView === "dashboard" && (
               <SandboxDashboard
                 balance={balanceData}

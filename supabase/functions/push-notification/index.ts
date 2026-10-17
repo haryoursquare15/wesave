@@ -1,10 +1,9 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+import { z } from "npm:zod@3.25.76";
+import { sendAndroidPush } from "../_shared/fcm.ts";
+import { pushCategoryEnabled } from "../_shared/android-push-policy.ts";
 
 import webpush from "npm:web-push@3.6.7";
 
@@ -65,10 +64,16 @@ function safeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
+function requiredEnv(name: string): string {
+  const value = Deno.env.get(name);
+  if (!value) throw new Error("Notification service is not configured");
+  return value;
+}
+
 function adminClient() {
   return createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    requiredEnv("SUPABASE_URL"),
+    requiredEnv("SUPABASE_SERVICE_ROLE_KEY"),
   );
 }
 
@@ -129,7 +134,16 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { action, user_id, title, body, url, tag, notification_id, category } = await req.json();
+    const schema = z.object({
+      action: z.enum(["get_vapid_key", "send_push", "retry_dlq"]),
+      user_id: z.string().uuid().optional(), title: z.string().max(1000).optional(),
+      body: z.string().max(10000).optional(), url: z.string().max(2000).optional(),
+      tag: z.string().max(200).optional(), notification_id: z.string().uuid().nullish(),
+      category: z.string().max(100).optional(),
+    });
+    const parsed = schema.safeParse(await req.json().catch(() => null));
+    if (!parsed.success) return Response.json({ error: "Invalid notification request" }, { status: 400, headers: corsHeaders });
+    const { action, user_id, title, body, url, tag, notification_id, category } = parsed.data;
     const supabaseAdmin = adminClient();
     const internal = await isInternalCaller(req, supabaseAdmin);
 
@@ -158,12 +172,8 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Only the platform itself, or the target user (test push to own devices)
-      if (!internal) {
-        const caller = await callerUserId(req, supabaseAdmin);
-        if (!caller || caller !== user_id) return unauthorized();
-      }
-
+      // Sending is internal-only; key lookup remains available to signed-in devices.
+      if (!internal) return unauthorized();
 
       // Get user's push subscriptions
       const { data: subscriptions, error } = await supabaseAdmin
@@ -171,12 +181,7 @@ Deno.serve(async (req) => {
         .select("*")
         .eq("user_id", user_id);
 
-      if (error || !subscriptions?.length) {
-        return new Response(
-          JSON.stringify({ sent: 0, message: "No subscriptions found" }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+      if (error) throw new Error("Unable to load notification devices");
 
       // Respect the user's notification preferences; security alerts always send.
       const cat = typeof category === "string" ? category : "transactions";
@@ -186,17 +191,17 @@ Deno.serve(async (req) => {
           .select("transactions, marketing")
           .eq("user_id", user_id)
           .maybeSingle();
-        const enabled = cat === "marketing" ? (prefs?.marketing ?? false) : (prefs?.transactions ?? true);
+        const enabled = pushCategoryEnabled(cat, prefs);
         if (!enabled) {
           return new Response(
-            JSON.stringify({ sent: 0, skipped: "category_disabled" }),
+            JSON.stringify({ sent: 0, skipped: "category_disabled", web: { sent: 0, failed: 0, removed: 0 }, fcm: { sent: 0, failed: 0, removed: 0 } }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
       }
 
-      const vapidPublicKey = Deno.env.get("VAPID_PUBLIC_KEY")!;
-      const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY")!;
+      const vapidPublicKey = Deno.env.get("VAPID_PUBLIC_KEY") || "";
+      const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY") || "";
       const vapidSubject = (() => { const v = Deno.env.get("VAPID_SUBJECT") || ""; return /^(mailto:|https?:\/\/)/.test(v) ? v : "mailto:support@vestara.ng"; })();
 
       const payload = JSON.stringify({
@@ -212,7 +217,7 @@ Deno.serve(async (req) => {
       const expired: string[] = [];
       const dlqRows: Array<Record<string, unknown>> = [];
 
-      for (const sub of subscriptions) {
+      for (const sub of subscriptions ?? []) {
         try {
           const response = await generatePushPayload(
             sub,
@@ -269,8 +274,9 @@ Deno.serve(async (req) => {
         if (dlqErr) console.error("DLQ insert failed:", dlqErr.message);
       }
 
+      const fcm = await sendAndroidPush(supabaseAdmin, user_id, sanitizeUrl(url), String(tag || "vestara-notification").slice(0, 60));
       return new Response(
-        JSON.stringify({ sent, expired: expired.length, dlq: dlqRows.length }),
+        JSON.stringify({ sent, expired: expired.length, dlq: dlqRows.length, web: { sent, failed: dlqRows.length, removed: expired.length }, fcm }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -282,8 +288,8 @@ Deno.serve(async (req) => {
       if (!internal) return unauthorized();
 
 
-      const vapidPublicKey = Deno.env.get("VAPID_PUBLIC_KEY")!;
-      const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY")!;
+      const vapidPublicKey = Deno.env.get("VAPID_PUBLIC_KEY") || "";
+      const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY") || "";
       const vapidSubject = (() => { const v = Deno.env.get("VAPID_SUBJECT") || ""; return /^(mailto:|https?:\/\/)/.test(v) ? v : "mailto:support@vestara.ng"; })();
 
       const { data: pending } = await supabaseAdmin

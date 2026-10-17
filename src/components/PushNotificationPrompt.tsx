@@ -2,12 +2,13 @@ import { useState, useEffect } from "react";
 import { Bell, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
-import { useAuth } from "@/contexts/AuthContext";
+import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
 import { toast } from "sonner";
 
 export function PushNotificationPrompt() {
-  const { user } = useAuth();
-  const { supported, permission, isSubscribed, loading, subscribe } = usePushNotifications();
+  const { session } = useSandboxAwareAuth();
+  const user = session?.user;
+  const { supported, permission, isSubscribed, loading, subscribe, android } = usePushNotifications();
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
@@ -23,7 +24,7 @@ export function PushNotificationPrompt() {
     const success = await subscribe();
     if (success) {
       toast.success("Push notifications enabled!");
-    } else if (Notification.permission === "denied") {
+    } else if (!android && typeof Notification !== "undefined" && Notification.permission === "denied") {
       toast.error("Notifications blocked. Enable them in your browser settings.");
     }
   };

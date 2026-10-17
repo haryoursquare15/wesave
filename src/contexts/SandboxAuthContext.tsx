@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from "react
 import { User, Session } from "@supabase/supabase-js";
 import { sandboxSupabase } from "@/integrations/supabase/sandboxClient";
 import { secureSignIn } from "@/lib/secureSignIn";
+import { isAndroidApp, removeAndroidToken } from "@/lib/androidPush";
 
 interface SandboxAuthContextType {
   user: User | null;
@@ -83,7 +84,8 @@ export function SandboxAuthProvider({ children }: { children: ReactNode }) {
     // Remove this device's push subscription before the session is dropped.
     try {
       const uid = session?.user?.id;
-      const registration = await navigator.serviceWorker?.getRegistration("/sw.js");
+      if (uid && isAndroidApp()) await removeAndroidToken(sandboxSupabase, uid);
+      const registration = isAndroidApp() ? undefined : await navigator.serviceWorker?.getRegistration("/sw.js");
       const sub = await registration?.pushManager.getSubscription();
       if (uid && sub) {
         await sandboxSupabase.from("push_subscriptions").delete().eq("user_id", uid).eq("endpoint", sub.endpoint);

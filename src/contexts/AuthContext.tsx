@@ -3,6 +3,7 @@ import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { Tables } from "@/integrations/supabase/types";
 import { secureSignIn } from "@/lib/secureSignIn";
+import { isAndroidApp, removeAndroidToken } from "@/lib/androidPush";
 
 type Profile = Tables<"profiles"> & {
   onboarding_completed?: boolean;
@@ -254,6 +255,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    if (user && isAndroidApp()) await removeAndroidToken(supabase, user.id);
     // Clear session marker to prevent re-authentication issues
     sessionStorage.removeItem("wesave_session_active");
     await supabase.auth.signOut();
