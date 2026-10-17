@@ -40,12 +40,13 @@ export async function sendAndroidPush(client: SupabaseClient, userId: string, ur
   if (!devices?.length) return counts;
   try {
     const auth = await authenticate();
+    const data = androidPushData(url, tag);
     for (const device of devices) {
       try {
         const response = await fetch(`https://fcm.googleapis.com/v1/projects/${auth.projectId}/messages:send`, {
           method: "POST",
           headers: { Authorization: `Bearer ${auth.accessToken}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ message: { token: device.token, data: androidPushData(url, tag), android: { priority: "high" } } }),
+          body: JSON.stringify({ message: { token: device.token, notification: { title: data.title, body: data.body }, data, android: { priority: "high" } } }),
           signal: AbortSignal.timeout(15_000),
         });
         if (response.ok) { counts.sent++; continue; }
