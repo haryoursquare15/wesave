@@ -15,3 +15,4 @@
 - The push-notification internal dispatcher fans out to Web Push and FCM, with a service-role-only send-push alias; why: existing database triggers keep working and no customer can send pushes directly.
 - Android notification previews are constructed by the shared push privacy policy with numeric redaction; why: messages remain readable without exposing balances, account numbers or security codes on lock screens.
 - AuthContext preserves its context identity through Vite hot updates; why: refreshed route consumers must still read the mounted provider instead of crashing the preview.
+- Full-screen sync states render the shared presentation-only FluidLoader; why: keep loading visuals consistent without changing callers' loading or routing logic.

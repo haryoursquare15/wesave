@@ -1,3 +1,4 @@
+import { FluidLoader } from "@/components/FluidLoader";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -65,11 +66,7 @@ export default function AdminLogin() {
   };
 
   if (checking) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
-      </div>
-    );
+    return <FluidLoader />;
   }
 
   return (

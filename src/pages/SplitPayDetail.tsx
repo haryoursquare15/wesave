@@ -1,3 +1,4 @@
+import { FluidLoader } from "@/components/FluidLoader";
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, UserPlus, CheckCircle, XCircle, Ban, AlertTriangle, Info } from "lucide-react";
@@ -56,11 +57,7 @@ export default function SplitPayDetail() {
 
 
   if (loading || !request) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="h-8 w-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
-      </div>
-    );
+    return <FluidLoader />;
   }
 
   const isCreator = user?.id === request.creator_user_id;
