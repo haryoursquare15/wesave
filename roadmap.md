@@ -1,4 +1,7 @@
 # Requested updates
+- [ ] Add Android token registration, launch sync and device-only sign-out cleanup.
+- [ ] Deploy owner-scoped device_tokens and internal FCM delivery alongside Web Push.
+- [ ] Verify Android rules and delivery; real-wrapper delivery requires an Android device.
 - [x] Remove customer-facing ledger errors and correct non-card payment decline wording; six regression tests passed.
 - [x] Align notification tray actions and verify readability in signed-in preview.
 - [x] Fit password and PIN sign-in screens without page scrolling on tested phone sizes.
