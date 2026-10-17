@@ -128,6 +128,108 @@ function unauthorized() {
   });
 }
 
+const ADMIN_ROLES = ["admin", "super_admin", "operations_admin", "support_officer", "finance_admin", "compliance_admin"];
+
+/** True when the user holds any admin role (checked server-side via user_roles). */
+async function callerIsAdmin(supabase: ReturnType<typeof createClient>, userId: string): Promise<boolean> {
+  const { data } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId)
+    .in("role", ADMIN_ROLES)
+    .limit(1);
+  return (data?.length ?? 0) > 0;
+}
+
+/** Send a push (Web Push + Android FCM) to one user, honoring preferences. */
+async function sendPushToUser(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  opts: {
+    userId: string; title?: string; body?: string; url?: string;
+    tag?: string; category?: string; notificationId?: string | null;
+  },
+) {
+  const { userId, title, body, url, tag, category, notificationId } = opts;
+
+  const { data: subscriptions, error } = await supabaseAdmin
+    .from("push_subscriptions")
+    .select("*")
+    .eq("user_id", userId);
+  if (error) throw new Error("Unable to load notification devices");
+
+  // Respect the user's notification preferences; security alerts always send.
+  const cat = typeof category === "string" ? category : "transactions";
+  if (cat !== "security") {
+    const { data: prefs } = await supabaseAdmin
+      .from("notification_preferences")
+      .select("transactions, marketing")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (!pushCategoryEnabled(cat, prefs)) {
+      return { sent: 0, skipped: "category_disabled", web: { sent: 0, failed: 0, removed: 0 }, fcm: { sent: 0, failed: 0, removed: 0 } };
+    }
+  }
+
+  const vapidPublicKey = Deno.env.get("VAPID_PUBLIC_KEY") || "";
+  const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY") || "";
+  const vapidSubject = (() => { const v = Deno.env.get("VAPID_SUBJECT") || ""; return /^(mailto:|https?:\/\/)/.test(v) ? v : "mailto:support@vestara.ng"; })();
+
+  const payload = JSON.stringify({
+    title: String(title || "Vestara").slice(0, 120),
+    body: String(body || "").slice(0, 500),
+    url: sanitizeUrl(url),
+    tag: String(tag || "vestara-notification").slice(0, 60),
+    notification_id: notificationId,
+  });
+
+  let sent = 0;
+  const expired: string[] = [];
+  const dlqRows: Array<Record<string, unknown>> = [];
+
+  for (const sub of subscriptions ?? []) {
+    try {
+      const response = await generatePushPayload(sub, payload, vapidSubject, vapidPublicKey, vapidPrivateKey);
+      if (response.ok || response.status === 201) {
+        sent++;
+      } else if (response.status === 404 || response.status === 410) {
+        expired.push(sub.id);
+      } else {
+        console.error(`Push failed for ${sub.endpoint}: ${response.status}`);
+        dlqRows.push({
+          user_id: userId,
+          notification_id: notificationId ?? null,
+          subscription_endpoint: sub.endpoint,
+          payload: { title, body, url, tag, notification_id: notificationId },
+          failure_status: response.status,
+          failure_reason: `HTTP ${response.status}`,
+        });
+      }
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      console.error(`Push error for ${sub.endpoint}:`, reason);
+      dlqRows.push({
+        user_id: userId,
+        notification_id: notificationId ?? null,
+        subscription_endpoint: sub.endpoint,
+        payload: { title, body, url, tag, notification_id: notificationId },
+        failure_status: 0,
+        failure_reason: reason,
+      });
+    }
+  }
+
+  if (expired.length > 0) {
+    await supabaseAdmin.from("push_subscriptions").delete().in("id", expired);
+  }
+  if (dlqRows.length > 0) {
+    const { error: dlqErr } = await supabaseAdmin.from("notification_dlq").insert(dlqRows);
+    if (dlqErr) console.error("DLQ insert failed:", dlqErr.message);
+  }
+
+  const fcm = await sendAndroidPush(supabaseAdmin, userId, sanitizeUrl(url), String(tag || "vestara-notification").slice(0, 60));
+  return { sent, expired: expired.length, dlq: dlqRows.length, web: { sent, failed: dlqRows.length, removed: expired.length }, fcm };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
