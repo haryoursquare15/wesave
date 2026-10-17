@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import { sandboxSupabase } from "@/integrations/supabase/sandboxClient";
+import { Button } from "@/components/ui/button";
 
 type Category = "transactions" | "security" | "marketing";
 type Prefs = Record<Category, boolean>;
@@ -15,6 +16,41 @@ const LABELS: Record<Category, { label: string; helper: string }> = {
 export function NotificationPrefs({ userId }: { userId: string | null }) {
   const [prefs, setPrefs] = useState<Prefs | null>(null);
   const [saving, setSaving] = useState<Category | null>(null);
+  const [testing, setTesting] = useState(false);
+
+  const sendTestPush = useCallback(async () => {
+    if (!userId) return;
+    setTesting(true);
+    try {
+      const { data, error } = await sandboxSupabase.functions.invoke("push-notification", {
+        body: {
+          action: "send_push",
+          user_id: userId,
+          title: "Vestara",
+          body: "This is a test notification. You're all set!",
+          url: "/app",
+          tag: "vestara-test-push",
+          category: "security",
+        },
+      });
+      if (error) throw error;
+      const fcm = data?.fcm ?? { sent: 0, failed: 0 };
+      const web = data?.web ?? { sent: 0, failed: 0 };
+      const totalSent = (fcm.sent ?? 0) + (web.sent ?? 0);
+      const totalFailed = (fcm.failed ?? 0) + (web.failed ?? 0);
+      if (totalSent > 0) {
+        toast.success("Test notification sent — check your device.");
+      } else if (totalFailed > 0) {
+        toast.error("Delivery failed. Make sure notifications are allowed on this device, then try again.");
+      } else {
+        toast.error("No registered device found. Enable notifications on this device first.");
+      }
+    } catch {
+      toast.error("We couldn't send the test. Please try again.");
+    } finally {
+      setTesting(false);
+    }
+  }, [userId]);
 
   useEffect(() => {
     if (!userId) return;
