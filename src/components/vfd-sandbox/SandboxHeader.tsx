@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import vestaraLogo from "@/assets/vestara-logo-transparent.png";
 import { SandboxNotificationBell } from "./SandboxNotificationBell";
 import { BillDeliveryPopupListener } from "./BillDeliveryPopupListener";
+import { PushSubscriptionSync } from "./PushSubscriptionSync";
 
 interface SandboxHeaderProps {
   /** Hidden on the home screen. */
@@ -37,6 +38,7 @@ export function SandboxHeader({ showBack = true, onBack, right }: SandboxHeaderP
         {right}
       </div>
       <BillDeliveryPopupListener />
+      <PushSubscriptionSync />
     </div>
   );
 }
