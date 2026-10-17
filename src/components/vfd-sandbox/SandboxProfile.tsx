@@ -716,7 +716,7 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
             </SheetHeader>
             <div className="pt-3 space-y-3">
               <ul className="text-sm text-muted-foreground space-y-1.5 list-disc pl-5">
-                <li>You'll be asked for permission in your browser.</li>
+                <li>{push.android ? "You'll be asked to allow notifications on your phone." : "You'll be asked for permission in your browser."}</li>
                 <li>You can switch this off any time from this screen.</li>
                 <li>Push does not replace email — important alerts still go to {email}.</li>
               </ul>

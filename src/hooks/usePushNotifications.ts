@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useSandboxAwareAuth } from "@/hooks/useSandboxAwareAuth";
+import { isAndroidApp, syncAndroidToken, removeAndroidToken } from "@/lib/androidPush";
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -41,6 +42,7 @@ function detectPlatform(): string {
 export function usePushNotifications() {
   const { session, client: supabase } = useSandboxAwareAuth();
   const user = session?.user ?? null;
+  const android = isAndroidApp();
   const [permission, setPermission] = useState<NotificationPermission>(
     typeof Notification !== "undefined" ? Notification.permission : "default"
   );
@@ -50,6 +52,12 @@ export function usePushNotifications() {
 
   const checkExistingSubscription = useCallback(async () => {
     try {
+      if (android) {
+        const registered = user ? await syncAndroidToken(supabase, user.id) : false;
+        setIsSubscribed(registered);
+        setPermission(registered ? "granted" : "default");
+        return;
+      }
       const registration = await navigator.serviceWorker.getRegistration("/sw.js");
       if (!registration) { setIsSubscribed(false); return; }
       let sub = await registration.pushManager.getSubscription();
@@ -83,28 +91,29 @@ export function usePushNotifications() {
       } catch { /* best-effort; keep current state on failure */ }
       // Self-heal: make sure the server knows about this phone's subscription.
       const j = sub.toJSON();
+      if (!j.endpoint || !j.keys?.p256dh || !j.keys.auth) { setIsSubscribed(false); return; }
       const { error } = await supabase.from("push_subscriptions").upsert(
-        { user_id: user.id, endpoint: j.endpoint!, p256dh: j.keys!.p256dh!, auth_key: j.keys!.auth!, platform: detectPlatform(), user_agent: navigator.userAgent, last_seen: new Date().toISOString(), updated_at: new Date().toISOString() },
+        { user_id: user.id, endpoint: j.endpoint, p256dh: j.keys.p256dh, auth_key: j.keys.auth, platform: detectPlatform(), user_agent: navigator.userAgent, last_seen: new Date().toISOString(), updated_at: new Date().toISOString() },
         { onConflict: "user_id,endpoint" },
       );
       setIsSubscribed(!error);
     } catch {
       setIsSubscribed(false);
     }
-  }, [user, supabase]);
+  }, [user?.id, supabase, android]);
 
   useEffect(() => {
-    const isSupported =
+    const isSupported = android || (
       "serviceWorker" in navigator &&
       "PushManager" in window &&
-      "Notification" in window;
+      "Notification" in window);
     setSupported(isSupported);
 
     if (isSupported) {
-      setPermission(Notification.permission);
+      if (!android) setPermission(Notification.permission);
       void checkExistingSubscription();
     }
-  }, [user, checkExistingSubscription]);
+  }, [android, checkExistingSubscription]);
 
   const registerServiceWorker = useCallback(async () => {
     const registration = await navigator.serviceWorker.register("/sw.js", {
@@ -119,6 +128,13 @@ export function usePushNotifications() {
     setLoading(true);
 
     try {
+      if (android) {
+        const registered = await syncAndroidToken(supabase, user.id, true);
+        setIsSubscribed(registered);
+        setPermission(registered ? "granted" : "default");
+        setLoading(false);
+        return registered;
+      }
       // Request permission
       const perm = await Notification.requestPermission();
       setPermission(perm);
@@ -158,15 +174,19 @@ export function usePushNotifications() {
       });
 
       const subJson = subscription.toJSON();
+      if (!subJson.endpoint || !subJson.keys?.p256dh || !subJson.keys.auth) {
+        setLoading(false);
+        return false;
+      }
       localStorage.setItem("vapid_public_key", vapidData.vapid_public_key);
 
       // Save subscription to database
       const { error } = await supabase.from("push_subscriptions").upsert(
         {
           user_id: user.id,
-          endpoint: subJson.endpoint!,
-          p256dh: subJson.keys!.p256dh!,
-          auth_key: subJson.keys!.auth!,
+          endpoint: subJson.endpoint,
+          p256dh: subJson.keys.p256dh,
+          auth_key: subJson.keys.auth,
           platform: detectPlatform(),
           user_agent: navigator.userAgent,
           last_seen: new Date().toISOString(),
@@ -189,13 +209,18 @@ export function usePushNotifications() {
       setLoading(false);
       return false;
     }
-  }, [user, supported, registerServiceWorker]);
+  }, [user?.id, supported, registerServiceWorker, android, supabase]);
 
   const unsubscribe = useCallback(async () => {
     if (!user) return;
     setLoading(true);
 
     try {
+      if (android) {
+        await removeAndroidToken(supabase, user.id);
+        setIsSubscribed(false);
+        return;
+      }
       const registration = await navigator.serviceWorker.getRegistration("/sw.js");
       if (registration) {
         const sub = await registration.pushManager.getSubscription();
@@ -215,11 +240,15 @@ export function usePushNotifications() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user?.id, supabase, android]);
 
   // Delete only this device's subscription row (used on logout).
   const removeCurrentDevice = useCallback(async () => {
     try {
+      if (android) {
+        if (user) await removeAndroidToken(supabase, user.id);
+        return;
+      }
       const registration = await navigator.serviceWorker.getRegistration("/sw.js");
       const sub = await registration?.pushManager.getSubscription();
       if (sub && user) {
@@ -232,9 +261,10 @@ export function usePushNotifications() {
     } catch {
       // Best-effort; never block sign-out.
     }
-  }, [user, supabase]);
+  }, [user?.id, supabase, android]);
 
   return {
+    android,
     supported,
     permission,
     isSubscribed,
