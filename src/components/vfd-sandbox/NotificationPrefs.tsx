@@ -4,7 +4,6 @@ import { Loader2, Send } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { sandboxSupabase } from "@/integrations/supabase/sandboxClient";
-import { useIsAdmin } from "@/hooks/useAdmin";
 
 type Category = "transactions" | "security" | "marketing";
 type Prefs = Record<Category, boolean>;
