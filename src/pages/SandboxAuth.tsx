@@ -151,6 +151,11 @@ export default function SandboxAuth() {
       el.style.setProperty("--auth-height", `${viewport.height}px`);
       // Keep the shell glued to the visible area when the keyboard pans the viewport up.
       el.style.setProperty("--auth-offset", `${viewport.offsetTop}px`);
+      // Compact styles depend on the physical screen height, not the keyboard-shrunk
+      // viewport, so opening the keyboard never re-lays-out the form.
+      const h = window.screen?.height || viewport.height;
+      el.classList.toggle("auth-compact", h < 700);
+      el.classList.toggle("auth-short", h < 480);
     };
     update();
     viewport.addEventListener("resize", update);

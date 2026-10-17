@@ -321,33 +321,27 @@
      --auth-offset counteracts the keyboard panning the visual viewport up. */
   .auth-screen { position: fixed; inset: 0; height: var(--auth-height, 100dvh); overflow: hidden; transform: translateY(var(--auth-offset, 0px)); will-change: transform; }
   .auth-brand h1 { letter-spacing: 0; }
-  @media (max-height: 700px) {
-    .auth-form { padding-top: 16px; padding-bottom: max(env(safe-area-inset-bottom), 8px); }
-    .auth-form h2 { font-size: 24px; }
-    .auth-intro { margin-bottom: 12px; }
-    .auth-form form { display: flex; flex-direction: column; gap: 8px; }
-    .auth-form form > :not([hidden]) ~ :not([hidden]) { margin-top: 0; margin-bottom: 0; }
-    .auth-brand h1 { margin-top: 4px; font-size: 20px; }
-    .auth-brand > p { display: none; }
-    .auth-pin-content > img, .auth-pin-content > div:first-child { height: 48px; width: 48px; flex-shrink: 0; }
-    .auth-pin-content > h2 { margin-top: 10px; font-size: 20px; text-align: center; }
-    .auth-pin-content > div:nth-of-type(2) { margin-top: 16px; margin-bottom: 16px; }
-    .auth-keypad { gap: 8px 24px; padding-top: 8px; }
-    .auth-pin-content > button { margin-top: 4px; }
-  }
-  @media (max-height: 480px) {
-    .auth-brand { display: none; }
-    .auth-form { margin-top: 0; border-radius: 0; }
-    .auth-intro { display: none; }
-    .auth-create { margin-top: 8px; }
-    .auth-screen:has(input:focus) .auth-intro,
-    .auth-screen:has(input:focus) .auth-create,
-    .auth-screen:has(input:focus) .auth-form h2,
-    .auth-screen:has(input:focus) .auth-form form > button[type="button"] { display: none; }
-    .auth-pin-content { padding-top: max(env(safe-area-inset-top), 8px); }
-    .auth-pin-content > img, .auth-pin-content > div:first-child,
-    .auth-pin-content > p { display: none; }
-  }
+  /* Compact/short layouts use screen-height classes set in JS (see SandboxAuth) so the
+     on-screen keyboard shrinking the visual viewport never triggers a layout change. */
+  .auth-screen.auth-compact .auth-form { padding-top: 16px; padding-bottom: max(env(safe-area-inset-bottom), 8px); }
+  .auth-screen.auth-compact .auth-form h2 { font-size: 24px; }
+  .auth-screen.auth-compact .auth-intro { margin-bottom: 12px; }
+  .auth-screen.auth-compact .auth-form form { display: flex; flex-direction: column; gap: 8px; }
+  .auth-screen.auth-compact .auth-form form > :not([hidden]) ~ :not([hidden]) { margin-top: 0; margin-bottom: 0; }
+  .auth-screen.auth-compact .auth-brand h1 { margin-top: 4px; font-size: 20px; }
+  .auth-screen.auth-compact .auth-brand > p { display: none; }
+  .auth-screen.auth-compact .auth-pin-content > img, .auth-screen.auth-compact .auth-pin-content > div:first-child { height: 48px; width: 48px; flex-shrink: 0; }
+  .auth-screen.auth-compact .auth-pin-content > h2 { margin-top: 10px; font-size: 20px; text-align: center; }
+  .auth-screen.auth-compact .auth-pin-content > div:nth-of-type(2) { margin-top: 16px; margin-bottom: 16px; }
+  .auth-screen.auth-compact .auth-keypad { gap: 8px 24px; padding-top: 8px; }
+  .auth-screen.auth-compact .auth-pin-content > button { margin-top: 4px; }
+  .auth-screen.auth-short .auth-brand { display: none; }
+  .auth-screen.auth-short .auth-form { margin-top: 0; border-radius: 0; }
+  .auth-screen.auth-short .auth-intro { display: none; }
+  .auth-screen.auth-short .auth-create { margin-top: 8px; }
+  .auth-screen.auth-short .auth-pin-content { padding-top: max(env(safe-area-inset-top), 8px); }
+  .auth-screen.auth-short .auth-pin-content > img, .auth-screen.auth-short .auth-pin-content > div:first-child,
+  .auth-screen.auth-short .auth-pin-content > p { display: none; }
   .bg-gradient-ink { background-image: linear-gradient(180deg, hsl(var(--ink)) 0%, hsl(var(--ink-2)) 100%); }
   .tonal-drift { animation: tonal-drift 30s ease-in-out infinite; }
   .pin-shake { animation: pin-shake 360ms ease-out; }
