@@ -526,7 +526,7 @@ function VfdSandboxInner() {
   });
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="h-[100dvh] flex flex-col overflow-hidden bg-background">
       <SandboxHeader
         showBack={currentView !== "dashboard"}
         onBack={goBack}
@@ -547,7 +547,7 @@ function VfdSandboxInner() {
       <ProfilePictureUpload open={photoOpen} onOpenChange={setPhotoOpen} />
       {kycDone && <SandboxGroupInviteModal onAccepted={() => { /* downstream UIs poll on their own */ }} />}
       {kycDone && <SandboxSplitInviteModal onOpenSplit={() => { setCurrentView("split"); window.dispatchEvent(new Event("vestara:open-split")); }} />}
-      <div className="max-w-lg mx-auto px-4 py-5 pb-32 space-y-5">
+      <div className="flex-1 overflow-y-auto overscroll-contain max-w-lg w-full mx-auto px-4 py-5 pb-32 space-y-5">
         {!kycDone ? (
           <SandboxKYC
             vfd={vfd}
@@ -673,7 +673,7 @@ function VfdSandboxInner() {
         )}
       </div>
       {kycDone && (
-        <nav aria-label="Main" className="fixed bottom-0 inset-x-0 z-30 bg-card/95 backdrop-blur-md border-t border-border">
+        <nav aria-label="Main" className="shrink-0 z-30 bg-card/95 backdrop-blur-md border-t border-border pb-[env(safe-area-inset-bottom,0px)]">
           <div className="max-w-lg mx-auto grid grid-cols-5">
             {([
               { label: "Home", icon: Home, active: currentView === "dashboard", go: () => setCurrentView("dashboard") },
