@@ -16,3 +16,4 @@
 - Android notification previews are constructed by the shared push privacy policy with numeric redaction; why: messages remain readable without exposing balances, account numbers or security codes on lock screens.
 - AuthContext preserves its context identity through Vite hot updates; why: refreshed route consumers must still read the mounted provider instead of crashing the preview.
 - Full-screen sync states render the shared presentation-only FluidLoader; why: keep loading visuals consistent without changing callers' loading or routing logic.
+- Password sign-in remembers only an opted-in username through rememberUsername, independently of PIN/biometric setup; why: prefill login safely without storing password credentials or changing authentication.

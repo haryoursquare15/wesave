@@ -17,6 +17,8 @@ import { toast } from "sonner";
 import { getUserFriendlyError } from "@/lib/errorMessages";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { readRememberedUsername, rememberUsername } from "@/lib/rememberUsername";
 import { TonalBackground } from "@/components/vfd-sandbox/TonalBackground";
 
 // Display-only welcome details for the PIN screen (first name + photo, never email).
@@ -162,7 +164,11 @@ export default function SandboxAuth() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: "", phone: "", email: "", password: "" });
+  const [rememberDetails, setRememberDetails] = useState(() => Boolean(readRememberedUsername()));
+  const [form, setForm] = useState(() => ({ name: "", phone: "", email: isSignUp ? "" : readRememberedUsername(), password: "" }));
+  useEffect(() => {
+    if (!isSignUp) rememberUsername(form.email, rememberDetails);
+  }, [form.email, rememberDetails, isSignUp]);
   const [pin, setPin] = useState("");
   const [otp, setOtp] = useState("");
   const [resendIn, setResendIn] = useState(0);
@@ -487,6 +493,10 @@ export default function SandboxAuth() {
                     </button>
                   }
                 />
+                <label htmlFor="remember-details" className="flex min-h-11 cursor-pointer items-center gap-3 text-sm text-foreground">
+                  <Checkbox id="remember-details" checked={rememberDetails} onCheckedChange={(checked) => setRememberDetails(checked === true)} className="min-h-0 min-w-0 h-5 w-5" />
+                  Remember my sign-in details
+                </label>
                 <div className="flex justify-end">
                   <Link to="/password/forgot" className="text-sm font-medium text-primary">Forgot password?</Link>
                 </div>
