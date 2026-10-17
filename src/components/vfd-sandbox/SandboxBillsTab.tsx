@@ -761,8 +761,8 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
       {step === "categories" && (
         <>
           <div>
-            <h2 className="text-lg font-bold text-foreground mb-1">Pay Bills</h2>
-            <p className="text-sm text-muted-foreground mb-3">Buy airtime, data, pay for cable TV, electricity & more</p>
+            <h2 className="text-lg font-bold text-foreground mb-1">Pay bills</h2>
+            <p className="text-sm text-muted-foreground mb-3">Airtime, data, cable TV, electricity and more</p>
           </div>
           <div className="flex gap-1.5 p-1 bg-muted/40 rounded-xl mb-3">
             {([
@@ -774,12 +774,39 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
               <button
                 key={t.k}
                 onClick={() => setTopTab(t.k)}
-                className={`flex-1 text-xs font-semibold py-2 rounded-lg transition-all ${topTab === t.k ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}
+                className={`flex-1 text-xs font-semibold py-2.5 min-h-[44px] rounded-lg transition-all ${topTab === t.k ? "bg-card text-foreground shadow-sm" : "text-foreground/60 hover:text-foreground"}`}
               >
                 {t.label}
               </button>
             ))}
           </div>
+          {topTab === "pay" && payAgain.length > 0 && (
+            <div className="mb-4">
+              <p className="text-xs font-semibold text-muted-foreground mb-2">Pay again</p>
+              <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: "none" }}>
+                {payAgain.map((b) => {
+                  const cfg = categoryConfig[b.category] || { icon: Receipt, color: "text-muted-foreground", bg: "bg-muted" };
+                  const Icon = cfg.icon;
+                  return (
+                    <button
+                      key={b.id}
+                      onClick={() => startPayAgain(b)}
+                      className="flex items-center gap-2 shrink-0 min-h-[44px] pl-2 pr-3 py-2 rounded-full bg-card border border-border/60 active:scale-95 transition-transform"
+                    >
+                      <span className={`w-8 h-8 rounded-full ${cfg.bg} flex items-center justify-center shrink-0`}>
+                        <Icon className={`h-4 w-4 ${cfg.color}`} />
+                      </span>
+                      <span className="text-left">
+                        <span className="block text-xs font-semibold text-foreground leading-tight max-w-[120px] truncate">{b.nickname || b.biller_name}</span>
+                        <span className="block text-[10px] text-muted-foreground leading-tight">{maskId(b.customer_id)}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {topTab === "pay" && <p className="text-xs font-semibold text-muted-foreground mb-2">Categories</p>}
           {topTab === "receipts" && <SandboxBillReceipts />}
           {topTab === "recurring" && <SandboxRecurringBills />}
           {topTab === "beneficiaries" && <SandboxBillBeneficiaries />}
