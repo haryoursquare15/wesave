@@ -172,8 +172,9 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Sending is internal-only; key lookup remains available to signed-in devices.
-      if (!internal) return unauthorized();
+      // Sending is internal-only, except a signed-in user sending to themselves
+      // (used by the Profile → Notifications test button).
+      if (!internal && (await callerUserId(req, supabaseAdmin)) !== user_id) return unauthorized();
 
       // Get user's push subscriptions
       const { data: subscriptions, error } = await supabaseAdmin
