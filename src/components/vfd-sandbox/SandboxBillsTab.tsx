@@ -14,7 +14,7 @@ function writeBillCache(key: string, v: unknown) {
 }
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Smartphone, Tv, Wifi, Zap, Globe, ArrowLeft, ChevronRight,
+  Smartphone, Tv, Signal, Zap, Globe, ArrowLeft, ChevronRight,
   Search, Loader2, CheckCircle2, AlertCircle, Receipt,
   GraduationCap, Dices, Repeat, Users, Split,
 } from "lucide-react";
@@ -68,11 +68,31 @@ interface BillerItem {
 const categoryConfig: Record<string, { icon: typeof Smartphone; color: string; bg: string }> = {
   Airtime: { icon: Smartphone, color: "text-blue-600", bg: "bg-blue-500/10" },
   "Cable TV": { icon: Tv, color: "text-purple-600", bg: "bg-purple-500/10" },
-  Data: { icon: Wifi, color: "text-emerald-600", bg: "bg-emerald-500/10" },
+  Data: { icon: Signal, color: "text-emerald-600", bg: "bg-emerald-500/10" },
   Utility: { icon: Zap, color: "text-amber-600", bg: "bg-amber-500/10" },
   "Internet Subscription": { icon: Globe, color: "text-rose-600", bg: "bg-rose-500/10" },
   Education: { icon: GraduationCap, color: "text-cyan-600", bg: "bg-cyan-500/10" },
   Betting: { icon: Dices, color: "text-orange-600", bg: "bg-orange-500/10" },
+};
+
+/* Display order and friendly labels for the category grid. The backend
+   category string is still what we send to the API — only presentation is
+   reordered/renamed here. */
+const CATEGORY_PRESENTATION: Record<string, { label: string; order: number }> = {
+  Airtime: { label: "Airtime", order: 0 },
+  Data: { label: "Data", order: 1 },
+  Utility: { label: "Electricity", order: 2 },
+  "Cable TV": { label: "Cable TV", order: 3 },
+  "Internet Subscription": { label: "Internet", order: 4 },
+  Betting: { label: "Betting and gaming", order: 5 },
+};
+const categoryLabel = (cat: string) => CATEGORY_PRESENTATION[cat]?.label || cat;
+const categoryOrder = (cat: string) => CATEGORY_PRESENTATION[cat]?.order ?? 100;
+
+/** Mask a customer identifier, keeping only the last four digits. */
+const maskId = (id: string) => {
+  const digits = String(id || "").trim();
+  return digits.length > 4 ? `•••• ${digits.slice(-4)}` : digits;
 };
 
 type Step = "categories" | "billers" | "items" | "payment" | "success";
@@ -97,6 +117,8 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
   const [step, setStep] = useState<Step>("categories");
   const [loading, setLoading] = useState(false);
   const [beneficiaries, setBeneficiaries] = useState<any[]>([]);
+  const [payAgain, setPayAgain] = useState<any[]>([]);
+  const [prefill, setPrefill] = useState<{ category: string; billerId?: string; billerName?: string; customerId: string; phone?: string } | null>(null);
   const [showRecurringDialog, setShowRecurringDialog] = useState(false);
   const [recurringFreq, setRecurringFreq] = useState<"daily" | "weekly" | "monthly">("monthly");
   const [creatingRecurring, setCreatingRecurring] = useState(false);
@@ -497,6 +519,43 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
     }
   }, [step, selectedCategory, callProducts]);
 
+  // "Pay again" chips: recent saved beneficiaries across all categories.
+  useEffect(() => {
+    if (step !== "categories") return;
+    callProducts("list_bill_beneficiaries")
+      .then(r => setPayAgain((r?.data || []).slice(0, 10)))
+      .catch(() => setPayAgain([]));
+  }, [step, callProducts]);
+
+  // A Pay again chip prefills the flow: jump to the biller's plans, then
+  // carry the saved customer id/phone into the payment step.
+  useEffect(() => {
+    if (!prefill || step !== "billers" || billers.length === 0) return;
+    const match = billers.find(b => b.id === prefill.billerId)
+      || billers.find(b => b.name === prefill.billerName);
+    if (match) loadItems(match);
+  }, [prefill, step, billers, loadItems]);
+
+  useEffect(() => {
+    if (prefill && step === "payment") {
+      setCustomerId(prefill.customerId);
+      if (prefill.phone) setPhoneNumber(prefill.phone);
+      setValidationResult(null);
+      setPrefill(null);
+    }
+  }, [prefill, step]);
+
+  const startPayAgain = (b: any) => {
+    setPrefill({
+      category: b.category,
+      billerId: b.biller_id,
+      billerName: b.biller_name,
+      customerId: b.customer_id,
+      phone: b.phone_number || undefined,
+    });
+    loadBillers(b.category);
+  };
+
   const pickBeneficiary = (b: any) => {
     setCustomerId(b.customer_id);
     setPhoneNumber(b.phone_number || "");
@@ -702,8 +761,8 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
       {step === "categories" && (
         <>
           <div>
-            <h2 className="text-lg font-bold text-foreground mb-1">Pay Bills</h2>
-            <p className="text-sm text-muted-foreground mb-3">Buy airtime, data, pay for cable TV, electricity & more</p>
+            <h2 className="text-lg font-bold text-foreground mb-1">Pay bills</h2>
+            <p className="text-sm text-muted-foreground mb-3">Airtime, data, cable TV, electricity and more</p>
           </div>
           <div className="flex gap-1.5 p-1 bg-muted/40 rounded-xl mb-3">
             {([
@@ -715,12 +774,39 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
               <button
                 key={t.k}
                 onClick={() => setTopTab(t.k)}
-                className={`flex-1 text-xs font-semibold py-2 rounded-lg transition-all ${topTab === t.k ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}
+                className={`flex-1 text-xs font-semibold py-2.5 min-h-[44px] rounded-lg transition-all ${topTab === t.k ? "bg-card text-foreground shadow-sm" : "text-foreground/60 hover:text-foreground"}`}
               >
                 {t.label}
               </button>
             ))}
           </div>
+          {topTab === "pay" && payAgain.length > 0 && (
+            <div className="mb-4">
+              <p className="text-xs font-semibold text-muted-foreground mb-2">Pay again</p>
+              <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: "none" }}>
+                {payAgain.map((b) => {
+                  const cfg = categoryConfig[b.category] || { icon: Receipt, color: "text-muted-foreground", bg: "bg-muted" };
+                  const Icon = cfg.icon;
+                  return (
+                    <button
+                      key={b.id}
+                      onClick={() => startPayAgain(b)}
+                      className="flex items-center gap-2 shrink-0 min-h-[44px] pl-2 pr-3 py-2 rounded-full bg-card border border-border/60 active:scale-95 transition-transform"
+                    >
+                      <span className={`w-8 h-8 rounded-full ${cfg.bg} flex items-center justify-center shrink-0`}>
+                        <Icon className={`h-4 w-4 ${cfg.color}`} />
+                      </span>
+                      <span className="text-left">
+                        <span className="block text-xs font-semibold text-foreground leading-tight max-w-[120px] truncate">{b.nickname || b.biller_name}</span>
+                        <span className="block text-[10px] text-muted-foreground leading-tight">{maskId(b.customer_id)}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {topTab === "pay" && <p className="text-xs font-semibold text-muted-foreground mb-2">Categories</p>}
           {topTab === "receipts" && <SandboxBillReceipts />}
           {topTab === "recurring" && <SandboxRecurringBills />}
           {topTab === "beneficiaries" && <SandboxBillBeneficiaries />}
@@ -742,20 +828,20 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
                 <div key={i} className="h-28 rounded-2xl bg-muted animate-pulse" />
               ))
             ) : (
-              categories.map((cat) => {
+              [...categories].sort((a, b) => categoryOrder(a) - categoryOrder(b)).map((cat) => {
                 const cfg = categoryConfig[cat] || { icon: Receipt, color: "text-muted-foreground", bg: "bg-muted" };
                 const Icon = cfg.icon;
                 return (
                   <motion.button
                     key={cat}
-                    whileTap={{ scale: 0.95 }}
+                    whileTap={{ scale: 0.97 }}
                     onClick={() => loadBillers(cat)}
-                    className="flex flex-col items-center justify-center gap-3 p-5 rounded-2xl bg-card border border-border/60 hover:border-primary/30 hover:shadow-md transition-all"
+                    className="flex flex-col items-start justify-between gap-3 min-h-[120px] p-4 rounded-2xl bg-card border border-border/60 text-left active:bg-muted/40 transition-colors"
                   >
-                    <div className={`w-12 h-12 rounded-xl ${cfg.bg} flex items-center justify-center`}>
-                      <Icon className={`h-6 w-6 ${cfg.color}`} />
+                    <div className={`w-11 h-11 rounded-xl ${cfg.bg} flex items-center justify-center`}>
+                      <Icon className={`h-5 w-5 ${cfg.color}`} />
                     </div>
-                    <span className="text-sm font-semibold text-foreground">{cat}</span>
+                    <span className="text-sm font-semibold text-foreground leading-snug">{categoryLabel(cat)}</span>
                   </motion.button>
                 );
               })
