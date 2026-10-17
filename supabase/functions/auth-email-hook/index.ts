@@ -16,7 +16,7 @@ const corsHeaders = {
 
 // Configuration
 const SITE_NAME = "VESTARA"
-const SENDER_DOMAIN = "mail.vestara.ng"
+const SENDER_DOMAIN = "notify.mail.vestara.ng"
 const ROOT_DOMAIN = "vestara.ng"
 const FROM_DOMAIN = "vestara.ng"
 const SITE_URL = `https://${ROOT_DOMAIN}`
