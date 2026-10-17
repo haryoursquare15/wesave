@@ -10,3 +10,4 @@
 - Admin freeze/suspend/risk-flag is enforced server-side by _shared/account-freeze.ts in vfd-banking, vfd-sandbox-products and vestara-ledger; admin actions go through the admin_account_action RPC; why: admin buttons must actually block money movement, not just set a label.
 - Complaint transaction selection uses the exclusive classifier in complaintTransactions and never falls back to all transactions; why: empty service categories must not show unrelated failures.
 - Security-controls callers use invokeSecurityControls with their own session client; why: refresh stale credentials before requests and handle expired sessions without uncaught errors or replaying network failures.
+- The legacy /auth page is retired: the route is a redirect to /signin (mode=reset → /password/reset), src/pages/Auth.tsx is deleted, and all buttons/navigate calls point at /signin; why: one product sign-in entry, no stale design reachable.
