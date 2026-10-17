@@ -79,7 +79,7 @@ Deno.serve(async (req) => {
         return json({ error: "Could not start verification. Please try again." }, 500);
       }
 
-      await sendBrandedEmail({
+      const sent = await sendBrandedEmail({
         recipientEmail: email,
         title: "Verify your email",
         message:
@@ -90,6 +90,12 @@ Deno.serve(async (req) => {
         securityNotice: true,
         idempotencyKey: `signup-otp-${email}-${Date.now()}`,
       });
+
+      if (!sent.ok) {
+        // Clear the stored code so the user can retry immediately once sending works.
+        await admin.from("signup_email_otps").delete().eq("email", email);
+        return json({ error: "We couldn't send your code right now. Please try again in a few minutes." }, 503);
+      }
 
       return json({ success: true });
     }
