@@ -129,7 +129,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { action, user_id, title, body, url, tag, notification_id } = await req.json();
+    const { action, user_id, title, body, url, tag, notification_id, category } = await req.json();
     const supabaseAdmin = adminClient();
     const internal = await isInternalCaller(req, supabaseAdmin);
 
@@ -176,6 +176,23 @@ Deno.serve(async (req) => {
           JSON.stringify({ sent: 0, message: "No subscriptions found" }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
+      }
+
+      // Respect the user's notification preferences; security alerts always send.
+      const cat = typeof category === "string" ? category : "transactions";
+      if (cat !== "security") {
+        const { data: prefs } = await supabaseAdmin
+          .from("notification_preferences")
+          .select("transactions, marketing")
+          .eq("user_id", user_id)
+          .maybeSingle();
+        const enabled = cat === "marketing" ? (prefs?.marketing ?? false) : (prefs?.transactions ?? true);
+        if (!enabled) {
+          return new Response(
+            JSON.stringify({ sent: 0, skipped: "category_disabled" }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
       }
 
       const vapidPublicKey = Deno.env.get("VAPID_PUBLIC_KEY")!;
