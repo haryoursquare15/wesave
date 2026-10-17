@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import { sandboxSupabase } from "@/integrations/supabase/sandboxClient";
-import { Button } from "@/components/ui/button";
 
 type Category = "transactions" | "security" | "marketing";
 type Prefs = Record<Category, boolean>;

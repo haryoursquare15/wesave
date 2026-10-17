@@ -135,8 +135,9 @@ Deno.serve(async (req) => {
 
   try {
     const schema = z.object({
-      action: z.enum(["get_vapid_key", "send_push", "retry_dlq"]),
+      action: z.enum(["get_vapid_key", "send_push", "retry_dlq", "admin_send"]),
       user_id: z.string().uuid().optional(), title: z.string().max(1000).optional(),
+      broadcast: z.boolean().optional(),
       body: z.string().max(10000).optional(), url: z.string().max(2000).optional(),
       tag: z.string().max(200).optional(), notification_id: z.string().uuid().nullish(),
       category: z.string().max(100).optional(),
