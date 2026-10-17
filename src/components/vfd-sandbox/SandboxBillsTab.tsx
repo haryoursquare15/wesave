@@ -545,7 +545,7 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
     }
   }, [prefill, step]);
 
-  const payAgain = (b: any) => {
+  const startPayAgain = (b: any) => {
     setPrefill({
       category: b.category,
       billerId: b.biller_id,
