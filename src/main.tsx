@@ -15,8 +15,23 @@ const originalError = sonnerToast.error;
       : data,
   )) as typeof sonnerToast.error;
 
-createRoot(document.getElementById("root")!).render(
-  <BrowserRouter>
-    <App />
-  </BrowserRouter>
-);
+// Native shell / installed-app entry: never show the marketing landing.
+// Android WebView user agents contain "; wv)"; installed PWAs report
+// standalone display mode. Both must land in the app at /app instead.
+const isNativeWebView = typeof navigator !== "undefined" && navigator.userAgent.includes("; wv)");
+const isStandaloneDisplayMode =
+  typeof window !== "undefined" &&
+  (window.matchMedia?.("(display-mode: standalone)")?.matches ||
+    (navigator as { standalone?: boolean }).standalone === true);
+if (
+  (isNativeWebView || isStandaloneDisplayMode) &&
+  (window.location.pathname === "/" || window.location.pathname === "/index.html")
+) {
+  window.location.replace("/app");
+} else {
+  createRoot(document.getElementById("root")!).render(
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
+  );
+}
