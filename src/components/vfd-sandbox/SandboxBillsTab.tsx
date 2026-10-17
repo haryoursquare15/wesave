@@ -250,14 +250,14 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
   /* ─── Step 1: Load Categories ─── */
   const loadCategories = useCallback(async () => {
     // Show cached/default categories instantly; refresh quietly in the background.
-    const fallback = ["Airtime", "Cable TV", "Data", "Utility", "Internet Subscription", "Education", "Betting"];
+    const fallback = ["Airtime", "Cable TV", "Data", "Utility", "Internet Subscription", "Betting"];
     let cached: string[] | null = null;
     try { cached = JSON.parse(localStorage.getItem("vestara_bill_categories") || "null"); } catch { cached = null; }
-    setCategories(cached?.length ? cached : fallback);
+    setCategories(visibleCategories(cached?.length ? cached : fallback));
     setLoading(false);
     try {
       const result = await callProducts("bills_categories");
-      const cats = result?.data?.data?.map((c: { category: string }) => c.category) || [];
+      const cats = visibleCategories(result?.data?.data?.map((c: { category: string }) => c.category) || []);
       if (cats.length > 0) {
         setCategories(cats);
         try { localStorage.setItem("vestara_bill_categories", JSON.stringify(cats)); } catch { /* ignore */ }
@@ -275,8 +275,8 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
       // Show instantly, refresh quietly in the background.
       setBillers(cachedList); setStep("billers");
       void callProducts("bills_billers", { categoryName: category }).then((result) => {
-        const list = result?.data?.data;
-        if (Array.isArray(list) && list.length) { writeBillCache(cacheKey, list); setBillers(list); }
+      const list = result?.data?.data;
+      if (Array.isArray(list) && list.length) { writeBillCache(cacheKey, list); setBillers(visibleBillers(list)); }
       }).catch(() => { /* keep cached */ });
       return;
     }
@@ -284,7 +284,7 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
     try {
       const result = await callProducts("bills_billers", { categoryName: category });
       const list = result?.data?.data || [];
-      setBillers(Array.isArray(list) ? list : []);
+      setBillers(visibleBillers(Array.isArray(list) ? list : []));
       if (Array.isArray(list) && list.length) writeBillCache(cacheKey, list);
       if (!Array.isArray(list) || list.length === 0) {
         const msg = result?.data?.message || result?.raw?.message || `No ${category} billers available right now`;
