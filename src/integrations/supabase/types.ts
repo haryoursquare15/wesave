@@ -2137,6 +2137,27 @@ export type Database = {
         }
         Relationships: []
       }
+      notification_preferences: {
+        Row: {
+          marketing: boolean
+          security: boolean
+          transactions: boolean
+          user_id: string
+        }
+        Insert: {
+          marketing?: boolean
+          security?: boolean
+          transactions?: boolean
+          user_id: string
+        }
+        Update: {
+          marketing?: boolean
+          security?: boolean
+          transactions?: boolean
+          user_id?: string
+        }
+        Relationships: []
+      }
       payments_test: {
         Row: {
           amount: number
@@ -2623,8 +2644,11 @@ export type Database = {
           created_at: string
           endpoint: string
           id: string
+          last_seen: string
           p256dh: string
+          platform: string | null
           updated_at: string
+          user_agent: string | null
           user_id: string
         }
         Insert: {
@@ -2632,8 +2656,11 @@ export type Database = {
           created_at?: string
           endpoint: string
           id?: string
+          last_seen?: string
           p256dh: string
+          platform?: string | null
           updated_at?: string
+          user_agent?: string | null
           user_id: string
         }
         Update: {
@@ -2641,8 +2668,11 @@ export type Database = {
           created_at?: string
           endpoint?: string
           id?: string
+          last_seen?: string
           p256dh?: string
+          platform?: string | null
           updated_at?: string
+          user_agent?: string | null
           user_id?: string
         }
         Relationships: []
@@ -8481,6 +8511,21 @@ export type Database = {
       gen_random_bytes: { Args: { n: number }; Returns: string }
       gen_random_uuid: { Args: never; Returns: string }
       get_insight_ui_config: { Args: never; Returns: Json }
+      get_my_notification_preferences: {
+        Args: never
+        Returns: {
+          marketing: boolean
+          security: boolean
+          transactions: boolean
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "notification_preferences"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       get_own_card_tokens: {
         Args: never
         Returns: {

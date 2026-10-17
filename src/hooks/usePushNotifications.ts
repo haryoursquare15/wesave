@@ -19,6 +19,13 @@ export function isIosBrowserTab(): boolean {
   return ios && !standalone;
 }
 
+function detectPlatform(): string {
+  if (typeof navigator === "undefined") return "unknown";
+  if (/iphone|ipad|ipod/i.test(navigator.userAgent)) return "ios";
+  if (/android/i.test(navigator.userAgent)) return "android";
+  return "desktop";
+}
+
 export function usePushNotifications() {
   const { session, client: supabase } = useSandboxAwareAuth();
   const user = session?.user ?? null;
@@ -38,7 +45,7 @@ export function usePushNotifications() {
       // Self-heal: make sure the server knows about this phone's subscription.
       const j = sub.toJSON();
       const { error } = await supabase.from("push_subscriptions").upsert(
-        { user_id: user.id, endpoint: j.endpoint!, p256dh: j.keys!.p256dh!, auth_key: j.keys!.auth!, updated_at: new Date().toISOString() },
+        { user_id: user.id, endpoint: j.endpoint!, p256dh: j.keys!.p256dh!, auth_key: j.keys!.auth!, platform: detectPlatform(), user_agent: navigator.userAgent, last_seen: new Date().toISOString(), updated_at: new Date().toISOString() },
         { onConflict: "user_id,endpoint" },
       );
       setIsSubscribed(!error);
@@ -110,6 +117,9 @@ export function usePushNotifications() {
           endpoint: subJson.endpoint!,
           p256dh: subJson.keys!.p256dh!,
           auth_key: subJson.keys!.auth!,
+          platform: detectPlatform(),
+          user_agent: navigator.userAgent,
+          last_seen: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         },
         { onConflict: "user_id,endpoint" }
@@ -157,6 +167,23 @@ export function usePushNotifications() {
     }
   }, [user]);
 
+  // Delete only this device's subscription row (used on logout).
+  const removeCurrentDevice = useCallback(async () => {
+    try {
+      const registration = await navigator.serviceWorker.getRegistration("/sw.js");
+      const sub = await registration?.pushManager.getSubscription();
+      if (sub && user) {
+        await supabase
+          .from("push_subscriptions")
+          .delete()
+          .eq("user_id", user.id)
+          .eq("endpoint", sub.endpoint);
+      }
+    } catch {
+      // Best-effort; never block sign-out.
+    }
+  }, [user, supabase]);
+
   return {
     supported,
     permission,
@@ -164,5 +191,6 @@ export function usePushNotifications() {
     loading,
     subscribe,
     unsubscribe,
+    removeCurrentDevice,
   };
 }

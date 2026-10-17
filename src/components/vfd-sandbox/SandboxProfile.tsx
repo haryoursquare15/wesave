@@ -23,6 +23,7 @@ import { LoginPinSettings } from "@/components/settings/LoginPinSettings";
 import { WhatsAppAlertSettings } from "@/components/settings/WhatsAppAlertSettings";
 import { useTransactionPin } from "@/hooks/useTransactionPin";
 import { usePushNotifications, isIosBrowserTab } from "@/hooks/usePushNotifications";
+import { NotificationPrefs } from "@/components/vfd-sandbox/NotificationPrefs";
 import { useBiometricToggle } from "@/hooks/useBiometricToggle";
 import { SandboxFAQ } from "./SandboxFAQ";
 import { openComplaints } from "./complaints/ComplaintsCenter";
@@ -485,6 +486,7 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
               } else { await push.unsubscribe(); toast.success("Push notifications off"); }
             }} aria-label="Push notifications" />}
         />
+        {push.isSubscribed && <NotificationPrefs userId={userId} />}
         <ProfileRow icon={Mail} label="Email statements" onClick={() => soon("Email statements")} />
       </ProfileSection>
 
