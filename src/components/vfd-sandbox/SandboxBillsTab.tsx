@@ -828,20 +828,20 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
                 <div key={i} className="h-28 rounded-2xl bg-muted animate-pulse" />
               ))
             ) : (
-              categories.map((cat) => {
+              [...categories].sort((a, b) => categoryOrder(a) - categoryOrder(b)).map((cat) => {
                 const cfg = categoryConfig[cat] || { icon: Receipt, color: "text-muted-foreground", bg: "bg-muted" };
                 const Icon = cfg.icon;
                 return (
                   <motion.button
                     key={cat}
-                    whileTap={{ scale: 0.95 }}
+                    whileTap={{ scale: 0.97 }}
                     onClick={() => loadBillers(cat)}
-                    className="flex flex-col items-center justify-center gap-3 p-5 rounded-2xl bg-card border border-border/60 hover:border-primary/30 hover:shadow-md transition-all"
+                    className="flex flex-col items-start justify-between gap-3 min-h-[120px] p-4 rounded-2xl bg-card border border-border/60 text-left active:bg-muted/40 transition-colors"
                   >
-                    <div className={`w-12 h-12 rounded-xl ${cfg.bg} flex items-center justify-center`}>
-                      <Icon className={`h-6 w-6 ${cfg.color}`} />
+                    <div className={`w-11 h-11 rounded-xl ${cfg.bg} flex items-center justify-center`}>
+                      <Icon className={`h-5 w-5 ${cfg.color}`} />
                     </div>
-                    <span className="text-sm font-semibold text-foreground">{cat}</span>
+                    <span className="text-sm font-semibold text-foreground leading-snug">{categoryLabel(cat)}</span>
                   </motion.button>
                 );
               })
