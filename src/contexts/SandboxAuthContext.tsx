@@ -80,6 +80,17 @@ export function SandboxAuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    // Remove this device's push subscription before the session is dropped.
+    try {
+      const uid = session?.user?.id;
+      const registration = await navigator.serviceWorker?.getRegistration("/sw.js");
+      const sub = await registration?.pushManager.getSubscription();
+      if (uid && sub) {
+        await sandboxSupabase.from("push_subscriptions").delete().eq("user_id", uid).eq("endpoint", sub.endpoint);
+      }
+    } catch {
+      // Best-effort; never block sign-out.
+    }
     await sandboxSupabase.auth.signOut();
     setUser(null);
     setSession(null);
