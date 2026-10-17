@@ -320,7 +320,7 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
     const cacheKey = `vestara_items_${biller.id}_${biller.division}_${biller.product}`;
     const cachedItems = readBillCache<BillerItem[]>(cacheKey);
     setLoading(!cachedItems?.length);
-    else { setItems(cachedItems); setStep("items"); }
+    if (cachedItems?.length) { setItems(cachedItems); setStep("items"); }
     try {
       const paymentItems = await fetchBillCatalogue<BillerItem>(cacheKey, async () => {
       const result = await callProducts("bills_items", {
@@ -511,6 +511,8 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
 
   /* ─── Navigation ─── */
   const goBack = () => {
+    catalogueSelection.current += 1;
+    setLoading(false);
     switch (step) {
       case "billers": setStep("categories"); break;
       case "items": setStep("billers"); break;
