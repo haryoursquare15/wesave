@@ -8,7 +8,6 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { useSessionEnforcement } from "@/hooks/useSessionEnforcement";
 import { useEffect } from "react";
 import Landing from "./pages/Landing";
-import Auth from "./pages/Auth";
 import ForgotPassword from "./pages/ForgotPassword";
 import Onboarding from "./pages/Onboarding";
 import Dashboard from "./pages/Dashboard";
@@ -150,7 +149,7 @@ const App = () => {
               <Routes>
                 <Route path="/" element={<Landing />} />
                 <Route path="/app-home" element={<AppHome />} />
-                <Route path="/auth" element={<Auth />} />
+                <Route path="/auth" element={<AuthRedirect />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 <Route path="/onboarding" element={<Onboarding />} />
                 <Route path="/dashboard" element={<Dashboard />} />
