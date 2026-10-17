@@ -226,7 +226,7 @@ async function sendPushToUser(
     if (dlqErr) console.error("DLQ insert failed:", dlqErr.message);
   }
 
-  const fcm = await sendAndroidPush(supabaseAdmin, userId, sanitizeUrl(url), String(tag || "vestara-notification").slice(0, 60));
+  const fcm = await sendAndroidPush(supabaseAdmin, userId, sanitizeUrl(url), String(tag || "vestara-notification").slice(0, 60), title, body);
   return { sent, expired: expired.length, dlq: dlqRows.length, web: { sent, failed: dlqRows.length, removed: expired.length }, fcm };
 }
 

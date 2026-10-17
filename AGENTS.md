@@ -13,5 +13,5 @@
 - The legacy /auth page is retired: the route is a redirect to /signin (mode=reset → /password/reset), src/pages/Auth.tsx is deleted, and all buttons/navigate calls point at /signin; why: one product sign-in entry, no stale design reachable.
 - Android push registration is centralized in androidPush and selected by the shared push hook; why: native wrappers must never enter the Web Push flow and sign-out uses the same device identity.
 - The push-notification internal dispatcher fans out to Web Push and FCM, with a service-role-only send-push alias; why: existing database triggers keep working and no customer can send pushes directly.
-- Android notification text is constructed by the shared push privacy policy rather than copied from producers; why: financial details must never reach Android lock screens.
+- Android notification previews are constructed by the shared push privacy policy with numeric redaction; why: messages remain readable without exposing balances, account numbers or security codes on lock screens.
 - AuthContext preserves its context identity through Vite hot updates; why: refreshed route consumers must still read the mounted provider instead of crashing the preview.

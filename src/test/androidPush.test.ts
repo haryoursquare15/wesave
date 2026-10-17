@@ -67,8 +67,20 @@ describe("Android push delivery policy", () => {
     expect(pushCategoryEnabled("marketing", null)).toBe(false);
     expect(pushCategoryEnabled("marketing", { marketing: true })).toBe(true);
   });
-  it("Android text contains no financial details and is data-only", () => {
+  it("falls back to generic text when no preview is supplied", () => {
     expect(androidPushData("/app", "vestara-notification")).toEqual({ title: "Vestara", body: "You have a new notification. Open Vestara to view it.", url: "/app", tag: "vestara-notification" });
+  });
+  it("previews the supplied notification message", () => {
+    const data = androidPushData("/app", "offer", "New product", "GoalSave is now available.");
+    expect(data.title).toBe("New product");
+    expect(data.body).toBe("GoalSave is now available.");
+  });
+  it("hides balances and account numbers in message previews", () => {
+    const data = androidPushData("/app", "credit", "Received ₦1,500", "Balance: 25000.50. Account 0123456789.");
+    expect(data.title).not.toContain("1,500");
+    expect(data.body).not.toContain("25000.50");
+    expect(data.body).not.toContain("0123456789");
+    expect(data.body).toContain("[hidden]");
   });
   it("removes expired tokens but not malformed request errors", () => {
     expect(isInvalidFcmToken(404, {})).toBe(true);

@@ -3,9 +3,16 @@ export function pushCategoryEnabled(category: string, prefs: { transactions?: bo
   return category === "marketing" ? (prefs?.marketing ?? false) : (prefs?.transactions ?? true);
 }
 
-// Android lock screens never receive financial text from notification producers.
-export function androidPushData(url: string, tag: string): Record<string, string> {
-  return { title: "Vestara", body: "You have a new notification. Open Vestara to view it.", url, tag };
+// Preview the message, but strip numeric financial values, account numbers and codes.
+export function androidPushData(url: string, tag: string, title?: string, body?: string): Record<string, string> {
+  const preview = (value: string, limit: number) => value
+    .replace(/(?:₦|NGN|USD|GBP|EUR|\$|£|€)?\s*\d[\d,]*(?:\.\d+)?/gi, " [hidden]")
+    .replace(/\s+/g, " ").trim().slice(0, limit);
+  return {
+    title: preview(title || "Vestara", 120),
+    body: preview(body || "You have a new notification. Open Vestara to view it.", 500),
+    url, tag,
+  };
 }
 
 export function isInvalidFcmToken(status: number, body: unknown): boolean {
