@@ -197,7 +197,7 @@ Deno.serve(async (req) => {
 
       const vapidPublicKey = Deno.env.get("VAPID_PUBLIC_KEY")!;
       const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY")!;
-      const vapidSubject = Deno.env.get("VAPID_SUBJECT") || "mailto:support@vestara.app";
+      const vapidSubject = (() => { const v = Deno.env.get("VAPID_SUBJECT") || ""; return /^(mailto:|https?:\/\/)/.test(v) ? v : "mailto:support@vestara.ng"; })();
 
       const payload = JSON.stringify({
         title: String(title || "Vestara").slice(0, 120),
@@ -284,7 +284,7 @@ Deno.serve(async (req) => {
 
       const vapidPublicKey = Deno.env.get("VAPID_PUBLIC_KEY")!;
       const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY")!;
-      const vapidSubject = Deno.env.get("VAPID_SUBJECT") || "mailto:support@vestara.app";
+      const vapidSubject = (() => { const v = Deno.env.get("VAPID_SUBJECT") || ""; return /^(mailto:|https?:\/\/)/.test(v) ? v : "mailto:support@vestara.ng"; })();
 
       const { data: pending } = await supabaseAdmin
         .from("notification_dlq")
