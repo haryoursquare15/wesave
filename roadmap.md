@@ -1,7 +1,7 @@
 # Requested updates
-- [ ] Add Android token registration, launch sync and device-only sign-out cleanup.
-- [ ] Deploy owner-scoped device_tokens and internal FCM delivery alongside Web Push.
-- [ ] Verify Android rules and delivery; real-wrapper delivery requires an Android device.
+- [x] Add Android token registration, launch sync and device-only sign-out cleanup; verified registration readback and sign-out on the requesting account with a simulated wrapper.
+- [x] Deploy owner-scoped device_tokens and internal FCM delivery alongside Web Push; secure service account saved, sender rejects user calls, eleven rule tests passed.
+- [ ] Verify real Android FCM delivery; blocked on a real wrapper/device token and Firebase Cloud Messaging API availability.
 - [x] Remove customer-facing ledger errors and correct non-card payment decline wording; six regression tests passed.
 - [x] Align notification tray actions and verify readability in signed-in preview.
 - [x] Fit password and PIN sign-in screens without page scrolling on tested phone sizes.
