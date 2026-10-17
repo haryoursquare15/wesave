@@ -997,11 +997,16 @@ serve(async (req) => {
 
         await supabase.from("user_notifications").insert({
           user_id: userId,
-          type: "savings_pending_approval",
+          notification_type: "savings_pending_approval",
           title: "Investment submitted for review",
           message: `Your ${product_code} investment of ₦${Number(principal).toLocaleString()} is awaiting placement confirmation. Funds are safely on hold.`,
-          metadata: { savings_id: savingsId, product_code },
         }).then(() => {}, () => {});
+
+        await notifyAdmins(supabase, {
+          type: "admin_investment_pending",
+          title: "Investment awaiting approval",
+          message: `A ${product_code} investment of ₦${Number(principal).toLocaleString()} is waiting for placement confirmation. Open the admin console → Investment Approvals to review.`,
+        });
 
         result = { ...(data as Record<string, unknown> ?? {}), sub_account: subAccount, funding_error: fundingError };
         break;

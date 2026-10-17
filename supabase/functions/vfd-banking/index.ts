@@ -1030,6 +1030,12 @@ async function handleTierUpgrade(userId: string, body: Record<string, unknown>) 
 
   if (error) return jsonResponse({ error: error.message }, 500);
 
+  await notifyAdmins(supabaseAdmin, {
+    type: "admin_kyc_pending",
+    title: "New KYC review needed",
+    message: `A customer submitted a Tier ${requestedTier} upgrade request and is waiting for document review. Open the admin console → KYC Review to approve or reject.`,
+  });
+
   return jsonResponse({
     data: {
       status: "pending_review",
