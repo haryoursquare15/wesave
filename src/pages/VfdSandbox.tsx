@@ -566,7 +566,7 @@ function VfdSandboxInner() {
             transition={{ duration: 0.22, ease: "easeOut" }}
             className="space-y-5"
           >
-            {currentView === "dashboard" && <PushNotificationPrompt />}
+            {currentView === "dashboard" && null}
             {currentView === "dashboard" && (
               <SandboxDashboard
                 balance={balanceData}
