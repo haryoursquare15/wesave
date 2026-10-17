@@ -273,7 +273,7 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
     const cachedList = readBillCache<Biller[]>(cacheKey);
     if (cachedList?.length) {
       // Show instantly, refresh quietly in the background.
-      setBillers(cachedList); setStep("billers");
+      setBillers(visibleBillers(cachedList)); setStep("billers");
       void callProducts("bills_billers", { categoryName: category }).then((result) => {
       const list = result?.data?.data;
       if (Array.isArray(list) && list.length) { writeBillCache(cacheKey, list); setBillers(visibleBillers(list)); }
