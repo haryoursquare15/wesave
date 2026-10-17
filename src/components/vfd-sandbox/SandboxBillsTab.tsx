@@ -519,6 +519,43 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
     }
   }, [step, selectedCategory, callProducts]);
 
+  // "Pay again" chips: recent saved beneficiaries across all categories.
+  useEffect(() => {
+    if (step !== "categories") return;
+    callProducts("list_bill_beneficiaries")
+      .then(r => setPayAgain((r?.data || []).slice(0, 10)))
+      .catch(() => setPayAgain([]));
+  }, [step, callProducts]);
+
+  // A Pay again chip prefills the flow: jump to the biller's plans, then
+  // carry the saved customer id/phone into the payment step.
+  useEffect(() => {
+    if (!prefill || step !== "billers" || billers.length === 0) return;
+    const match = billers.find(b => b.id === prefill.billerId)
+      || billers.find(b => b.name === prefill.billerName);
+    if (match) loadItems(match);
+  }, [prefill, step, billers, loadItems]);
+
+  useEffect(() => {
+    if (prefill && step === "payment") {
+      setCustomerId(prefill.customerId);
+      if (prefill.phone) setPhoneNumber(prefill.phone);
+      setValidationResult(null);
+      setPrefill(null);
+    }
+  }, [prefill, step]);
+
+  const payAgain = (b: any) => {
+    setPrefill({
+      category: b.category,
+      billerId: b.biller_id,
+      billerName: b.biller_name,
+      customerId: b.customer_id,
+      phone: b.phone_number || undefined,
+    });
+    loadBillers(b.category);
+  };
+
   const pickBeneficiary = (b: any) => {
     setCustomerId(b.customer_id);
     setPhoneNumber(b.phone_number || "");
