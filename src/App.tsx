@@ -160,7 +160,7 @@ const App = () => {
               <Routes>
                 <Route path="/" element={<Landing />} />
                 <Route path="/app-home" element={<AppHome />} />
-                <Route path="/signin" element={<AuthRedirect />} />
+                <Route path="/auth" element={<AuthRedirect />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 <Route path="/onboarding" element={<Onboarding />} />
                 <Route path="/dashboard" element={<Dashboard />} />
