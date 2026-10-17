@@ -90,6 +90,17 @@ function LegacyRedirect({ to }: { to: string }) {
   return <Navigate to={target} replace />;
 }
 
+/**
+ * The legacy /auth page is retired — no entry point should ever land on it.
+ * Password-recovery links that still target /auth?mode=reset are forwarded to
+ * the product reset page so old reset emails keep working.
+ */
+function AuthRedirect() {
+  const { search } = useLocation();
+  const isReset = new URLSearchParams(search).get("mode") === "reset";
+  return <LegacyRedirect to={isReset ? RESET_PASSWORD : SIGN_IN} />;
+}
+
 // Session enforcement wrapper - only runs hook on protected routes
 function ProtectedRouteEnforcement({ children }: { children: React.ReactNode }) {
   const location = useLocation();
