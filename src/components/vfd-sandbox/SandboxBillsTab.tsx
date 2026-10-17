@@ -14,7 +14,7 @@ function writeBillCache(key: string, v: unknown) {
 }
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Smartphone, Tv, Wifi, Zap, Globe, ArrowLeft, ChevronRight,
+  Smartphone, Tv, Signal, Zap, Globe, ArrowLeft, ChevronRight,
   Search, Loader2, CheckCircle2, AlertCircle, Receipt,
   GraduationCap, Dices, Repeat, Users, Split,
 } from "lucide-react";
@@ -68,11 +68,31 @@ interface BillerItem {
 const categoryConfig: Record<string, { icon: typeof Smartphone; color: string; bg: string }> = {
   Airtime: { icon: Smartphone, color: "text-blue-600", bg: "bg-blue-500/10" },
   "Cable TV": { icon: Tv, color: "text-purple-600", bg: "bg-purple-500/10" },
-  Data: { icon: Wifi, color: "text-emerald-600", bg: "bg-emerald-500/10" },
+  Data: { icon: Signal, color: "text-emerald-600", bg: "bg-emerald-500/10" },
   Utility: { icon: Zap, color: "text-amber-600", bg: "bg-amber-500/10" },
   "Internet Subscription": { icon: Globe, color: "text-rose-600", bg: "bg-rose-500/10" },
   Education: { icon: GraduationCap, color: "text-cyan-600", bg: "bg-cyan-500/10" },
   Betting: { icon: Dices, color: "text-orange-600", bg: "bg-orange-500/10" },
+};
+
+/* Display order and friendly labels for the category grid. The backend
+   category string is still what we send to the API — only presentation is
+   reordered/renamed here. */
+const CATEGORY_PRESENTATION: Record<string, { label: string; order: number }> = {
+  Airtime: { label: "Airtime", order: 0 },
+  Data: { label: "Data", order: 1 },
+  Utility: { label: "Electricity", order: 2 },
+  "Cable TV": { label: "Cable TV", order: 3 },
+  "Internet Subscription": { label: "Internet", order: 4 },
+  Betting: { label: "Betting and gaming", order: 5 },
+};
+const categoryLabel = (cat: string) => CATEGORY_PRESENTATION[cat]?.label || cat;
+const categoryOrder = (cat: string) => CATEGORY_PRESENTATION[cat]?.order ?? 100;
+
+/** Mask a customer identifier, keeping only the last four digits. */
+const maskId = (id: string) => {
+  const digits = String(id || "").trim();
+  return digits.length > 4 ? `•••• ${digits.slice(-4)}` : digits;
 };
 
 type Step = "categories" | "billers" | "items" | "payment" | "success";
