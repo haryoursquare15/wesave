@@ -3,6 +3,7 @@ import { isMoneyAction, isAccountFrozen, FROZEN_MESSAGE } from "../_shared/accou
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { vfdFetch, getGatewayAccessToken } from "../_shared/vfd-gateway.ts";
 import { checkSpendLock } from "../_shared/spend-lock.ts";
+import { notifyAdmins } from "../_shared/notify-admins.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

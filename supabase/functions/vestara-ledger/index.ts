@@ -12,6 +12,7 @@ import {
 } from "../_shared/vfd-mandate.ts";
 import { payoutSavingsToUser } from "../_shared/vfd-savings-payout.ts";
 import { markSettlementLedgerPosted } from "../_shared/settlement.ts";
+import { notifyAdmins } from "../_shared/notify-admins.ts";
 
 
 const corsHeaders = {
