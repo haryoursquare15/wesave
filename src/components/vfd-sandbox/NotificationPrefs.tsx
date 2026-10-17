@@ -16,7 +16,6 @@ const LABELS: Record<Category, { label: string; helper: string }> = {
 };
 
 export function NotificationPrefs({ userId }: { userId: string | null }) {
-  const { isAdmin } = useIsAdmin();
   const [prefs, setPrefs] = useState<Prefs | null>(null);
   const [saving, setSaving] = useState<Category | null>(null);
   const [testing, setTesting] = useState(false);
@@ -87,7 +86,7 @@ export function NotificationPrefs({ userId }: { userId: string | null }) {
           />
         </div>
       ))}
-      {isAdmin && (
+      {userId && (
         <div className="pt-2 pb-1">
           <Button variant="outline" size="sm" className="w-full" disabled={testing} onClick={() => void sendTest()}>
             {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
