@@ -8,7 +8,6 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { useSessionEnforcement } from "@/hooks/useSessionEnforcement";
 import { useEffect } from "react";
 import Landing from "./pages/Landing";
-import Auth from "./pages/Auth";
 import ForgotPassword from "./pages/ForgotPassword";
 import Onboarding from "./pages/Onboarding";
 import Dashboard from "./pages/Dashboard";
@@ -57,7 +56,7 @@ import { APP_HOME, SIGN_IN, FORGOT_PASSWORD, RESET_PASSWORD, JOIN } from "@/lib/
 
 const queryClient = new QueryClient();
 
-const PUBLIC_ROUTES = ["/", "/auth", "/forgot-password", "/invite", "/onboarding", "/terms", "/privacy", "/aml-policy", "/kyc-policy", "/goal", "/delete-account", "/app-home", "/vfd-sandbox", "/vfd-sandbox/auth", "/unsubscribe", APP_HOME, SIGN_IN, FORGOT_PASSWORD, RESET_PASSWORD, JOIN, ADMIN_LOGIN_PATH];
+const PUBLIC_ROUTES = ["/", "/auth", "/signin", "/forgot-password", "/invite", "/onboarding", "/terms", "/privacy", "/aml-policy", "/kyc-policy", "/goal", "/delete-account", "/app-home", "/vfd-sandbox", "/vfd-sandbox/auth", "/unsubscribe", APP_HOME, SIGN_IN, FORGOT_PASSWORD, RESET_PASSWORD, JOIN, ADMIN_LOGIN_PATH];
 
 function isPublicRoute(pathname: string) {
   return PUBLIC_ROUTES.some(route =>
@@ -89,6 +88,17 @@ function LegacyRedirect({ to }: { to: string }) {
   }, [target]);
 
   return <Navigate to={target} replace />;
+}
+
+/**
+ * The legacy /auth page is retired — no entry point should ever land on it.
+ * Password-recovery links that still target /auth?mode=reset are forwarded to
+ * the product reset page so old reset emails keep working.
+ */
+function AuthRedirect() {
+  const { search } = useLocation();
+  const isReset = new URLSearchParams(search).get("mode") === "reset";
+  return <LegacyRedirect to={isReset ? RESET_PASSWORD : SIGN_IN} />;
 }
 
 // Session enforcement wrapper - only runs hook on protected routes
@@ -150,7 +160,7 @@ const App = () => {
               <Routes>
                 <Route path="/" element={<Landing />} />
                 <Route path="/app-home" element={<AppHome />} />
-                <Route path="/auth" element={<Auth />} />
+                <Route path="/auth" element={<AuthRedirect />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 <Route path="/onboarding" element={<Onboarding />} />
                 <Route path="/dashboard" element={<Dashboard />} />

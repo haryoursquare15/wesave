@@ -41,7 +41,7 @@ export default function SecuritySettings() {
 
   useEffect(() => {
     if (!authLoading && !user) {
-      navigate("/auth");
+      navigate("/signin");
     }
   }, [user, authLoading, navigate]);
 

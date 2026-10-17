@@ -50,7 +50,7 @@ export default function DeleteAccount() {
         <p className="text-muted-foreground mb-6 max-w-sm">
           To delete your Vestara account, you need to sign in first so we can verify your identity.
         </p>
-        <Button onClick={() => navigate("/auth")}>Sign In</Button>
+        <Button onClick={() => navigate("/signin")}>Sign In</Button>
       </div>
     );
   }

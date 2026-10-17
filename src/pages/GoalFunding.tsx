@@ -17,7 +17,7 @@ export default function GoalFunding() {
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
-    if (!authLoading && !user) navigate("/auth");
+    if (!authLoading && !user) navigate("/signin");
   }, [user, authLoading, navigate]);
 
   const filtered = campaigns.filter(c =>

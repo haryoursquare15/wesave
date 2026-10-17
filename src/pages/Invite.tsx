@@ -39,7 +39,7 @@ export default function Invite() {
     if (!user) {
       // Store invite token and redirect to auth
       sessionStorage.setItem("pending_invite_token", token || "");
-      navigate("/auth?mode=signup");
+      navigate("/signin?mode=signup");
       return;
     }
 
@@ -61,7 +61,7 @@ export default function Invite() {
 
   const handleSignUp = () => {
     sessionStorage.setItem("pending_invite_token", token || "");
-    navigate("/auth?mode=signup");
+    navigate("/signin?mode=signup");
   };
 
   if (authLoading || validating || status === "loading") {
@@ -223,7 +223,7 @@ export default function Invite() {
                   <button
                     onClick={() => {
                       sessionStorage.setItem("pending_invite_token", token || "");
-                      navigate("/auth");
+                      navigate("/signin");
                     }}
                     className="text-primary hover:underline"
                   >

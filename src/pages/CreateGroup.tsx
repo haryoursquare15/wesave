@@ -82,7 +82,7 @@ export default function CreateGroup() {
 
     if (sessionError || !session?.user) {
       toast.error("Your session has expired. Please sign in again.");
-      navigate("/auth");
+      navigate("/signin");
       return;
     }
 

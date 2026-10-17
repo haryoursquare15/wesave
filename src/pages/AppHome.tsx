@@ -57,11 +57,11 @@ export default function AppHome() {
   // In-app routing (works in the browser and inside the Capacitor WebView,
   // where an absolute https:// URL would leave the native shell).
   const handleGetStarted = () => {
-    navigate("/auth?mode=signup");
+    navigate("/signin?mode=signup");
   };
 
   const handleSignIn = () => {
-    navigate("/auth");
+    navigate("/signin");
   };
 
   // Splash Screen

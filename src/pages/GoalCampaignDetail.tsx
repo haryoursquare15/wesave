@@ -24,7 +24,7 @@ export default function GoalCampaignDetail() {
   const [contributeOpen, setContributeOpen] = useState(false);
 
   useEffect(() => {
-    if (!authLoading && !user) navigate("/auth");
+    if (!authLoading && !user) navigate("/signin");
   }, [user, authLoading, navigate]);
 
   const fmt = (n: number) => new Intl.NumberFormat("en-NG").format(n);

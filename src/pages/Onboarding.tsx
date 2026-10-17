@@ -246,7 +246,7 @@ export default function Onboarding() {
   const handleComplete = async () => {
     if (!user) {
       toast.error("Please sign in first");
-      navigate("/auth");
+      navigate("/signin");
       return;
     }
 

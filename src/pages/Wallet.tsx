@@ -120,7 +120,7 @@ export default function Wallet() {
   // Redirect if not logged in
   useEffect(() => {
     if (!authLoading && !user) {
-      navigate("/auth");
+      navigate("/signin");
     }
   }, [user, authLoading, navigate]);
 

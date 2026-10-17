@@ -61,7 +61,7 @@ export default function SandboxHealth() {
   useEffect(() => {
     if (authLoading || adminLoading) return;
     if (!user) {
-      navigate("/auth", { replace: true });
+      navigate("/signin", { replace: true });
       return;
     }
     if (!isAdmin) {
