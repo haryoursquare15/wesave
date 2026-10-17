@@ -117,6 +117,8 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
   const [step, setStep] = useState<Step>("categories");
   const [loading, setLoading] = useState(false);
   const [beneficiaries, setBeneficiaries] = useState<any[]>([]);
+  const [payAgain, setPayAgain] = useState<any[]>([]);
+  const [prefill, setPrefill] = useState<{ category: string; billerId?: string; billerName?: string; customerId: string; phone?: string } | null>(null);
   const [showRecurringDialog, setShowRecurringDialog] = useState(false);
   const [recurringFreq, setRecurringFreq] = useState<"daily" | "weekly" | "monthly">("monthly");
   const [creatingRecurring, setCreatingRecurring] = useState(false);
