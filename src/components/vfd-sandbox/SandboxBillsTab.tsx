@@ -1,17 +1,5 @@
-import { useState, useCallback, useEffect } from "react";
-
-// Bill catalogue cache (billers/items rarely change): 12h, shown instantly then refreshed.
-const BILL_CACHE_TTL = 12 * 60 * 60 * 1000;
-function readBillCache<T>(key: string): T | null {
-  try {
-    const raw = JSON.parse(localStorage.getItem(key) || "null");
-    if (raw && raw.t && Date.now() - raw.t < BILL_CACHE_TTL) return raw.v as T;
-  } catch { /* ignore */ }
-  return null;
-}
-function writeBillCache(key: string, v: unknown) {
-  try { localStorage.setItem(key, JSON.stringify({ t: Date.now(), v })); } catch { /* ignore */ }
-}
+import { useState, useCallback, useEffect, useRef } from "react";
+import { categoryKey, visibleCategories, isVisibleBiller, readBillCache, fetchBillCatalogue } from "@/lib/billCatalogue";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Smartphone, Tv, Signal, Zap, Globe, ArrowLeft, ChevronRight,
@@ -83,16 +71,13 @@ const CATEGORY_PRESENTATION: Record<string, { label: string; order: number }> = 
   Utility: { label: "Electricity", order: 2 },
   "Cable TV": { label: "Cable TV", order: 3 },
   "Internet Subscription": { label: "Internet", order: 4 },
-  Betting: { label: "Betting & Gaming", order: 5 },
+  Betting: { label: "Betting & gaming", order: 5 },
 };
 
 /* Education billers are no longer offered; lottery billers are excluded too. */
-const EXCLUDED_CATEGORIES = new Set(["education"]);
-const EXCLUDED_BILLER_RE = /(lotto|lottery)/i;
-const visibleCategories = (cats: string[]) => cats.filter((c) => !EXCLUDED_CATEGORIES.has(c.trim().toLowerCase()));
-const visibleBillers = (list: Biller[]) => list.filter((b) => !EXCLUDED_BILLER_RE.test(b.name || ""));
-const categoryLabel = (cat: string) => CATEGORY_PRESENTATION[cat]?.label || cat;
-const categoryOrder = (cat: string) => CATEGORY_PRESENTATION[cat]?.order ?? 100;
+const visibleBillers = (list: Biller[]) => list.filter(isVisibleBiller);
+const categoryLabel = (cat: string) => CATEGORY_PRESENTATION[categoryKey(cat)]?.label || cat;
+const categoryOrder = (cat: string) => CATEGORY_PRESENTATION[categoryKey(cat)]?.order ?? 100;
 
 /** Mask a customer identifier, keeping only the last four digits. */
 const maskId = (id: string) => {
@@ -186,6 +171,7 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
 
   // Search/filter
   const [billerSearch, setBillerSearch] = useState("");
+  const catalogueSelection = useRef(0);
 
   const callProducts = useCallback(async (action: string, body: Record<string, unknown> = {}) => {
     let { data: sessionData } = await client.auth.getSession();
@@ -265,56 +251,86 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
     } catch { /* keep shown categories */ }
   }, [callProducts]);
 
+  useEffect(() => { void loadCategories(); }, [loadCategories]);
+
+  const getBillers = useCallback((category: string) => fetchBillCatalogue<Biller>(
+    `vestara_billers_${category}`,
+    async () => {
+      const result = await callProducts("bills_billers", { categoryName: category });
+      return Array.isArray(result?.data?.data) ? result.data.data : [];
+    },
+  ), [callProducts]);
+
+  // Warm category lists with at most two requests; clicks share the same request.
+  useEffect(() => {
+    if (!categories.length) return;
+    let cancelled = false;
+    const queue = [...categories];
+    const worker = async () => {
+      while (!cancelled && queue.length) {
+        const category = queue.shift();
+        if (!category) return;
+        try { await getBillers(category); } catch { /* retry on selection */ }
+      }
+    };
+    void worker(); void worker();
+    return () => { cancelled = true; };
+  }, [categories, getBillers]);
+
   /* ─── Step 2: Load Billers ─── */
   const loadBillers = useCallback(async (category: string) => {
+    const selection = ++catalogueSelection.current;
     setSelectedCategory(category);
     setBillerSearch("");
     const cacheKey = `vestara_billers_${category}`;
     const cachedList = readBillCache<Biller[]>(cacheKey);
+    setStep("billers");
+    setLoading(!cachedList?.length);
     if (cachedList?.length) {
       // Show instantly, refresh quietly in the background.
       setBillers(visibleBillers(cachedList)); setStep("billers");
-      void callProducts("bills_billers", { categoryName: category }).then((result) => {
-      const list = result?.data?.data;
-      if (Array.isArray(list) && list.length) { writeBillCache(cacheKey, list); setBillers(visibleBillers(list)); }
+      void getBillers(category).then((list) => {
+      if (selection === catalogueSelection.current && list.length) setBillers(visibleBillers(list));
       }).catch(() => { /* keep cached */ });
       return;
     }
     setLoading(true);
     try {
-      const result = await callProducts("bills_billers", { categoryName: category });
-      const list = result?.data?.data || [];
+      const list = await getBillers(category);
+      if (selection !== catalogueSelection.current) return;
       setBillers(visibleBillers(Array.isArray(list) ? list : []));
-      if (Array.isArray(list) && list.length) writeBillCache(cacheKey, list);
       if (!Array.isArray(list) || list.length === 0) {
-        const msg = result?.data?.message || result?.raw?.message || `No ${category} billers available right now`;
+        const msg = `No ${categoryLabel(category)} billers available right now`;
         toast({ title: "No billers", description: String(msg) });
       }
     } catch (err) {
+      if (selection !== catalogueSelection.current) return;
       setBillers([]);
       const msg = err instanceof Error ? err.message : "Could not load billers";
       toast({ title: "Error", description: msg, variant: "destructive" });
     } finally {
-      setLoading(false);
-      setStep("billers");
+      if (selection === catalogueSelection.current) setLoading(false);
     }
-  }, [callProducts, toast]);
+  }, [getBillers, toast]);
 
   /* ─── Step 3: Load Items ─── */
   const loadItems = useCallback(async (biller: Biller) => {
+    const selection = ++catalogueSelection.current;
     setSelectedBiller(biller);
     const cacheKey = `vestara_items_${biller.id}_${biller.division}_${biller.product}`;
     const cachedItems = readBillCache<BillerItem[]>(cacheKey);
-    if (!cachedItems?.length) setLoading(true);
-    else { setItems(cachedItems); setStep("items"); }
+    setLoading(!cachedItems?.length);
+    if (cachedItems?.length) { setItems(cachedItems); setStep("items"); }
     try {
+      const paymentItems = await fetchBillCatalogue<BillerItem>(cacheKey, async () => {
       const result = await callProducts("bills_items", {
         billerId: biller.id,
         divisionId: biller.division,
         productId: biller.product,
       });
-      const paymentItems = result?.data?.data?.paymentitems || [];
-      if (paymentItems.length) writeBillCache(cacheKey, paymentItems);
+      return result?.data?.data?.paymentitems || [];
+      });
+      if (selection !== catalogueSelection.current) return;
       if (cachedItems?.length) {
         if (paymentItems.length) setItems(paymentItems);
         return;
@@ -348,9 +364,10 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
         setStep("items");
       }
     } catch {
+      if (selection !== catalogueSelection.current) return;
       if (!cachedItems?.length) { setItems([]); setStep("items"); }
     } finally {
-      setLoading(false);
+      if (selection === catalogueSelection.current) setLoading(false);
     }
   }, [callProducts, selectedCategory]);
 
@@ -494,6 +511,8 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
 
   /* ─── Navigation ─── */
   const goBack = () => {
+    catalogueSelection.current += 1;
+    setLoading(false);
     switch (step) {
       case "billers": setStep("categories"); break;
       case "items": setStep("billers"); break;
@@ -528,7 +547,7 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
   useEffect(() => {
     if (step !== "categories") return;
     callProducts("list_bill_beneficiaries")
-      .then(r => setPayAgain((r?.data || []).slice(0, 10)))
+      .then(r => setPayAgain((r?.data || []).filter(isVisibleBiller).slice(0, 10)))
       .catch(() => setPayAgain([]));
   }, [step, callProducts]);
 
@@ -725,11 +744,6 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
 
 
 
-  // Auto-load categories on first render
-  if (categories.length === 0 && !loading) {
-    loadCategories();
-  }
-
   const isAmountFixed = isFixedPriceItem(selectedItem);
   const itemFee = selectedItem?.itemFee ? Number(selectedItem.itemFee) : 0;
   const convenienceFee = (selectedBiller?.convenienceFee ? Number(selectedBiller.convenienceFee) : 0)
@@ -741,7 +755,7 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
 
   const stepTitle: Record<Step, string> = {
     categories: "Pay Bills",
-    billers: selectedCategory,
+    billers: categoryLabel(selectedCategory),
     items: selectedBiller?.name || "Select Plan",
     payment: "Confirm Payment",
     success: "Payment Complete",
@@ -790,7 +804,7 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
               <p className="text-xs font-semibold text-muted-foreground mb-2">Pay again</p>
               <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: "none" }}>
                 {payAgain.map((b) => {
-                  const cfg = categoryConfig[b.category] || { icon: Receipt, color: "text-muted-foreground", bg: "bg-muted" };
+                  const cfg = categoryConfig[categoryKey(b.category)] || { icon: Receipt, color: "text-muted-foreground", bg: "bg-muted" };
                   const Icon = cfg.icon;
                   return (
                     <button
@@ -834,7 +848,7 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
               ))
             ) : (
               [...categories].sort((a, b) => categoryOrder(a) - categoryOrder(b)).map((cat) => {
-                const cfg = categoryConfig[cat] || { icon: Receipt, color: "text-muted-foreground", bg: "bg-muted" };
+                const cfg = categoryConfig[categoryKey(cat)] || { icon: Receipt, color: "text-muted-foreground", bg: "bg-muted" };
                 const Icon = cfg.icon;
                 return (
                   <motion.button
@@ -885,7 +899,7 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
             ) : (
               <div className="bg-card rounded-2xl border border-border/50 divide-y divide-border/30 overflow-hidden">
                 {filteredBillers.map((biller) => {
-                  const cfg = categoryConfig[selectedCategory] || { icon: Receipt, color: "text-muted-foreground", bg: "bg-muted" };
+                  const cfg = categoryConfig[categoryKey(selectedCategory)] || { icon: Receipt, color: "text-muted-foreground", bg: "bg-muted" };
                   const Icon = cfg.icon;
                   return (
                     <motion.button
