@@ -42,6 +42,20 @@ export function usePushNotifications() {
       if (!registration) { setIsSubscribed(false); return; }
       const sub = await registration.pushManager.getSubscription();
       if (!sub || !user || Notification.permission !== "granted") { setIsSubscribed(false); return; }
+      // If the VAPID key pair changed since this device subscribed, the old
+      // subscription can't receive pushes — drop it and ask to re-subscribe.
+      const knownKey = localStorage.getItem("vapid_public_key");
+      try {
+        const { data } = await supabase.functions.invoke("push-notification", { body: { action: "get_vapid_key" } });
+        // No stored key means this subscription predates key tracking (old pair);
+        // a mismatch means keys rotated. Either way it can't receive pushes.
+        if (data?.vapid_public_key && data.vapid_public_key !== knownKey) {
+          await supabase.from("push_subscriptions").delete().eq("user_id", user.id).eq("endpoint", sub.endpoint);
+          await sub.unsubscribe();
+          setIsSubscribed(false);
+          return;
+        }
+      } catch { /* best-effort; keep current state on failure */ }
       // Self-heal: make sure the server knows about this phone's subscription.
       const j = sub.toJSON();
       const { error } = await supabase.from("push_subscriptions").upsert(
@@ -103,12 +117,23 @@ export function usePushNotifications() {
       const registration = await registerServiceWorker();
       const applicationServerKey = urlBase64ToUint8Array(vapidData.vapid_public_key) as BufferSource;
 
+      // If this device already has a subscription (e.g. created with older
+      // VAPID keys), drop it first so we can re-subscribe with the current key.
+      const existing = await registration.pushManager.getSubscription();
+      if (existing) {
+        try {
+          await supabase.from("push_subscriptions").delete().eq("user_id", user.id).eq("endpoint", existing.endpoint);
+        } catch { /* best-effort cleanup */ }
+        await existing.unsubscribe();
+      }
+
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey,
       });
 
       const subJson = subscription.toJSON();
+      localStorage.setItem("vapid_public_key", vapidData.vapid_public_key);
 
       // Save subscription to database
       const { error } = await supabase.from("push_subscriptions").upsert(
