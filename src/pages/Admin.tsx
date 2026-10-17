@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { 
   Shield, ArrowLeft, Banknote, Users, UsersRound, 
-  Activity, FileText, FlaskConical, CreditCard, ArrowDownToLine, Wallet, MessageSquare, Mail
+  Activity, FileText, FlaskConical, CreditCard, ArrowDownToLine, Wallet, MessageSquare, Mail, Bell
 } from "lucide-react";
 import { PlatformRevenueTab } from "@/components/admin/PlatformRevenueTab";
 import { AdminOverviewTab } from "@/components/admin/AdminOverviewTab";
