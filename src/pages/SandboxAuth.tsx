@@ -456,7 +456,7 @@ export default function SandboxAuth() {
           </div>
         </motion.div>
       ) : !isSignUp ? (
-        <div className="flex h-full flex-col">
+        <div className="fixed inset-0 flex h-[100dvh] flex-col overflow-hidden">
           <div className="auth-brand relative flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden bg-ink pb-6 pt-[env(safe-area-inset-top)]">
             <TonalBackground variant="signin" />
             <img src={logo} alt="Vestara logo" className="relative h-[clamp(48px,12dvh,112px)] w-[clamp(48px,12dvh,112px)] object-contain" />

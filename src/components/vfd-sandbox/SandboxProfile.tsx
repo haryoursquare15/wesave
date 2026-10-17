@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import {
   Phone, ShieldCheck, IdCard, Landmark, BadgeCheck, Hash, FileText, KeyRound, Lock,
   Fingerprint, Timer, Smartphone, History, LogOut, MessageCircle, Bell, Mail, Palette,
-  Sparkles, Download, AlertTriangle, LifeBuoy, HelpCircle, ClipboardList,
+  Sparkles, Download, AlertTriangle, LifeBuoy, HelpCircle, ClipboardList, ChevronDown,
   ScrollText, Shield, Info, Copy, Camera, Loader2, CheckCircle, Monitor, Trash2,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -204,6 +204,7 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
   const bio = useBiometricToggle();
   const device = useDeviceFingerprint();
   const [sheet, setSheet] = useState<SheetKey>(null);
+  const [pushPrefsOpen, setPushPrefsOpen] = useState(false);
   const [soonTitle, setSoonTitle] = useState("");
   const [wa, setWa] = useState<{ phone: string; opted_in: boolean } | null>(null);
   const [cats, setCats] = useState({ money: true, ajo: true, weekly: false });
