@@ -17,3 +17,4 @@
 - AuthContext preserves its context identity through Vite hot updates; why: refreshed route consumers must still read the mounted provider instead of crashing the preview.
 - Full-screen sync states render the shared presentation-only FluidLoader; why: keep loading visuals consistent without changing callers' loading or routing logic.
 - Password sign-in remembers only an opted-in username through rememberUsername, independently of PIN/biometric setup; why: prefill login safely without storing password credentials or changing authentication.
+- Bill catalogue presentation and read-only cache reuse share billCatalogue; preserve provider request keys and never cache validation or payment actions; why: normalize provider inconsistencies and reduce waits without changing payment safety.
