@@ -77,7 +77,7 @@ export default function ForgotPassword() {
           </Link>
 
           <Link
-            to="/auth"
+            to="/signin"
             className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-8 transition-colors"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -105,7 +105,7 @@ export default function ForgotPassword() {
                 </button>
               </p>
               <Button asChild variant="outline" className="w-full">
-                <Link to="/auth">Return to sign in</Link>
+                <Link to="/signin">Return to sign in</Link>
               </Button>
             </div>
           ) : (
@@ -152,7 +152,7 @@ export default function ForgotPassword() {
 
               <p className="mt-6 text-center text-sm text-muted-foreground">
                 Remember your password?{" "}
-                <Link to="/auth" className="text-primary font-medium hover:underline">
+                <Link to="/signin" className="text-primary font-medium hover:underline">
                   Sign In
                 </Link>
               </p>

@@ -27,10 +27,10 @@ export function LandingHero() {
             animate={{ opacity: 1, x: 0 }}
             className="flex items-center gap-3"
           >
-            <Link to="/auth">
+            <Link to="/signin">
               <Button variant="ghost" size="sm">Sign In</Button>
             </Link>
-            <Link to="/auth?mode=signup">
+            <Link to="/signin?mode=signup">
               <Button size="sm">Get Started</Button>
             </Link>
           </motion.div>
@@ -74,13 +74,13 @@ export function LandingHero() {
             transition={{ delay: 0.4 }}
             className="flex flex-col sm:flex-row gap-4 justify-center"
           >
-            <Link to="/auth?mode=signup">
+            <Link to="/signin?mode=signup">
               <Button variant="hero" size="xl" className="w-full sm:w-auto">
                 Start Saving Now
                 <ArrowRight className="h-5 w-5" />
               </Button>
             </Link>
-            <Link to="/auth">
+            <Link to="/signin">
               <Button variant="outline" size="xl" className="w-full sm:w-auto">
                 Explore Groups
               </Button>

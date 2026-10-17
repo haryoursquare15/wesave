@@ -32,7 +32,7 @@ export function useSessionEnforcement({ enabled = true }: UseSessionEnforcementO
     try {
       await supabase.auth.signOut();
       toast.info("Session expired due to inactivity. Please sign in again.");
-      navigate("/auth");
+      navigate("/signin");
     } catch (error) {
       console.error("Error signing out:", error);
     }

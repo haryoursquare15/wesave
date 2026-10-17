@@ -35,7 +35,7 @@ export default function Associations() {
 
   useEffect(() => {
     if (!authLoading && !user) {
-      navigate("/auth");
+      navigate("/signin");
     }
   }, [user, authLoading, navigate]);
 

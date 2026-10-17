@@ -49,7 +49,7 @@ export default function Support() {
 
   useEffect(() => {
     if (!authLoading && !user) {
-      navigate("/auth");
+      navigate("/signin");
     }
   }, [user, authLoading, navigate]);
 

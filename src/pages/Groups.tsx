@@ -22,7 +22,7 @@ export default function Groups() {
   // Redirect to auth if not logged in
   useEffect(() => {
     if (!authLoading && !user) {
-      navigate("/auth");
+      navigate("/signin");
     }
   }, [user, authLoading, navigate]);
 

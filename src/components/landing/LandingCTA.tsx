@@ -25,7 +25,7 @@ export function LandingCTA() {
               Join thousands of Africans saving smarter together. Create your account
               in minutes and start building your financial future.
             </p>
-            <Link to="/auth?mode=signup">
+            <Link to="/signin?mode=signup">
               <Button variant="gold" size="xl">
                 Get Started for Free
                 <ArrowRight className="h-5 w-5" />

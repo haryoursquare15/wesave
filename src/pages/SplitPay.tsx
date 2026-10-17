@@ -14,7 +14,7 @@ export default function SplitPay() {
   const { requests, loading } = useSplitRequests();
 
   useEffect(() => {
-    if (!authLoading && !user) navigate("/auth");
+    if (!authLoading && !user) navigate("/signin");
   }, [user, authLoading, navigate]);
 
   return (

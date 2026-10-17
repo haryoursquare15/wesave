@@ -42,7 +42,7 @@ export default function TargetAjoDetail() {
   const [removingId, setRemovingId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!authLoading && !user) navigate("/auth");
+    if (!authLoading && !user) navigate("/signin");
   }, [user, authLoading, navigate]);
 
   // Fetch member profiles

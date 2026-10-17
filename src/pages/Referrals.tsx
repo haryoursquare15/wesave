@@ -16,7 +16,7 @@ export default function Referrals() {
   const { stats, history, referralLink, referralCode, loading } = useReferrals();
 
   useEffect(() => {
-    if (!authLoading && !user) navigate("/auth");
+    if (!authLoading && !user) navigate("/signin");
   }, [user, authLoading, navigate]);
 
   const copyLink = () => {

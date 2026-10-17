@@ -31,7 +31,7 @@ export default function CreateGoalCampaign() {
   });
 
   useEffect(() => {
-    if (!authLoading && !user) navigate("/auth");
+    if (!authLoading && !user) navigate("/signin");
   }, [user, authLoading, navigate]);
 
   const update = (field: string, value: string) =>

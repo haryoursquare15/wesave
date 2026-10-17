@@ -29,7 +29,7 @@ export default function SplitPayDetail() {
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    if (!authLoading && !user) navigate("/auth");
+    if (!authLoading && !user) navigate("/signin");
   }, [user, authLoading, navigate]);
 
   const fetchWalletBalance = useCallback(async () => {
