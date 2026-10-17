@@ -133,6 +133,7 @@ export function usePushNotifications() {
       });
 
       const subJson = subscription.toJSON();
+      localStorage.setItem("vapid_public_key", vapidData.vapid_public_key);
 
       // Save subscription to database
       const { error } = await supabase.from("push_subscriptions").upsert(
