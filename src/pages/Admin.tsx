@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { 
   Shield, ArrowLeft, Banknote, Users, UsersRound, 
-  Activity, FileText, FlaskConical, CreditCard, ArrowDownToLine, Wallet, MessageSquare, Mail
+  Activity, FileText, FlaskConical, CreditCard, ArrowDownToLine, Wallet, MessageSquare, Mail, Bell
 } from "lucide-react";
 import { PlatformRevenueTab } from "@/components/admin/PlatformRevenueTab";
 import { AdminOverviewTab } from "@/components/admin/AdminOverviewTab";
@@ -31,6 +31,7 @@ import { VestaraAuditExportTab } from "@/components/admin/VestaraAuditExportTab"
 import { VfdWebhookDlqTab } from "@/components/admin/VfdWebhookDlqTab";
 import { VfdAuditTab } from "@/components/admin/VfdAuditTab";
 import { RolesPermissionsTab } from "@/components/admin/RolesPermissionsTab";
+import { AdminPushTab } from "@/components/admin/AdminPushTab";
 import { KycReviewTab } from "@/components/admin/KycReviewTab";
 import { Percent, PiggyBank, FileSpreadsheet, AlertTriangle, ScanLine, UserCog, ScanFace } from "lucide-react";
 import { ADMIN_LOGIN_PATH, ADMIN_RECURRING_TEST_PATH, applyNoIndex } from "@/lib/adminRoutes";
@@ -183,6 +184,10 @@ export default function Admin() {
               <Mail className="h-4 w-4" />
               Emails
             </TabsTrigger>
+            <TabsTrigger value="push" className="flex items-center gap-1">
+              <Bell className="h-4 w-4" />
+              Push
+            </TabsTrigger>
             <TabsTrigger value="vestara-rates" className="flex items-center gap-1">
               <Percent className="h-4 w-4" />
               Vestara Rates
@@ -277,6 +282,10 @@ export default function Admin() {
 
           <TabsContent value="emails">
             <AdminEmailTab />
+          </TabsContent>
+
+          <TabsContent value="push">
+            <AdminPushTab />
           </TabsContent>
 
           <TabsContent value="vestara-rates">
