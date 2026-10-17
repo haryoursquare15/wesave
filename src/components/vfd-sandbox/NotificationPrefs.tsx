@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Loader2, Send } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
-import { Button } from "@/components/ui/button";
 import { sandboxSupabase } from "@/integrations/supabase/sandboxClient";
 
 type Category = "transactions" | "security" | "marketing";
@@ -17,7 +15,6 @@ const LABELS: Record<Category, { label: string; helper: string }> = {
 export function NotificationPrefs({ userId }: { userId: string | null }) {
   const [prefs, setPrefs] = useState<Prefs | null>(null);
   const [saving, setSaving] = useState<Category | null>(null);
-  const [testing, setTesting] = useState(false);
 
   useEffect(() => {
     if (!userId) return;
@@ -43,30 +40,6 @@ export function NotificationPrefs({ userId }: { userId: string | null }) {
     setSaving(null);
   }, [userId, prefs]);
 
-  const sendTest = useCallback(async () => {
-    if (!userId) return;
-    setTesting(true);
-    try {
-      const { error } = await sandboxSupabase.functions.invoke("push-notification", {
-        body: {
-          action: "send_push",
-          user_id: userId,
-          title: "Vestara test",
-          body: "Push notifications are working on this device.",
-          url: "/app",
-          tag: "vestara-test-push",
-          category: "security",
-        },
-      });
-      if (error) throw error;
-      toast.success("Test notification sent");
-    } catch {
-      toast.error("We couldn't send the test. Please try again.");
-    } finally {
-      setTesting(false);
-    }
-  }, [userId]);
-
   if (!userId || !prefs) return null;
 
   return (
@@ -85,14 +58,6 @@ export function NotificationPrefs({ userId }: { userId: string | null }) {
           />
         </div>
       ))}
-      {userId && (
-        <div className="pt-2 pb-1">
-          <Button variant="outline" size="sm" className="w-full" disabled={testing} onClick={() => void sendTest()}>
-            {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            Send test push
-          </Button>
-        </div>
-      )}
     </div>
   );
 }
