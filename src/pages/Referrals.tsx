@@ -1,3 +1,4 @@
+import { FluidLoader } from "@/components/FluidLoader";
 import { motion } from "framer-motion";
 import { Copy, Gift, Users, Clock, CheckCircle, Lock, Share2, ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -56,11 +57,7 @@ export default function Referrals() {
   };
 
   if (authLoading || loading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="h-8 w-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
-      </div>
-    );
+    return <FluidLoader />;
   }
 
   return (

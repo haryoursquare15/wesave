@@ -1,3 +1,4 @@
+import { FluidLoader } from "@/components/FluidLoader";
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { ArrowLeft, Target, AlertTriangle } from "lucide-react";
@@ -90,11 +91,7 @@ export default function CreateGoalCampaign() {
   };
 
   if (authLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="h-8 w-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
-      </div>
-    );
+    return <FluidLoader />;
   }
 
   return (

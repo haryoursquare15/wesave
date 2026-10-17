@@ -1,3 +1,4 @@
+import { FluidLoader } from "@/components/FluidLoader";
 import { useState, useEffect, useRef } from "react";
 import { invokeSecureFunction } from "@/lib/secureApi";
 import { motion } from "framer-motion";
@@ -530,11 +531,7 @@ export default function GroupDetail() {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="h-8 w-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
-      </div>
-    );
+    return <FluidLoader />;
   }
 
   if (!group) {
