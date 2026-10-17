@@ -56,7 +56,7 @@ import { APP_HOME, SIGN_IN, FORGOT_PASSWORD, RESET_PASSWORD, JOIN } from "@/lib/
 
 const queryClient = new QueryClient();
 
-const PUBLIC_ROUTES = ["/", "/signin", "/forgot-password", "/invite", "/onboarding", "/terms", "/privacy", "/aml-policy", "/kyc-policy", "/goal", "/delete-account", "/app-home", "/vfd-sandbox", "/vfd-sandbox/auth", "/unsubscribe", APP_HOME, SIGN_IN, FORGOT_PASSWORD, RESET_PASSWORD, JOIN, ADMIN_LOGIN_PATH];
+const PUBLIC_ROUTES = ["/", "/auth", "/signin", "/forgot-password", "/invite", "/onboarding", "/terms", "/privacy", "/aml-policy", "/kyc-policy", "/goal", "/delete-account", "/app-home", "/vfd-sandbox", "/vfd-sandbox/auth", "/unsubscribe", APP_HOME, SIGN_IN, FORGOT_PASSWORD, RESET_PASSWORD, JOIN, ADMIN_LOGIN_PATH];
 
 function isPublicRoute(pathname: string) {
   return PUBLIC_ROUTES.some(route =>
