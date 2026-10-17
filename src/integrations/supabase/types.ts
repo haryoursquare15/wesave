@@ -1092,6 +1092,33 @@ export type Database = {
         }
         Relationships: []
       }
+      device_tokens: {
+        Row: {
+          created_at: string | null
+          id: string
+          last_seen: string | null
+          platform: string | null
+          token: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          last_seen?: string | null
+          platform?: string | null
+          token: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          last_seen?: string | null
+          platform?: string | null
+          token?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       email_send_log: {
         Row: {
           created_at: string
