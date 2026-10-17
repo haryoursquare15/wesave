@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, ReactNode, type Context } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { Tables } from "@/integrations/supabase/types";
@@ -24,7 +24,16 @@ interface AuthContextType {
   isOnboardingComplete: boolean;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+// Keep provider and consumers on the same context during preview hot updates.
+// Recreating it can leave an already-mounted provider serving the old context
+// while refreshed route consumers read a new, empty one.
+const AuthContext: Context<AuthContextType | undefined> =
+  import.meta.hot?.data.authContext ?? createContext<AuthContextType | undefined>(undefined);
+
+if (import.meta.hot) {
+  import.meta.hot.data.authContext = AuthContext;
+  import.meta.hot.dispose((data) => { data.authContext = AuthContext; });
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
