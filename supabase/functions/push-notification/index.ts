@@ -173,112 +173,59 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Sending is internal-only, except a signed-in user sending to themselves
-      // (used by the Profile → Notifications test button).
+      // Sending is internal-only, except a signed-in user sending to themselves.
       if (!internal && (await callerUserId(req, supabaseAdmin)) !== user_id) return unauthorized();
 
-      // Get user's push subscriptions
-      const { data: subscriptions, error } = await supabaseAdmin
-        .from("push_subscriptions")
-        .select("*")
-        .eq("user_id", user_id);
-
-      if (error) throw new Error("Unable to load notification devices");
-
-      // Respect the user's notification preferences; security alerts always send.
-      const cat = typeof category === "string" ? category : "transactions";
-      if (cat !== "security") {
-        const { data: prefs } = await supabaseAdmin
-          .from("notification_preferences")
-          .select("transactions, marketing")
-          .eq("user_id", user_id)
-          .maybeSingle();
-        const enabled = pushCategoryEnabled(cat, prefs);
-        if (!enabled) {
-          return new Response(
-            JSON.stringify({ sent: 0, skipped: "category_disabled", web: { sent: 0, failed: 0, removed: 0 }, fcm: { sent: 0, failed: 0, removed: 0 } }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-      }
-
-      const vapidPublicKey = Deno.env.get("VAPID_PUBLIC_KEY") || "";
-      const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY") || "";
-      const vapidSubject = (() => { const v = Deno.env.get("VAPID_SUBJECT") || ""; return /^(mailto:|https?:\/\/)/.test(v) ? v : "mailto:support@vestara.ng"; })();
-
-      const payload = JSON.stringify({
-        title: String(title || "Vestara").slice(0, 120),
-        body: String(body || "").slice(0, 500),
-        url: sanitizeUrl(url),
-        tag: String(tag || "vestara-notification").slice(0, 60),
-        notification_id,
+      const result = await sendPushToUser(supabaseAdmin, {
+        userId: user_id, title, body, url, tag, category, notificationId: notification_id,
       });
-
-
-      let sent = 0;
-      const expired: string[] = [];
-      const dlqRows: Array<Record<string, unknown>> = [];
-
-      for (const sub of subscriptions ?? []) {
-        try {
-          const response = await generatePushPayload(
-            sub,
-            payload,
-            vapidSubject,
-            vapidPublicKey,
-            vapidPrivateKey
-          );
-
-          if (response.ok || response.status === 201) {
-            sent++;
-          } else if (response.status === 404 || response.status === 410) {
-            // Subscription expired, clean up
-            expired.push(sub.id);
-          } else {
-            // Persist failure to DLQ for retry instead of silently dropping
-            console.error(`Push failed for ${sub.endpoint}: ${response.status}`);
-            dlqRows.push({
-              user_id,
-              notification_id: notification_id ?? null,
-              subscription_endpoint: sub.endpoint,
-              payload: { title, body, url, tag, notification_id },
-              failure_status: response.status,
-              failure_reason: `HTTP ${response.status}`,
-            });
-          }
-        } catch (err) {
-          const reason = err instanceof Error ? err.message : String(err);
-          console.error(`Push error for ${sub.endpoint}:`, reason);
-          dlqRows.push({
-            user_id,
-            notification_id: notification_id ?? null,
-            subscription_endpoint: sub.endpoint,
-            payload: { title, body, url, tag, notification_id },
-            failure_status: 0,
-            failure_reason: reason,
-          });
-        }
-      }
-
-      // Clean up expired subscriptions
-      if (expired.length > 0) {
-        await supabaseAdmin
-          .from("push_subscriptions")
-          .delete()
-          .in("id", expired);
-      }
-
-      // Persist failures (best-effort; never block push response)
-      if (dlqRows.length > 0) {
-        const { error: dlqErr } = await supabaseAdmin
-          .from("notification_dlq")
-          .insert(dlqRows);
-        if (dlqErr) console.error("DLQ insert failed:", dlqErr.message);
-      }
-
-      const fcm = await sendAndroidPush(supabaseAdmin, user_id, sanitizeUrl(url), String(tag || "vestara-notification").slice(0, 60));
       return new Response(
-        JSON.stringify({ sent, expired: expired.length, dlq: dlqRows.length, web: { sent, failed: dlqRows.length, removed: expired.length }, fcm }),
+        JSON.stringify(result),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Admin-initiated push: to one user or broadcast to all registered users.
+    if (action === "admin_send") {
+      const caller = await callerUserId(req, supabaseAdmin);
+      if (!caller || !(await callerIsAdmin(supabaseAdmin, caller))) return unauthorized();
+      if (!title || !body) {
+        return new Response(
+          JSON.stringify({ error: "title and body required" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      const cat = typeof category === "string" && ["transactions", "security", "marketing"].includes(category) ? category : "marketing";
+
+      let targetIds: string[] = [];
+      if (broadcast) {
+        const [subs, devices] = await Promise.all([
+          supabaseAdmin.from("push_subscriptions").select("user_id"),
+          supabaseAdmin.from("device_tokens").select("user_id"),
+        ]);
+        targetIds = [...new Set([...(subs.data ?? []), ...(devices.data ?? [])].map((r) => r.user_id as string))];
+      } else if (user_id) {
+        targetIds = [user_id];
+      } else {
+        return new Response(
+          JSON.stringify({ error: "user_id or broadcast required" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      if (targetIds.length > 500) targetIds = targetIds.slice(0, 500);
+
+      const totals = { users: 0, sent: 0, failed: 0, skipped: 0 };
+      for (const target of targetIds) {
+        const result = await sendPushToUser(supabaseAdmin, {
+          userId: target, title, body, url, tag: tag ?? "vestara-admin", category: cat,
+        });
+        totals.users++;
+        totals.sent += (result.web?.sent ?? 0) + (result.fcm?.sent ?? 0);
+        totals.failed += (result.web?.failed ?? 0) + (result.fcm?.failed ?? 0);
+        if (result.skipped) totals.skipped++;
+      }
+      return new Response(
+        JSON.stringify({ ok: true, ...totals }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
