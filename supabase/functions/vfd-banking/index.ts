@@ -3,6 +3,7 @@ import { isMoneyAction, isAccountFrozen, FROZEN_MESSAGE } from "../_shared/accou
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { vfdFetch, getGatewayAccessToken } from "../_shared/vfd-gateway.ts";
 import { checkSpendLock } from "../_shared/spend-lock.ts";
+import { notifyAdmins } from "../_shared/notify-admins.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1029,6 +1030,12 @@ async function handleTierUpgrade(userId: string, body: Record<string, unknown>) 
     .eq("user_id", userId);
 
   if (error) return jsonResponse({ error: error.message }, 500);
+
+  await notifyAdmins(supabaseAdmin, {
+    type: "admin_kyc_pending",
+    title: "New KYC review needed",
+    message: `A customer submitted a Tier ${requestedTier} upgrade request and is waiting for document review. Open the admin console → KYC Review to approve or reject.`,
+  });
 
   return jsonResponse({
     data: {
