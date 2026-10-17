@@ -12,6 +12,18 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return outputArray;
 }
 
+/** True when the browser subscription was created with `publicKey`. */
+function subscriptionUsesKey(sub: PushSubscription, publicKey: string): boolean {
+  const raw = sub.options?.applicationServerKey;
+  if (raw) {
+    const a = new Uint8Array(raw);
+    const b = urlBase64ToUint8Array(publicKey);
+    return a.length === b.length && a.every((v, i) => v === b[i]);
+  }
+  // Browser doesn't expose the key: trust what we stored at subscribe time.
+  return localStorage.getItem("vapid_public_key") === publicKey;
+}
+
 export function isIosBrowserTab(): boolean {
   if (typeof navigator === "undefined") return false;
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
