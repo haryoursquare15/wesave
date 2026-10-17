@@ -7,7 +7,8 @@ import { SandboxModeContext } from "@/hooks/useSandboxAwareAuth";
 import { useVfdBanking } from "@/hooks/useVfdBanking";
 import { useVestaraLedger, VestaraLockedFund } from "@/hooks/useVestaraLedger";
 import { useToast } from "@/hooks/use-toast";
-import { RefreshCw, LogOut, MessageCircle, Home, PiggyBank, CreditCard, Sparkles, User } from "lucide-react";
+import { LogOut, MessageCircle, Home, PiggyBank, CreditCard, Sparkles, User } from "lucide-react";
+import { FluidLoader } from "@/components/FluidLoader";
 import { ProfilePictureUpload } from "@/components/settings/ProfilePictureUpload";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { SandboxHeader } from "@/components/vfd-sandbox/SandboxHeader";
@@ -477,11 +478,7 @@ function VfdSandboxInner() {
   // redirect to sign-in.
   const signedInThisSession = typeof window !== "undefined" && !!sessionStorage.getItem("vestara_sandbox_signed_in");
   if (authLoading || !user || !signedInThisSession || !clientChecked) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <FluidLoader />;
   }
 
   // VFD live balance is the source of truth for the spendable wallet.
