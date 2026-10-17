@@ -103,6 +103,16 @@ export function usePushNotifications() {
       const registration = await registerServiceWorker();
       const applicationServerKey = urlBase64ToUint8Array(vapidData.vapid_public_key) as BufferSource;
 
+      // If this device already has a subscription (e.g. created with older
+      // VAPID keys), drop it first so we can re-subscribe with the current key.
+      const existing = await registration.pushManager.getSubscription();
+      if (existing) {
+        try {
+          await supabase.from("push_subscriptions").delete().eq("user_id", user.id).eq("endpoint", existing.endpoint);
+        } catch { /* best-effort cleanup */ }
+        await existing.unsubscribe();
+      }
+
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey,
