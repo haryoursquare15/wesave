@@ -12,6 +12,18 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return outputArray;
 }
 
+/** True when the browser subscription was created with `publicKey`. */
+function subscriptionUsesKey(sub: PushSubscription, publicKey: string): boolean {
+  const raw = sub.options?.applicationServerKey;
+  if (raw) {
+    const a = new Uint8Array(raw);
+    const b = urlBase64ToUint8Array(publicKey);
+    return a.length === b.length && a.every((v, i) => v === b[i]);
+  }
+  // Browser doesn't expose the key: trust what we stored at subscribe time.
+  return localStorage.getItem("vapid_public_key") === publicKey;
+}
+
 export function isIosBrowserTab(): boolean {
   if (typeof navigator === "undefined") return false;
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
@@ -40,20 +52,33 @@ export function usePushNotifications() {
     try {
       const registration = await navigator.serviceWorker.getRegistration("/sw.js");
       if (!registration) { setIsSubscribed(false); return; }
-      const sub = await registration.pushManager.getSubscription();
+      let sub = await registration.pushManager.getSubscription();
       if (!sub || !user || Notification.permission !== "granted") { setIsSubscribed(false); return; }
       // If the VAPID key pair changed since this device subscribed, the old
-      // subscription can't receive pushes — drop it and ask to re-subscribe.
-      const knownKey = localStorage.getItem("vapid_public_key");
+      // subscription can't receive pushes — silently swap it for a new one
+      // (permission is already granted) instead of leaving the phone unsubscribed.
       try {
         const { data } = await supabase.functions.invoke("push-notification", { body: { action: "get_vapid_key" } });
-        // No stored key means this subscription predates key tracking (old pair);
-        // a mismatch means keys rotated. Either way it can't receive pushes.
-        if (data?.vapid_public_key && data.vapid_public_key !== knownKey) {
-          await supabase.from("push_subscriptions").delete().eq("user_id", user.id).eq("endpoint", sub.endpoint);
-          await sub.unsubscribe();
-          setIsSubscribed(false);
-          return;
+        const currentKey: string | undefined = data?.vapid_public_key;
+        if (currentKey && !subscriptionUsesKey(sub, currentKey)) {
+          const oldEndpoint = sub.endpoint;
+          try {
+            await sub.unsubscribe();
+            sub = await registration.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey: urlBase64ToUint8Array(currentKey) as BufferSource,
+            });
+            localStorage.setItem("vapid_public_key", currentKey);
+            if (sub.endpoint !== oldEndpoint) {
+              await supabase.from("push_subscriptions").delete().eq("user_id", user.id).eq("endpoint", oldEndpoint);
+            }
+          } catch {
+            await supabase.from("push_subscriptions").delete().eq("user_id", user.id).eq("endpoint", oldEndpoint);
+            setIsSubscribed(false);
+            return;
+          }
+        } else if (currentKey) {
+          localStorage.setItem("vapid_public_key", currentKey);
         }
       } catch { /* best-effort; keep current state on failure */ }
       // Self-heal: make sure the server knows about this phone's subscription.
