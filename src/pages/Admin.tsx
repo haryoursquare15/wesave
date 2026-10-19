@@ -33,6 +33,7 @@ import { VfdAuditTab } from "@/components/admin/VfdAuditTab";
 import { RolesPermissionsTab } from "@/components/admin/RolesPermissionsTab";
 import { AdminPushTab } from "@/components/admin/AdminPushTab";
 import { KycReviewTab } from "@/components/admin/KycReviewTab";
+import { OnboardingFunnelTab } from "@/components/admin/OnboardingFunnelTab";
 import { Percent, PiggyBank, FileSpreadsheet, AlertTriangle, ScanLine, UserCog, ScanFace } from "lucide-react";
 import { ADMIN_LOGIN_PATH, ADMIN_RECURRING_TEST_PATH, applyNoIndex } from "@/lib/adminRoutes";
 
@@ -113,6 +114,12 @@ export default function Admin() {
               <Activity className="h-4 w-4" />
               Overview
             </TabsTrigger>
+            {hasPermission("users.view") && (
+              <TabsTrigger value="onboarding" className="flex items-center gap-1">
+                <Activity className="h-4 w-4" />
+                Onboarding
+              </TabsTrigger>
+            )}
             {hasPermission("users.view") && (
               <TabsTrigger value="users" className="flex items-center gap-1">
                 <Users className="h-4 w-4" />
@@ -279,6 +286,10 @@ export default function Admin() {
             <KycReviewTab />
           </TabsContent>
 
+
+          <TabsContent value="onboarding">
+            <OnboardingFunnelTab />
+          </TabsContent>
 
           <TabsContent value="emails">
             <AdminEmailTab />
