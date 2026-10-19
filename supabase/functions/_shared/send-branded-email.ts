@@ -3,7 +3,7 @@
  *
  * All outbound app email goes through Lovable's managed email delivery using
  * the shared `notification` template and the verified sender domain
- * notify.mail2.vestara.ng. Suppression, retries and unsubscribe handling are enforced
+ * notify.mail.vestara.ng. Suppression, retries and unsubscribe handling are enforced
  * by Lovable server-side, so no edge function should call an email provider
  * API directly.
  */
