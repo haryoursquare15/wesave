@@ -8278,6 +8278,10 @@ export type Database = {
         Args: { _time_filter?: string }
         Returns: Json
       }
+      admin_get_onboarding_funnel: {
+        Args: { _days?: number; _include_internal?: boolean }
+        Returns: Json
+      }
       admin_get_revenue_breakdown: {
         Args: { _end?: string; _include_internal?: boolean; _start?: string }
         Returns: Json
