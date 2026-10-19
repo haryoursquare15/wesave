@@ -1,0 +1,464 @@
+/* Vestara Vision: editorial design system.
+   Presentation-only, built on existing transactions, auth, KYC and banking logic. */
+
+/* Site photography is expressive, not buried beneath a dark opaque filter. */
+.vc-site .vc-hero-overlay {
+ background:linear-gradient(90deg,rgba(3,18,29,.76) 0%,rgba(3,18,29,.44) 47%,rgba(5,17,28,.13) 100%),
+ linear-gradient(0deg,rgba(4,15,25,.79) 0%,transparent 37%,rgba(5,17,27,.26) 100%);
+}
+.vc-site .vc-hero-background {background:#132e42 url("/illustrations/split.svg") center 40%/cover no-repeat;}
+.vc-site .vc-hero-photo {background:transparent;object-position:center 32%;}
+.vc-site .vc-offering {background:#204458 url("/illustrations/split.svg") center/cover no-repeat;}
+.vc-site .vc-offering-1 {background-image:url("/illustrations/savings.svg");}
+.vc-site .vc-offering-2 {background-image:url("/illustrations/community.svg");}
+.vc-site .vc-intro-image {background:#ad714f url("/illustrations/split.svg") center/cover no-repeat;}
+.vc-site .vc-end {background:#183b50 url("/illustrations/community.svg") center/cover no-repeat;}
+.vc-site .vc-offering.vc-floating-product {
+ height:clamp(440px,37vw,565px);
+ flex-basis:clamp(320px,36vw,480px);
+ width:clamp(320px,36vw,480px);
+ border-radius:25px!important;
+ box-shadow:0 23px 47px -29px rgba(0,0,0,.32);
+}
+.vc-site .vc-offering.vc-floating-product > img {object-fit:cover;}
+.vc-site .vc-offering .vc-offering-overlay {
+ background:linear-gradient(180deg,rgba(5,25,39,.11),rgba(5,25,39,.11) 32%,rgba(5,21,32,.87));
+}
+.vc-site .vc-floating-product .vc-offering-inside {
+ padding:clamp(27px,3vw,40px);
+}
+.vc-site .vc-floating-product .vc-offering-content {width:100%;}
+.vc-site .vc-feature-card {
+ flex-basis:clamp(270px,28vw,375px);
+ min-height:320px;
+ border-radius:24px!important;
+ background:#fff;
+ border:1px solid rgba(18,47,68,.09);
+ box-shadow:0 19px 38px -32px rgba(14,39,54,.31);
+}
+.vc-site .vc-feature-card h3 {font-size:clamp(24px,2vw,30px);line-height:1.23;max-width:unset;}
+.vc-site .vc-feature-card .vc-feature-top {align-items:center;}
+.vc-site .vc-feature-card .vc-feature-icon {border-radius:17px;}
+.vc-site .vc-feature-2 {background:#132f42;color:#fff;}
+.vc-site .vc-feature-5 {background:#f1e5d8;}
+.vc-site .vc-feature-card a {transition:gap .2s ease;color:inherit;}
+.vc-site .vc-feature-card a:hover {gap:10px;}
+.vc-site .vc-rail-actions button {
+ border-radius:14px;
+ transition:background .22s,color .22s,opacity .22s,transform .22s;
+}
+.vc-site .vc-rail-actions button:disabled,
+.vc-site .vc-products .vc-rail-actions button:disabled,
+.vc-site .vc-features .vc-rail-actions button:disabled {
+ background:transparent!important;
+ border-color:currentColor!important;
+ color:inherit!important;
+ opacity:.24!important;
+ transform:none!important;
+ cursor:not-allowed;
+ box-shadow:none!important;
+}
+.vc-site .vc-rail-actions button:not(:disabled):active {transform:scale(.94);}
+.vc-site .vc-swipe-rail {scroll-snap-type:x mandatory;scroll-padding-inline:2px;}
+.vc-site .vc-rail-actions > span {font-variant-numeric:tabular-nums;font-weight:800;letter-spacing:.14em;}
+.vc-site .vc-hero h1 {text-wrap:balance;}
+.vc-site .vc-feature-heading h2 {font-size:clamp(38px,4.6vw,68px);letter-spacing:-.07em;}
+.vc-site .vc-feature-heading .vc-rail-subtitle {max-width:450px;}
+.vc-site .vc-products {background:linear-gradient(155deg,#0b2538,#14354c 58%,#0b273d);}
+.vc-site .vc-features {background:radial-gradient(ellipse at 95% 10%,rgba(243,134,62,.09),transparent 50%),#f7f4ee;}
+.vc-site .vc-hero .vc-primary-link,.vc-site .vc-end .vc-primary-link {font-weight:750;letter-spacing:-.01em;}
+
+/* Fintech app: an actual product language, not inherited generic cards. */
+.vestara-app {
+ --background:39 20% 98%;
+ --card:0 0% 100%;
+ --border:215 16% 90%;
+ background:#f8f7f3;
+ color:hsl(var(--foreground));
+}
+.vestara-app-scroll {
+ background:radial-gradient(circle at 100% 0%,rgba(250,181,124,.065),transparent 45%),#f8f7f3;
+ padding-top:21px;
+}
+.vestara-app .premium-dashboard {gap:22px;}
+.vestara-app .premium-dashboard > div:first-child h1 {
+ font-size:clamp(24px,6.3vw,29px);
+ line-height:1.1;font-weight:760;
+ letter-spacing:-.067em;
+}
+.vestara-app .premium-dashboard > div:first-child p {font-size:12px;}
+.vestara-app .premium-dashboard > div:first-child .ring-primary\/20 {ring:0;box-shadow:0 0 0 4px #e7eee9;}
+.vestara-app .premium-balance-card {
+ border-radius:25px!important;
+ border:1px solid rgba(255,255,255,.15);
+ padding:24px!important;
+ background:
+ radial-gradient(circle at 102% 0%,rgba(239,127,56,.25),transparent 52%),
+ linear-gradient(135deg,#244b61 0%,#123147 49%,#0b2437 100%);
+ box-shadow:0 26px 42px -29px rgba(8,34,52,.54),inset 0 1px rgba(255,255,255,.11)!important;
+}
+.vestara-app .premium-balance-card::before {
+ content:"";display:block;position:absolute;left:24px;right:24px;top:0;
+ height:2px;border-radius:2px;
+ background:linear-gradient(90deg,#f9b06a,rgba(255,255,255,.06),transparent);
+}
+.vestara-app .premium-balance-card h2 {
+ font-size:clamp(36px,10vw,47px);
+ font-weight:720;
+ line-height:1.1;
+ margin:17px 0 20px!important;
+ letter-spacing:-.072em;
+}
+.vestara-app .premium-balance-card .grid.grid-cols-3 {
+ padding-top:18px;
+ gap:7px;
+ border-top-color:rgba(255,255,255,.2);
+}
+.vestara-app .premium-balance-card .grid.grid-cols-3 > div:not(:first-child) {padding-left:10px;}
+.vestara-app .premium-balance-card .grid.grid-cols-3 p:first-child {opacity:.75;font-size:10px;}
+.vestara-app .premium-balance-card .grid.grid-cols-3 p:last-child {font-size:12px;}
+.vestara-app .premium-quick-actions {
+ margin-top:0!important;
+ padding:2px 0 5px;
+ gap:7px;
+}
+.vestara-app .premium-quick-actions button {gap:10px;}
+.vestara-app .premium-quick-actions .premium-action-icon {
+ width:54px;height:54px;
+ max-width:100%;
+ border-radius:16px!important;
+ border:1px solid #e9e8e5;
+ background:#fff;
+ color:#1b4157;
+ box-shadow:0 11px 20px -18px rgba(13,44,60,.30);
+ transition:transform .2s,box-shadow .2s,background .2s;
+}
+.vestara-app .premium-quick-actions button:hover .premium-action-icon {transform:translateY(-2px);box-shadow:0 14px 26px -17px rgba(13,44,60,.36);}
+.vestara-app .premium-quick-actions button:first-child .premium-action-icon {background:#f16d29;color:#fff;border-color:#f16d29;}
+.vestara-app .premium-quick-actions button > span:last-child {font-size:10px;line-height:1.18;font-weight:720;letter-spacing:-.015em;}
+
+/* A crafted personal editorial feature, with an original illustration and live CTAs. */
+.vestara-app .premium-chapter {
+ position:relative;
+ min-height:292px;
+ overflow:hidden;
+ isolation:isolate;
+ border-radius:25px;
+ color:#fff;
+ background:linear-gradient(135deg,#183a4d,#0c2a40);
+ border:1px solid rgba(19,55,74,.25);
+ box-shadow:0 20px 35px -29px rgba(13,46,62,.48);
+}
+.vestara-app .premium-chapter-visual {
+ position:absolute;
+ width:80%;
+ height:100%;
+ right:-17%;
+ top:0;
+ z-index:0;
+ opacity:.75;
+ overflow:hidden;
+ mask-image:linear-gradient(90deg,transparent 0%,black 52%);
+ pointer-events:none;
+}
+.vestara-app .premium-chapter-visual img {
+ width:100%;height:100%;
+ object-fit:cover;
+ object-position:center 30%;
+}
+.vestara-app .premium-chapter::after {
+ content:"";position:absolute;inset:0;z-index:0;
+ pointer-events:none;
+ background:linear-gradient(90deg,rgba(9,31,45,.83),rgba(9,31,45,.5) 55%,rgba(8,29,43,.16));
+}
+.vestara-app .premium-chapter-content {
+ position:relative;z-index:1;
+ display:flex;
+ flex-direction:column;
+ align-items:flex-start;
+ padding:26px 23px 26px;
+ max-width:85%;
+ min-height:292px;
+}
+.vestara-app .premium-chapter-content > span {
+ font-size:9px;font-weight:790;letter-spacing:.16em;color:#ffb889;
+ margin-bottom:auto;
+}
+.vestara-app .premium-chapter h2 {
+ font-size:clamp(34px,9.5vw,52px);
+ font-weight:650;
+ line-height:1.01;letter-spacing:-.076em;
+ margin:20px 0 10px;
+ color:white;
+}
+.vestara-app .premium-chapter h2 em {
+ font-family:"Playfair Display",Georgia,serif;font-weight:400;
+ letter-spacing:-.06em;color:#ffc196;
+}
+.vestara-app .premium-chapter p {
+ font-size:11px;line-height:1.55;
+ color:#d6e0e4;max-width:230px;
+ margin:0 0 17px;
+}
+.vestara-app .premium-chapter-actions {display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
+.vestara-app .premium-chapter-actions button {
+ font-size:11px;font-weight:730;
+ display:inline-flex;align-items:center;gap:7px;
+ color:white;
+}
+.vestara-app .premium-chapter-actions button:first-child {
+ background:#f17836;border:1px solid #f17836;
+ padding:12px 14px;border-radius:11px;
+}
+.vestara-app .premium-chapter-actions button:last-child {border-bottom:1px solid rgba(255,255,255,.55);padding-bottom:7px;}
+.vestara-app .premium-chapter-actions button:focus-visible {outline:2px solid #fff;outline-offset:3px;}
+.vestara-app .premium-discover {padding-top:3px;}
+.vestara-app .premium-discover-heading h2 {font-size:22px;line-height:1.15;}
+.vestara-app .premium-discover-heading p {color:#c86e39;font-weight:800;}
+.vestara-app .premium-discover-grid {
+ grid-auto-columns:minmax(190px,73%);
+ gap:13px;
+ padding-bottom:13px;
+ scroll-snap-type:x mandatory;
+}
+.vestara-app .premium-discover-card {
+ min-height:233px;
+ border-radius:21px!important;
+ box-shadow:0 21px 35px -25px rgba(8,36,52,.38);
+ background:#23485c url("/illustrations/split.svg") center/cover no-repeat;
+}
+.vestara-app .premium-discover-card:nth-child(2) {background-image:url("/illustrations/savings.svg");}
+.vestara-app .premium-discover-card:nth-child(3) {background-image:url("/illustrations/community.svg");}
+.vestara-app .premium-discover-card::after {border-radius:21px!important;}
+.vestara-app .premium-discover-overlay {
+ background:linear-gradient(180deg,rgba(5,24,38,.10) 0%,rgba(5,24,38,.15) 35%,rgba(5,24,38,.87) 100%);
+}
+.vestara-app .premium-discover-card > img {object-fit:cover;}
+.vestara-app .premium-discover-copy strong {font-size:22px;font-weight:730;letter-spacing:-.05em;line-height:1.16;max-width:220px;}
+.vestara-app .premium-discover-copy > span {font-size:9px;letter-spacing:.14em;}
+
+/* Profile: deliberately designed navigation hub, identity and grouped settings. */
+.vestara-app .premium-profile-heading {padding:5px 2px 0;}
+.vestara-app .premium-profile-heading h1 {font-weight:760;font-size:38px;line-height:1.06;letter-spacing:-.075em;}
+.vestara-app .premium-profile-identity {
+ border-radius:25px!important;
+ min-height:159px;
+ padding:25px 22px!important;
+}
+.vestara-app .premium-profile-hub {
+ display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+ gap:9px;
+}
+.vestara-app .premium-profile-hub > button {
+ display:flex;flex-direction:column;align-items:flex-start;
+ position:relative;
+ min-width:0;
+ min-height:118px;
+ padding:15px 12px 13px;
+ text-align:left;
+ background:hsl(var(--card));
+ border:1px solid hsl(var(--border));
+ border-radius:18px;
+ transition:background .2s,border-color .2s,transform .2s;
+}
+.vestara-app .premium-profile-hub > button:hover {
+ transform:translateY(-2px);
+ border-color:hsl(var(--primary)/.3);
+}
+.vestara-app .premium-profile-hub-glyph {
+ width:31px;height:31px;display:grid;place-items:center;
+ color:#e37430;
+ margin-bottom:auto;
+}
+.vestara-app .premium-profile-hub > button:nth-child(2) .premium-profile-hub-glyph {color:#1c516b;}
+.vestara-app .premium-profile-hub > button:nth-child(3) .premium-profile-hub-glyph {color:#a88032;}
+.vestara-app .premium-profile-hub button > span:nth-child(2) {min-width:0;margin-top:12px;display:flex;flex-direction:column;gap:2px;}
+.vestara-app .premium-profile-hub strong {font-size:12px;font-weight:760;color:hsl(var(--foreground));letter-spacing:-.03em;}
+.vestara-app .premium-profile-hub small {font-size:10px;line-height:1.2;color:hsl(var(--muted-foreground));}
+.vestara-app .premium-profile-hub > button > svg {position:absolute;top:14px;right:12px;color:hsl(var(--muted-foreground));opacity:.65;}
+.vestara-app .premium-profile-setup {border-radius:19px!important;border:1px solid hsl(var(--border))!important;background:hsl(var(--card))!important;box-shadow:0 15px 24px -23px rgba(17,43,63,.19)!important;}
+.vestara-app .premium-profile-section {margin-top:21px;}
+.vestara-app .premium-settings-list {
+ background:transparent!important;
+ border:0!important;
+ box-shadow:none!important;
+ border-radius:0!important;
+ display:flex;
+ flex-direction:column;
+ gap:9px;
+ overflow:visible!important;
+}
+.vestara-app .premium-settings-list > .premium-profile-row,
+.vestara-app .premium-settings-list > div:not(.premium-profile-row) {
+ border:1px solid hsl(var(--border));
+ border-radius:16px!important;
+ background:hsl(var(--card));
+ overflow:hidden;
+ margin:0;
+ box-shadow:0 8px 26px -24px rgba(11,34,49,.25);
+}
+.vestara-app .premium-settings-list > .premium-profile-row {
+ padding:15px 14px;
+ min-height:70px;
+}
+.vestara-app .premium-profile-row > .premium-profile-row-icon {
+ background:transparent!important;
+ border:0!important;
+ border-radius:0;
+ color:hsl(var(--primary));
+ width:28px;height:34px;
+}
+.vestara-app .premium-profile-section[data-section="account"] .premium-profile-row-icon {color:#27566b;background:transparent!important;}
+.vestara-app .premium-profile-section[data-section="security"] .premium-profile-row-icon {color:#d46f33;background:transparent!important;}
+.vestara-app .premium-profile-row .flex-1.min-w-0 > p:first-child {font-size:12.5px;font-weight:720;}
+.vestara-app .premium-profile-row .flex-1.min-w-0 > p:nth-child(2) {font-size:11px;}
+.vestara-app .premium-profile-row .text-right {max-width:39%;font-size:11px;overflow:hidden;}
+.vestara-app .premium-settings-list > .premium-profile-row-attention {background:hsl(var(--primary-soft)/.3)!important;border-color:hsl(var(--primary)/.15)!important;}
+.vestara-app .premium-settings-list > .premium-profile-row:hover {border-color:hsl(var(--primary)/.29);}
+.vestara-app .premium-profile-row svg.text-muted-foreground {opacity:.5;}
+.vestara-app .premium-profile-section[data-section="preferences"] .premium-settings-list > div {border-radius:18px!important;}
+
+/* Bills move away from the same generic cards used for every product. */
+.vestara-app .premium-bills {padding-bottom:24px;}
+.vestara-app .premium-bills-heading {margin:0 0 16px;padding:1px 1px 0;}
+.vestara-app .premium-bills-heading > span {
+ font-size:9px;letter-spacing:.17em;color:#ca7139;font-weight:800;
+}
+.vestara-app .premium-bills-heading h2 {
+ font-size:clamp(27px,8.2vw,37px);
+ margin:10px 0 7px;
+ letter-spacing:-.073em;line-height:1.15;font-weight:770;
+}
+.vestara-app .premium-bills-heading h2 span {color:#e97431;}
+.vestara-app .premium-bills-heading p {font-size:12px;line-height:1.5;color:hsl(var(--muted-foreground));}
+.vestara-app .premium-bills .bg-muted\/40.rounded-xl.mb-3 {padding:5px;border-radius:15px;}
+.vestara-app .premium-bills .bg-muted\/40.rounded-xl.mb-3 button {border-radius:11px!important;}
+.vestara-app .premium-bill-categories {gap:12px;}
+.vestara-app .premium-bill-category {
+ min-height:137px;
+ border-radius:20px!important;
+ background:#fff;
+ padding:17px;
+ border:1px solid #e8e8e3;
+ box-shadow:0 15px 30px -25px rgba(14,43,61,.28);
+ transition:transform .2s ease,border-color .2s ease;
+}
+.vestara-app .premium-bill-category:hover {transform:translateY(-2px);border-color:#f2ad84;}
+.vestara-app .premium-bill-category:nth-child(3n + 1) {
+ background:#18384e;
+ border-color:#18384e;
+}
+.vestara-app .premium-bill-category:nth-child(3n + 1) .text-foreground {color:#fff;}
+.vestara-app .premium-bill-category:nth-child(3n + 1) .bg-blue-500\/10,
+.vestara-app .premium-bill-category:nth-child(3n + 1) .bg-amber-500\/10,
+.vestara-app .premium-bill-category:nth-child(3n + 1) .bg-muted {background:rgba(255,255,255,.11);color:#fff;}
+.vestara-app .premium-bill-category .w-11.h-11 {border-radius:13px;}
+.vestara-app .premium-bill-category .text-sm.font-semibold {font-size:14px;font-weight:740;letter-spacing:-.025em;}
+.vestara-app .premium-bills [data-slot="dialog-content"] {border-radius:20px;}
+
+/* More editorial rhythm throughout all authenticated services. */
+.vestara-app .premium-context-banner {min-height:165px;border-radius:24px;}
+.vestara-app[data-view="bills"] .premium-context-banner {background:radial-gradient(circle at 98% 0%,rgba(255,200,137,.21),transparent 55%),linear-gradient(145deg,#143f51,#102b3f);}
+.vestara-app[data-view="history"] .premium-context-banner {background:radial-gradient(circle at 95% 0%,rgba(244,144,77,.22),transparent 46%),linear-gradient(145deg,#273d4b,#0b253b);}
+.vestara-app[data-view="ajo"] .premium-context-banner,
+.vestara-app[data-view="association"] .premium-context-banner {background:radial-gradient(circle at 90% 0%,rgba(246,179,105,.24),transparent 52%),linear-gradient(145deg,#33584c,#163b40);}
+.vestara-app[data-view="target"] .premium-context-banner,
+.vestara-app[data-view="goal"] .premium-context-banner {background:radial-gradient(circle at 90% 0%,rgba(255,165,83,.24),transparent 52%),linear-gradient(145deg,#3a4355,#15334a);}
+.vestara-app[data-view="transfer"] .premium-context-banner,
+.vestara-app[data-view="withdraw"] .premium-context-banner {background:radial-gradient(circle at 90% 0%,rgba(255,173,120,.22),transparent 52%),linear-gradient(145deg,#1b5063,#0d2a40);}
+.vestara-app[data-view="fund"] .premium-context-banner {background:radial-gradient(circle at 95% 0%,rgba(250,185,117,.25),transparent 50%),linear-gradient(145deg,#17455a,#0d2b40);}
+.vestara-app .premium-savings .bg-gradient-ink {
+ background:radial-gradient(circle at 94% 0%,rgba(246,137,63,.29),transparent 43%),linear-gradient(155deg,#235069,#0a283e);
+ border-radius:24px!important;
+ padding:26px 23px;
+ min-height:150px;
+}
+.vestara-app .premium-savings .bg-gradient-ink .text-3xl {font-size:35px;letter-spacing:-.063em;}
+.vestara-app .premium-split-heading h3 {font-size:27px!important;}
+.vestara-app .premium-insights [aria-label="Money-health score"] {border-radius:25px;box-shadow:0 22px 40px -30px rgba(8,32,48,.55);}
+.vestara-app .premium-insights section .grid.grid-cols-2 > button {
+ border-radius:17px;
+ border:1px solid hsl(var(--border));
+ background:hsl(var(--card));
+ box-shadow:0 15px 30px -26px rgba(12,33,52,.25);
+}
+.vestara-app .premium-insights .relative.rounded-lg.border.bg-card {border-radius:20px;}
+.vestara-app .vestara-bottom-nav {
+ margin:0 12px max(8px,env(safe-area-inset-bottom,0px))!important;
+ background:hsl(var(--card)/.96)!important;
+ border:1px solid hsl(var(--border)/.8)!important;
+ border-radius:20px;
+ overflow:hidden;
+ box-shadow:0 14px 34px -25px rgba(7,26,38,.33);
+ padding-bottom:0!important;
+ backdrop-filter:blur(20px);
+}
+.vestara-app .vestara-bottom-tabs {min-height:65px;padding:5px!important;}
+.vestara-app .vestara-bottom-tab {border-radius:15px;min-height:58px;}
+.vestara-app .vestara-bottom-indicator {
+ inset:1px 2px!important;
+ height:auto!important;
+ border-radius:14px!important;
+ background:hsl(var(--primary)/.10)!important;
+}
+.vestara-app .vestara-bottom-tab .relative {z-index:1;}
+.vestara-app .vestara-bottom-tab[aria-current="page"] {color:hsl(var(--primary));}
+
+/* Colour safety in dark mode; no washed-out white cards or illegible controls. */
+.dark .vestara-app {
+ --card:214 27% 15%;
+ --border:216 20% 28%;
+ background:#0c1c29;
+}
+.dark .vestara-app-scroll {background:radial-gradient(circle at 100% 0%,rgba(255,144,64,.03),transparent 52%),#0c1c29;}
+.dark .vestara-app .premium-profile-hub > button,
+.dark .vestara-app .premium-bill-category:not(:nth-child(3n + 1)) {background:#162d3c;color:#eef6f8;border-color:#294253;}
+.dark .vestara-app .premium-profile-hub strong {color:#fff;}
+.dark .vestara-app .premium-profile-hub small {color:#bac8d0;}
+.dark .vestara-app .premium-settings-list > .premium-profile-row,
+.dark .vestara-app .premium-settings-list > div:not(.premium-profile-row) {background:#142b3a;border-color:#284153;}
+.dark .vestara-app .premium-profile-row > .premium-profile-row-icon {color:#f6a16f;}
+.dark .vestara-app .premium-bill-category .text-foreground {color:#eaf2f6;}
+.dark .vestara-app .premium-chapter {border-color:#344d5b;}
+.dark .vestara-app .premium-balance-card {border-color:rgba(255,255,255,.14);}
+.dark .vestara-app .premium-bills-heading h2 {color:#f4f8f9;}
+.dark .vestara-app .vestara-bottom-nav {background:#142b3b!important;border-color:#284352!important;}
+.dark .vestara-app .vestara-bottom-indicator {background:rgba(247,132,67,.15)!important;}
+
+@media (max-width:720px) {
+ .vc-site .vc-hero-overlay {
+   background:linear-gradient(90deg,rgba(5,20,32,.67),rgba(5,20,32,.25)),
+   linear-gradient(0deg,rgba(5,18,28,.81),transparent 55%);
+ }
+ .vc-site .vc-offering.vc-floating-product {
+   flex-basis:min(81vw,365px)!important;width:min(81vw,365px)!important;
+   height:clamp(450px,62vh,530px)!important;
+   border-radius:23px!important;
+ }
+ .vc-site .vc-feature-card {flex:0 0 min(76vw,330px);border-radius:21px!important;}
+ .vc-site .vc-offering .vc-offering-overlay {background:linear-gradient(180deg,rgba(5,25,39,.02),rgba(5,25,39,.15) 42%,rgba(5,22,35,.91) 100%);}
+ .vc-site .vc-feature-heading .vc-rail-actions button:disabled {opacity:.24;}
+ .vestara-app-scroll {padding-left:16px;padding-right:16px;}
+ .vestara-app .premium-chapter {min-height:282px;border-radius:23px;}
+ .vestara-app .premium-chapter-content {min-height:282px;max-width:91%;padding:23px 20px;}
+ .vestara-app .premium-chapter-visual {width:100%;right:-33%;}
+ .vestara-app .premium-profile-hub > button {padding:13px 10px;min-height:112px;border-radius:15px;}
+ .vestara-app .premium-profile-hub strong {font-size:11px;}
+ .vestara-app .premium-profile-hub small {font-size:9px;}
+ .vestara-app .premium-settings-list > .premium-profile-row {border-radius:14px!important;}
+ .vestara-app .premium-bill-category {min-height:129px;border-radius:19px!important;}
+ .vestara-app .vestara-bottom-nav {margin:0 9px max(6px,env(safe-area-inset-bottom,0px))!important;border-radius:18px;}
+ .vestara-app .vestara-bottom-tab {min-height:55px;}
+ .vestara-app .vestara-bottom-tab > span:last-child {font-size:10px;}
+}
+@media(max-width:375px) {
+ .vestara-app .premium-balance-card {padding:21px!important;}
+ .vestara-app .premium-balance-card h2 {font-size:36px;}
+ .vestara-app .premium-quick-actions .premium-action-icon {width:49px;height:49px;}
+ .vestara-app .premium-chapter h2 {font-size:35px;}
+ .vestara-app .premium-profile-hub > button {min-height:108px;padding:12px 8px;}
+}
+@media(prefers-reduced-motion:reduce) {
+ .vestara-app .premium-profile-hub > button,.vestara-app .premium-quick-actions .premium-action-icon,.vestara-app .premium-bill-category {transition:none!important;}
+ .vestara-app .premium-profile-hub > button:hover,.vestara-app .premium-bill-category:hover {transform:none!important;}
+}

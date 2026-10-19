@@ -1,0 +1,122 @@
+/* Vestara Studio. Frontend-only finishing layer for signed-in customer screens. */
+.vestara-app {
+ --background: 40 22% 97%;
+ --foreground: 210 46% 14%;
+ --card: 0 0% 100%;
+ --card-foreground: 210 46% 14%;
+ --muted: 40 14% 94%;
+ --muted-foreground: 211 13% 44%;
+ --border: 215 17% 89%;
+ --input: 216 17% 85%;
+ --primary-soft: 25 80% 95%;
+ --accent: 25 80% 95%;
+ --accent-foreground: 21 79% 39%;
+ background: linear-gradient(180deg,#faf9f5 0%,#f5f4f0 60%,#faf9f5 100%);
+ font-family:"DM Sans",system-ui,sans-serif;
+}
+.dark .vestara-app { --background:214 33% 10%; --foreground:220 18% 96%; --card:214 27% 16%; --card-foreground:220 18% 96%; --muted:215 26% 23%; --muted-foreground:210 15% 72%; --border:214 19% 29%; --input:214 19% 29%; --primary-soft:21 56% 19%; }
+.vestara-app-header { background:hsl(var(--card) / .97); box-shadow:0 4px 28px -25px rgba(9,30,48,.42); border-bottom:1px solid hsl(var(--border)/.8); }
+.vestara-app-header > div:first-child { min-height:70px; }
+.vestara-app-header img[alt="Vestara"] { height:37px; max-width:173px; }
+.vestara-app-scroll { padding-top:24px; padding-left:20px; padding-right:20px; }
+.vestara-app-scroll > div { max-width:100%; }
+.vestara-app .vestara-elevated-dashboard { gap:27px; }
+.vestara-elevated-dashboard > div:first-child { padding:1px 2px 1px; margin-bottom:4px; }
+.vestara-elevated-dashboard > div:first-child h1 { font-weight:700; letter-spacing:-.065em; font-size:26px; }
+.vestara-elevated-dashboard > div:first-child p { font-size:12px; font-weight:550; }
+.vestara-elevated-dashboard .premium-balance-card {
+ padding:27px 24px 24px;
+ border-radius:23px;
+ background: radial-gradient(circle at 105% 0%,rgba(255,150,59,.26),transparent 42%), linear-gradient(125deg,#1a3c54 0%,#102a42 51%,#071b2e 100%);
+ border:1px solid rgba(255,255,255,.12);
+ box-shadow:0 24px 44px -28px rgba(7,26,44,.48),inset 0 1px rgba(255,255,255,.09);
+}
+.vestara-elevated-dashboard .premium-balance-card::before {
+ content:""; position:absolute; left:23px; right:23px; top:0; height:3px; background:linear-gradient(90deg,#f47a2c,rgba(255,162,67,.35),transparent); border-radius:0 0 6px 6px;
+}
+.vestara-elevated-dashboard .premium-balance-card::after { right:-93px; top:-110px; width:265px; height:265px; border:1px solid rgba(255,255,255,.10); box-shadow:0 0 0 40px rgba(255,255,255,.02),0 0 0 86px rgba(255,255,255,.012); }
+.vestara-elevated-dashboard .premium-balance-card h2 { font-weight:680; letter-spacing:-.07em; margin-top:12px; margin-bottom:28px; }
+.vestara-elevated-dashboard .premium-balance-card .uppercase { font-size:10px; font-weight:670; letter-spacing:.18em; }
+.vestara-elevated-dashboard .premium-balance-card .grid.grid-cols-3 { padding-top:18px; }
+.vestara-elevated-dashboard .premium-balance-card .grid.grid-cols-3 p:first-child { font-size:11px; font-weight:500; opacity:.72; }
+.vestara-elevated-dashboard .premium-balance-card .grid.grid-cols-3 p:last-child { font-size:13px; font-weight:670; margin-top:5px; }
+.vestara-elevated-dashboard .premium-quick-actions { gap:8px; padding:6px 0 0; }
+.vestara-elevated-dashboard .premium-quick-actions .premium-action-icon {
+ height:54px; width:54px; max-width:100%; background:#fff; border:1px solid #e6e9e9; border-radius:15px;
+ color:#143148; box-shadow:0 9px 18px -17px rgba(12,40,59,.5);
+}
+.vestara-elevated-dashboard .premium-quick-actions button:first-child .premium-action-icon { color:#fff; background:#ed6a25; border-color:#ed6a25; box-shadow:0 12px 25px -17px rgba(237,106,37,.8); }
+.vestara-elevated-dashboard .premium-quick-actions button:last-child .premium-action-icon { background:#fff; }
+.vestara-elevated-dashboard .premium-quick-actions button > span:last-child { font-size:11px; font-weight:660; color:hsl(var(--foreground)); line-height:1.25; }
+.premium-discover { padding:4px 0 6px; }
+.premium-discover-heading { display:flex; justify-content:space-between; align-items:flex-end; gap:14px; margin-bottom:15px; }
+.premium-discover-heading p { font-size:9px; letter-spacing:.16em; color:#d76e30; font-weight:800; }
+.premium-discover-heading h2 { color:hsl(var(--foreground)); font-size:21px; font-weight:700; line-height:1.24; letter-spacing:-.055em; margin-top:5px; }
+.premium-discover-heading h2 span { color:#e96b25; }
+.premium-discover-heading button { display:inline-flex; align-items:center; gap:4px; font-size:11px; color:hsl(var(--muted-foreground)); font-weight:700; white-space:nowrap; }
+.premium-discover-heading button:hover { color:hsl(var(--primary)); }
+.premium-discover-grid { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(180px,62%); gap:12px; overflow-x:auto; overscroll-behavior-x:contain; scroll-snap-type:x mandatory; scrollbar-width:none; padding:0 1px 6px; }
+.premium-discover-grid::-webkit-scrollbar { display:none; }
+.premium-discover-card { position:relative; scroll-snap-align:start; text-align:left; width:100%; min-height:220px; overflow:hidden; border-radius:16px; isolation:isolate; background:#173a4a; border:1px solid rgba(255,255,255,.15); box-shadow:0 12px 22px -19px rgba(7,30,48,.4); transition:transform .2s ease,box-shadow .2s ease; }
+.premium-discover-card:hover { transform:translateY(-2px); box-shadow:0 17px 29px -19px rgba(7,30,48,.6); }
+.premium-discover-card img { position:absolute; inset:0; height:100%; width:100%; object-fit:cover; transition:transform .75s ease; z-index:-2; }
+.premium-discover-card:hover img { transform:scale(1.08); }
+.premium-discover-overlay { position:absolute; inset:0; z-index:-1; background:linear-gradient(180deg,rgba(9,28,42,.08),rgba(5,21,33,.18) 30%,rgba(5,21,33,.91) 100%); }
+.premium-discover-copy { position:absolute; bottom:21px; left:18px; right:18px; color:white; }
+.premium-discover-copy > span { font-size:10px; font-weight:750; letter-spacing:.1em; text-transform:uppercase; color:#ffc391; display:block; margin-bottom:7px; }
+.premium-discover-copy strong { display:block; font-size:19px; line-height:1.2; font-weight:680; letter-spacing:-.05em; max-width:180px; }
+.premium-discover-arrow { position:absolute; display:grid; place-items:center; top:14px; right:14px; height:31px; width:31px; border:1px solid rgba(255,255,255,.62); border-radius:50%; color:#fff; background:rgba(0,0,0,.12); }
+.vestara-app .premium-dashboard h2,.vestara-app .premium-dashboard h3,.vestara-app .premium-profile h2 { letter-spacing:-.04em; }
+.vestara-app .bg-card.rounded-2xl.border { border-color:hsl(var(--border)); box-shadow:0 12px 24px -22px rgba(11,32,48,.26); }
+.vestara-app .premium-profile { gap:23px; }
+.vestara-app .premium-profile-identity { background:linear-gradient(125deg,#fff 50%,#fff8f2); border:1px solid #e5e9e9; padding:21px; border-radius:19px; box-shadow:0 16px 36px -32px rgba(12,39,56,.40); }
+.dark .vestara-app .premium-profile-identity { background:hsl(var(--card)); border-color:hsl(var(--border)); }
+.vestara-app .premium-profile-identity p:first-child { font-size:19px; font-weight:680; }
+.vestara-app .premium-profile-setup { background:#fff; border:1px solid #e5e9e9; border-left:3px solid #ee702b; border-radius:14px; padding:17px; }
+.dark .vestara-app .premium-profile-setup { background:hsl(var(--card)); border-color:hsl(var(--border)); }
+.vestara-app .premium-profile-setup > p:first-child { color:hsl(var(--foreground)); }
+.vestara-app .premium-profile-setup button { background:#f7f7f4; border:1px solid #ebece8; }
+.dark .vestara-app .premium-profile-setup button { background:hsl(var(--muted)); border-color:hsl(var(--border)); }
+.vestara-app .premium-profile-section > h2 { font-size:10px; color:hsl(var(--muted-foreground)); letter-spacing:.19em; padding:0 4px 4px; }
+.vestara-app .premium-settings-list { box-shadow:0 12px 26px -22px rgba(9,30,46,.26); border-radius:16px; border:1px solid hsl(var(--border)); }
+.vestara-app .premium-profile-row { padding:15px 17px; min-height:68px; border-left:0; gap:13px; background:transparent; }
+.vestara-app .premium-profile-row-attention { background: hsl(var(--primary-soft)/.42); }
+.vestara-app .premium-profile-row-icon { background:hsl(var(--muted) /.65); border:1px solid hsl(var(--border)/.6); color:hsl(var(--foreground)); width:36px; height:36px; border-radius:11px; }
+.vestara-app .premium-profile-row-attention .premium-profile-row-icon { color:hsl(var(--primary)); background:hsl(var(--primary-soft)); }
+.vestara-app .premium-profile-row .flex-1.min-w-0 > p:first-child { font-size:13.5px; font-weight:670; letter-spacing:-.017em; }
+.vestara-app .premium-profile-row .flex-1.min-w-0 > p:nth-child(2) { font-size:11.5px; line-height:1.5; }
+.vestara-app .premium-profile-row .text-right { font-size:12px; font-weight:550; max-width:47%; }
+.vestara-app .premium-profile-row .inline-flex.rounded-full { background:hsl(var(--primary-soft)); color:hsl(var(--primary)); font-weight:700; }
+.vestara-app .premium-profile-row svg.text-muted-foreground { opacity:.7; }
+.vestara-app .vestara-bottom-nav { background:hsl(var(--card)/.98); border-top:1px solid hsl(var(--border)/.8); box-shadow:0 -8px 25px -22px rgba(8,29,49,.3); }
+.vestara-app .vestara-bottom-tabs { min-height:74px; padding:5px 10px; }
+.vestara-app .vestara-bottom-tab { gap:5px; min-height:62px; border-radius:8px; }
+.vestara-app .vestara-bottom-tab > span:last-child { font-size:10px; letter-spacing:.03em; font-weight:600; }
+.vestara-app .vestara-bottom-tab[aria-current="page"] > span:last-child { font-weight:750; }
+.vestara-app .vestara-bottom-indicator { inset:auto 32% 3px!important; height:3px; border-radius:20px; background:hsl(var(--primary)); }
+.vestara-app .vestara-bottom-tab > span:nth-child(2) { transition:transform .2s ease; }
+.vestara-app .vestara-bottom-tab[aria-current="page"] > span:nth-child(2) { color:hsl(var(--primary)); }
+/* Shared customer input surfaces are calmer, with reliable touch targets. */
+.vestara-app button:not(:disabled) { -webkit-tap-highlight-color:transparent; }
+.vestara-app input,.vestara-app select,.vestara-app textarea { border-radius:11px; }
+.vestara-app input:focus-visible,.vestara-app select:focus-visible,.vestara-app textarea:focus-visible { outline-color:hsl(var(--primary)); }
+.vestara-app .bg-gradient-ink { background-image:linear-gradient(135deg,#173850,#0b2437); }
+.vestara-app .rounded-\[20px\].bg-gradient-ink { border:1px solid rgba(255,255,255,.08); box-shadow:0 16px 29px -22px rgba(8,29,49,.37); }
+.vestara-app .border-border\/50.bg-card,.vestara-app .border-border.bg-card { border-color:hsl(var(--border)); }
+/* Deliberately subtle styling of the credential screen only. No authentication logic changes. */
+.auth-screen .auth-brand h1 { letter-spacing:-.04em; }
+.auth-screen .auth-form { border-radius:22px 22px 0 0; }
+.auth-screen .auth-form input { border-radius:12px; }
+.auth-screen .auth-pin .auth-keypad button { border-radius:50%; }
+@media(max-width:390px){
+ .vestara-app-scroll { padding-left:15px; padding-right:15px; }
+ .premium-discover-grid { grid-auto-columns:minmax(175px,75%); }
+ .premium-discover-card { min-height:205px; }
+ .vestara-app .premium-profile-row { padding:13px 12px; gap:10px; }
+ .vestara-app .premium-profile-row-icon { width:33px; height:33px; }
+ .vestara-app .premium-quick-actions .premium-action-icon { width:49px; height:49px; }
+}
+@media(prefers-reduced-motion:reduce){
+ .premium-discover-card,.premium-discover-card img { transition:none; }
+ .premium-discover-card:hover,.premium-discover-card:hover img { transform:none; }
+}

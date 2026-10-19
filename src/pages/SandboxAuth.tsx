@@ -89,7 +89,7 @@ function strength(pw: string) {
 const slides = [
   { icon: Users, title: "Save together with Ajo", body: "Join a Thrift circle with friends and take turns getting paid." },
   { icon: PiggyBank, title: "Earn with Vault and GoalSave", body: "Put money aside, hit your goals and earn daily interest." },
-  { icon: Send, title: "Pay bills and send money", body: "Airtime, electricity and transfers — fast, from one wallet." },
+  { icon: Send, title: "Pay bills and send money", body: "Airtime, electricity and transfers, all from one wallet." },
 ];
 
 function Onboarding({ onDone }: { onDone: () => void }) {

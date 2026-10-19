@@ -341,11 +341,13 @@ export function SandboxSplitTab() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="premium-split space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-base font-semibold flex items-center gap-2">
-          <Receipt className="h-4 w-4 text-primary" /> SplitPay
-        </h3>
+        <div className="premium-split-heading">
+          <span>SHARED EXPENSES</span>
+          <h3>Split Pay</h3>
+          <p>Create a split, invite others and track payments.</p>
+        </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={loadSplits}><RefreshCw className="h-3 w-3" /></Button>
           <Button size="sm" onClick={() => setShowCreate(!showCreate)}><Plus className="h-3 w-3 mr-1" /> New Split</Button>

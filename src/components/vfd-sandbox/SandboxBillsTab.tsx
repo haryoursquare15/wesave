@@ -762,7 +762,7 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
   };
 
   return (
-    <div className="space-y-4">
+    <div className="premium-bills at-bills space-y-4">
       {/* Header */}
       {step !== "categories" && (
         <motion.div
@@ -779,9 +779,10 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
 
       {step === "categories" && (
         <>
-          <div>
-            <h2 className="text-lg font-bold text-foreground mb-1">Pay bills</h2>
-            <p className="text-sm text-muted-foreground mb-3">Airtime, data, cable TV, electricity and more</p>
+          <div className="premium-bills-heading">
+            <span>PAYMENTS</span>
+            <h2>Pay bills</h2>
+            <p>Airtime, data, electricity and more.</p>
           </div>
           <div className="flex gap-1.5 p-1 bg-muted/40 rounded-xl mb-3">
             {([
@@ -840,7 +841,7 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 20 }}
-            className="grid grid-cols-2 gap-3"
+            className="premium-bill-categories grid grid-cols-2 gap-3"
           >
             {loading ? (
               Array.from({ length: 4 }).map((_, i) => (
@@ -855,7 +856,7 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
                     key={cat}
                     whileTap={{ scale: 0.97 }}
                     onClick={() => loadBillers(cat)}
-                    className="flex flex-col items-start justify-between gap-3 min-h-[120px] p-4 rounded-2xl bg-card border border-border/60 text-left active:bg-muted/40 transition-colors"
+                    className="premium-bill-category flex flex-col items-start justify-between gap-3 min-h-[120px] p-4 rounded-2xl bg-card border border-border/60 text-left active:bg-muted/40 transition-colors"
                   >
                     <div className={`w-11 h-11 rounded-xl ${cfg.bg} flex items-center justify-center`}>
                       <Icon className={`h-5 w-5 ${cfg.color}`} />

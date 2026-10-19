@@ -7,8 +7,8 @@ import { toast } from "sonner";
 import {
   Phone, ShieldCheck, IdCard, Landmark, BadgeCheck, Hash, FileText, KeyRound, Lock,
   Fingerprint, Timer, Smartphone, History, LogOut, MessageCircle, Bell, Mail, Palette,
-  Sparkles, Download, AlertTriangle, LifeBuoy, HelpCircle, ClipboardList, ChevronDown,
-  ScrollText, Shield, Info, Copy, Camera, Loader2, CheckCircle, Monitor, Trash2,
+  ChartNoAxesCombined, Users, Download, AlertTriangle, LifeBuoy, HelpCircle, ClipboardList, ChevronDown,
+  ScrollText, Shield, Info, Copy, Camera, Loader2, CheckCircle, Monitor, Trash2, ChevronRight,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -377,24 +377,49 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
     : "Not set";
 
   return (
-    <div className="space-y-6">
-      {/* Header card */}
-      <div className="bg-card rounded-2xl border border-border p-5 flex items-center gap-4">
-        <button type="button" onClick={onChangePhoto} className="relative shrink-0 active:scale-95 transition-transform" aria-label="Change profile photo">
-          <Avatar className="h-16 w-16">
-            <AvatarImage src={avatarUrl || undefined} alt="Your profile photo" className="object-cover" />
-            <AvatarFallback className="text-lg font-semibold bg-primary/10 text-primary">{name.charAt(0).toUpperCase()}</AvatarFallback>
-          </Avatar>
-          <span className="absolute -bottom-0.5 -right-0.5 h-6 w-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center border-2 border-card">
-            <Camera className="h-3 w-3" />
-          </span>
-        </button>
-        <div className="min-w-0 flex-1">
-          <p className="font-semibold text-foreground truncate">{name}</p>
-          <p className="text-sm text-muted-foreground truncate">{email}</p>
-          <div className="mt-1.5"><Chip tone="primary">{tier}</Chip></div>
-        </div>
+    <div className="premium-profile at-profile space-y-6">
+      <div className="premium-profile-heading">
+        <span><span className="premium-profile-heading-dot" /> ACCOUNT SETTINGS</span>
+        <h1>Your profile</h1>
+        <p>Personal information, security and preferences.</p>
       </div>
+      <section className="at-profile-passport v4-profile-summary" aria-label="Your account identity">
+        <div className="at-passport-marker"><span>PERSONAL ACCOUNT</span><span>VESTARA</span></div>
+        <div className="at-passport-content">
+          <div className="at-passport-copy">
+            <span className="at-passport-caption">Account holder</span>
+            <h2>{name}</h2>
+            <p>{email}</p>
+            <div className="at-passport-tier"><BadgeCheck size={15}/>{tier}</div>
+          </div>
+          <button type="button" className="at-passport-avatar" onClick={onChangePhoto} aria-label="Change profile photo">
+            <Avatar className="h-16 w-16">
+              <AvatarImage src={avatarUrl || undefined} alt="Your profile photo" className="object-cover" />
+              <AvatarFallback>{name.charAt(0).toUpperCase()}</AvatarFallback>
+            </Avatar>
+            <span><Camera size={13}/></span>
+          </button>
+        </div>
+        <div className="at-passport-footer"><span>Manage your details securely</span><span>Account settings</span></div>
+      </section>
+
+      <nav className="premium-profile-hub" aria-label="Account quick access">
+        <button type="button" onClick={() => setSheet("tier")}>
+          <span className="premium-profile-hub-glyph"><BadgeCheck size={22} strokeWidth={1.7}/></span>
+          <span><strong>My limits</strong><small>Manage tier</small></span>
+          <ChevronRight size={16}/>
+        </button>
+        <button type="button" onClick={() => onNavigate("history")}>
+          <span className="premium-profile-hub-glyph"><History size={22} strokeWidth={1.7}/></span>
+          <span><strong>Activity</strong><small>View history</small></span>
+          <ChevronRight size={16}/>
+        </button>
+        <button type="button" onClick={() => setSheet("contact")}>
+          <span className="premium-profile-hub-glyph"><LifeBuoy size={22} strokeWidth={1.7}/></span>
+          <span><strong>Get help</strong><small>We're here</small></span>
+          <ChevronRight size={16}/>
+        </button>
+      </nav>
 
       {(() => {
         const items: { label: string; helper: string; onClick: () => void }[] = [];
@@ -403,8 +428,8 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
         if (hasTxPin === false) items.push({ label: "Set your transaction PIN", helper: "4 digits to approve payments", onClick: () => setSheet("txPin") });
         if (!items.length) return null;
         return (
-          <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4">
-            <p className="text-sm font-semibold text-foreground">Action required</p>
+          <div className="premium-profile-setup rounded-2xl border border-primary/30 bg-primary/5 p-4">
+            <p className="text-sm font-semibold text-foreground">A few things to finish</p>
             <p className="text-xs text-muted-foreground">Complete {items.length === 1 ? "this step" : `these ${items.length} steps`} to get the most out of Vestara.</p>
             <div className="mt-3 space-y-2">
               {items.map((it) => (
@@ -429,7 +454,7 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
         <ProfileRow
           icon={Landmark}
           label="Withdrawal bank"
-          helper={withdrawalBank ? withdrawalBank.account_name : "Set once — cannot be changed"}
+          helper={withdrawalBank ? withdrawalBank.account_name : "Set once, cannot be changed"}
           value={withdrawBankRowValue}
           onClick={withdrawalBank ? undefined : () => setSheet("withdrawbank")}
         />
@@ -446,13 +471,13 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
       </ProfileSection>
 
       <ProfileSection title="Security">
-        <ProfileRow icon={KeyRound} label="Login PIN (6-digit)" helper="Used to open the app" attention={hasLoginPin === false ? "Not set — action required" : undefined} onClick={() => setSheet("loginPin")} />
-        <ProfileRow icon={Lock} label="Transaction PIN (4-digit)" helper="Used to approve payments and transfers" attention={hasTxPin === false ? "Not set — action required" : undefined} onClick={() => setSheet("txPin")} />
+        <ProfileRow icon={KeyRound} label="Login PIN (6-digit)" helper="Used to open the app" attention={hasLoginPin === false ? "Setup required" : undefined} onClick={() => setSheet("loginPin")} />
+        <ProfileRow icon={Lock} label="Transaction PIN (4-digit)" helper="Used to approve payments and transfers" attention={hasTxPin === false ? "Setup required" : undefined} onClick={() => setSheet("txPin")} />
         <ProfileRow icon={Shield} label="Change password" onClick={() => setSheet("password")} />
         <ProfileRow
           icon={Fingerprint}
           label="Fingerprint / Face ID login"
-          helper={!bio.supported ? "Not available on this phone or browser" : bio.on ? "On for this phone" : "Off — needs a login PIN"}
+          helper={!bio.supported ? "Not available on this phone or browser" : bio.on ? "On for this phone" : "Off, login PIN required"}
           trailing={<Switch checked={bio.on} disabled={!bio.supported || bio.busy}
             onCheckedChange={async (v) => {
               const ok = await bio.toggle(v);
@@ -476,7 +501,7 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
         <ProfileRow
           icon={Bell}
           label="Push notifications"
-          helper={!push.supported ? (isIosBrowserTab() ? "On iPhone: tap Share → Add to Home Screen, then open Vestara from your Home Screen" : "Not supported on this browser") : push.permission === "denied" ? "Blocked in browser settings — enable it there to turn on" : push.isSubscribed ? "On" : "Tap to set up"}
+          helper={!push.supported ? (isIosBrowserTab() ? "On iPhone: tap Share → Add to Home Screen, then open Vestara from your Home Screen" : "Not supported on this browser") : push.permission === "denied" ? "Blocked in browser settings. Enable it there to turn on" : push.isSubscribed ? "On" : "Tap to set up"}
           onClick={!push.isSubscribed && push.supported && push.permission !== "denied" ? () => setSheet("pushsetup") : undefined}
           trailing={<Switch checked={push.isSubscribed} disabled={!push.supported || push.loading || push.permission === "denied"}
             onCheckedChange={async (v) => {
@@ -504,15 +529,15 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
       </ProfileSection>
 
       <ProfileSection title="Preferences">
-        <div className="px-4 py-3 space-y-2">
+        <div className="v4-appearance-panel px-4 py-3 space-y-2">
           <div className="flex items-center gap-3">
             <span className="h-9 w-9 rounded-full bg-primary/10 text-primary flex items-center justify-center"><Palette size={18} /></span>
-            <p className="text-sm font-medium text-foreground">Appearance</p>
+            <p className="v4-appearance-label text-sm font-medium text-foreground">Appearance</p>
           </div>
-          <div role="radiogroup" className="grid grid-cols-3 gap-1 rounded-xl bg-muted p-1">
+          <div role="radiogroup" aria-label="Colour theme" className="v4-theme-options grid grid-cols-3 gap-1 rounded-xl bg-muted p-1">
             {(["system", "light", "dark"] as const).map((t) => (
               <button key={t} role="radio" aria-checked={theme === t} onClick={() => setTheme(t)}
-                className={cn("h-9 rounded-lg text-sm font-medium capitalize transition-colors", theme === t ? "bg-card text-foreground shadow-sm" : "text-muted-foreground")}
+                className={cn("v4-theme-option h-9 rounded-lg text-sm font-medium capitalize transition-colors", theme === t ? "bg-card text-foreground shadow-sm" : "text-muted-foreground")}
               >{t}</button>
             ))}
           </div>
@@ -520,7 +545,7 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
       </ProfileSection>
 
       <ProfileSection title="Privacy and data">
-        <ProfileRow icon={Sparkles} label="Vestara Money Pulse" helper="Your money-health score, pillars and personalised tips"
+        <ProfileRow icon={ChartNoAxesCombined} label="Vestara Money Pulse" helper="Your money-health score, pillars and personalised tips"
           trailing={<Switch checked={insightsOn} onCheckedChange={(v) => { setInsightsOn(v); localStorage.setItem("vestara:insights", v ? "on" : "off"); }} aria-label="Vestara Money Pulse" />} />
         <ProfileRow icon={Download} label="Download my data" onClick={() => soon("Download my data")} />
       </ProfileSection>
@@ -559,7 +584,7 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
             <div className="mt-4 divide-y divide-border rounded-2xl border border-border overflow-hidden">
               <ProfileRow icon={ShieldCheck} label="Security" helper="Always on to protect you" trailing={<Switch checked disabled aria-label="Security alerts" />} />
               <ProfileRow icon={Landmark} label="Money movement" trailing={<Switch checked={cats.money} onCheckedChange={(v) => setCats({ ...cats, money: v })} aria-label="Money movement" />} />
-              <ProfileRow icon={Sparkles} label="Ajo and savings" trailing={<Switch checked={cats.ajo} onCheckedChange={(v) => setCats({ ...cats, ajo: v })} aria-label="Ajo and savings" />} />
+              <ProfileRow icon={Users} label="Ajo and savings" trailing={<Switch checked={cats.ajo} onCheckedChange={(v) => setCats({ ...cats, ajo: v })} aria-label="Ajo and savings" />} />
               <ProfileRow icon={FileText} label="Weekly summary" trailing={<Switch checked={cats.weekly} onCheckedChange={(v) => setCats({ ...cats, weekly: v })} aria-label="Weekly summary" />} />
             </div>
             <label className="block mt-4 text-sm font-medium text-foreground">Alert me for transfers above (optional)</label>
@@ -569,7 +594,7 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
             </div>
           </>)}
           {sheet === "tier" && (<>
-            <SheetHeader><SheetTitle>Account tier and limits</SheetTitle><SheetDescription>{tier === "Tier 3" ? "You're on Tier 3 — the highest tier. No upgrade needed." : `You're on ${tier}. Upgrade to raise your limits.`}</SheetDescription></SheetHeader>
+            <SheetHeader><SheetTitle>Account tier and limits</SheetTitle><SheetDescription>{tier === "Tier 3" ? "You're on Tier 3, the highest tier. No upgrade needed." : `You're on ${tier}. Upgrade to raise your limits.`}</SheetDescription></SheetHeader>
             {tier !== "Tier 3" && <Button className="w-full mt-4" onClick={() => { setSheet(null); onNavigate("kyc"); }}>Upgrade my tier</Button>}
           </>)}
           {sheet === "freeze" && (<>
@@ -613,7 +638,7 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
             <SheetHeader>
               <SheetTitle>Set up your withdrawal bank</SheetTitle>
               <SheetDescription>
-                Every withdrawal from Vestara goes to this account. For your safety, this cannot be changed later from the app — contact support if you need to update it.
+                Every withdrawal from Vestara goes to this account. For your safety, this cannot be changed later from the app, contact support if you need to update it.
               </SheetDescription>
             </SheetHeader>
             <div className="space-y-3 pt-3">
@@ -725,13 +750,13 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
           {sheet === "pushsetup" && (<>
             <SheetHeader>
               <SheetTitle>Turn on push notifications</SheetTitle>
-              <SheetDescription>Get instant alerts for money in and out, Ajo updates and security events — even when the app is closed.</SheetDescription>
+              <SheetDescription>Get instant alerts for money in and out, Ajo updates and security events, even when the app is closed.</SheetDescription>
             </SheetHeader>
             <div className="pt-3 space-y-3">
               <ul className="text-sm text-muted-foreground space-y-1.5 list-disc pl-5">
                 <li>{push.android ? "You'll be asked to allow notifications on your phone." : "You'll be asked for permission in your browser."}</li>
                 <li>You can switch this off any time from this screen.</li>
-                <li>Push does not replace email — important alerts still go to {email}.</li>
+                <li>Push does not replace email, important alerts still go to {email}.</li>
               </ul>
               <Button className="w-full" disabled={push.loading} onClick={async () => {
                 const ok = await push.subscribe();

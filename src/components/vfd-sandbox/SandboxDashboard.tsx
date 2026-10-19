@@ -12,6 +12,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import vestaraBadge from "@/assets/vestara-mark.png";
+
+// Editorial photography is used only for optional navigation surfaces.
+const serviceImagery = {
+  split: "https://images.pexels.com/photos/30678206/pexels-photo-30678206.jpeg?auto=compress&cs=tinysrgb&w=900",
+  save: "https://images.pexels.com/photos/30677594/pexels-photo-30677594.jpeg?auto=compress&cs=tinysrgb&w=950",
+  ajo: "https://images.pexels.com/photos/17272256/pexels-photo-17272256.jpeg?auto=compress&cs=tinysrgb&w=900",
+};
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { describeTransaction } from "@/lib/transactionLabels";
 import { cleanCustomerName, customerFirstName } from "@/lib/customerName";
@@ -204,7 +211,7 @@ function getTxMeta(type: string) {
 /* ─── Main Dashboard Component ─── */
 export function SandboxDashboard({ balance, onNavigate, recentTransactions = [], tier, upgradePending = false, avatarUrl }: SandboxDashboardProps) {
   const [showBalance, setShowBalance] = useState(true);
-  const [tapped, setTapped] = useState<{ key: string; n: number } | null>(null);
+
   const [copied, setCopied] = useState(false);
   const [activeBanner, setActiveBanner] = useState(0);
   const [carouselPaused, setCarouselPaused] = useState(false);
@@ -307,215 +314,136 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
   const displayAccountName = cleanCustomerName(balance.fullName?.trim()) || balance.fullName || "—";
 
   return (
-    <div className="space-y-6">
-      {/* Greeting */}
-      <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.05 }}
-        className="flex items-center gap-3"
-      >
-        <Avatar className="h-12 w-12 shrink-0 ring-2 ring-primary/20">
-          <AvatarImage src={avatarUrl || undefined} alt="Your profile photo" className="object-cover" />
-          <AvatarFallback className="bg-background"><img src={vestaraBadge} alt="Vestara" className="h-9 w-9 object-contain" /></AvatarFallback>
-        </Avatar>
-        <div>
-          <p className="text-sm text-muted-foreground">{greeting},</p>
-          <h1 className="text-xl font-bold text-foreground">{firstName} 👋</h1>
-        </div>
-      </motion.div>
+    <div className="premium-dashboard vestara-elevated-dashboard space-y-6">
 
-      {/* ═══ BALANCE CARD ═══ */}
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1, duration: 0.5 }}
-        className="relative overflow-hidden rounded-2xl bg-primary p-5 text-primary-foreground shadow-md"
-      >
-        {/* Decorative circles */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -right-10 -top-10 h-36 w-36 rounded-full bg-primary-foreground/[0.06]" />
-          <div className="absolute -bottom-8 -left-8 h-28 w-28 rounded-full bg-primary-foreground/[0.04]" />
-          <div className="absolute right-1/4 top-1/2 h-20 w-20 rounded-full bg-primary-foreground/[0.03]" />
-        </div>
-
-        <div className="relative z-10">
-          {/* Top row */}
-          <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center gap-2">
-              <Wallet className="h-4 w-4 opacity-70" />
-              <span className="text-xs font-medium opacity-70 tracking-wide uppercase">Total Balance</span>
-            </div>
-            <motion.button
-              whileTap={press}
-              transition={spring}
-              onClick={() => setShowBalance(!showBalance)}
-              className="p-1.5 hover:bg-primary-foreground/10 rounded-full transition-colors"
-              aria-label={showBalance ? "Hide balance" : "Show balance"}
-            >
-              {showBalance ? <Eye className="h-4 w-4 opacity-70" /> : <EyeOff className="h-4 w-4 opacity-70" />}
-            </motion.button>
+      <section className="at-overview">
+        <div className="at-greeting">
+          <div>
+            <h1>{greeting}, <span>{firstName}</span></h1>
+            <p>Manage your money, savings and payments in one place.</p>
           </div>
+          <Avatar className="at-greeting-avatar">
+            <AvatarImage src={avatarUrl || undefined} alt="Profile photo" className="object-cover" />
+            <AvatarFallback>{firstName.substring(0,1).toUpperCase()}</AvatarFallback>
+          </Avatar>
+        </div>
 
-          {/* Primary figure — Total (crossfade with a light blur) */}
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.h2
-              key={showBalance ? "shown" : "hidden"}
-              initial={{ opacity: 0, filter: "blur(4px)" }}
-              animate={{ opacity: 1, filter: "blur(0px)" }}
-              exit={{ opacity: 0, filter: "blur(4px)" }}
-              transition={{ duration: 0.18, ease: "easeOut" }}
-              className="text-[2.5rem] font-semibold tracking-tight mb-3 leading-none"
-            >
-              {showBalance ? <AnimatedNumber value={balance.totalBalance} /> : "₦ ••••••"}
-            </motion.h2>
-          </AnimatePresence>
-
-
-
-          {balance.noVfdAccount && (
-            <p className="text-[11px] opacity-80 mb-3 leading-snug">
-              No VFD account yet — complete KYC to activate your unique NUBAN and start receiving funds.
-            </p>
-          )}
-          {!balance.noVfdAccount && balance.stale && (
-            <p className="text-[11px] opacity-80 mb-3 leading-snug">
-              Live balance unavailable — showing last known figure. Pull to refresh.
-            </p>
-          )}
-
-
-          {/* Account number — never show the platform pool (1001695610) as a user NUBAN */}
-          {(() => {
-            const POOL = "1001695610";
-            const acct = balance.accountNumber;
-            const hasRealNuban = acct && acct !== "—" && acct !== POOL;
-            if (!hasRealNuban) {
-              return (
-                <button
-                  onClick={() => onNavigate("kyc")}
-                  className="flex flex-col items-start gap-0.5 text-xs opacity-90 hover:opacity-100 transition-opacity mb-4 text-left"
-                >
-                  <span className="text-[10px] uppercase tracking-wider opacity-60">
-                    Your VFD account number
-                  </span>
-                  <span className="flex items-center gap-1.5 font-mono font-semibold tracking-wide">
-                    Provisioning… <ChevronRight className="h-3 w-3" />
-                  </span>
-                  <span className="truncate max-w-[260px] opacity-70 text-[10px]">
-                    Complete KYC to activate your unique VFD account
-                  </span>
-                </button>
-              );
-            }
-            return (
-              <button
-                onClick={copyAccount}
-                className="flex flex-col items-start gap-0.5 text-xs opacity-80 hover:opacity-100 transition-opacity mb-4 text-left"
-              >
-                <span className="text-[10px] uppercase tracking-wider opacity-60">
-                  Your VFD account number
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="font-mono font-semibold tracking-wide">{acct}</span>
-                  {copied ? (
-                    <Check className="h-3 w-3" />
-                  ) : (
-                    <Copy className="h-3 w-3" />
-                  )}
-                </span>
-                <span className="truncate max-w-[220px] opacity-60">{displayAccountName}</span>
+        <motion.section
+          className="at-statement"
+          aria-label="Your account overview"
+          initial={{opacity:0,y:18}}
+          animate={{opacity:1,y:0}}
+          transition={{duration:.55,ease:"easeOut"}}
+        >
+          <div className="at-statement-main">
+            <div className="at-statement-topline"><span>ACCOUNT OVERVIEW</span><span>VESTARA</span></div>
+            <div className="at-statement-balance-label">
+              <span>Total balance</span>
+              <button type="button" onClick={() => setShowBalance(!showBalance)} aria-label={showBalance ? "Hide balance" : "Show balance"}>
+                {showBalance ? <Eye size={19} /> : <EyeOff size={19} />}<span>{showBalance ? "Hide" : "Show"}</span>
               </button>
-            );
-          })()}
+            </div>
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.h2
+                className="at-statement-balance"
+                key={showBalance ? "shown" : "hidden"}
+                initial={{opacity:0,y:5}}
+                animate={{opacity:1,y:0}}
+                exit={{opacity:0,y:-5}}
+                transition={{duration:.17}}
+              >
+                {showBalance ? <AnimatedNumber value={balance.totalBalance} /> : "₦ ••••••"}
+              </motion.h2>
+            </AnimatePresence>
+            {balance.noVfdAccount && <p className="at-statement-notice">Complete KYC to receive your personal VFD account number.</p>}
+            {!balance.noVfdAccount && balance.stale && <p className="at-statement-notice">Showing last known balance. Pull to refresh for an update.</p>}
+            <div className="at-statement-actions">
+              <button type="button" className="at-action-primary" onClick={() => onNavigate("fund")}>Add money <Plus size={17} /></button>
+              <button type="button" className="at-action-secondary" onClick={() => onNavigate("transfer")}>Send money <ArrowUpRight size={17} /></button>
+            </div>
+            </div>
+          <div className="at-statement-detail">
+            <div className="at-detail-header"><span>ACCOUNT DETAILS</span></div>
+            <div className="at-account-number">
+              <span>Your VFD account number</span>
+              {(() => {
+                const number = balance.accountNumber;
+                const active = number && number !== "—" && number !== "1001695610";
+                return active
+                  ? <button type="button" onClick={copyAccount} aria-label="Copy account number"><strong>{number}</strong>{copied ? <Check size={16}/> : <Copy size={16}/>}</button>
+                  : <button type="button" onClick={() => onNavigate("kyc")}><strong>Activate account</strong><ChevronRight size={16}/></button>;
+              })()}
+              <small>{displayAccountName}</small>
+            </div>
+            <div className="at-detail-divider" />
+            <div className="at-balance-breakdown">
+              {[
+                { label: "Available", amount: balance.availableBalance },
+                { label: "Locked", amount: balance.lockedBalance },
+                { label: "Savings", amount: balance.savingsBalance },
+              ].map(item => (
+                <div key={item.label}><span>{item.label}</span><strong>{showBalance ? "₦" + item.amount.toLocaleString() : "••••"}</strong></div>
+              ))}
+            </div>
+            {(() => {
+              const tierKey=(tier||"tier1").toLowerCase();
+              const info=TIER_INFO[tierKey]||TIER_INFO.tier1;
+              return <div className="at-account-tier">
+                <span><ShieldCheck size={15}/>{upgradePending ? "Upgrade pending" : info.short + " · " + info.daily + " daily limit"}</span>
+                {tierKey !== "tier3" && !upgradePending && <button type="button" onClick={() => onNavigate("kyc")}>Upgrade <ArrowUpRight size={14}/></button>}
+              </div>;
+            })()}
+          </div>
+        </motion.section>
 
-
-
-          {/* Secondary detail row — clearly subordinate to Total */}
-          <div className="grid grid-cols-3 gap-2 border-t border-primary-foreground/15 pt-3">
+        <section className="at-transactions-shortcuts" aria-label="Quick actions">
+          <div className="at-mini-heading"><div><span>QUICK ACTIONS</span><h2>Move your money</h2></div></div>
+          <div className="at-action-grid">
             {[
-              { label: "Available", value: balance.availableBalance },
-              { label: "Locked", value: balance.lockedBalance },
-              { label: "Savings", value: balance.savingsBalance },
-            ].map((item) => (
-              <div key={item.label} className="min-w-0">
-                <p className="text-xs opacity-75">{item.label}</p>
-                <p className="text-sm font-semibold tabular-nums break-words">
-                  {showBalance ? `₦${item.value.toLocaleString()}` : "••••"}
-                </p>
-              </div>
+              {label:"Withdraw",hint:"Move funds",icon:Banknote,go:"withdraw"},
+              {label:"Pay bills",hint:"Everyday payments",icon:Receipt,go:"bills"},
+              {label:"Save",hint:"Grow your money",icon:PiggyBank,go:"lock"},
+              {label:"Activity",hint:"Your transactions",icon:Clock,go:"history"},
+            ].map(item => (
+              <motion.button key={item.label} type="button" className="at-shortcut"
+                whileTap={{scale:.97}} onClick={() => {void haptic("light");onNavigate(item.go);}}>
+                <span className="at-shortcut-icon"><item.icon size={22} strokeWidth={1.7}/></span>
+                <strong>{item.label}</strong>
+                <small>{item.hint}</small>
+                <ArrowUpRight size={16} className="at-shortcut-arrow"/>
+              </motion.button>
             ))}
           </div>
+        </section>
+      </section>
+
+      <section className="at-journeys" aria-label="Explore your money possibilities">
+        <div className="at-section-title">
+          <div><span>EXPLORE VESTARA</span><h2>Make more of your money</h2></div>
+          <button type="button" onClick={() => document.getElementById("home-services")?.scrollIntoView({behavior:"smooth",block:"start"})}>Explore all <ArrowUpRight size={17}/></button>
         </div>
-      </motion.div>
-
-      {/* ═══ KYC TIER PILL ═══ */}
-      {(() => {
-        const tierKey = (tier || "tier1").toLowerCase();
-        const info = TIER_INFO[tierKey] || TIER_INFO.tier1;
-        const canUpgrade = tierKey !== "tier3" && !upgradePending;
-        return (
-          <div className="flex items-center gap-2 -mt-3">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-primary-soft text-accent-foreground px-3 py-1 text-xs font-semibold">
-              <Shield className="h-3.5 w-3.5" />
-              {upgradePending ? "Upgrade in progress · up to 24h" : `${info.short} · ${info.daily} daily limit`}
+        <div className="v4-products">
+          <button type="button" className="v4-product v4-product-featured" onClick={() => onNavigate("lock")}>
+            <span className="v4-product-icon"><PiggyBank size={25} strokeWidth={1.8}/></span>
+            <span className="v4-product-copy">
+              <span className="v4-product-eyebrow">Savings</span>
+              <strong>Save for what matters.</strong>
+              <small>Flexible plans for your goals, big or small.</small>
             </span>
-            {canUpgrade && (
-              <button onClick={() => onNavigate("kyc")} className="min-h-0 text-xs font-semibold text-primary flex items-center gap-0.5 active:opacity-60">
-                Upgrade <ChevronRight className="h-3 w-3" />
-              </button>
-            )}
-          </div>
-        );
-      })()}
-
-      {/* ═══ QUICK ACTIONS ROW ═══ */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.15 }}
-        className="grid grid-cols-5 gap-2"
-      >
-        {[
-          { key: "fund", label: "Add Money", icon: Plus, color: "bg-primary-soft text-primary", tap: { rotate: [0, 90] } },
-          { key: "withdraw", label: "Withdraw", icon: Banknote, color: "bg-primary-soft text-primary", tap: { y: [0, -3, 0], rotate: [0, 8, 0] } },
-          { key: "services", label: "Services", icon: LayoutGrid, color: "bg-primary-soft text-primary", tap: { x: [0, 3, 0], y: [0, -3, 0] } },
-          { key: "lock", label: "Lock", icon: Lock, color: "bg-primary-soft text-primary", tap: { y: [0, 2, 0], scale: [1, 0.92, 1] } },
-          { key: "history", label: "History", icon: Clock, color: "bg-primary-soft text-primary", tap: { rotate: [0, 90, 90] } },
-        ].map((action) => (
-          <button
-            key={action.key}
-            onClick={() => {
-              void haptic("light");
-              setTapped({ key: action.key, n: Date.now() });
-              if (action.key === "services") {
-                document.getElementById("home-services")?.scrollIntoView({ behavior: "smooth", block: "start" });
-                return;
-              }
-              // Let the icon cue play briefly; never block input.
-              setTimeout(() => onNavigate(action.key), 160);
-            }}
-            className="flex flex-col items-center gap-2 group"
-          >
-            <motion.div
-              whileTap={press}
-              transition={spring}
-              className={`w-14 h-14 rounded-2xl ${action.color} flex items-center justify-center`}
-            >
-              <motion.span
-                key={tapped?.key === action.key ? tapped.n : 0}
-                initial={false}
-                animate={tapped?.key === action.key ? action.tap : undefined}
-                transition={{ duration: 0.2, ease: "easeOut" }}
-                className="inline-flex"
-              >
-                <action.icon className="h-5 w-5" />
-              </motion.span>
-            </motion.div>
-            <span className="text-xs font-medium text-foreground">{action.label}</span>
+            <span className="v4-product-arrow"><ArrowUpRight size={21}/></span>
           </button>
-        ))}
-      </motion.div>
+          <button type="button" className="v4-product" onClick={() => onNavigate("split")}>
+            <span className="v4-product-icon"><Users size={24} strokeWidth={1.8}/></span>
+            <span className="v4-product-copy"><span className="v4-product-eyebrow">Split Pay</span><strong>Better when shared.</strong><small>Split expenses without the back and forth.</small></span>
+            <span className="v4-product-arrow"><ArrowUpRight size={21}/></span>
+          </button>
+          <button type="button" className="v4-product" onClick={() => onNavigate("ajo")}>
+            <span className="v4-product-icon"><ShieldCheck size={24} strokeWidth={1.8}/></span>
+            <span className="v4-product-copy"><span className="v4-product-eyebrow">Ajo & Esusu</span><strong>Grow together.</strong><small>Manage your contributions with clarity.</small></span>
+            <span className="v4-product-arrow"><ArrowUpRight size={21}/></span>
+          </button>
+        </div>
+      </section>
 
       {/* ═══ THIS WEEK (SPENDLOCK) ═══ */}
       <div id="home-spendlock" className="space-y-3 scroll-mt-20">
@@ -680,10 +608,10 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.25 }}
-        className="scroll-mt-20"
+        className="v4-service-section scroll-mt-20"
       >
-        <h3 className="text-sm font-bold text-foreground mb-3">Services</h3>
-        <div className="grid grid-cols-2 gap-2.5">
+        <h3 className="v4-service-heading text-sm font-bold text-foreground mb-3">Services</h3>
+        <div className="v4-service-grid grid grid-cols-2 gap-2.5">
           {serviceCategories.map((cat) => {
             const dimmed = !!cat.comingSoon;
             const isOpen = openCategory === cat.key;
@@ -696,7 +624,7 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
                   setOpenCategory(isOpen ? null : cat.key);
                 }}
                 aria-expanded={cat.children ? isOpen : undefined}
-                className={`relative flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border transition-all ${
+                className={`v4-service-tile relative flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border transition-all ${
                   isOpen ? "border-primary/40 shadow-sm" : "border-border/60 hover:border-primary/30"
                 } ${dimmed ? "opacity-70" : ""}`}
               >
@@ -705,12 +633,12 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
                     Soon
                   </span>
                 )}
-                <div className={`w-11 h-11 rounded-xl ${cat.color} flex items-center justify-center`}>
+                <div className={`v4-service-icon w-11 h-11 rounded-xl ${cat.color} flex items-center justify-center`}>
                   <cat.icon className="h-5 w-5" />
                 </div>
                 <div className="text-center">
-                  <p className="text-xs font-semibold text-foreground leading-tight">{cat.label}</p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">{cat.desc}</p>
+                  <p className="v4-service-label text-xs font-semibold text-foreground leading-tight">{cat.label}</p>
+                  <p className="v4-service-subtitle text-[10px] text-muted-foreground mt-0.5">{cat.desc}</p>
                 </div>
                 {cat.children && (
                   <ChevronRight
@@ -722,7 +650,7 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
           })}
         </div>
 
-        {/* Second level — revealed for the open category only */}
+        {/* Second level, revealed for the open category only */}
         <AnimatePresence initial={false}>
           {openCategory && (
             <motion.div
@@ -732,7 +660,7 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
               exit={{ opacity: 0, height: 0 }}
               className="overflow-hidden"
             >
-              <div className="mt-2.5 rounded-2xl border border-border/60 bg-card divide-y divide-border/50">
+              <div className="v4-service-children mt-2.5 rounded-2xl border border-border/60 bg-card divide-y divide-border/50">
                 {(serviceCategories.find((c) => c.key === openCategory)?.children || []).map((child) => {
                   const disabled = !!child.comingSoon;
                   return (
@@ -741,7 +669,7 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
                       onClick={() => { if (!disabled) onNavigate(child.key); }}
                       disabled={disabled}
                       aria-disabled={disabled}
-                      className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                      className={`v4-service-child w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
                         disabled ? "opacity-60 cursor-not-allowed" : "hover:bg-muted/50"
                       }`}
                     >

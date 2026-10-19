@@ -7,11 +7,12 @@ import { SandboxModeContext } from "@/hooks/useSandboxAwareAuth";
 import { useVfdBanking } from "@/hooks/useVfdBanking";
 import { useVestaraLedger, VestaraLockedFund } from "@/hooks/useVestaraLedger";
 import { useToast } from "@/hooks/use-toast";
-import { LogOut, MessageCircle, Home, PiggyBank, CreditCard, Sparkles, User } from "lucide-react";
+import { LogOut, MessageCircle, Home, PiggyBank, CreditCard, ChartNoAxesCombined, User, ArrowUpRight, Wallet, Landmark, History, ShieldCheck, Users, Target, ReceiptText, ArrowLeftRight, Layers3, type LucideIcon } from "lucide-react";
 import { FluidLoader } from "@/components/FluidLoader";
 import { ProfilePictureUpload } from "@/components/settings/ProfilePictureUpload";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { SandboxHeader } from "@/components/vfd-sandbox/SandboxHeader";
+import vestaraLogo from "@/assets/vestara-logo-transparent.png";
 import { SandboxDashboard } from "@/components/vfd-sandbox/SandboxDashboard";
 import { SandboxKYC } from "@/components/vfd-sandbox/SandboxKYC";
 import { SandboxSavings } from "@/components/vfd-sandbox/SandboxSavings";
@@ -49,13 +50,27 @@ interface UserBalance {
 }
 
 type View = "dashboard" | "fund" | "transfer" | "withdraw" | "lock" | "history" | "ajo" | "target" | "goal" | "split" | "association" | "bills" | "card" | "kyc" | "mandates" | "insights" | "profile";
+type ScreenIntro = { eyebrow: string; title: string; description: string; icon: LucideIcon };
+const screenIntros: Partial<Record<View, ScreenIntro>> = {
+  fund: { eyebrow: "Wallet", title: "Add money", description: "Fund your Vestara account securely.", icon: Wallet },
+  transfer: { eyebrow: "Transfers", title: "Send money", description: "Move money to another bank account.", icon: ArrowLeftRight },
+  withdraw: { eyebrow: "Withdrawal", title: "Withdraw funds", description: "Transfer funds to your linked bank.", icon: Landmark },
+  history: { eyebrow: "Transactions", title: "Activity", description: "Your recent and past transactions.", icon: History },
+  ajo: { eyebrow: "Groups", title: "Ajo & Esusu", description: "Manage your community contributions.", icon: Users },
+  target: { eyebrow: "Savings", title: "Target savings", description: "Track progress towards your target.", icon: Target },
+  goal: { eyebrow: "Savings", title: "Savings goals", description: "Plans for things that matter to you.", icon: Target },
+  association: { eyebrow: "Groups", title: "Associations", description: "Your group activities and contributions.", icon: Users },
+  card: { eyebrow: "Payments", title: "Your card", description: "Manage your payment options.", icon: CreditCard },
+  mandates: { eyebrow: "Payments", title: "Recurring payments", description: "Review and manage scheduled payments.", icon: Layers3 },
+};
+
 
 function ProductWrapper({ children, onBack }: { children: React.ReactNode; onBack: () => void }) {
   return (
-    <div className="space-y-4">
+    <div className="premium-service-page space-y-4">
       <button
         onClick={onBack}
-        className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+        className="premium-service-back text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
       >
         <ArrowLeft className="h-3 w-3" /> Dashboard
       </button>
@@ -523,7 +538,32 @@ function VfdSandboxInner() {
   });
 
   return (
-    <div className="h-[100dvh] flex flex-col overflow-hidden bg-background">
+    <div data-view={currentView} className="vestara-app at-shell v4-app h-[100dvh] flex flex-col overflow-hidden bg-background">
+      {kycDone && <aside className="at-sidebar" aria-label="Main navigation">
+        <div className="at-sidebar-brand">
+          <img src={vestaraLogo} alt="Vestara" />
+          <span>VESTARA</span>
+        </div>
+        <div className="at-sidebar-section"><span>MAIN MENU</span>
+          {[
+            {key:"dashboard",label:"Overview",icon:Home,action:() => setCurrentView("dashboard")},
+            {key:"lock",label:"Savings",icon:PiggyBank,action:() => {setInitialSavingsProduct(null);setCurrentView("lock");}},
+            {key:"bills",label:"Payments",icon:CreditCard,action:() => setCurrentView("bills")},
+            {key:"insights",label:"Money Pulse",icon:ChartNoAxesCombined,action:() => setCurrentView("insights")},
+            {key:"history",label:"Activity",icon:History,action:() => setCurrentView("history")},
+          ].map(entry => (
+            <button type="button" key={entry.key} aria-current={currentView===entry.key ? "page" : undefined} onClick={entry.action}>
+              <entry.icon size={19} strokeWidth={1.75}/>{entry.label}
+              {currentView===entry.key && <span className="at-sidebar-active-dot"/>}
+            </button>
+          ))}
+        </div>
+        <div className="at-sidebar-section at-sidebar-more"><span>ACCOUNT</span>
+          <button type="button" onClick={() => setCurrentView("profile")} aria-current={currentView==="profile"?"page":undefined}><User size={19}/> My account</button>
+          <button type="button" onClick={() => setCurrentView("ajo")} aria-current={currentView==="ajo"?"page":undefined}><Users size={19}/> Ajo & Esusu</button>
+        </div>
+        <div className="at-sidebar-footer"><ShieldCheck size={16}/><span>Powered and supported by VFD Microfinance Bank</span></div>
+      </aside>}
       <SandboxHeader
         showBack={currentView !== "dashboard"}
         onBack={goBack}
@@ -544,7 +584,7 @@ function VfdSandboxInner() {
       <ProfilePictureUpload open={photoOpen} onOpenChange={setPhotoOpen} />
       {kycDone && <SandboxGroupInviteModal onAccepted={() => { /* downstream UIs poll on their own */ }} />}
       {kycDone && <SandboxSplitInviteModal onOpenSplit={() => { setCurrentView("split"); window.dispatchEvent(new Event("vestara:open-split")); }} />}
-      <div className="flex-1 overflow-y-auto overscroll-contain max-w-lg w-full mx-auto px-4 py-5 pb-32 space-y-5">
+      <div className="vestara-app-scroll at-workspace flex-1 overflow-y-auto overscroll-contain max-w-lg w-full mx-auto px-4 py-5 pb-32 space-y-5">
         {!kycDone ? (
           <SandboxKYC
             vfd={vfd}
@@ -555,13 +595,24 @@ function VfdSandboxInner() {
             }}
           />
         ) : (
-          <motion.div
+          <div
             key={currentView}
-            initial={{ opacity: 0, x: navDir.current * 16 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.22, ease: "easeOut" }}
-            className="space-y-5"
+            className="premium-app-page at-page space-y-5"
           >
+            {screenIntros[currentView] && (() => {
+              const screen = screenIntros[currentView]!;
+              const Icon = screen.icon;
+              return (
+                <header className="premium-context-banner v4-page-intro">
+                  <div className="premium-context-copy">
+                    <span className="premium-context-eyebrow">{screen.eyebrow}</span>
+                    <h1>{screen.title}</h1>
+                    <p>{screen.description}</p>
+                  </div>
+                  <div className="premium-context-icon"><Icon size={23} strokeWidth={1.8} /></div>
+                </header>
+              );
+            })()}
             {currentView === "dashboard" && null}
             {currentView === "dashboard" && (
               <SandboxDashboard
@@ -667,40 +718,26 @@ function VfdSandboxInner() {
                 }}
               />
             )}
-          </motion.div>
+          </div>
         )}
       </div>
       {kycDone && (
-        <nav aria-label="Main" className="shrink-0 z-30 bg-card/95 backdrop-blur-md border-t border-border pb-[env(safe-area-inset-bottom,0px)]">
-          <div className="max-w-lg mx-auto grid grid-cols-5">
+        <nav aria-label="Main" className="vestara-bottom-nav at-bottom-nav v4-underline-nav v4-floating-nav shrink-0 z-30 bg-card/95 backdrop-blur-md border-t border-border pb-[env(safe-area-inset-bottom,0px)]">
+          <div className="vestara-bottom-tabs max-w-lg mx-auto grid grid-cols-5">
             {([
               { label: "Home", icon: Home, active: currentView === "dashboard", go: () => setCurrentView("dashboard") },
               { label: "Save", icon: PiggyBank, active: currentView === "lock", go: () => { setInitialSavingsProduct(null); setCurrentView("lock"); } },
               { label: "Pay", icon: CreditCard, active: currentView === "bills" || currentView === "transfer", go: () => setCurrentView("bills") },
-              { label: "Pulse", icon: Sparkles, active: currentView === "insights", go: () => setCurrentView("insights") },
+              { label: "Insights", icon: ChartNoAxesCombined, active: currentView === "insights", go: () => setCurrentView("insights") },
               { label: "Profile", icon: User, active: currentView === "profile", go: () => setCurrentView("profile") },
             ]).map((t) => (
               <button
                 key={t.label}
                 onClick={t.go}
                 aria-current={t.active ? "page" : undefined}
-                className={`relative flex flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium transition-colors ${t.active ? "text-primary" : "text-muted-foreground"}`}
+                className={`vestara-bottom-tab relative flex flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium transition-colors ${t.active ? "text-primary" : "text-muted-foreground"}`}
               >
-                {t.active && (
-                  <motion.span
-                    layoutId="tab-pill"
-                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                    className="absolute inset-x-3 top-1 bottom-1 rounded-full bg-primary/10"
-                  />
-                )}
-                <motion.span
-                  className="relative inline-flex"
-                  animate={{ scale: t.active ? 1.1 : 1 }}
-                  whileTap={{ scale: 0.96 }}
-                  transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                >
-                  <t.icon className="h-5 w-5" fill={t.active ? "currentColor" : "none"} fillOpacity={t.active ? 0.2 : 0} />
-                </motion.span>
+                <span className="v4-nav-icon"><t.icon className="h-5 w-5" strokeWidth={t.active ? 2.2 : 1.85} /></span>
                 <span className="relative">{t.label}</span>
               </button>
             ))}

@@ -376,10 +376,14 @@ export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductC
   }, [visibleSavings]);
 
   return (
-    <div className="space-y-5">
+    <div className="premium-savings at-savings space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold">Save</h2>
+        <div className="premium-savings-heading at-savings-heading">
+          <span>YOUR SAVINGS</span>
+          <h2>Savings</h2>
+          <p>Set money aside and track your progress.</p>
+        </div>
         <Button variant="ghost" size="icon" aria-label="Refresh" onClick={() => { loadAll(); onRefresh(); void refreshMandates(); }} disabled={loadingData || vestara.loading}>
           <RefreshCw className={`h-4 w-4 ${(loadingData || vestara.loading) ? "animate-spin" : ""}`} />
         </Button>

@@ -1,0 +1,153 @@
+/* Vestara landing: mobile navigation, considered spacing and balanced footer.
+ * Scoped only to the public homepage; no changes to /app. */
+
+/* A bright, readable overlay above hero imagery. */
+.vc-site .vc-mobile-menu {
+  background:rgba(255,255,255,.96);
+  color:#17344a;
+  border:1px solid rgba(255,255,255,.83);
+  border-radius:17px;
+  box-shadow:0 24px 55px rgba(5,21,34,.25),0 2px 8px rgba(10,27,40,.08);
+  -webkit-backdrop-filter:blur(22px) saturate(140%);
+  backdrop-filter:blur(22px) saturate(140%);
+  padding:12px;
+  gap:0;
+  overflow:hidden;
+}
+.vc-site .vc-mobile-menu a {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  min-height:59px;
+  padding:13px 17px;
+  font-size:15px;
+  line-height:1.35;
+  font-weight:680;
+  letter-spacing:-.015em;
+  color:#18354a!important;
+  border-bottom:1px solid #e7edf1;
+  border-radius:7px;
+  transition:color .18s ease,background-color .18s ease;
+}
+.vc-site .vc-mobile-menu a:hover,
+.vc-site .vc-mobile-menu a:focus-visible {
+  color:#d9692b!important;
+  background:#f4f7f8;
+}
+.vc-site .vc-mobile-menu a:nth-last-child(2) {border-bottom:none;}
+.vc-site .vc-mobile-menu a:last-child {
+  min-height:57px;
+  margin-top:10px;
+  padding:14px 17px;
+  background:#143850;
+  border:1px solid #143850;
+  color:#fff!important;
+  border-radius:10px;
+  font-weight:750;
+}
+.vc-site .vc-mobile-menu a:last-child:hover,
+.vc-site .vc-mobile-menu a:last-child:focus-visible {
+  background:#21516d;
+  color:#fff!important;
+}
+.vc-site .vc-mobile-menu a:last-child svg {color:#fff;flex-shrink:0;}
+/* Remove surplus space under the feature carousel now that its redundant caption is gone. */
+.vc-site .vc-features {padding-bottom:clamp(57px,5vw,84px);}
+
+@media (max-width:720px) {
+  .vc-site .vc-mobile-menu {
+    top:clamp(76px,12.2vw,92px);
+    left:18px;
+    right:18px;
+    z-index:45;
+    border-radius:17px;
+  }
+  .vc-site .vc-mobile-menu a {min-height:57px;}
+  .vc-site .vc-features {padding-bottom:57px;}
+
+  .vc-site .vc-footer.vc-footer-light {
+    padding:49px 22px max(38px,env(safe-area-inset-bottom,0px));
+    text-align:center;
+  }
+  .vc-site .vc-footer-light .vc-footer-main {
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    align-items:center!important;
+    text-align:center;
+    gap:20px;
+    padding-bottom:37px;
+    width:100%;
+  }
+  .vc-site .vc-footer-light .vc-footer-main > a.vc-logo {
+    align-self:center;
+    justify-content:center;
+    width:max-content;
+    max-width:100%;
+  }
+  .vc-site .vc-footer-light .vc-footer-main .vc-logo img.vc-logo-art {
+    width:auto;
+    max-width:min(235px,78vw);
+    height:50px;
+    object-position:center;
+    object-fit:contain;
+  }
+  .vc-site .vc-footer-light .vc-footer-main p {
+    max-width:330px;
+    color:#637787!important;
+    font-size:14px;
+    line-height:1.65;
+    margin:0 auto;
+  }
+  .vc-site .vc-footer-light .vc-footer-main > a:last-child {
+    justify-content:center;
+    align-self:center;
+    margin:2px auto 0;
+    font-size:13px;
+    color:#173a51!important;
+  }
+  .vc-site .vc-footer-light .vc-footer-small {
+    display:flex;
+    flex-direction:column;
+    align-items:center!important;
+    justify-content:center;
+    text-align:center;
+    gap:22px;
+    padding-top:30px;
+    margin:0 auto;
+    width:100%;
+  }
+  .vc-site .vc-footer-light .vc-footer-small > span {
+    display:block;
+    width:100%;
+    max-width:335px;
+    line-height:1.7;
+    margin:0 auto;
+    text-align:center;
+    font-size:12px;
+  }
+  .vc-site .vc-footer-light .vc-footer-small > div {
+    display:flex;
+    flex-wrap:wrap;
+    justify-content:center!important;
+    align-items:center;
+    gap:14px 22px;
+    width:100%;
+    max-width:370px;
+    margin:0 auto;
+  }
+  .vc-site .vc-footer-light .vc-footer-small > div a {
+    font-size:12px;
+    line-height:1.45;
+  }
+  .vc-site .vc-footer-light .vc-footer-small > span:last-child {
+    color:#2a475a!important;
+    max-width:320px;
+    font-size:12px;
+    font-weight:660;
+    line-height:1.6;
+  }
+}
+@media(prefers-reduced-motion:reduce){
+  .vc-site .vc-mobile-menu a {transition:none;}
+}

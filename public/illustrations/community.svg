@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1000" viewBox="0 0 1200 1000" role="img"><defs>
+ <linearGradient id="bg" x2="1" y2="1"><stop stop-color="#174459"/><stop offset="1" stop-color="#6d7057"/></linearGradient>
+ <linearGradient id="skin" x2="1" y2="1"><stop stop-color="#b77449"/><stop offset=".57" stop-color="#8f512f"/><stop offset="1" stop-color="#68391f"/></linearGradient>
+ <linearGradient id="silk" x2=".1" y2="0.9"><stop stop-color="#d97648"/><stop offset="1" stop-color="#a64e28"/></linearGradient>
+ <radialGradient id="light"><stop stop-color="#fbcf9b" stop-opacity=".55"/><stop offset="1" stop-color="#fbcf9b" stop-opacity="0"/></radialGradient>
+ <pattern id="texture" width="14" height="14" patternUnits="userSpaceOnUse"><path d="M0 0L1 0M4 8L5 8M11 12L12 12" stroke="#fff" stroke-opacity=".14"/></pattern>
+ <filter id="shadow"><feGaussianBlur stdDeviation="22"/></filter>
+ </defs>
+ <rect width="1200" height="1000" fill="url(#bg)"/>
+ <ellipse cx="990" cy="70" rx="700" ry="490" fill="url(#light)"/>
+ <circle cx="890" cy="320" r="345" fill="none" stroke="#fff" stroke-opacity=".09" stroke-width="2"/>
+ <circle cx="890" cy="320" r="420" fill="none" stroke="#fff" stroke-opacity=".06" stroke-width="2"/>
+ <path d="M0 814Q292 714 590 827T1200 791V1000H0Z" fill="#081e2c" fill-opacity=".28"/>
+ <g transform="translate(-15 -20)">
+ <rect x="210" y="165" width="770" height="610" rx="30" fill="#f0b787" opacity=".18"/>
+ <path d="M218 183V770M976 183V770" stroke="#ffcf9f" stroke-width="8" opacity=".2"/>
+ <circle cx="613" cy="296" r="194" fill="#ffcb82" opacity=".11"/>
+ <!-- left -->
+ <path d="M118 1010Q134 662 352 669Q519 691 546 1010Z" fill="#f0a26a"/>
+ <path d="M253 664Q220 578 235 484Q249 399 335 395Q414 402 431 498L412 634Q329 699 253 664Z" fill="url(#skin)"/>
+ <path d="M212 497Q208 372 313 340Q422 327 438 449L421 535Q373 491 370 431Q289 486 212 497Z" fill="#172025"/>
+ <!-- middle -->
+ <path d="M365 1010Q412 622 603 621Q784 616 842 1010Z" fill="#22485d"/>
+ <path d="M514 633Q493 529 505 436Q510 365 598 349Q681 359 702 437L675 627Q608 710 514 633Z" fill="url(#skin)"/>
+ <path d="M484 470Q475 347 568 330Q592 287 643 319Q719 308 723 439L685 499Q665 446 650 417Q573 472 484 470Z" fill="#142126"/>
+ <!-- right -->
+ <path d="M753 1010Q753 656 947 641Q1106 650 1187 1010Z" fill="#da8652"/>
+ <path d="M839 645Q798 520 828 420Q853 371 923 371Q1010 391 1024 476L1004 638Q924 713 839 645Z" fill="url(#skin)"/>
+ <path d="M793 481Q771 380 832 356Q856 302 925 331Q1019 320 1052 433L1030 502Q997 435 984 401Q891 471 793 481Z" fill="#191f23"/>
+ <!-- hands in centre -->
+ <path d="M424 745Q495 779 574 756" stroke="#9e633c" stroke-width="51" stroke-linecap="round" fill="none"/>
+ <path d="M855 749Q791 790 719 763" stroke="#aa6a40" stroke-width="51" stroke-linecap="round" fill="none"/>
+ <path d="M556 767Q600 781 627 770L691 759" stroke="#bd865d" stroke-width="49" stroke-linecap="round" fill="none"/>
+ </g>
+ <rect width="1200" height="1000" fill="url(#texture)" opacity=".48"/>
+ </svg>

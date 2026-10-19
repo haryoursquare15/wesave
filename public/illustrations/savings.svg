@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1000" viewBox="0 0 1200 1000" role="img"><defs>
+ <linearGradient id="bg" x2="1" y2="1"><stop stop-color="#173a4a"/><stop offset="1" stop-color="#aa6540"/></linearGradient>
+ <linearGradient id="skin" x2="1" y2="1"><stop stop-color="#b77449"/><stop offset=".57" stop-color="#8f512f"/><stop offset="1" stop-color="#68391f"/></linearGradient>
+ <linearGradient id="silk" x2=".1" y2="0.9"><stop stop-color="#dd863a"/><stop offset="1" stop-color="#a64e28"/></linearGradient>
+ <radialGradient id="light"><stop stop-color="#fbcf9b" stop-opacity=".55"/><stop offset="1" stop-color="#fbcf9b" stop-opacity="0"/></radialGradient>
+ <pattern id="texture" width="14" height="14" patternUnits="userSpaceOnUse"><path d="M0 0L1 0M4 8L5 8M11 12L12 12" stroke="#fff" stroke-opacity=".14"/></pattern>
+ <filter id="shadow"><feGaussianBlur stdDeviation="22"/></filter>
+ </defs>
+ <rect width="1200" height="1000" fill="url(#bg)"/>
+ <ellipse cx="990" cy="70" rx="700" ry="490" fill="url(#light)"/>
+ <circle cx="890" cy="320" r="345" fill="none" stroke="#fff" stroke-opacity=".09" stroke-width="2"/>
+ <circle cx="890" cy="320" r="420" fill="none" stroke="#fff" stroke-opacity=".06" stroke-width="2"/>
+ <path d="M0 814Q292 714 590 827T1200 791V1000H0Z" fill="#081e2c" fill-opacity=".28"/>
+ <g transform="translate(0 -35)">
+ <path d="M0 673Q374 551 709 667Q1005 764 1200 565V1000H0Z" fill="#ffdcaf" opacity=".17"/>
+ <circle cx="337" cy="310" r="170" fill="#e68d51" opacity=".28"/>
+ <!-- elegant blouse -->
+ <path d="M344 1015Q349 631 595 618Q893 608 949 1015Z" fill="url(#silk)"/>
+ <path d="M468 707Q429 782 419 976M745 690Q794 796 821 991" stroke="#f8c49b" stroke-opacity=".23" stroke-width="22"/>
+ <!-- face and hair -->
+ <path d="M480 520Q423 437 447 317Q464 196 593 178Q738 201 749 332Q780 451 714 547L715 669Q592 753 470 662Z" fill="#171f22"/>
+ <path d="M502 340Q500 241 602 222Q697 232 706 349L710 501Q698 591 598 628Q521 590 499 495Z" fill="url(#skin)"/>
+ <path d="M461 349Q428 257 510 210Q615 151 701 223Q765 285 726 376Q676 307 634 299Q561 370 461 349Z" fill="#151c20"/>
+ <path d="M464 391Q434 496 481 561M741 376Q757 488 709 562" stroke="#151c20" stroke-width="56" stroke-linecap="round"/>
+ <ellipse cx="558" cy="422" rx="6" ry="4" fill="#292125"/><ellipse cx="650" cy="418" rx="6" ry="4" fill="#292125"/>
+ <path d="M573 514Q609 535 644 503" stroke="#543224" stroke-width="7" fill="none" stroke-linecap="round"/>
+ <!-- hands and phone -->
+ <path d="M458 795Q535 753 586 700" stroke="#a3653f" stroke-width="69" stroke-linecap="round"/>
+ <path d="M759 811Q703 735 655 716" stroke="#9e5c37" stroke-width="68" stroke-linecap="round"/>
+ <rect x="556" y="587" width="117" height="214" rx="18" transform="rotate(-12 556 587)" fill="#10283a" stroke="#f6b88d" stroke-width="8"/>
+ <rect x="573" y="607" width="85" height="177" rx="9" transform="rotate(-12 573 607)" fill="#345263"/>
+ <circle cx="644" cy="779" r="5" fill="#f2c793"/>
+ <path d="M540 815l76 39" stroke="#c98050" stroke-width="45" stroke-linecap="round"/>
+ </g>
+ <rect width="1200" height="1000" fill="url(#texture)" opacity=".48"/>
+ </svg>

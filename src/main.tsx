@@ -4,6 +4,17 @@ import { toast as sonnerToast } from "sonner";
 import App from "./App.tsx";
 import { sanitizeUserMessage } from "./lib/errorMessages";
 import "./index.css";
+import "./styles/premium.css";
+import "./styles/cinematic.css";
+import "./styles/studio.css";
+import "./styles/finish.css";
+import "./styles/atelier.css";
+import "./styles/vision.css";
+import "./styles/private-bank.css";
+import "./styles/v4-app.css";
+import "./styles/v4-fixes.css";
+import "./styles/v4-dark-polish.css";
+import "./styles/home-polish.css";
 
 // Never show technical wording in error popups, wherever they come from.
 const originalError = sonnerToast.error;

@@ -1,0 +1,547 @@
+/*
+ * Vestara v4 | Clean Digital Banking
+ * No faux editorial ornaments, artificial photography, or gradient overload.
+ * Presentation-only overrides. All existing feature actions and backend calls remain.
+ */
+.vc-site .vc-footer.vc-footer-light {
+  background:#fff!important;
+  color:#263b4d!important;
+  border-top:1px solid #e7ecf0;
+  padding-top:62px;
+  padding-bottom:28px;
+}
+.vc-site .vc-footer-light .vc-footer-main {padding-bottom:52px;}
+.vc-site .vc-footer-light .vc-logo,.vc-site .vc-footer-light .vc-logo:hover {background:transparent!important;box-shadow:none!important;}
+.vc-site .vc-footer-light .vc-logo img.vc-logo-art {height:45px;max-width:205px;filter:none!important;}
+.vc-site .vc-footer-light .vc-logo img.vc-logo-white-text {display:none!important;}
+.vc-site .vc-footer-light .vc-footer-main p {color:#657585;}
+.vc-site .vc-footer-light .vc-footer-main > a:last-child {color:#183548!important;transition:color .2s;}
+.vc-site .vc-footer-light .vc-footer-main > a:last-child:hover {color:#df722f!important;}
+.vc-site .vc-footer-light .vc-footer-small {color:#6f7d89!important;border-top:1px solid #e5ebef;}
+.vc-site .vc-footer-light .vc-footer-small a {color:#32485a!important;}
+.vc-site .vc-footer-light .vc-footer-small a:hover {color:#e16e2d!important;}
+.vc-site .vc-footer-light .vc-footer-small > span:last-child {font-weight:600;color:#365063!important;}
+
+/* Clean tokens, removing the previous paper/beige visual scheme. */
+.vestara-app.at-shell.v4-app {
+  --v4-blue:#102c44;
+  --v4-blue-2:#193e5b;
+  --v4-ink:#1d2d39;
+  --v4-body:#536676;
+  --v4-muted:#8493a0;
+  --v4-orange:#e66e30;
+  --v4-border:#e5ebef;
+  --v4-bg:#f7f9fb;
+  --v4-white:#fff;
+  --background:210 32% 98%;
+  --foreground:208 35% 17%;
+  --card:0 0% 100%;
+  --muted:210 25% 96%;
+  --border:209 23% 91%;
+  background:var(--v4-bg)!important;
+  color:var(--v4-ink);
+  font-family:"Manrope","DM Sans",system-ui,sans-serif;
+  letter-spacing:-.02em;
+}
+.vestara-app.at-shell.v4-app * { -webkit-tap-highlight-color:transparent; }
+.vestara-app.at-shell.v4-app :focus-visible {outline:2px solid var(--v4-orange);outline-offset:3px;}
+.vestara-app.at-shell.v4-app :is(button,a,[role=button]) {touch-action:manipulation;}
+.vestara-app.at-shell.v4-app :is(button,input,textarea,select) {font-family:inherit;}
+.vestara-app.at-shell.v4-app .at-header {
+  min-height:68px;
+  background:var(--v4-white)!important;
+  border-bottom:1px solid var(--v4-border);
+  box-shadow:none!important;
+}
+.vestara-app.at-shell.v4-app .at-header-inner {max-width:1140px;padding:10px 28px;min-height:68px;}
+.vestara-app.at-shell.v4-app .at-header-brand {gap:15px;}
+.vestara-app.at-shell.v4-app .at-header-brand .vestara-brand-logo {height:35px;max-width:170px;}
+.vestara-app.at-shell.v4-app .at-header-brand > span {
+  color:#8a98a1;font-size:11px;font-weight:650;letter-spacing:.025em;
+  text-transform:none;border-color:#dbe4ea;padding-left:15px;
+}
+.vestara-app.at-shell.v4-app .at-header [aria-label="Open profile"] {
+  background:#eef3f6!important;border:1px solid #e5ecf0;color:#24455d;
+  border-radius:50%;box-shadow:none;
+}
+.vestara-app.at-shell.v4-app .at-workspace {
+  background:var(--v4-bg)!important;
+  padding:30px clamp(20px,4vw,46px) 120px;
+}
+.vestara-app.at-shell.v4-app .at-page {max-width:1040px;gap:26px;}
+.vestara-app.at-shell.v4-app .at-page > * {min-width:0;}
+
+/* Desktop sidebar as an actual navigation component rather than a magazine panel. */
+@media(min-width:960px) {
+  .vestara-app.at-shell.v4-app {grid-template-columns:235px minmax(0,1fr);grid-template-rows:68px minmax(0,1fr);}
+  .vestara-app.at-shell.v4-app .at-sidebar {
+    background:#fff!important;
+    border-right:1px solid var(--v4-border)!important;
+    gap:27px;
+    padding:26px 14px 20px;
+  }
+  .vestara-app.at-shell.v4-app .at-sidebar-brand {border-bottom:1px solid var(--v4-border);padding:4px 11px 24px;gap:10px;}
+  .vestara-app.at-shell.v4-app .at-sidebar-brand img {width:160px;max-height:53px;}
+  .vestara-app.at-shell.v4-app .at-sidebar-brand > span {
+    font-size:10px;letter-spacing:.12em;font-weight:740;color:#8797a1;
+  }
+  .vestara-app.at-shell.v4-app .at-sidebar-section {gap:6px;}
+  .vestara-app.at-shell.v4-app .at-sidebar-section > span {color:#98a5ae;font-size:10px;letter-spacing:.13em;font-weight:750;padding:0 14px 9px;}
+  .vestara-app.at-shell.v4-app .at-sidebar-section > button {
+    min-height:46px;border-radius:10px;padding:12px 13px;
+    color:#566a7b;font-size:13px;font-weight:650;gap:14px;
+    transition:background .2s ease,color .2s ease;
+  }
+  .vestara-app.at-shell.v4-app .at-sidebar-section > button svg {color:#8194a3;stroke-width:1.8;}
+  .vestara-app.at-shell.v4-app .at-sidebar-section > button:hover {background:#f1f5f8;color:#12334e;}
+  .vestara-app.at-shell.v4-app .at-sidebar-section > button[aria-current="page"] {
+    background:#eaf2f7;color:#123b56;box-shadow:none;font-weight:780;
+  }
+  .vestara-app.at-shell.v4-app .at-sidebar-section > button[aria-current="page"] svg {color:#df6e30;}
+  .vestara-app.at-shell.v4-app .at-sidebar-active-dot {background:#e66e30;width:6px;height:6px;}
+  .vestara-app.at-shell.v4-app .at-sidebar-more {border-top:1px solid var(--v4-border);padding-top:20px;}
+  .vestara-app.at-shell.v4-app .at-sidebar-footer {border-top:1px solid var(--v4-border);font-size:10px;color:#8395a3;line-height:1.5;}
+  .vestara-app.at-shell.v4-app .at-sidebar-footer svg {color:#617b8b;}
+  .vestara-app.at-shell.v4-app .at-workspace {max-width:none!important;padding:36px clamp(35px,5vw,68px) 80px;}
+  .vestara-app.at-shell.v4-app .at-header-inner {max-width:none;min-height:68px;padding:12px 40px;}
+}
+@media(max-width:959px){
+  .vestara-app.at-shell.v4-app .at-header-inner {padding:9px 20px;}
+  .vestara-app.at-shell.v4-app .at-header-brand > span {display:none;}
+}
+
+/* Home dashboard, purposeful hierarchy and typography. */
+.vestara-app.at-shell.v4-app .premium-dashboard {gap:28px;}
+.vestara-app.at-shell.v4-app .at-overview {gap:24px;}
+.vestara-app.at-shell.v4-app .at-greeting {padding:5px 0 0;align-items:center;}
+.vestara-app.at-shell.v4-app .at-eyebrow {
+  font-size:10px;letter-spacing:.10em;font-weight:750;
+  color:#a07a67;gap:8px;margin-bottom:9px;
+}
+.vestara-app.at-shell.v4-app .at-eyebrow > span {background:#e66e30;width:16px;height:3px;border-radius:3px;}
+.vestara-app.at-shell.v4-app .at-greeting h1 {
+  color:#172f41;font-family:inherit;font-size:clamp(28px,3.9vw,42px);
+  font-weight:780;letter-spacing:-.06em;line-height:1.22;
+}
+.vestara-app.at-shell.v4-app .at-greeting h1 span {color:#e36e30;font-weight:780;}
+.vestara-app.at-shell.v4-app .at-greeting p {font-size:13px;color:#778998;margin-top:7px;}
+.vestara-app.at-shell.v4-app .at-greeting-avatar {width:46px;height:46px;border:3px solid #fff;box-shadow:0 0 0 1px #e5ecf0;}
+.vestara-app.at-shell.v4-app .at-statement {
+  border:0;min-height:0;
+  display:grid;grid-template-columns:minmax(0,1.18fr) minmax(0,.82fr);
+  border-radius:22px!important;box-shadow:0 14px 32px -26px rgba(17,45,68,.33)!important;
+  background:#fff;overflow:hidden;
+}
+.vestara-app.at-shell.v4-app .at-statement-main {
+  min-height:329px;
+  padding:clamp(28px,3.7vw,42px);
+  background:linear-gradient(137deg,#173c59 0%,#102d46 72%,#0b2942 100%);
+  color:#fff;
+}
+.vestara-app.at-shell.v4-app .at-statement-watermark {display:none;}
+.vestara-app.at-shell.v4-app .at-statement-topline {
+  color:#a8c1d1;font-size:10px;letter-spacing:.11em;
+  font-weight:700;opacity:1;
+}
+.vestara-app.at-shell.v4-app .at-statement-topline span:first-child {color:#f7b98b;}
+.vestara-app.at-shell.v4-app .at-statement-balance-label {margin-top:43px;}
+.vestara-app.at-shell.v4-app .at-statement-balance-label > span {color:#c7d7e1;font-weight:570;font-size:14px;}
+.vestara-app.at-shell.v4-app .at-statement-balance-label > button {
+  color:#d6e2e9;border-color:rgba(255,255,255,.23);
+  background:rgba(255,255,255,.06);border-radius:10px;
+  padding:7px 10px;min-height:38px;
+}
+.vestara-app.at-shell.v4-app .at-statement-balance {
+  color:#fff;font-size:clamp(47px,6vw,69px);
+  line-height:1.13;letter-spacing:-.070em;
+  margin:10px 0 26px;font-weight:740;
+}
+.vestara-app.at-shell.v4-app .at-statement-notice {color:#f1caab;}
+.vestara-app.at-shell.v4-app .at-statement-actions {margin-top:auto;gap:10px;}
+.vestara-app.at-shell.v4-app .at-statement-actions > button {
+  min-height:45px;padding:12px 18px;border-radius:11px;
+  font-size:12px;font-weight:770;gap:16px;
+  transition:background .2s,transform .2s;
+}
+.vestara-app.at-shell.v4-app .at-action-primary {background:#ee792f;color:#fff;}
+.vestara-app.at-shell.v4-app .at-action-primary:hover {background:#fa8a48;}
+.vestara-app.at-shell.v4-app .at-action-secondary {background:rgba(255,255,255,.14);color:#fff;}
+.vestara-app.at-shell.v4-app .at-action-secondary:hover {background:rgba(255,255,255,.23);}
+.vestara-app.at-shell.v4-app .at-statement-detail {
+  background:#fff;color:#20394c;
+  padding:clamp(25px,3.5vw,39px);
+  border-left:1px solid #eef1f4;
+}
+.vestara-app.at-shell.v4-app .at-statement-detail::after {display:none;}
+.vestara-app.at-shell.v4-app .at-detail-header {color:#8b9ca6;letter-spacing:.11em;font-size:10px;}
+.vestara-app.at-shell.v4-app .at-detail-symbol {display:grid;place-items:center;width:36px;height:36px;border-radius:11px;background:#f3f6f8;color:#1b4561;font:750 17px/1 inherit;letter-spacing:-.07em;}
+.vestara-app.at-shell.v4-app .at-detail-symbol > span {color:#e66e30;}
+.vestara-app.at-shell.v4-app .at-account-number {margin:35px 0 0;}
+.vestara-app.at-shell.v4-app .at-account-number > span {font-size:12px;color:#7e909e;}
+.vestara-app.at-shell.v4-app .at-account-number button {color:#19384f;font-size:clamp(18px,2.3vw,24px);gap:12px;letter-spacing:-.04em;}
+.vestara-app.at-shell.v4-app .at-account-number button > svg {color:#e7783a;}
+.vestara-app.at-shell.v4-app .at-account-number small {font-size:11px;color:#93a2aa;}
+.vestara-app.at-shell.v4-app .at-detail-divider {background:#e7edf0;margin:23px 0 21px;}
+.vestara-app.at-shell.v4-app .at-balance-breakdown {gap:9px;}
+.vestara-app.at-shell.v4-app .at-balance-breakdown span {color:#82929c;font-size:10px;}
+.vestara-app.at-shell.v4-app .at-balance-breakdown strong {color:#213b4f;font-size:13px;font-weight:770;}
+.vestara-app.at-shell.v4-app .at-account-tier {border-top:1px solid #edf0f2;margin-top:auto;padding-top:16px;color:#6a8491;font-size:10px;}
+.vestara-app.at-shell.v4-app .at-account-tier button {color:#db712f;}
+.vestara-app.at-shell.v4-app .at-account-tier svg {color:#2d7c66;}
+
+/* Quick actions, no decorative tiles or gradient blocks. */
+.vestara-app.at-shell.v4-app .at-mini-heading > div > span,
+.vestara-app.at-shell.v4-app .at-section-title > div > span {
+  font-size:10px;letter-spacing:.09em;font-weight:740;color:#8797a3;margin-bottom:6px;
+}
+.vestara-app.at-shell.v4-app .at-mini-heading h2,
+.vestara-app.at-shell.v4-app .at-section-title h2 {
+  font-size:clamp(19px,2.5vw,24px);font-weight:770;
+  letter-spacing:-.046em;color:#223c4e;
+}
+.vestara-app.at-shell.v4-app .at-action-grid {grid-template-columns:repeat(4,minmax(0,1fr));gap:11px;margin-top:16px;}
+.vestara-app.at-shell.v4-app .at-shortcut,
+.vestara-app.at-shell.v4-app .at-shortcut:nth-child(2),
+.vestara-app.at-shell.v4-app .at-shortcut:nth-child(3),
+.vestara-app.at-shell.v4-app .at-shortcut:nth-child(4) {
+  background:#fff;border:1px solid var(--v4-border)!important;
+  border-radius:17px;min-height:138px;padding:18px;
+  box-shadow:0 7px 19px -21px rgba(15,41,61,.34);
+}
+.vestara-app.at-shell.v4-app .at-shortcut:hover {border-color:#d2e1e8!important;background:#fcfdfe;transform:translateY(-2px);}
+.vestara-app.at-shell.v4-app .at-shortcut-icon {
+  width:39px;height:39px;display:grid;place-items:center;
+  background:#edf4f8;color:#1d5672;border-radius:12px;
+}
+.vestara-app.at-shell.v4-app .at-shortcut:nth-child(2) .at-shortcut-icon {background:#fff1e7;color:#df732f;}
+.vestara-app.at-shell.v4-app .at-shortcut:nth-child(3) .at-shortcut-icon {background:#eef5ee;color:#38775d;}
+.vestara-app.at-shell.v4-app .at-shortcut strong {margin-top:16px;font-size:13px;font-weight:770;color:#193a4f;}
+.vestara-app.at-shell.v4-app .at-shortcut small {font-size:10px;color:#93a0a8;margin-top:5px;}
+.vestara-app.at-shell.v4-app .at-shortcut-arrow {color:#abb7be;width:16px;right:16px;top:18px;}
+
+/* Product discovery: functional tiles, not AI-themed faux imagery. */
+.vestara-app.at-shell.v4-app .at-journeys {gap:14px;}
+.vestara-app.at-shell.v4-app .at-section-title button {color:#dc763a;font-size:12px;font-weight:750;}
+.vestara-app.at-shell.v4-app .v4-products {
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;
+}
+.vestara-app.at-shell.v4-app .v4-product {
+  display:flex;flex-direction:column;position:relative;
+  min-width:0;min-height:205px;padding:21px;
+  border-radius:19px;border:1px solid #e5ebef;
+  background:#fff;color:#223b4b;text-align:left;
+  transition:border-color .2s,transform .2s,box-shadow .2s;
+}
+.vestara-app.at-shell.v4-app .v4-product:hover {border-color:#bdd1df;box-shadow:0 12px 24px -23px rgba(25,59,79,.36);transform:translateY(-2px);}
+.vestara-app.at-shell.v4-app .v4-product-featured {background:#eaf3f8;border-color:#e0eef4;}
+.vestara-app.at-shell.v4-app .v4-product-icon {
+  display:grid;place-items:center;width:43px;height:43px;border-radius:13px;
+  background:#f0f5f7;color:#1c526c;margin-bottom:auto;
+}
+.vestara-app.at-shell.v4-app .v4-product-featured .v4-product-icon {background:#d7e9f1;color:#173c55;}
+.vestara-app.at-shell.v4-app .v4-product:nth-child(2) .v4-product-icon {background:#fff0e5;color:#df7639;}
+.vestara-app.at-shell.v4-app .v4-product:nth-child(3) .v4-product-icon {background:#e8f3e9;color:#317b62;}
+.vestara-app.at-shell.v4-app .v4-product-copy {display:flex;flex-direction:column;align-items:flex-start;margin-top:24px;gap:6px;padding-right:16px;}
+.vestara-app.at-shell.v4-app .v4-product-eyebrow {font-size:10px;font-weight:750;color:#7e919c;}
+.vestara-app.at-shell.v4-app .v4-product strong {font-size:clamp(16px,1.7vw,20px);line-height:1.25;letter-spacing:-.045em;font-weight:780;color:#1b3c52;}
+.vestara-app.at-shell.v4-app .v4-product small {color:#718797;font-size:11px;line-height:1.6;}
+.vestara-app.at-shell.v4-app .v4-product-arrow {position:absolute;right:19px;top:22px;color:#728a99;}
+.vestara-app.at-shell.v4-app .premium-dashboard > div .bg-card.rounded-2xl.border.shadow-sm,
+.vestara-app.at-shell.v4-app .premium-dashboard > div .bg-card.rounded-2xl.border {
+  background:#fff;border-color:#e5ebef!important;border-radius:17px!important;
+  box-shadow:none!important;
+}
+.vestara-app.at-shell.v4-app .premium-dashboard .flex.items-center.justify-between.mb-3 > h3,
+.vestara-app.at-shell.v4-app .premium-dashboard .flex.items-center.justify-between.mb-3 > div > h3 {font-size:17px!important;color:#203b4e;letter-spacing:-.035em;}
+.vestara-app.at-shell.v4-app .premium-dashboard .text-primary {color:#e27333;}
+.vestara-app.at-shell.v4-app .premium-dashboard .text-success {color:#178467;}
+
+/* Profile: high-trust account identity and organised settings. */
+.vestara-app.at-shell.v4-app .premium-profile-heading {padding:3px 0 0;}
+.vestara-app.at-shell.v4-app .premium-profile-heading > span {font-size:10px;letter-spacing:.10em;font-weight:750;color:#899baa;}
+.vestara-app.at-shell.v4-app .premium-profile-heading-dot {background:#ea7835;}
+.vestara-app.at-shell.v4-app .premium-profile-heading h1 {
+  color:#1c374b;font-size:clamp(29px,3vw,39px);font-weight:770;
+  line-height:1.15;letter-spacing:-.05em;margin:10px 0 6px;
+}
+.vestara-app.at-shell.v4-app .premium-profile-heading p {color:#83949f;font-size:13px;}
+.vestara-app.at-shell.v4-app .at-profile-passport.v4-profile-summary {
+  background:#fff!important;color:#203f53!important;
+  border:1px solid var(--v4-border);border-radius:19px;
+  min-height:0;padding:24px 26px 18px;box-shadow:none;
+}
+.vestara-app.at-shell.v4-app .v4-profile-summary::after {display:none;}
+.vestara-app.at-shell.v4-app .at-passport-marker {font-size:10px;letter-spacing:.09em;color:#90a0aa;font-weight:760;}
+.vestara-app.at-shell.v4-app .at-passport-marker > span:last-child {color:#2c5870;}
+.vestara-app.at-shell.v4-app .at-passport-content {padding:19px 0 17px;gap:18px;}
+.vestara-app.at-shell.v4-app .at-passport-caption {font-size:11px;color:#899ca6;font-weight:650;letter-spacing:0;margin-bottom:7px;}
+.vestara-app.at-shell.v4-app .at-passport-copy h2 {font-size:clamp(20px,2.7vw,27px);font-weight:770;color:#1b3c4f;letter-spacing:-.04em;}
+.vestara-app.at-shell.v4-app .at-passport-copy p {color:#78909e;font-size:12px;margin-top:7px;}
+.vestara-app.at-shell.v4-app .at-passport-tier {background:#edf6f4;color:#267e68;border:1px solid #d9ece6;padding:6px 10px;font-size:10px;border-radius:8px;}
+.vestara-app.at-shell.v4-app .at-passport-avatar {border:1px solid #e3ebef;box-shadow:none;width:75px;height:75px;}
+.vestara-app.at-shell.v4-app .at-passport-avatar [data-slot="avatar-fallback"] {background:#eaf2f6;color:#1c526c;font-family:inherit;font-size:24px;font-weight:730;}
+.vestara-app.at-shell.v4-app .at-passport-avatar > span:last-child {background:#ea7b3a;border-color:#fff;}
+.vestara-app.at-shell.v4-app .at-passport-footer {border-color:#edf0f3;color:#8498a6;font-size:10px;letter-spacing:.02em;font-weight:650;}
+.vestara-app.at-shell.v4-app .premium-profile-hub {gap:10px;}
+.vestara-app.at-shell.v4-app .premium-profile-hub > button,
+.vestara-app.at-shell.v4-app .premium-profile-hub > button:nth-child(2),
+.vestara-app.at-shell.v4-app .premium-profile-hub > button:nth-child(3) {
+  background:#fff;border:1px solid var(--v4-border);border-radius:16px;min-height:111px;
+  padding:15px;box-shadow:none;
+}
+.vestara-app.at-shell.v4-app .premium-profile-hub > button:hover {border-color:#bed5e3;transform:translateY(-1px);}
+.vestara-app.at-shell.v4-app .premium-profile-hub-glyph {color:#2a6380!important;}
+.vestara-app.at-shell.v4-app .premium-profile-hub > button:nth-child(2) .premium-profile-hub-glyph {color:#e27333!important;}
+.vestara-app.at-shell.v4-app .premium-profile-hub strong {color:#244051;font-size:12px;font-weight:730;}
+.vestara-app.at-shell.v4-app .premium-profile-hub small {color:#889aa4;font-size:10px;}
+.vestara-app.at-shell.v4-app .premium-profile-setup {
+  background:#fff!important;border:1px solid #e8eef0!important;
+  border-left:3px solid #ed864b!important;border-radius:14px!important;padding:20px!important;
+}
+.vestara-app.at-shell.v4-app .premium-profile-setup button {border:1px solid #e9eef1;border-radius:12px;background:#fafcfd;}
+.vestara-app.at-shell.v4-app .at-settings-section > h2 {font-size:12px;letter-spacing:.01em;font-weight:800;color:#29485b;padding:2px 2px 9px;text-transform:none;}
+.vestara-app.at-shell.v4-app .at-settings-section .premium-settings-list {
+  background:#fff!important;border:1px solid var(--v4-border)!important;
+  border-radius:17px!important;overflow:hidden!important;
+}
+.vestara-app.at-shell.v4-app .at-settings-section .premium-settings-list > .premium-profile-row,
+.vestara-app.at-shell.v4-app .at-settings-section .premium-settings-list > div:not(.premium-profile-row) {
+  background:#fff!important;border:0!important;border-bottom:1px solid #edf1f3!important;box-shadow:none!important;
+}
+.vestara-app.at-shell.v4-app .at-settings-section .premium-settings-list > :last-child {border-bottom:0!important;}
+.vestara-app.at-shell.v4-app .at-settings-section .premium-profile-row {min-height:72px;padding:17px 20px!important;}
+.vestara-app.at-shell.v4-app .at-settings-section .premium-profile-row:hover {background:#f8fbfd!important;}
+.vestara-app.at-shell.v4-app .at-settings-section .premium-profile-row-icon {
+  display:grid!important;place-items:center!important;
+  background:#f0f5f8!important;border:0!important;border-radius:11px!important;
+  height:39px!important;width:39px!important;color:#285e7a!important;
+}
+.vestara-app.at-shell.v4-app .at-settings-section[data-section="security"] .premium-profile-row-icon {background:#fff4eb!important;color:#db752f!important;}
+.vestara-app.at-shell.v4-app .at-settings-section .premium-profile-row .flex-1.min-w-0 > p:first-child {font-size:13px;font-weight:730;color:#254052;}
+.vestara-app.at-shell.v4-app .at-settings-section .premium-profile-row .flex-1.min-w-0 > p:nth-child(2) {font-size:11px;color:#899aa5;}
+.vestara-app.at-shell.v4-app .at-settings-section .premium-profile-row .text-right {color:#677f8e;font-size:11px;}
+.vestara-app.at-shell.v4-app .at-settings-section .premium-profile-row-attention {background:#fffbf7!important;}
+.vestara-app.at-shell.v4-app .at-settings-section [role="radiogroup"] {background:#f0f4f7;border-radius:11px;}
+.vestara-app.at-shell.v4-app .at-settings-section [role="radio"][aria-checked="true"] {background:#fff;box-shadow:0 2px 9px -7px #587180;}
+
+/* Interior screens: shared clean components without marketing banners. */
+.vestara-app.at-shell.v4-app .premium-context-banner.v4-page-intro {
+  background:transparent!important;min-height:0;padding:0 0 10px;
+  border:0;border-radius:0;box-shadow:none;
+  display:flex;align-items:center;gap:14px;
+}
+.vestara-app.at-shell.v4-app .v4-page-intro .premium-context-orbit {display:none!important;}
+.vestara-app.at-shell.v4-app .v4-page-intro .premium-context-eyebrow {
+  margin:0 0 7px;color:#8496a1;font-size:11px;letter-spacing:.05em;font-weight:650;
+}
+.vestara-app.at-shell.v4-app .v4-page-intro h1 {
+  font-size:clamp(27px,3.5vw,36px);color:#1a374c;line-height:1.15;font-weight:780;letter-spacing:-.055em;margin:0 0 6px;
+}
+.vestara-app.at-shell.v4-app .v4-page-intro p {color:#8797a2;font-size:13px;}
+.vestara-app.at-shell.v4-app .v4-page-intro .premium-context-icon {
+  background:#fff;color:#2d6583;border:1px solid #e4ebf0;border-radius:14px;
+  height:51px;width:51px;box-shadow:none;
+}
+.vestara-app.at-shell.v4-app .premium-service-page {gap:18px;}
+.vestara-app.at-shell.v4-app .premium-service-back {
+  border:0;background:transparent;padding:3px 0;font-size:12px;font-weight:740;color:#e47535;
+}
+.vestara-app.at-shell.v4-app .premium-service-page :is([data-slot="card"],.bg-card.rounded-2xl.border,.border.rounded-xl) {
+  background:#fff;border-color:#e5ecf0;border-radius:17px!important;box-shadow:none!important;
+}
+.vestara-app.at-shell.v4-app .premium-service-page :is(input,textarea,[role="combobox"]) {
+  background:#fff;min-height:45px;border:1px solid #dfe8ec;border-radius:11px!important;font-size:14px;
+}
+.vestara-app.at-shell.v4-app :is(.premium-service-page,.at-savings,.at-bills,.premium-split) button:disabled {opacity:.5;cursor:not-allowed;}
+.vestara-app.at-shell.v4-app .at-savings-heading h2,
+.vestara-app.at-shell.v4-app .premium-split-heading h3,
+.vestara-app.at-shell.v4-app .premium-bills-heading h2 {
+  color:#1c3c50;font-size:clamp(26px,3vw,34px)!important;letter-spacing:-.055em;font-weight:780;
+}
+.vestara-app.at-shell.v4-app .at-savings-heading > span,
+.vestara-app.at-shell.v4-app .premium-split-heading > span,
+.vestara-app.at-shell.v4-app .premium-bills-heading > span {color:#8797a1;font-size:10px;letter-spacing:.07em;font-weight:770;}
+.vestara-app.at-shell.v4-app .at-savings-heading p,
+.vestara-app.at-shell.v4-app .premium-split-heading p,
+.vestara-app.at-shell.v4-app .premium-bills-heading p {color:#8193a1;font-size:12px;}
+.vestara-app.at-shell.v4-app .at-savings .bg-gradient-ink {
+  background:linear-gradient(129deg,#153953,#0d2d47)!important;color:#fff!important;
+  min-height:153px;padding:28px;border-radius:18px!important;box-shadow:none;border:0!important;
+}
+.vestara-app.at-shell.v4-app .at-savings .bg-gradient-ink::before {display:none;}
+.vestara-app.at-shell.v4-app .at-savings .bg-gradient-ink .text-3xl {color:#fff!important;font-weight:770;font-size:clamp(33px,5vw,42px);}
+.vestara-app.at-shell.v4-app .at-savings .bg-gradient-ink .opacity-70,
+.vestara-app.at-shell.v4-app .at-savings .bg-gradient-ink .opacity-80 {color:#d2e0e9!important;}
+.vestara-app.at-shell.v4-app .at-savings button.w-full.h-14 {border-radius:12px;font-weight:760;}
+.vestara-app.at-shell.v4-app .at-savings .bg-card.rounded-2xl {border-radius:17px!important;box-shadow:none!important;}
+.vestara-app.at-shell.v4-app .premium-split > div:first-child {align-items:center;gap:16px;}
+.vestara-app.at-shell.v4-app .premium-split > div:first-child .flex.gap-2 {padding-top:0;flex-shrink:0;}
+.vestara-app.at-shell.v4-app .premium-split > div:first-child .flex.gap-2 button {border-radius:10px;min-height:39px;}
+.vestara-app.at-shell.v4-app .premium-split .bg-primary\/5 {background:#f1f8fb!important;border-color:#cfe3ed;border-radius:14px!important;}
+.vestara-app.at-shell.v4-app .at-bills .premium-bill-categories {gap:12px;}
+.vestara-app.at-shell.v4-app .at-bills .premium-bill-category,
+.vestara-app.at-shell.v4-app .at-bills .premium-bill-category:nth-child(3n + 1) {
+  background:#fff!important;color:#1a3b4e;border:1px solid #e3ebef;
+  border-radius:16px!important;padding:19px;min-height:150px;
+  box-shadow:none;
+}
+.vestara-app.at-shell.v4-app .at-bills .premium-bill-category:hover {border-color:#bfd4df;transform:translateY(-1px);}
+.vestara-app.at-shell.v4-app .at-bills .premium-bill-category .w-11.h-11 {
+  display:grid;place-items:center;
+  width:44px;height:44px;background:#f1f6f9;border-radius:13px;color:#2e708e;
+}
+.vestara-app.at-shell.v4-app .at-bills .premium-bill-category .text-sm.font-semibold,
+.vestara-app.at-shell.v4-app .at-bills .premium-bill-category:nth-child(3n + 1) .text-foreground {
+  color:#244052;font-size:14px;font-weight:770;
+}
+.vestara-app.at-shell.v4-app .at-insights > header {padding:0 2px 5px;}
+.vestara-app.at-shell.v4-app .at-insights > header h1 {font-size:clamp(27px,3vw,35px);color:#1a3a50;font-weight:780;letter-spacing:-.055em;}
+.vestara-app.at-shell.v4-app .at-insights [aria-label="Money-health score"] {
+  background:linear-gradient(135deg,#123b54,#102d46);border:0;border-radius:19px;padding:29px;
+  box-shadow:none;
+}
+.vestara-app.at-shell.v4-app .at-insights section .grid.grid-cols-2 > button {
+  background:#fff;border:1px solid #e2ebef;border-radius:15px;box-shadow:none;padding:19px;
+}
+.vestara-app.at-shell.v4-app .at-insights .relative.rounded-lg.border.bg-card {border-radius:15px;}
+
+/* Consistent, light mobile tabs, with restrained active state. */
+.vestara-app.at-shell.v4-app .at-bottom-nav {
+  background:#fff!important;border:1px solid #e5ecf0!important;border-radius:18px!important;
+  box-shadow:0 14px 34px -28px rgba(12,39,57,.33)!important;
+  margin:0 12px max(8px,env(safe-area-inset-bottom,0px))!important;
+  padding:0!important;overflow:hidden;
+}
+.vestara-app.at-shell.v4-app .at-bottom-nav .vestara-bottom-tabs {padding:6px 7px!important;min-height:63px;gap:2px;}
+.vestara-app.at-shell.v4-app .at-bottom-nav .vestara-bottom-tab {
+  color:#8193a2;min-height:56px;border-radius:12px;
+  display:flex;align-items:center;justify-content:center;
+  gap:5px;
+}
+.vestara-app.at-shell.v4-app .at-bottom-nav .vestara-bottom-tab[aria-current="page"] {
+  color:#df6e32!important;background:#fff3eb;font-weight:800;
+}
+.vestara-app.at-shell.v4-app .at-bottom-nav .v4-nav-icon {display:grid;place-items:center;}
+.vestara-app.at-shell.v4-app .at-bottom-nav .vestara-bottom-tab > span:last-child {font-size:10px;font-weight:700;}
+/* Respect important financial values in dark mode. */
+.dark .vestara-app.at-shell.v4-app {
+  --v4-bg:#0d202d;--v4-white:#142d3e;--v4-border:#304b5e;
+  --v4-ink:#f4f8fa;--v4-body:#b7c9d5;
+  --background:208 48% 10%;--foreground:204 22% 94%;
+  --card:210 35% 17%;--border:207 25% 30%;
+  background:#0d202d!important;color:#e9f3f6;
+}
+.dark .vestara-app.at-shell.v4-app .at-workspace {background:#0d202d!important;}
+.dark .vestara-app.at-shell.v4-app .at-header {background:#152d3d!important;border-color:#294759;}
+.dark .vestara-app.at-shell.v4-app .at-sidebar {background:#122b3b!important;border-color:#294759!important;}
+.dark .vestara-app.at-shell.v4-app .at-sidebar-section > button {color:#bcd0dc;}
+.dark .vestara-app.at-shell.v4-app .at-sidebar-section > button[aria-current="page"] {color:#fff;background:#294a5d;}
+.dark .vestara-app.at-shell.v4-app .at-sidebar-section > span {color:#91a7b2;}
+.dark .vestara-app.at-shell.v4-app .at-greeting h1,
+.dark .vestara-app.at-shell.v4-app .at-mini-heading h2,
+.dark .vestara-app.at-shell.v4-app .at-section-title h2,
+.dark .vestara-app.at-shell.v4-app .premium-profile-heading h1,
+.dark .vestara-app.at-shell.v4-app .at-savings-heading h2,
+.dark .vestara-app.at-shell.v4-app .premium-split-heading h3,
+.dark .vestara-app.at-shell.v4-app .premium-bills-heading h2,
+.dark .vestara-app.at-shell.v4-app .at-insights > header h1 {color:#f1f8fb;}
+.dark .vestara-app.at-shell.v4-app .at-statement-detail,
+.dark .vestara-app.at-shell.v4-app .at-shortcut,
+.dark .vestara-app.at-shell.v4-app .at-shortcut:nth-child(n),
+.dark .vestara-app.at-shell.v4-app .v4-product,
+.dark .vestara-app.at-shell.v4-app .v4-product-featured,
+.dark .vestara-app.at-shell.v4-app .at-profile-passport.v4-profile-summary,
+.dark .vestara-app.at-shell.v4-app .premium-profile-hub button,
+.dark .vestara-app.at-shell.v4-app .premium-profile-hub > button:nth-child(n),
+.dark .vestara-app.at-shell.v4-app .at-bills .premium-bill-category:nth-child(n) {
+  background:#173245!important;color:#e9f3f6!important;border-color:#2c4b5d!important;
+}
+.dark .vestara-app.at-shell.v4-app .at-statement {border:1px solid #2c4b5d;}
+.dark .vestara-app.at-shell.v4-app .at-detail-header,
+.dark .vestara-app.at-shell.v4-app .at-account-number > span,
+.dark .vestara-app.at-shell.v4-app .at-account-number small,
+.dark .vestara-app.at-shell.v4-app .at-balance-breakdown span,
+.dark .vestara-app.at-shell.v4-app .at-account-tier {color:#afc2cd;}
+.dark .vestara-app.at-shell.v4-app .at-account-number button,
+.dark .vestara-app.at-shell.v4-app .at-balance-breakdown strong,
+.dark .vestara-app.at-shell.v4-app .at-shortcut strong,
+.dark .vestara-app.at-shell.v4-app .v4-product strong,
+.dark .vestara-app.at-shell.v4-app .at-passport-copy h2,
+.dark .vestara-app.at-shell.v4-app .premium-profile-hub strong,
+.dark .vestara-app.at-shell.v4-app .at-bills .premium-bill-category .text-sm.font-semibold {color:#f3f8fb;}
+.dark .vestara-app.at-shell.v4-app .at-settings-section .premium-settings-list,
+.dark .vestara-app.at-shell.v4-app .at-settings-section .premium-settings-list > * {
+  background:#173245!important;border-color:#304e60!important;
+}
+.dark .vestara-app.at-shell.v4-app .at-settings-section .premium-profile-row:hover {background:#203d50!important;}
+.dark .vestara-app.at-shell.v4-app .at-settings-section .premium-profile-row .flex-1.min-w-0 > p:first-child {color:#eef6f9;}
+.dark .vestara-app.at-shell.v4-app .premium-context-banner.v4-page-intro {background:transparent!important;}
+.dark .vestara-app.at-shell.v4-app .v4-page-intro h1 {color:#f4f9fc;}
+.dark .vestara-app.at-shell.v4-app .v4-page-intro .premium-context-icon {background:#173548;border-color:#315369;color:#bfd9e7;}
+.dark .vestara-app.at-shell.v4-app .at-insights section .grid.grid-cols-2 > button {background:#173245;border-color:#304d60;}
+.dark .vestara-app.at-shell.v4-app .at-bottom-nav {background:#173245!important;border-color:#315063!important;}
+.dark .vestara-app.at-shell.v4-app .at-bottom-nav .vestara-bottom-tab[aria-current="page"] {background:#2c4050;color:#ffb17c!important;}
+.dark .vestara-app.at-shell.v4-app .at-passport-marker,
+.dark .vestara-app.at-shell.v4-app .at-passport-footer {color:#adc1cc;}
+@media(max-width:760px){
+  .vc-site .vc-footer-light {padding-top:43px;padding-bottom:30px;}
+  .vc-site .vc-footer-light .vc-footer-main {padding-bottom:29px;gap:17px;}
+  .vc-site .vc-footer-light .vc-footer-small {gap:16px;}
+  .vestara-app.at-shell.v4-app .at-workspace {padding:22px 15px 100px;}
+  .vestara-app.at-shell.v4-app .at-page {gap:20px;}
+  .vestara-app.at-shell.v4-app .premium-dashboard {gap:23px;}
+  .vestara-app.at-shell.v4-app .at-greeting h1 {font-size:clamp(27px,7vw,35px);}
+  .vestara-app.at-shell.v4-app .at-greeting p {font-size:12px;}
+  .vestara-app.at-shell.v4-app .at-statement {display:flex;flex-direction:column;border-radius:19px!important;}
+  .vestara-app.at-shell.v4-app .at-statement-main {min-height:0;padding:25px 23px 27px;}
+  .vestara-app.at-shell.v4-app .at-statement-topline {font-size:9px;}
+  .vestara-app.at-shell.v4-app .at-statement-balance-label {margin-top:33px;}
+  .vestara-app.at-shell.v4-app .at-statement-balance {font-size:clamp(43px,12vw,60px);margin-bottom:25px;}
+  .vestara-app.at-shell.v4-app .at-statement-actions > button {min-height:45px;flex:1;gap:9px;padding:10px;font-size:11px;}
+  .vestara-app.at-shell.v4-app .at-statement-detail {border-left:0;border-top:1px solid #e5ebef;padding:23px;}
+  .vestara-app.at-shell.v4-app .at-account-number {margin:18px 0 0;}
+  .vestara-app.at-shell.v4-app .at-detail-header {font-size:9px;}
+  .vestara-app.at-shell.v4-app .at-detail-divider {margin:18px 0;}
+  .vestara-app.at-shell.v4-app .at-account-tier {margin-top:18px;padding-top:16px;}
+  .vestara-app.at-shell.v4-app .at-mini-heading h2,.vestara-app.at-shell.v4-app .at-section-title h2 {font-size:21px;}
+  .vestara-app.at-shell.v4-app .at-action-grid {gap:7px;}
+  .vestara-app.at-shell.v4-app .at-shortcut:nth-child(n) {min-height:103px;padding:11px 9px;border-radius:13px;}
+  .vestara-app.at-shell.v4-app .at-shortcut-icon {height:33px;width:33px;border-radius:10px;}
+  .vestara-app.at-shell.v4-app .at-shortcut-icon svg {height:18px;width:18px;}
+  .vestara-app.at-shell.v4-app .at-shortcut-arrow {display:none;}
+  .vestara-app.at-shell.v4-app .at-shortcut strong {font-size:11px;letter-spacing:-.03em;margin-top:12px;}
+  .vestara-app.at-shell.v4-app .at-shortcut small {display:none;}
+  .vestara-app.at-shell.v4-app .v4-products {
+    grid-template-columns:none;display:flex;gap:11px;
+    overflow-x:auto;scroll-snap-type:x mandatory;
+    padding:3px 0 15px;scrollbar-width:none;
+    -webkit-overflow-scrolling:touch;
+  }
+  .vestara-app.at-shell.v4-app .v4-products::-webkit-scrollbar {display:none;}
+  .vestara-app.at-shell.v4-app .v4-product {flex:0 0 min(77vw,290px);min-height:205px;scroll-snap-align:start;}
+  .vestara-app.at-shell.v4-app .v4-product strong {font-size:19px;}
+  .vestara-app.at-shell.v4-app .at-profile-passport.v4-profile-summary {padding:20px;border-radius:16px;}
+  .vestara-app.at-shell.v4-app .premium-profile-hub {gap:8px;}
+  .vestara-app.at-shell.v4-app .premium-profile-hub > button:nth-child(n) {min-height:100px;padding:12px;}
+  .vestara-app.at-shell.v4-app .premium-profile-hub strong {font-size:11px;}
+  .vestara-app.at-shell.v4-app .premium-profile-hub small {font-size:10px;}
+  .vestara-app.at-shell.v4-app .at-settings-section .premium-profile-row {padding:14px!important;gap:11px;}
+  .vestara-app.at-shell.v4-app .at-settings-section .premium-profile-row-icon {height:36px!important;width:36px!important;}
+  .vestara-app.at-shell.v4-app .premium-split > div:first-child {flex-wrap:wrap;}
+  .vestara-app.at-shell.v4-app .premium-split > div:first-child .flex.gap-2 {padding-top:0;}
+  .vestara-app.at-shell.v4-app .v4-page-intro h1 {font-size:29px;}
+  .vestara-app.at-shell.v4-app .at-header-brand .vestara-brand-logo {height:33px;}
+  .vestara-app.at-shell.v4-app .at-bottom-nav {margin:0 8px max(7px,env(safe-area-inset-bottom,0px))!important;}
+}
+@media(max-width:370px){
+  .vestara-app.at-shell.v4-app .at-workspace {padding:18px 12px 100px;}
+  .vestara-app.at-shell.v4-app .at-shortcut:nth-child(n) {padding:10px 7px;}
+  .vestara-app.at-shell.v4-app .at-shortcut strong {font-size:10px;}
+  .vestara-app.at-shell.v4-app .at-balance-breakdown strong {font-size:11px;}
+}
+@media(prefers-reduced-motion:reduce){
+  .vestara-app.at-shell.v4-app .at-shortcut:hover,
+  .vestara-app.at-shell.v4-app .v4-product:hover,
+  .vestara-app.at-shell.v4-app .premium-profile-hub > button:hover {transform:none;}
+  .vestara-app.at-shell.v4-app .v4-product,.vestara-app.at-shell.v4-app .at-shortcut {transition:none;}
+}

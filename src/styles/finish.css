@@ -1,0 +1,256 @@
+/* Vestara Atelier: final brand and interaction layer.
+   No changes to authentication, wallet balances, transactions or banking APIs. */
+
+/* 1. Proper photo stacking. Negative-z images were disappearing behind parent backgrounds. */
+.vc-site .vc-hero-background { z-index: 0; isolation: isolate; pointer-events:none; }
+.vc-site .vc-hero-photo { z-index:0; display:block; background:#173748; }
+.vc-site .vc-hero-overlay { z-index:1; }
+.vc-site .vc-nav, .vc-site .vc-hero-center, .vc-site .vc-hero-bottom { position:relative; z-index:3; }
+.vc-site .vc-hero-aside { z-index:3; }
+.vc-site .vc-offering { isolation:isolate; }
+.vc-site .vc-offering > img { z-index:0; display:block; }
+.vc-site .vc-offering-overlay { z-index:1; }
+.vc-site .vc-offering-inside { position:relative; z-index:2; }
+.vc-site .vc-end { isolation:isolate; }
+.vc-site .vc-end > img { z-index:0; display:block; }
+.vc-site .vc-end-overlay { z-index:1; }
+.vc-site .vc-end > div:last-child { position:relative; z-index:2; }
+.vestara-app .premium-discover-card { isolation:isolate; }
+.vestara-app .premium-discover-card > img { z-index:0; display:block; object-fit:cover; }
+.vestara-app .premium-discover-card .premium-discover-overlay { z-index:1; }
+.vestara-app .premium-discover-card .premium-discover-copy,
+.vestara-app .premium-discover-card .premium-discover-arrow { z-index:2; }
+
+/* 2. Official original logo on a restrained white plate, without text recreation. */
+.vc-site .vc-logo {
+ background:rgba(255,255,255,.97);
+ padding:10px 16px;
+ border-radius:5px;
+ min-width:0;
+ min-height:51px;
+ display:inline-flex;
+ align-items:center;
+ justify-content:center;
+ box-shadow:0 8px 35px -24px rgba(0,0,0,.46);
+ transition:transform .25s ease,background .25s ease;
+}
+.vc-site .vc-logo:hover { transform:translateY(-2px); background:#fff; }
+.vc-site .vc-logo img {
+ display:block;
+ object-fit:contain;
+ object-position:center;
+ width:auto;
+ height:32px;
+ max-width:175px;
+}
+.vc-site .vc-footer .vc-logo img { height:32px; }
+.dark .vestara-app-header .vestara-brand-logo,
+.dark img.vestara-brand-logo,
+[data-theme="dark"] .vestara-brand-logo {
+ filter:brightness(0) invert(1);
+ transition:filter .2s ease;
+}
+.vestara-app-header .vestara-brand-logo { transition:filter .2s ease; }
+
+/* 3. Premium swipe experiences. Scroll snapping keeps touch interactions natural. */
+.vc-site .vc-carousel-section { position:relative; overflow:hidden; }
+.vc-site .vc-rail-heading {
+ max-width:1440px;
+ width:100%;
+ margin:0 auto 41px;
+ display:flex;
+ justify-content:space-between;
+ align-items:flex-end;
+ gap:28px;
+}
+.vc-site .vc-rail-heading h2 { margin:16px 0 0; }
+.vc-site .vc-rail-subtitle { max-width:530px; margin:18px 0 0; font-size:16px; line-height:1.68; font-weight:400; }
+.vc-site .vc-products .vc-rail-subtitle { color:#b6c9d3; }
+.vc-site .vc-rail-actions { display:flex; align-items:center; justify-content:flex-end; gap:10px; flex-shrink:0; padding-bottom:4px; }
+.vc-site .vc-rail-actions > span { display:inline-flex; align-items:center; gap:8px; font-size:10px; font-weight:750; letter-spacing:.16em; margin-right:11px; }
+.vc-site .vc-products .vc-rail-actions > span { color:#c8dae1; }
+.vc-site .vc-rail-actions button {
+ width:46px; height:46px; display:grid; place-items:center; border-radius:50%;
+ background:transparent; color:inherit; border:1px solid currentColor;
+ transition:transform .24s ease,background .24s ease,color .24s ease;
+}
+.vc-site .vc-rail-actions button:hover { transform:translateY(-2px); }
+.vc-site .vc-products .vc-rail-actions button { color:#fff; border-color:rgba(255,255,255,.45); }
+.vc-site .vc-products .vc-rail-actions button:hover { color:#112c41; background:#fff; }
+.vc-site .vc-swipe-rail {
+ max-width:1440px;
+ margin:0 auto;
+ display:flex;
+ gap:22px;
+ width:100%;
+ padding:13px 2px 34px;
+ overflow-x:auto;
+ overflow-y:hidden;
+ scroll-snap-type:x mandatory;
+ scroll-padding-inline:2px;
+ scrollbar-width:none;
+ overscroll-behavior-x:contain;
+ touch-action:pan-x pan-y;
+ -webkit-overflow-scrolling:touch;
+}
+.vc-site .vc-swipe-rail::-webkit-scrollbar { display:none; }
+.vc-site .vc-swipe-rail:focus-visible { outline:2px solid #f18c43; outline-offset:2px; }
+.vc-site .vc-offerings { grid-template-columns:none; }
+.vc-site .vc-offering.vc-floating-product {
+ flex:0 0 clamp(340px,39vw,540px);
+ width:clamp(340px,39vw,540px);
+ height:clamp(490px,44vw,625px);
+ scroll-snap-align:start;
+ scroll-snap-stop:always;
+ overflow:hidden;
+ border-radius:10px;
+ box-shadow:0 27px 48px -26px rgba(0,0,0,.38);
+ transform-origin:center bottom;
+ transition:box-shadow .35s ease,transform .35s ease;
+ will-change:transform;
+}
+.vc-site .vc-floating-product:hover {
+ box-shadow:0 35px 60px -26px rgba(0,0,0,.55);
+}
+.vc-site .vc-floating-product .vc-offering-inside { padding:clamp(25px,3.4vw,46px); }
+.vc-site .vc-floating-product h3 { font-size:clamp(34px,3.35vw,54px); }
+.vc-site .vc-floating-product .vc-offering-top { border-bottom:1px solid rgba(255,255,255,.34); padding-bottom:15px; }
+.vc-site .vc-floating-product .vc-offering-inside a { padding-top:18px; }
+.vc-site .vc-swipe-hint {
+ max-width:1440px; margin:3px auto 0;
+ font-size:10px; font-weight:750; letter-spacing:.16em;
+ color:#aec2cf; display:flex; align-items:center; gap:10px;
+}
+.vc-site .vc-swipe-hint > span { width:29px; height:1px; background:#f16c25; }
+.vc-site .vc-swipe-hint svg { color:#fa9c62; }
+
+.vc-site .vc-features {
+ background:
+  radial-gradient(ellipse at 85% 4%,rgba(235,144,74,.10),transparent 42%),
+  #f6f3ed;
+}
+.vc-site .vc-features .vc-feature-heading { max-width:1440px; }
+.vc-site .vc-features h2 {
+ font-size:clamp(43px,5.3vw,81px);
+ font-weight:580;
+ line-height:1.12;
+ letter-spacing:-.077em;
+ color:#112c40;
+}
+.vc-site .vc-features h2 em { color:#dc702e; }
+.vc-site .vc-features .vc-rail-subtitle { color:#657580; }
+.vc-site .vc-features .vc-rail-actions > span { color:#5a6e7b; }
+.vc-site .vc-features .vc-rail-actions button { color:#102b40; border-color:rgba(16,43,64,.28); }
+.vc-site .vc-features .vc-rail-actions button:hover { color:#fff; background:#102b40; }
+.vc-site .vc-feature-rail { align-items:stretch; gap:19px; padding:15px 2px 37px; }
+.vc-site .vc-feature-card {
+ flex:0 0 clamp(280px,28vw,400px);
+ scroll-snap-align:start;
+ scroll-snap-stop:always;
+ min-height:395px;
+ background:#fff;
+ border:1px solid #e4e6e4;
+ border-radius:9px;
+ padding:30px;
+ display:flex;
+ flex-direction:column;
+ justify-content:space-between;
+ position:relative;
+ overflow:hidden;
+ box-shadow:0 25px 45px -32px rgba(14,42,55,.24);
+ transition:border-color .3s ease,box-shadow .3s ease,background .3s ease;
+}
+.vc-site .vc-feature-card::before {
+ content:""; position:absolute; right:-94px; top:-94px; width:245px; height:245px;
+ border:1px solid rgba(223,109,38,.15); border-radius:50%;
+ box-shadow:0 0 0 38px rgba(223,109,38,.025);
+ pointer-events:none;
+}
+.vc-site .vc-feature-card::after {
+ content:""; position:absolute; left:0; top:0; height:4px; width:100%;
+ transform:scaleX(.2); transform-origin:left;
+ background:linear-gradient(90deg,#f16d2c,#f5bb74);
+ transition:transform .5s ease;
+}
+.vc-site .vc-feature-card:hover { background:#fffdfb; border-color:rgba(234,110,37,.55); box-shadow:0 34px 54px -31px rgba(14,42,55,.31); }
+.vc-site .vc-feature-card:hover::after { transform:scaleX(1); }
+.vc-site .vc-feature-top { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; }
+.vc-site .vc-feature-top > span:first-child { color:#a0aab0; font-size:11px; font-weight:700; letter-spacing:.13em; }
+.vc-site .vc-feature-icon { display:grid; place-items:center; width:56px; height:56px; border-radius:14px; background:#faeee6; color:#da692a; }
+.vc-site .vc-feature-eyebrow { display:block; color:#d46a32; letter-spacing:.17em; font-size:10px; font-weight:750; }
+.vc-site .vc-feature-card h3 { font-size:clamp(27px,2.25vw,36px); letter-spacing:-.06em; font-weight:680; line-height:1.19; margin:14px 0 16px; max-width:270px; }
+.vc-site .vc-feature-card p { color:#6a7c86; line-height:1.75; font-size:14px; margin:0; max-width:300px; }
+.vc-site .vc-feature-card > a { display:flex; align-items:center; justify-content:space-between; color:#13334a; padding-top:18px; border-top:1px solid #e6e8e7; font-size:12px; font-weight:750; }
+.vc-site .vc-feature-card > a svg { color:#e56c29; }
+.vc-site .vc-feature-2 { background:#16374b; border-color:#16374b; color:#fff; }
+.vc-site .vc-feature-2 .vc-feature-top > span:first-child { color:#8eabbc; }
+.vc-site .vc-feature-2 .vc-feature-card p, .vc-site .vc-feature-2 p { color:#b7ccd7; }
+.vc-site .vc-feature-2 .vc-feature-card h3, .vc-site .vc-feature-2 h3 { color:#fff; }
+.vc-site .vc-feature-2 > a { color:#fff; border-color:rgba(255,255,255,.2); }
+.vc-site .vc-feature-2:hover { background:#1a3d50; }
+.vc-site .vc-feature-5 { background:#f9ece1; }
+.vc-site .vc-swipe-hint-dark { color:#657c88; }
+
+/* 4. Signed-in app refinement, including mobile-friendly service discovery. */
+.vestara-app { letter-spacing:-.007em; }
+.vestara-app .premium-discover-grid { scroll-padding:0 1px; }
+.vestara-app .premium-discover-card { border-radius:15px; box-shadow:0 15px 31px -25px rgba(11,32,48,.42); }
+.vestara-app .premium-discover-card:hover > img { transform:scale(1.06); }
+.vestara-app .premium-discover-copy { z-index:2; }
+.vestara-app .premium-discover-card::after { content:""; position:absolute; inset:0; border:1px solid rgba(255,255,255,.2); border-radius:15px; pointer-events:none; z-index:3; }
+.vestara-app .premium-savings > div:first-child h2,
+.vestara-app .premium-split > div:first-child h3 { font-size:25px; font-weight:740; letter-spacing:-.06em; }
+.vestara-app .premium-savings .bg-gradient-ink { background:radial-gradient(circle at 100% 0%,rgba(237,109,39,.26),transparent 52%),linear-gradient(145deg,#1c3d52,#092136); border-radius:21px; border:1px solid rgba(255,255,255,.1); box-shadow:0 22px 40px -30px rgba(3,20,32,.55); }
+.vestara-app .premium-savings .bg-gradient-ink .text-3xl { font-size:clamp(28px,8vw,38px); font-weight:710; letter-spacing:-.06em; }
+.vestara-app .premium-savings > button,
+.vestara-app .premium-savings .h-14.rounded-2xl { border-radius:12px; box-shadow:0 15px 30px -23px rgba(239,109,43,.5); }
+.vestara-app .premium-savings .bg-card.rounded-2xl,
+.vestara-app .premium-split .bg-card.rounded-2xl { border-radius:17px; border-color:hsl(var(--border)); box-shadow:0 13px 35px -32px rgba(11,33,51,.28); }
+.vestara-app .premium-split h3 { letter-spacing:-.04em; }
+.vestara-app .premium-split .bg-primary\/5 { background:hsl(var(--primary-soft)/.50); }
+.vestara-app .premium-split input { min-height:46px; border-radius:10px; }
+.vestara-app .premium-insights > header h1 { font-size:24px; letter-spacing:-.06em; font-weight:730; }
+.vestara-app .premium-insights [aria-label="Money-health score"] { border-radius:21px; border:1px solid rgba(255,255,255,.10); box-shadow:0 23px 39px -28px rgba(10,35,53,.48); background:radial-gradient(circle at 88% 4%,rgba(242,119,39,.20),transparent 40%),linear-gradient(145deg,#183c54,#0b2236); }
+.vestara-app .premium-insights section button.rounded-lg.border { border-radius:16px; box-shadow:0 11px 28px -25px rgba(11,35,53,.25); }
+.vestara-app .premium-profile-section > h2 { font-size:10px; font-weight:780; letter-spacing:.17em; }
+.dark .vestara-app {
+ background:linear-gradient(180deg,#0a1927,#101f2e 50%,#0c1d2b);
+}
+.dark .vestara-app .premium-discover-heading p { color:#ffab77; }
+.dark .vestara-app .premium-discover-heading h2 { color:#f6f6f3; }
+.dark .vestara-app .premium-discover-heading button { color:#becbd3; }
+.dark .vestara-app .premium-quick-actions .premium-action-icon { background:#172d3d; color:#e9f0f4; border-color:#304250; }
+.dark .vestara-app .premium-quick-actions button:first-child .premium-action-icon { background:#ef702b; color:#fff; }
+.dark .vestara-app .premium-profile-identity { background:#162b3d; border-color:#304252; }
+.dark .vestara-app .premium-profile-setup { background:#172c3d; }
+.dark .vestara-app .premium-profile-setup button { background:#1d3445; border-color:#345064; color:#fff; }
+.dark .vestara-app .premium-split input { background:#132b3e; color:#f5f5f3; }
+.dark .vestara-app .premium-insights [aria-label="Money-health score"] { border-color:#324453; }
+@media(max-width:1120px) {
+ .vc-site .vc-offering.vc-floating-product { flex-basis:min(65vw,460px); width:min(65vw,460px); }
+ .vc-site .vc-feature-card { flex-basis:min(48vw,360px); }
+}
+@media(max-width:720px) {
+ .vc-site .vc-logo { padding:8px 11px; min-height:46px; }
+ .vc-site .vc-logo img { height:29px; max-width:144px; width:auto; }
+ .vc-site .vc-rail-heading { align-items:flex-start; gap:15px; margin-bottom:24px; }
+ .vc-site .vc-rail-heading h2 { font-size:clamp(42px,10vw,63px); margin-top:13px; }
+ .vc-site .vc-products-header { flex-direction:column; align-items:flex-start; gap:15px; }
+ .vc-site .vc-rail-subtitle { font-size:14px; line-height:1.7; margin-top:16px; }
+ .vc-site .vc-rail-actions { justify-content:flex-end; width:100%; padding:0; }
+ .vc-site .vc-rail-actions > span { margin-right:auto; font-size:9px; }
+ .vc-site .vc-rail-actions button { width:42px; height:42px; }
+ .vc-site .vc-swipe-rail { gap:13px; padding:9px 1px 25px; }
+ .vc-site .vc-offering.vc-floating-product, .vc-site .vc-offering.vc-floating-product:last-child { flex:0 0 min(82vw,370px); width:min(82vw,370px); height:clamp(445px,66vh,550px); }
+ .vc-site .vc-floating-product .vc-offering-inside { padding:24px; }
+ .vc-site .vc-floating-product h3 { font-size:39px; }
+ .vc-site .vc-feature-card { flex:0 0 min(77vw,335px); width:min(77vw,335px); min-height:375px; padding:25px; }
+ .vc-site .vc-features h2 { font-size:clamp(37px,9vw,55px); }
+ .vc-site .vc-swipe-hint { font-size:9px; letter-spacing:.11em; }
+ .vestara-app .premium-discover-card { min-height:205px; }
+}
+@media(prefers-reduced-motion:reduce){
+ .vc-site .vc-feature-card, .vc-site .vc-feature-card::after,
+ .vc-site .vc-offering.vc-floating-product, .vc-site .vc-rail-actions button,
+ .vc-site .vc-logo, .vestara-app .premium-discover-card { transition:none!important; }
+}

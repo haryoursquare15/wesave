@@ -24,21 +24,19 @@ export function SandboxHeader({ showBack = true, onBack, right }: SandboxHeaderP
   };
 
   return (
-    <div className="sticky top-0 z-20 bg-background/85 backdrop-blur-md border-b border-border">
-      <div className="max-w-lg mx-auto px-4 py-2 flex items-center gap-2">
+    <header className="vestara-app-header at-header sticky top-0 z-20 bg-background/85 backdrop-blur-md border-b border-border">
+      <div className="at-header-inner max-w-lg mx-auto px-4 py-2 flex items-center gap-2">
         {showBack && (
           <Button variant="ghost" size="icon" onClick={handleBack} className="shrink-0" aria-label="Back">
             <ArrowLeft className="h-5 w-5" />
           </Button>
         )}
-        <div className="flex-1 flex items-center">
-          <img src={vestaraLogo} alt="Vestara" className="h-8 w-auto max-w-[160px] object-contain" />
-        </div>
+        <div className="at-header-brand flex-1 flex items-center"><img src={vestaraLogo} alt="Vestara" className="vestara-brand-logo h-8 w-auto max-w-[180px] object-contain" /><span>Secure account</span></div>
         <SandboxNotificationBell />
         {right}
       </div>
       <BillDeliveryPopupListener />
       <PushSubscriptionSync />
-    </div>
+    </header>
   );
 }

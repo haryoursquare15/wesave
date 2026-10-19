@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1000" viewBox="0 0 1200 1000" role="img"><defs>
+ <linearGradient id="bg" x2="1" y2="1"><stop stop-color="#1b4b55"/><stop offset="1" stop-color="#9b5d3d"/></linearGradient>
+ <linearGradient id="skin" x2="1" y2="1"><stop stop-color="#b77449"/><stop offset=".57" stop-color="#8f512f"/><stop offset="1" stop-color="#68391f"/></linearGradient>
+ <linearGradient id="silk" x2=".1" y2="0.9"><stop stop-color="#df743d"/><stop offset="1" stop-color="#a64e28"/></linearGradient>
+ <radialGradient id="light"><stop stop-color="#fbcf9b" stop-opacity=".55"/><stop offset="1" stop-color="#fbcf9b" stop-opacity="0"/></radialGradient>
+ <pattern id="texture" width="14" height="14" patternUnits="userSpaceOnUse"><path d="M0 0L1 0M4 8L5 8M11 12L12 12" stroke="#fff" stroke-opacity=".14"/></pattern>
+ <filter id="shadow"><feGaussianBlur stdDeviation="22"/></filter>
+ </defs>
+ <rect width="1200" height="1000" fill="url(#bg)"/>
+ <ellipse cx="990" cy="70" rx="700" ry="490" fill="url(#light)"/>
+ <circle cx="890" cy="320" r="345" fill="none" stroke="#fff" stroke-opacity=".09" stroke-width="2"/>
+ <circle cx="890" cy="320" r="420" fill="none" stroke="#fff" stroke-opacity=".06" stroke-width="2"/>
+ <path d="M0 814Q292 714 590 827T1200 791V1000H0Z" fill="#081e2c" fill-opacity=".28"/>
+ <g transform="translate(0 40)">
+ <path d="M0 755Q228 712 419 775Q692 868 1200 719V1000H0Z" fill="#f2b78a" fill-opacity=".13"/>
+ <ellipse cx="725" cy="810" rx="520" ry="62" fill="#071720" opacity=".36" filter="url(#shadow)"/>
+ <!-- seated left person -->
+ <path d="M153 875Q190 559 384 573Q562 588 588 887Z" fill="#df743d"/>
+ <path d="M245 598Q220 480 275 442Q326 397 383 459L428 546L418 628Q321 672 245 598Z" fill="url(#skin)"/>
+ <path d="M217 490Q204 349 325 335Q421 338 427 455L407 525Q371 454 355 445Q290 488 217 490Z" fill="#171c1d"/>
+ <ellipse cx="300" cy="440" rx="98" ry="110" fill="#1a1c20"/>
+ <path d="M326 594Q391 594 443 652L578 723" fill="none" stroke="#96552f" stroke-width="53" stroke-linecap="round"/>
+ <!-- person right -->
+ <path d="M649 878Q678 558 866 548Q1073 551 1106 887Z" fill="#ebe4d0"/>
+ <path d="M754 572Q720 456 776 396Q819 360 888 403Q936 448 926 557L916 620Q828 670 754 572Z" fill="url(#skin)"/>
+ <path d="M716 463Q695 344 766 325Q782 277 842 302Q884 271 913 317Q987 344 942 475L928 534Q890 480 873 427Q801 477 716 463Z" fill="#171c1e"/>
+ <path d="M788 621Q735 658 672 720L566 770" fill="none" stroke="#9c623c" stroke-width="52" stroke-linecap="round"/>
+ <!-- table foreground and bill -->
+ <rect x="330" y="746" width="626" height="24" rx="12" fill="#f7d9ae"/>
+ <path d="M335 762H950L1012 940H260Z" fill="#b46b42"/>
+ <path d="M480 759l-15 166M801 762l35 163" stroke="#efd6b9" stroke-opacity=".3" stroke-width="3"/>
+ <rect x="527" y="701" width="105" height="130" rx="16" transform="rotate(-13 527 701)" fill="#172e3a" stroke="#d9e2de" stroke-width="7"/>
+ <rect x="538" y="715" width="82" height="97" rx="8" transform="rotate(-13 538 715)" fill="#336170"/>
+ <circle cx="597" cy="804" r="5" fill="#ffcf9a"/>
+ <ellipse cx="754" cy="746" rx="77" ry="18" fill="#fff6e7"/><ellipse cx="750" cy="743" rx="56" ry="10" fill="#d98845"/>
+ </g>
+ <rect width="1200" height="1000" fill="url(#texture)" opacity=".48"/>
+ </svg>

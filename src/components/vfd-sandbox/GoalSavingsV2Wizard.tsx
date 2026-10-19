@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { createPortal } from "react-dom";
 import { ArrowLeft, Check, Loader2, Target, Vault as VaultIcon, Zap, Info, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -164,10 +165,12 @@ export function GoalSavingsV2Wizard({ onClose, onCreated, walletAvailable, produ
     </Button>
   );
 
-  return (
-    <div className="fixed inset-0 z-50 bg-background flex flex-col">
+  // Portal the full-screen wizard beyond the animated/scrolling app shell.
+  // This avoids position:fixed being constrained by transformed ancestors.
+  return createPortal(
+    <div role="dialog" aria-modal="true" aria-label="Create savings goal" className="vestara-goal-wizard fixed inset-0 z-40 bg-background flex flex-col overflow-hidden">
       {/* Top bar */}
-      <div className="sticky top-0 bg-background">
+      <div className="flex-none bg-background border-b border-border/60">
         <div className="max-w-lg w-full mx-auto px-5 pt-3 pb-2 space-y-2">
           <div className="flex items-center justify-between">
             <Button variant="ghost" size="icon" onClick={step === "done" ? onClose : back} disabled={submitting} aria-label={step === "done" ? "Close" : "Back"}>
@@ -185,7 +188,7 @@ export function GoalSavingsV2Wizard({ onClose, onCreated, walletAvailable, produ
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         <div className="max-w-lg mx-auto px-5 py-4">
           <AnimatePresence mode="wait">
             {step === 1 && (
@@ -351,8 +354,8 @@ export function GoalSavingsV2Wizard({ onClose, onCreated, walletAvailable, produ
       </div>
 
       {/* Pinned bottom */}
-      <div className="border-t border-border bg-background">
-        <div className="max-w-lg mx-auto px-5 pt-3 safe-bottom space-y-2">
+      <div className="vestara-wizard-actions flex-none border-t border-border bg-background">
+        <div className="max-w-lg mx-auto px-5 pt-3 pb-[max(16px,env(safe-area-inset-bottom))] space-y-2">
           {step === 1 && primary("Continue", next)}
           {step === 2 && (
             <>
@@ -414,7 +417,8 @@ export function GoalSavingsV2Wizard({ onClose, onCreated, walletAvailable, produ
         onClose={() => { setMandateSubject(null); onClose(); }}
         onAuthorized={() => { setMandateSubject(null); onClose(); }}
       />
-    </div>
+    </div>,
+    document.body,
   );
 }
 
