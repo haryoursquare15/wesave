@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { ChevronRight } from "lucide-react";
+import { ArrowUpRight, ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
@@ -16,55 +16,33 @@ interface ProfileRowProps {
 }
 
 export function ProfileRow({
-  icon: Icon,
-  label,
-  helper,
-  value,
-  trailing,
-  onClick,
-  destructive,
-  disabled,
-  attention,
+  icon: Icon, label, helper, value, trailing, onClick, destructive, disabled, attention,
 }: ProfileRowProps) {
   const Comp = onClick ? "button" : "div";
   return (
     <Comp
       {...(onClick ? { onClick, type: "button" as const, disabled } : {})}
       className={cn(
-        "premium-profile-row w-full flex items-center gap-3 px-4 min-h-[56px] text-left transition-colors",
-        onClick && !disabled && "active:bg-muted/60 hover:bg-muted/40",
-        destructive && "bg-destructive/5",
+        "premium-profile-row vm-setting-row w-full flex items-center text-left",
+        onClick && !disabled && "vm-setting-row-action",
+        destructive && "vm-setting-row-danger",
         attention && "premium-profile-row-attention",
         disabled && "opacity-60"
       )}
     >
-      <span
-        className={cn(
-          "premium-profile-row-icon h-9 w-9 shrink-0 rounded-full flex items-center justify-center",
-          destructive ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary"
-        )}
-      >
-        <Icon className="h-4.5 w-4.5" size={18} />
+      <span className="premium-profile-row-icon vm-setting-glyph shrink-0">
+        <Icon size={19} strokeWidth={1.65} />
       </span>
-      <div className="flex-1 min-w-0">
-        <p className={cn("text-sm font-medium truncate", destructive ? "text-destructive" : "text-foreground")}>
-          {label}
-        </p>
-        {helper && <p className="text-xs text-muted-foreground truncate">{helper}</p>}
-        {attention && (
-          <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-[11px] font-semibold text-primary">
-            <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-            {attention}
-          </span>
-        )}
+      <div className="vm-setting-copy flex-1 min-w-0">
+        <p className={cn("vm-setting-label", destructive && "text-destructive")}>{label}</p>
+        {helper && <p className="vm-setting-helper">{helper}</p>}
+        {attention && <span className="vm-setting-attention">{attention}</span>}
       </div>
-      {value !== undefined && (
-        <div className="text-sm text-muted-foreground max-w-[55%] truncate text-right">{value}</div>
-      )}
+      {value !== undefined && <div className="vm-setting-value">{value}</div>}
       {trailing !== undefined ? (
-        <div className="shrink-0">{trailing}</div>
+        <div className="vm-setting-trailing">{trailing}</div>
       ) : onClick ? (
-        <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+        <ChevronRight className="vm-setting-arrow" size={18} aria-hidden="true" />
       ) : null}
     </Comp>
   );
