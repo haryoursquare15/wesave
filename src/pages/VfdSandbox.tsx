@@ -538,13 +538,14 @@ function VfdSandboxInner() {
   });
 
   return (
-    <div data-view={currentView} className="vestara-app at-shell v4-app h-[100dvh] flex flex-col overflow-hidden bg-background">
-      {kycDone && <aside className="at-sidebar" aria-label="Main navigation">
-        <div className="at-sidebar-brand">
-          <img src={vestaraLogo} alt="Vestara" />
-          <span>VESTARA</span>
+    <div data-view={currentView} className="vestara-app at-shell v4-app vm-app h-[100dvh] flex flex-col overflow-hidden">
+      {kycDone && <aside className="at-sidebar vm-sidebar" aria-label="Main navigation">
+        <div className="at-sidebar-brand vm-sidebar-brand">
+          <span className="vm-sidebar-emblem">V<span>.</span></span>
+          <div><img src={vestaraLogo} alt="Vestara" /><span>YOUR MONEY SPACE</span></div>
         </div>
-        <div className="at-sidebar-section"><span>MAIN MENU</span>
+        <div className="vm-sidebar-caption">A better relationship with your money.</div>
+        <div className="at-sidebar-section vm-sidebar-section"><span>01 / DISCOVER</span>
           {[
             {key:"dashboard",label:"Overview",icon:Home,action:() => setCurrentView("dashboard")},
             {key:"lock",label:"Savings",icon:PiggyBank,action:() => {setInitialSavingsProduct(null);setCurrentView("lock");}},
@@ -558,11 +559,11 @@ function VfdSandboxInner() {
             </button>
           ))}
         </div>
-        <div className="at-sidebar-section at-sidebar-more"><span>ACCOUNT</span>
+        <div className="at-sidebar-section at-sidebar-more vm-sidebar-section"><span>02 / PERSONAL</span>
           <button type="button" onClick={() => setCurrentView("profile")} aria-current={currentView==="profile"?"page":undefined}><User size={19}/> My account</button>
           <button type="button" onClick={() => setCurrentView("ajo")} aria-current={currentView==="ajo"?"page":undefined}><Users size={19}/> Ajo & Esusu</button>
         </div>
-        <div className="at-sidebar-footer"><ShieldCheck size={16}/><span>Powered and supported by VFD Microfinance Bank</span></div>
+        <div className="at-sidebar-footer vm-sidebar-footer"><ShieldCheck size={18}/><span>Securely powered by<br />VFD Microfinance Bank</span></div>
       </aside>}
       <SandboxHeader
         showBack={currentView !== "dashboard"}
@@ -584,7 +585,7 @@ function VfdSandboxInner() {
       <ProfilePictureUpload open={photoOpen} onOpenChange={setPhotoOpen} />
       {kycDone && <SandboxGroupInviteModal onAccepted={() => { /* downstream UIs poll on their own */ }} />}
       {kycDone && <SandboxSplitInviteModal onOpenSplit={() => { setCurrentView("split"); window.dispatchEvent(new Event("vestara:open-split")); }} />}
-      <div className="vestara-app-scroll at-workspace flex-1 overflow-y-auto overscroll-contain max-w-lg w-full mx-auto px-4 py-5 pb-32 space-y-5">
+      <div className="vestara-app-scroll at-workspace vm-workspace flex-1 overflow-y-auto overscroll-contain w-full mx-auto">
         {!kycDone ? (
           <SandboxKYC
             vfd={vfd}
@@ -597,19 +598,19 @@ function VfdSandboxInner() {
         ) : (
           <div
             key={currentView}
-            className="premium-app-page at-page space-y-5"
+            className="premium-app-page at-page vm-app-page"
           >
             {screenIntros[currentView] && (() => {
               const screen = screenIntros[currentView]!;
               const Icon = screen.icon;
               return (
-                <header className="premium-context-banner v4-page-intro">
-                  <div className="premium-context-copy">
-                    <span className="premium-context-eyebrow">{screen.eyebrow}</span>
-                    <h1>{screen.title}</h1>
+                <header className="premium-context-banner v4-page-intro vm-page-intro">
+                  <div className="premium-context-copy vm-intro-copy">
+                    <span className="premium-context-eyebrow vm-eyebrow"><span className="vm-dot" /> VESTARA / {screen.eyebrow}</span>
+                    <h1>{screen.title}<span className="vm-title-period">.</span></h1>
                     <p>{screen.description}</p>
                   </div>
-                  <div className="premium-context-icon"><Icon size={23} strokeWidth={1.8} /></div>
+                  <div className="premium-context-icon vm-intro-icon"><Icon size={26} strokeWidth={1.6} /></div>
                 </header>
               );
             })()}
@@ -722,23 +723,23 @@ function VfdSandboxInner() {
         )}
       </div>
       {kycDone && (
-        <nav aria-label="Main" className="vestara-bottom-nav at-bottom-nav v4-underline-nav v4-floating-nav shrink-0 z-30 bg-card/95 backdrop-blur-md border-t border-border pb-[env(safe-area-inset-bottom,0px)]">
-          <div className="vestara-bottom-tabs max-w-lg mx-auto grid grid-cols-5">
+        <nav aria-label="Main" className="vestara-bottom-nav at-bottom-nav v4-underline-nav v4-floating-nav vm-dock shrink-0 z-30">
+          <div className="vestara-bottom-tabs vm-dock-tabs grid grid-cols-5">
             {([
               { label: "Home", icon: Home, active: currentView === "dashboard", go: () => setCurrentView("dashboard") },
-              { label: "Save", icon: PiggyBank, active: currentView === "lock", go: () => { setInitialSavingsProduct(null); setCurrentView("lock"); } },
-              { label: "Pay", icon: CreditCard, active: currentView === "bills" || currentView === "transfer", go: () => setCurrentView("bills") },
+              { label: "Save", icon: PiggyBank, active: currentView === "lock" || currentView === "target" || currentView === "goal", go: () => { setInitialSavingsProduct(null); setCurrentView("lock"); } },
+              { label: "Pay", icon: CreditCard, active: currentView === "bills" || currentView === "transfer" || currentView === "withdraw" || currentView === "fund" || currentView === "split", go: () => setCurrentView("bills") },
               { label: "Insights", icon: ChartNoAxesCombined, active: currentView === "insights", go: () => setCurrentView("insights") },
-              { label: "Profile", icon: User, active: currentView === "profile", go: () => setCurrentView("profile") },
+              { label: "Profile", icon: User, active: currentView === "profile" || currentView === "kyc", go: () => setCurrentView("profile") },
             ]).map((t) => (
               <button
                 key={t.label}
                 onClick={t.go}
                 aria-current={t.active ? "page" : undefined}
-                className={`vestara-bottom-tab relative flex flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium transition-colors ${t.active ? "text-primary" : "text-muted-foreground"}`}
+                className={`vestara-bottom-tab vm-dock-tab ${t.active ? "vm-dock-active" : ""}`}
               >
-                <span className="v4-nav-icon"><t.icon className="h-5 w-5" strokeWidth={t.active ? 2.2 : 1.85} /></span>
-                <span className="relative">{t.label}</span>
+                <span className="v4-nav-icon vm-dock-icon"><t.icon className="h-[21px] w-[21px]" strokeWidth={t.active ? 2.1 : 1.7} /></span>
+                <span className="vm-dock-caption">{t.label}</span>
               </button>
             ))}
           </div>
