@@ -24,16 +24,16 @@ export function SandboxHeader({ showBack = true, onBack, right }: SandboxHeaderP
   };
 
   return (
-    <header className="vestara-app-header at-header sticky top-0 z-20 bg-background/85 backdrop-blur-md border-b border-border">
-      <div className="at-header-inner max-w-lg mx-auto px-4 py-2 flex items-center gap-2">
+    <header className="vestara-app-header at-header vm-header sticky top-0 z-20">
+      <div className="at-header-inner vm-header-inner flex items-center gap-2">
         {showBack && (
-          <Button variant="ghost" size="icon" onClick={handleBack} className="shrink-0" aria-label="Back">
+          <Button variant="ghost" size="icon" onClick={handleBack} className="vm-header-back shrink-0" aria-label="Back">
             <ArrowLeft className="h-5 w-5" />
           </Button>
         )}
-        <div className="at-header-brand flex-1 flex items-center"><img src={vestaraLogo} alt="Vestara" className="vestara-brand-logo h-8 w-auto max-w-[180px] object-contain" /><span>Secure account</span></div>
-        <SandboxNotificationBell />
-        {right}
+        <div className="at-header-brand vm-header-brand flex-1 flex items-center"><img src={vestaraLogo} alt="Vestara" className="vestara-brand-logo h-8 w-auto max-w-[180px] object-contain" /><span className="vm-header-edition">PERSONAL BANKING <i /> EST. 2026</span></div>
+        <div className="vm-header-actions"><SandboxNotificationBell />
+        {right}</div>
       </div>
       <BillDeliveryPopupListener />
       <PushSubscriptionSync />
