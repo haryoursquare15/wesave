@@ -312,14 +312,23 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
   // Interim cosmetic mask: VFD registers sub-accounts as "<Corporate>-<NAME>".
   // Until VFD updates the merchant name, hide the legacy corporate prefix.
   const displayAccountName = cleanCustomerName(balance.fullName?.trim()) || balance.fullName || "—";
+  // Allocation uses actual account balances, never fabricated performance data.
+  const allocations = [
+    { label: "Available", amount: Math.max(0, balance.availableBalance), tone: "available" },
+    { label: "Savings", amount: Math.max(0, balance.savingsBalance), tone: "savings" },
+    { label: "Locked", amount: Math.max(0, balance.lockedBalance), tone: "locked" },
+  ];
+  const allocationTotal = allocations.reduce((total, segment) => total + segment.amount, 0);
+  const money = (amount: number) => "₦" + amount.toLocaleString("en-NG", { maximumFractionDigits: 2 });
+
 
   return (
     <div className="vm-dashboard">
       <header className="vm-welcome">
         <div>
-          <div className="vm-microline"><span className="vm-dot" /> YOUR VESTARA SPACE <span className="vm-slash">/</span> THE OVERVIEW</div>
+          <div className="vm-microline"><span className="vm-dot" /> THE VESTARA ACCOUNT <span className="vm-slash">/</span> OVERVIEW</div>
           <h1>{greeting}, <span>{firstName}.</span></h1>
-          <p>A calmer way to be in control of your money.</p>
+          <p>Everything that matters, in one considered place.</p>
         </div>
         <button className="vm-identity-link" type="button" onClick={() => onNavigate("profile")} aria-label="Open your profile">
           <Avatar className="vm-identity-avatar">
@@ -332,7 +341,7 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
 
       <div className="vm-overview-grid">
         <section className="vm-balance-stage" aria-label="Your money overview">
-          <div className="vm-stage-top"><span>01 / YOUR MONEY</span><span className="vm-stage-chip"><span /> LIVE OVERVIEW</span></div>
+          <div className="vm-stage-top"><span>01 / YOUR MONEY</span><span className="vm-stage-chip"><span /> ACCOUNT OVERVIEW</span></div>
           <div className="vm-balance-block">
             <div className="vm-balance-label">
               <span>Total balance</span>
@@ -363,7 +372,7 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
           </div>
         </section>
         <aside className="vm-account-pass" aria-label="Account details">
-          <div className="vm-pass-top"><span>VESTARA <b>PRIVATE</b></span><CreditCard size={21} strokeWidth={1.5} /></div>
+          <div className="vm-pass-top"><span>VESTARA <b>BANKING</b></span><CreditCard size={21} strokeWidth={1.5} /></div>
           <div className="vm-pass-content">
             <p>YOUR BANKING DETAILS</p>
             <span>VFD account number</span>
@@ -383,8 +392,33 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
         </aside>
       </div>
 
+      <section className="vv-allocation" aria-label="Balance allocation">
+        <div className="vv-allocation-heading">
+          <div>
+            <span className="vv-overline">A CLOSER LOOK / 01</span>
+            <h2>Where it all sits<span>.</span></h2>
+            <p>A simple view of your available, saved and locked balances.</p>
+          </div>
+          <button type="button" onClick={() => onNavigate("insights")}>Explore insights <ArrowUpRight size={17} /></button>
+        </div>
+        <div className="vv-allocation-bar" role="img" aria-label={allocationTotal > 0 ? allocations.map(a => `${a.label}: ${Math.round(a.amount / allocationTotal * 100)} percent`).join(", ") : "No balances to display yet"}>
+          {allocationTotal > 0 ? allocations.filter(a => a.amount > 0).map(a => (
+            <span key={a.tone} className={`vv-allocation-part vv-allocation-${a.tone}`} style={{ width: `${a.amount / allocationTotal * 100}%` }} />
+          )) : <span className="vv-allocation-empty" />}
+        </div>
+        <div className="vv-allocation-legend">
+          {allocations.map((a, index) => (
+            <div key={a.tone}>
+              <span className={`vv-allocation-dot vv-allocation-${a.tone}`} />
+              <div><small>0{index + 1} / {a.label}</small><strong>{showBalance ? money(a.amount) : "••••••"}</strong></div>
+              <span className="vv-allocation-percent">{allocationTotal > 0 && showBalance ? `${Math.round(a.amount / allocationTotal * 100)}%` : "—"}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
       <section className="vm-section vm-actions-section" aria-labelledby="vm-actions-title">
-        <div className="vm-section-top"><div><span className="vm-kicker">EVERYDAY BANKING</span><h2 id="vm-actions-title">Make your next move.</h2></div><span className="vm-section-index">02 / 05</span></div>
+        <div className="vm-section-top"><div><span className="vm-kicker">EVERYDAY BANKING</span><h2 id="vm-actions-title">Everyday, simplified.</h2></div><span className="vm-section-index">02 / 05</span></div>
         <div className="vm-action-grid">
           {[
             { label: "Add money", desc: "Fund your account", icon: ArrowDownLeft, go: "fund" },
@@ -472,7 +506,7 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
       </section>
 
       <section className="vm-section vm-products">
-        <div className="vm-section-top"><div><span className="vm-kicker">YOUR SAVINGS COLLECTION</span><h2>Made for your ambitions.</h2></div><button className="vm-text-link" type="button" onClick={() => onNavigate("lock")}>All plans <ArrowUpRight size={17} /></button></div>
+        <div className="vm-section-top"><div><span className="vm-kicker">SAVINGS & FUTURE PLANS</span><h2>For everything ahead.</h2></div><button className="vm-text-link" type="button" onClick={() => onNavigate("lock")}>All plans <ArrowUpRight size={17} /></button></div>
         <div className="vm-product-grid">
           {productBanners.map((product, index) => {
             const Icon = product.icon;
