@@ -314,389 +314,181 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
   const displayAccountName = cleanCustomerName(balance.fullName?.trim()) || balance.fullName || "—";
 
   return (
-    <div className="premium-dashboard vestara-elevated-dashboard space-y-6">
-
-      <section className="at-overview">
-        <div className="at-greeting">
-          <div>
-            <h1>{greeting}, <span>{firstName}</span></h1>
-            <p>Manage your money, savings and payments in one place.</p>
-          </div>
-          <Avatar className="at-greeting-avatar">
-            <AvatarImage src={avatarUrl || undefined} alt="Profile photo" className="object-cover" />
-            <AvatarFallback>{firstName.substring(0,1).toUpperCase()}</AvatarFallback>
-          </Avatar>
+    <div className="vm-dashboard">
+      <header className="vm-welcome">
+        <div>
+          <div className="vm-microline"><span className="vm-dot" /> YOUR VESTARA SPACE <span className="vm-slash">/</span> THE OVERVIEW</div>
+          <h1>{greeting}, <span>{firstName}.</span></h1>
+          <p>A calmer way to be in control of your money.</p>
         </div>
+        <button className="vm-identity-link" type="button" onClick={() => onNavigate("profile")} aria-label="Open your profile">
+          <Avatar className="vm-identity-avatar">
+            <AvatarImage src={avatarUrl || undefined} alt="Your profile" />
+            <AvatarFallback>{firstName.charAt(0).toUpperCase()}</AvatarFallback>
+          </Avatar>
+          <ChevronRight size={19} />
+        </button>
+      </header>
 
-        <motion.section
-          className="at-statement"
-          aria-label="Your account overview"
-          initial={{opacity:0,y:18}}
-          animate={{opacity:1,y:0}}
-          transition={{duration:.55,ease:"easeOut"}}
-        >
-          <div className="at-statement-main">
-            <div className="at-statement-topline"><span>ACCOUNT OVERVIEW</span><span>VESTARA</span></div>
-            <div className="at-statement-balance-label">
+      <div className="vm-overview-grid">
+        <section className="vm-balance-stage" aria-label="Your money overview">
+          <div className="vm-stage-top"><span>01 / YOUR MONEY</span><span className="vm-stage-chip"><span /> LIVE OVERVIEW</span></div>
+          <div className="vm-balance-block">
+            <div className="vm-balance-label">
               <span>Total balance</span>
               <button type="button" onClick={() => setShowBalance(!showBalance)} aria-label={showBalance ? "Hide balance" : "Show balance"}>
-                {showBalance ? <Eye size={19} /> : <EyeOff size={19} />}<span>{showBalance ? "Hide" : "Show"}</span>
+                {showBalance ? <Eye size={19} /> : <EyeOff size={19} />}
+                {showBalance ? "Hide" : "Show"}
               </button>
             </div>
-            <AnimatePresence mode="wait" initial={false}>
-              <motion.h2
-                className="at-statement-balance"
-                key={showBalance ? "shown" : "hidden"}
-                initial={{opacity:0,y:5}}
-                animate={{opacity:1,y:0}}
-                exit={{opacity:0,y:-5}}
-                transition={{duration:.17}}
-              >
-                {showBalance ? <AnimatedNumber value={balance.totalBalance} /> : "₦ ••••••"}
-              </motion.h2>
-            </AnimatePresence>
-            {balance.noVfdAccount && <p className="at-statement-notice">Complete KYC to receive your personal VFD account number.</p>}
-            {!balance.noVfdAccount && balance.stale && <p className="at-statement-notice">Showing last known balance. Pull to refresh for an update.</p>}
-            <div className="at-statement-actions">
-              <button type="button" className="at-action-primary" onClick={() => onNavigate("fund")}>Add money <Plus size={17} /></button>
-              <button type="button" className="at-action-secondary" onClick={() => onNavigate("transfer")}>Send money <ArrowUpRight size={17} /></button>
-            </div>
-            </div>
-          <div className="at-statement-detail">
-            <div className="at-detail-header"><span>ACCOUNT DETAILS</span></div>
-            <div className="at-account-number">
-              <span>Your VFD account number</span>
-              {(() => {
-                const number = balance.accountNumber;
-                const active = number && number !== "—" && number !== "1001695610";
-                return active
-                  ? <button type="button" onClick={copyAccount} aria-label="Copy account number"><strong>{number}</strong>{copied ? <Check size={16}/> : <Copy size={16}/>}</button>
-                  : <button type="button" onClick={() => onNavigate("kyc")}><strong>Activate account</strong><ChevronRight size={16}/></button>;
-              })()}
-              <small>{displayAccountName}</small>
-            </div>
-            <div className="at-detail-divider" />
-            <div className="at-balance-breakdown">
-              {[
-                { label: "Available", amount: balance.availableBalance },
-                { label: "Locked", amount: balance.lockedBalance },
-                { label: "Savings", amount: balance.savingsBalance },
-              ].map(item => (
-                <div key={item.label}><span>{item.label}</span><strong>{showBalance ? "₦" + item.amount.toLocaleString() : "••••"}</strong></div>
-              ))}
-            </div>
-            {(() => {
-              const tierKey=(tier||"tier1").toLowerCase();
-              const info=TIER_INFO[tierKey]||TIER_INFO.tier1;
-              return <div className="at-account-tier">
-                <span><ShieldCheck size={15}/>{upgradePending ? "Upgrade pending" : info.short + " · " + info.daily + " daily limit"}</span>
-                {tierKey !== "tier3" && !upgradePending && <button type="button" onClick={() => onNavigate("kyc")}>Upgrade <ArrowUpRight size={14}/></button>}
-              </div>;
-            })()}
+            <h2 aria-live="polite">{showBalance ? <AnimatedNumber value={balance.totalBalance} /> : "₦ ••••••"}</h2>
+            {balance.noVfdAccount && <p className="vm-inline-notice">Finish account verification to receive your account number.</p>}
+            {!balance.noVfdAccount && balance.stale && <p className="vm-inline-notice">Showing your last known balance. Refresh to see recent changes.</p>}
           </div>
-        </motion.section>
-
-        <section className="at-transactions-shortcuts" aria-label="Quick actions">
-          <div className="at-mini-heading"><div><span>QUICK ACTIONS</span><h2>Move your money</h2></div></div>
-          <div className="at-action-grid">
+          <div className="vm-money-composition">
             {[
-              {label:"Withdraw",hint:"Move funds",icon:Banknote,go:"withdraw"},
-              {label:"Pay bills",hint:"Everyday payments",icon:Receipt,go:"bills"},
-              {label:"Save",hint:"Grow your money",icon:PiggyBank,go:"lock"},
-              {label:"Activity",hint:"Your transactions",icon:Clock,go:"history"},
-            ].map(item => (
-              <motion.button key={item.label} type="button" className="at-shortcut"
-                whileTap={{scale:.97}} onClick={() => {void haptic("light");onNavigate(item.go);}}>
-                <span className="at-shortcut-icon"><item.icon size={22} strokeWidth={1.7}/></span>
-                <strong>{item.label}</strong>
-                <small>{item.hint}</small>
-                <ArrowUpRight size={16} className="at-shortcut-arrow"/>
-              </motion.button>
+              { name: "Available", sum: balance.availableBalance },
+              { name: "Saved", sum: balance.savingsBalance },
+              { name: "Locked", sum: balance.lockedBalance },
+            ].map((item) => (
+              <div key={item.name}>
+                <span>{item.name}</span>
+                <strong>{showBalance ? "₦" + item.sum.toLocaleString("en-NG") : "••••"}</strong>
+              </div>
             ))}
           </div>
+          <div className="vm-balance-footer">
+            <button className="vm-button vm-button-dark" onClick={() => onNavigate("fund")} type="button">Add money <Plus size={18} /></button>
+            <button className="vm-button vm-button-ghost" onClick={() => onNavigate("transfer")} type="button">Send money <ArrowUpRight size={18} /></button>
+          </div>
         </section>
-      </section>
-
-      <section className="at-journeys" aria-label="Explore your money possibilities">
-        <div className="at-section-title">
-          <div><span>EXPLORE VESTARA</span><h2>Make more of your money</h2></div>
-          <button type="button" onClick={() => document.getElementById("home-services")?.scrollIntoView({behavior:"smooth",block:"start"})}>Explore all <ArrowUpRight size={17}/></button>
-        </div>
-        <div className="v4-products">
-          <button type="button" className="v4-product v4-product-featured" onClick={() => onNavigate("lock")}>
-            <span className="v4-product-icon"><PiggyBank size={25} strokeWidth={1.8}/></span>
-            <span className="v4-product-copy">
-              <span className="v4-product-eyebrow">Savings</span>
-              <strong>Save for what matters.</strong>
-              <small>Flexible plans for your goals, big or small.</small>
-            </span>
-            <span className="v4-product-arrow"><ArrowUpRight size={21}/></span>
-          </button>
-          <button type="button" className="v4-product" onClick={() => onNavigate("split")}>
-            <span className="v4-product-icon"><Users size={24} strokeWidth={1.8}/></span>
-            <span className="v4-product-copy"><span className="v4-product-eyebrow">Split Pay</span><strong>Better when shared.</strong><small>Split expenses without the back and forth.</small></span>
-            <span className="v4-product-arrow"><ArrowUpRight size={21}/></span>
-          </button>
-          <button type="button" className="v4-product" onClick={() => onNavigate("ajo")}>
-            <span className="v4-product-icon"><ShieldCheck size={24} strokeWidth={1.8}/></span>
-            <span className="v4-product-copy"><span className="v4-product-eyebrow">Ajo & Esusu</span><strong>Grow together.</strong><small>Manage your contributions with clarity.</small></span>
-            <span className="v4-product-arrow"><ArrowUpRight size={21}/></span>
-          </button>
-        </div>
-      </section>
-
-      {/* ═══ THIS WEEK (SPENDLOCK) ═══ */}
-      <div id="home-spendlock" className="space-y-3 scroll-mt-20">
-        <SpendLockCard />
+        <aside className="vm-account-pass" aria-label="Account details">
+          <div className="vm-pass-top"><span>VESTARA <b>PRIVATE</b></span><CreditCard size={21} strokeWidth={1.5} /></div>
+          <div className="vm-pass-content">
+            <p>YOUR BANKING DETAILS</p>
+            <span>VFD account number</span>
+            {balance.accountNumber && balance.accountNumber !== "—" && balance.accountNumber !== "1001695610" ? (
+              <button type="button" className="vm-pass-account" onClick={copyAccount} aria-label="Copy account number">
+                {balance.accountNumber} {copied ? <Check size={17} /> : <Copy size={17} />}
+              </button>
+            ) : (
+              <button type="button" className="vm-pass-account" onClick={() => onNavigate("kyc")}>Activate account <ArrowUpRight size={17} /></button>
+            )}
+            <strong className="vm-pass-name">{displayAccountName}</strong>
+          </div>
+          <div className="vm-pass-footer">
+            <div><ShieldCheck size={17} /><span>{upgradePending ? "Upgrade pending" : (TIER_INFO[(tier || "tier1").toLowerCase()] || TIER_INFO.tier1).short + " account"}</span></div>
+            {(tier || "tier1").toLowerCase() !== "tier3" && !upgradePending && <button type="button" onClick={() => onNavigate("kyc")}>Upgrade <ArrowUpRight size={15} /></button>}
+          </div>
+        </aside>
       </div>
 
-      {/* ═══ RECENT ACTIVITY ═══ */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-      >
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-bold text-foreground">Recent Activity</h3>
-          <button
-            onClick={() => onNavigate("history")}
-            className="text-xs font-semibold text-primary hover:underline"
-          >
-            View all
-          </button>
+      <section className="vm-section vm-actions-section" aria-labelledby="vm-actions-title">
+        <div className="vm-section-top"><div><span className="vm-kicker">EVERYDAY BANKING</span><h2 id="vm-actions-title">Make your next move.</h2></div><span className="vm-section-index">02 / 05</span></div>
+        <div className="vm-action-grid">
+          {[
+            { label: "Add money", desc: "Fund your account", icon: ArrowDownLeft, go: "fund" },
+            { label: "Transfer", desc: "Send securely", icon: ArrowUpRight, go: "transfer" },
+            { label: "Withdraw", desc: "Access your money", icon: Banknote, go: "withdraw" },
+            { label: "Pay bills", desc: "Everyday essentials", icon: Receipt, go: "bills" },
+            { label: "Savings", desc: "Build tomorrow", icon: PiggyBank, go: "lock" },
+            { label: "Statements", desc: "See your activity", icon: Clock, go: "history" },
+          ].map((action, index) => (
+            <button className="vm-action-item" key={action.label} type="button" onClick={() => { void haptic("light"); onNavigate(action.go); }}>
+              <span className="vm-action-number">0{index + 1}</span>
+              <span className="vm-action-icon"><action.icon size={22} strokeWidth={1.65} /></span>
+              <span className="vm-action-copy"><strong>{action.label}</strong><small>{action.desc}</small></span>
+              <ArrowUpRight className="vm-action-arrow" size={17} />
+            </button>
+          ))}
         </div>
+      </section>
 
-        {recentTransactions.length === 0 ? (
-          <div className="bg-card rounded-2xl border border-border/50 p-8 text-center">
-            <div className="w-14 h-14 rounded-full bg-muted/50 flex items-center justify-center mx-auto mb-3">
-              <TrendingUp className="h-6 w-6 text-muted-foreground/40" />
-            </div>
-            <p className="text-sm font-medium text-muted-foreground">No transactions yet</p>
-            <p className="text-xs text-muted-foreground/70 mt-1 mb-3">Start saving today to see your activity here</p>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => onNavigate("fund")}
-              className="text-xs"
-            >
-              <Plus className="h-3.5 w-3.5 mr-1.5" />
-              Fund Account
-            </Button>
-          </div>
-        ) : (
-          <div className="bg-card rounded-2xl border border-border shadow-sm divide-y divide-border overflow-hidden">
-            {recentTransactions.slice(0, 5).map((tx, i) => {
+      <div className="vm-lower-grid">
+        <section className="vm-activity vm-section" aria-labelledby="vm-activity-title">
+          <div className="vm-section-top"><div><span className="vm-kicker">MONEY IN MOTION</span><h2 id="vm-activity-title">Recent activity</h2></div><button type="button" className="vm-text-link" onClick={() => onNavigate("history")}>View all <ArrowUpRight size={17} /></button></div>
+          <div className="vm-activity-list">
+            {recentTransactions.length === 0 ? (
+              <div className="vm-empty-activity"><span><Clock size={25} /></span><strong>A fresh start.</strong><p>Your transactions will appear here as they happen.</p><button type="button" onClick={() => onNavigate("fund")}>Add your first deposit <ArrowRight size={15} /></button></div>
+            ) : recentTransactions.slice(0, 5).map((tx) => {
               const meta = getTxMeta(tx.transaction_type);
               const TxIcon = meta.icon;
               const info = describeTransaction(tx);
-              const isCredit = tx.transaction_type === "credit" || tx.transaction_type === "unlock" || tx.transaction_type === "interest";
-              const displayLabel = info.title;
+              const isCredit = ["credit", "unlock", "interest"].includes(tx.transaction_type);
               return (
-                <motion.div
-                  key={tx.id}
-                  initial={{ opacity: 0, x: -8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.2 + i * 0.04 }}
-                  className="flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-colors"
-                >
-                  <div className={`w-9 h-9 rounded-xl ${meta.bg} flex items-center justify-center shrink-0`}>
-                    <TxIcon className={`h-4 w-4 ${meta.color}`} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate">
-                      {displayLabel}
-                    </p>
-                    {info.subtitle && (
-                      <p className="text-[10px] text-muted-foreground truncate">{info.subtitle}</p>
-                    )}
-                    <p className="text-[10px] text-muted-foreground">
-                      {new Date(tx.created_at).toLocaleDateString("en-NG", {
-                        month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
-                      })}
-                    </p>
-                  </div>
-                  <p className={`text-sm font-bold ${isCredit ? "text-success" : "text-foreground"}`}>
-                    {meta.sign}₦{tx.amount.toLocaleString()}
-                  </p>
-                </motion.div>
+                <div className="vm-activity-row" key={tx.id}>
+                  <span className={"vm-transaction-icon " + (isCredit ? "vm-credit" : "vm-debit")}><TxIcon size={19} strokeWidth={1.75} /></span>
+                  <div className="vm-activity-copy"><strong>{info.title}</strong><span>{new Date(tx.created_at).toLocaleDateString("en-NG", { month: "short", day: "numeric", year: "numeric" })}</span></div>
+                  <strong className={"vm-activity-amount " + (isCredit ? "vm-positive" : "")}>{meta.sign}₦{Number(tx.amount || 0).toLocaleString("en-NG")}</strong>
+                </div>
               );
             })}
           </div>
-        )}
-      </motion.div>
-
-      {/* ═══ SCROLLING PRODUCT BANNERS ═══ */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-      >
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <h3 className="text-sm font-bold text-foreground">Start a new savings plan</h3>
-            <p className="text-[10px] text-muted-foreground mt-0.5">
-              Existing holdings live in Active Savings
-            </p>
+        </section>
+        <aside className="vm-savings-feature">
+          <span className="vm-kicker">GROW WITH VESTARA</span>
+          <div className="vm-saving-symbol"><PiggyBank size={32} strokeWidth={1.35} /></div>
+          <h2>Good things<br />take intention.</h2>
+          <p>Put a little aside today for the life you're building.</p>
+          <div className="vm-savings-feature-footer">
+            <div><span>IN YOUR SAVINGS</span><strong>{showBalance ? "₦" + balance.savingsBalance.toLocaleString("en-NG") : "••••"}</strong></div>
+            <button type="button" onClick={() => onNavigate("lock")} aria-label="Explore savings"><ArrowUpRight size={23} /></button>
           </div>
-          <div className="flex items-center gap-1">
-            <Button type="button" variant="ghost" size="icon" className="h-10 w-10" disabled={activeBanner === 0} onClick={() => { setCarouselPaused(true); moveBanner(activeBanner - 1); }} aria-label="Previous savings plan">
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button type="button" variant="ghost" size="icon" className="h-10 w-10" disabled={activeBanner === productBanners.length - 1} onClick={() => { setCarouselPaused(true); moveBanner(activeBanner + 1); }} aria-label="Next savings plan">
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
+        </aside>
+      </div>
 
-        <div
-          ref={bannerRef}
-          className="flex touch-pan-x gap-3 overflow-x-auto overscroll-x-contain snap-x snap-mandatory scroll-px-1 scrollbar-hide pb-2"
-          style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-          onPointerDown={() => setCarouselPaused(true)}
-          onTouchStart={() => setCarouselPaused(true)}
-          onScroll={(e) => {
-            const el = e.currentTarget;
-            const cards = Array.from(el.children) as HTMLElement[];
-            const idx = cards.reduce((closest, card, index) =>
-              Math.abs(card.offsetLeft - el.scrollLeft) < Math.abs(cards[closest].offsetLeft - el.scrollLeft) ? index : closest, 0);
-            if (idx !== activeBanner && idx >= 0 && idx < productBanners.length) {
-              setActiveBanner(idx);
-            }
-          }}
-        >
-          {productBanners.map((banner) => {
-            const holding = holdings[banner.key];
+      <section className="vm-section vm-services" id="home-services">
+        <div className="vm-section-top"><div><span className="vm-kicker">MORE POSSIBILITIES</span><h2>Banking that goes further.</h2></div><span className="vm-section-index">04 / 05</span></div>
+        <div className="vm-service-grid">
+          {serviceCategories.map((category, index) => {
+            const Icon = category.icon;
+            const expanded = openCategory === category.key;
             return (
-              <button
-                key={banner.key}
-                onClick={() => onNavigate(banner.routeKey)}
-                className={`flex-none w-[80%] min-w-[260px] snap-center rounded-2xl bg-gradient-to-br ${banner.gradient} p-4 shadow-sm text-left text-ink-foreground relative overflow-hidden active:scale-[0.99] transition-transform`}
-              >
-                <div className={`absolute top-3 right-3 w-14 h-14 rounded-2xl ${banner.accent} flex items-center justify-center`}>
-                  <banner.icon className="h-7 w-7 opacity-90" />
-                </div>
-                <div className="relative z-10 min-h-[118px] flex flex-col justify-between">
-                  <div>
-                    <h4 className="text-sm font-semibold mb-1 tracking-tight">{banner.title}</h4>
-                    <p className="text-xs opacity-90 max-w-[80%] leading-relaxed">{banner.subtitle}</p>
+              <article className={"vm-service-tile " + (expanded ? "vm-service-open" : "")} key={category.key}>
+                <button type="button" aria-expanded={Boolean(category.children) ? expanded : undefined} onClick={() => {
+                  if (category.navKey) { onNavigate(category.navKey); return; }
+                  setOpenCategory(expanded ? null : category.key);
+                }}>
+                  <span className="vm-service-index">0{index + 1}</span>
+                  <Icon size={31} strokeWidth={1.35} />
+                  <strong>{category.label}</strong>
+                  <small>{category.desc}</small>
+                  <span className="vm-service-arrow"><ArrowUpRight size={20} /></span>
+                </button>
+                {expanded && category.children && (
+                  <div className="vm-service-children">
+                    {category.children.map((child) => (
+                      <button type="button" key={child.key} disabled={Boolean(child.comingSoon)} onClick={() => onNavigate(child.key)}>
+                        <span>{child.label}{child.comingSoon && <small> · Coming soon</small>}</span>
+                        <ChevronRight size={17} />
+                      </button>
+                    ))}
                   </div>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      </section>
 
-                  <div className="flex items-end justify-between gap-2">
-                    <span className="inline-block text-[11px] font-semibold bg-ink/25 px-3 py-1.5 rounded-full">
-                      {banner.cta}
-                    </span>
-                    <span className="text-[11px] font-semibold opacity-100 tabular-nums">
-
-                      {holding && showBalance
-                        ? `₦${holding.total.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
-                        : holding && !showBalance
-                        ? "••••"
-                        : "₦0"}
-                    </span>
-                  </div>
-                </div>
+      <section className="vm-section vm-products">
+        <div className="vm-section-top"><div><span className="vm-kicker">YOUR SAVINGS COLLECTION</span><h2>Made for your ambitions.</h2></div><button className="vm-text-link" type="button" onClick={() => onNavigate("lock")}>All plans <ArrowUpRight size={17} /></button></div>
+        <div className="vm-product-grid">
+          {productBanners.map((product, index) => {
+            const Icon = product.icon;
+            const holding = holdings[product.key];
+            return (
+              <button className={"vm-product-card vm-product-" + index} type="button" key={product.key} onClick={() => onNavigate(product.routeKey)}>
+                <span className="vm-product-meta"><span>0{index + 1} / COLLECTION</span><Icon size={20} strokeWidth={1.6} /></span>
+                <strong>{product.title}</strong>
+                <small>{product.subtitle}</small>
+                <span className="vm-product-bottom"><span>{holding ? showBalance ? "₦" + holding.total.toLocaleString("en-NG", { maximumFractionDigits: 2 }) + " invested" : "•••• invested" : "Explore plan"}</span><ArrowUpRight size={19} /></span>
               </button>
             );
           })}
         </div>
-
-      </motion.div>
-
-      {/* ═══ SERVICES (grouped categories) ═══ */}
-      <motion.div
-        id="home-services"
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.25 }}
-        className="v4-service-section scroll-mt-20"
-      >
-        <h3 className="v4-service-heading text-sm font-bold text-foreground mb-3">Services</h3>
-        <div className="v4-service-grid grid grid-cols-2 gap-2.5">
-          {serviceCategories.map((cat) => {
-            const dimmed = !!cat.comingSoon;
-            const isOpen = openCategory === cat.key;
-            return (
-              <motion.button
-                key={cat.key}
-                whileTap={{ scale: 0.97 }}
-                onClick={() => {
-                  if (cat.navKey) return onNavigate(cat.navKey);
-                  setOpenCategory(isOpen ? null : cat.key);
-                }}
-                aria-expanded={cat.children ? isOpen : undefined}
-                className={`v4-service-tile relative flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border transition-all ${
-                  isOpen ? "border-primary/40 shadow-sm" : "border-border/60 hover:border-primary/30"
-                } ${dimmed ? "opacity-70" : ""}`}
-              >
-                {dimmed && (
-                  <span className="absolute top-1 right-1 text-[8px] font-semibold uppercase tracking-wide bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">
-                    Soon
-                  </span>
-                )}
-                <div className={`v4-service-icon w-11 h-11 rounded-xl ${cat.color} flex items-center justify-center`}>
-                  <cat.icon className="h-5 w-5" />
-                </div>
-                <div className="text-center">
-                  <p className="v4-service-label text-xs font-semibold text-foreground leading-tight">{cat.label}</p>
-                  <p className="v4-service-subtitle text-[10px] text-muted-foreground mt-0.5">{cat.desc}</p>
-                </div>
-                {cat.children && (
-                  <ChevronRight
-                    className={`h-3 w-3 text-muted-foreground transition-transform ${isOpen ? "rotate-90" : ""}`}
-                  />
-                )}
-              </motion.button>
-            );
-          })}
-        </div>
-
-        {/* Second level, revealed for the open category only */}
-        <AnimatePresence initial={false}>
-          {openCategory && (
-            <motion.div
-              key={openCategory}
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              className="overflow-hidden"
-            >
-              <div className="v4-service-children mt-2.5 rounded-2xl border border-border/60 bg-card divide-y divide-border/50">
-                {(serviceCategories.find((c) => c.key === openCategory)?.children || []).map((child) => {
-                  const disabled = !!child.comingSoon;
-                  return (
-                    <button
-                      key={child.key}
-                      onClick={() => { if (!disabled) onNavigate(child.key); }}
-                      disabled={disabled}
-                      aria-disabled={disabled}
-                      className={`v4-service-child w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                        disabled ? "opacity-60 cursor-not-allowed" : "hover:bg-muted/50"
-                      }`}
-                    >
-                      <div className="w-9 h-9 rounded-xl bg-primary-soft flex items-center justify-center shrink-0">
-                        <child.icon className="h-4 w-4 text-primary" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-semibold text-foreground leading-tight">{child.label}</p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{child.desc}</p>
-                      </div>
-                      {disabled ? (
-                        <span className="text-[9px] font-semibold uppercase tracking-wide bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">
-                          Soon
-                        </span>
-                      ) : (
-                        <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.div>
-
-
+      </section>
+      <div className="vm-spendlock"><SpendLockCard /></div>
     </div>
   );
 }
