@@ -609,7 +609,8 @@ function VfdSandboxInner() {
         ) : (
           <div
             key={currentView}
-            className={`premium-app-page at-page vm-app-page vv-app-page ${currentView === "dashboard" ? "vv-home-page" : "vv-app-module"}`}\n            data-vv-view={currentView}
+            className={`premium-app-page at-page vm-app-page vv-app-page ${currentView === "dashboard" ? "vv-home-page" : "vv-app-module"}`}
+            data-vv-view={currentView}
           >
             {currentView !== "dashboard" && screenIntros[currentView] && (() => {
               const screen = screenIntros[currentView]!;
