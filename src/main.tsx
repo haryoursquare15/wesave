@@ -16,6 +16,7 @@ import "./styles/v4-fixes.css";
 import "./styles/v4-dark-polish.css";
 import "./styles/home-polish.css";
 import "./styles/vm-experience.css";
+import "./styles/vv-studio-03.css";
 
 // Never show technical wording in error popups, wherever they come from.
 const originalError = sonnerToast.error;
