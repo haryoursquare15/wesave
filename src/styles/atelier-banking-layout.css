@@ -106,3 +106,7 @@
 .dark .vestara-app.at-shell.v4-app :is(.premium-service-page,.premium-savings,.premium-split,.at-bills) :is(.text-primary){color:#ffac7f!important}
 .dark .vestara-app.at-shell.v4-app :is(.premium-service-page,.premium-savings,.premium-split,.at-bills) :is(.bg-primary\/5,.bg-primary\/10){background:#26364c!important}
 .dark .vestara-app.at-shell.v4-app :is(.premium-savings,.premium-split,.premium-profile,.at-bills,.at-insights) :is(.bg-card,[class*="rounded-2xl"][class*="border"]){border-color:#2f3e52!important}
+
+/* Accessible keyboard focus throughout the banking workspace. */
+.vestara-app.at-shell.v4-app :is(button,a,[role=button]):focus-visible{outline:2px solid #e97b45!important;outline-offset:3px!important}
+.dark .vestara-app.at-shell.v4-app :is(button,a,[role=button]):focus-visible{outline-color:#ffac7f!important}
