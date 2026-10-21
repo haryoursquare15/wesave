@@ -52,17 +52,28 @@ interface UserBalance {
 type View = "dashboard" | "fund" | "transfer" | "withdraw" | "lock" | "history" | "ajo" | "target" | "goal" | "split" | "association" | "bills" | "card" | "kyc" | "mandates" | "insights" | "profile";
 type ScreenIntro = { eyebrow: string; title: string; description: string; icon: LucideIcon };
 const screenIntros: Partial<Record<View, ScreenIntro>> = {
-  fund: { eyebrow: "Wallet", title: "Add money", description: "Fund your Vestara account securely.", icon: Wallet },
-  transfer: { eyebrow: "Transfers", title: "Send money", description: "Move money to another bank account.", icon: ArrowLeftRight },
-  withdraw: { eyebrow: "Withdrawal", title: "Withdraw funds", description: "Transfer funds to your linked bank.", icon: Landmark },
-  history: { eyebrow: "Transactions", title: "Activity", description: "Your recent and past transactions.", icon: History },
-  ajo: { eyebrow: "Groups", title: "Ajo & Esusu", description: "Manage your community contributions.", icon: Users },
-  target: { eyebrow: "Savings", title: "Target savings", description: "Track progress towards your target.", icon: Target },
-  goal: { eyebrow: "Savings", title: "Savings goals", description: "Plans for things that matter to you.", icon: Target },
-  association: { eyebrow: "Groups", title: "Associations", description: "Your group activities and contributions.", icon: Users },
-  card: { eyebrow: "Payments", title: "Your card", description: "Manage your payment options.", icon: CreditCard },
-  mandates: { eyebrow: "Payments", title: "Recurring payments", description: "Review and manage scheduled payments.", icon: Layers3 },
+  fund: { eyebrow: "Wallet / 01", title: "Add money", description: "Your money starts here. Fund your Vestara account in a few simple steps.", icon: Wallet },
+  transfer: { eyebrow: "Payments / 02", title: "Send money", description: "Move money confidently, with every detail in your control.", icon: ArrowLeftRight },
+  withdraw: { eyebrow: "Wallet / 03", title: "Withdraw funds", description: "Move available funds to your linked bank account.", icon: Landmark },
+  history: { eyebrow: "Activity / 04", title: "Your money, in motion", description: "A clearer record of every deposit, transfer and payment.", icon: History },
+  lock: { eyebrow: "Wealth / 05", title: "Build what’s next", description: "Purposeful savings for all the things worth planning for.", icon: PiggyBank },
+  ajo: { eyebrow: "Community / 06", title: "Better together", description: "Save as a group, contribute with clarity and keep the circle moving.", icon: Users },
+  target: { eyebrow: "Wealth / 07", title: "Target savings", description: "A plan for the milestones ahead.", icon: Target },
+  goal: { eyebrow: "Wealth / 08", title: "Shared goals", description: "Give meaningful goals a place to grow.", icon: Target },
+  association: { eyebrow: "Community / 09", title: "Associations", description: "Where contributions, members and plans come together.", icon: Users },
+  split: { eyebrow: "Payments / 10", title: "Make it a shared bill", description: "The easy way to bring everyone into the payment.", icon: ReceiptText },
+  bills: { eyebrow: "Payments / 11", title: "Everyday essentials", description: "All the payments that keep your day moving.", icon: CreditCard },
+  card: { eyebrow: "Payments / 12", title: "Your cards", description: "A considered way to manage payment options.", icon: CreditCard },
+  kyc: { eyebrow: "Account / 13", title: "Account verification", description: "Keep your account details complete and protected.", icon: ShieldCheck },
+  mandates: { eyebrow: "Payments / 14", title: "Recurring payments", description: "Stay in control of the payments that happen automatically.", icon: Layers3 },
+  insights: { eyebrow: "Insights / 15", title: "Know your numbers", description: "Perspective on where your money goes and how it grows.", icon: ChartNoAxesCombined },
+  profile: { eyebrow: "Account / 16", title: "Made personal", description: "Your details, controls and preferences in one place.", icon: User },
 };
+const screenIndexes: Record<Exclude<View, "dashboard">, string> = {
+  fund:"01",transfer:"02",withdraw:"03",history:"04",lock:"05",ajo:"06",target:"07",goal:"08",
+  association:"09",split:"10",bills:"11",card:"12",kyc:"13",mandates:"14",insights:"15",profile:"16",
+};
+
 
 
 function ProductWrapper({ children, onBack }: { children: React.ReactNode; onBack: () => void }) {
@@ -598,23 +609,47 @@ function VfdSandboxInner() {
         ) : (
           <div
             key={currentView}
-            className="premium-app-page at-page vm-app-page"
+            className={`premium-app-page at-page vm-app-page vv-app-page ${currentView === "dashboard" ? "vv-home-page" : "vv-app-module"}`}\n            data-vv-view={currentView}
           >
-            {screenIntros[currentView] && (() => {
+            {currentView !== "dashboard" && screenIntros[currentView] && (() => {
               const screen = screenIntros[currentView]!;
               const Icon = screen.icon;
+              const number = screenIndexes[currentView as Exclude<View, "dashboard">];
+              const navigation = [
+                { label: "Overview", go: "dashboard", icon: Home },
+                { label: "Send", go: "transfer", icon: ArrowUpRight },
+                { label: "Save", go: "lock", icon: PiggyBank },
+                { label: "Activity", go: "history", icon: History },
+              ] as const;
               return (
-                <header className="premium-context-banner v4-page-intro vm-page-intro">
-                  <div className="premium-context-copy vm-intro-copy">
-                    <span className="premium-context-eyebrow vm-eyebrow"><span className="vm-dot" /> VESTARA / {screen.eyebrow}</span>
-                    <h1>{screen.title}<span className="vm-title-period">.</span></h1>
-                    <p>{screen.description}</p>
+                <>
+                  <div className="vv-breadcrumb">
+                    <button type="button" onClick={() => setCurrentView("dashboard")}><Home size={14}/> Workspace</button>
+                    <span aria-hidden="true">/</span>
+                    <span>{screen.eyebrow.split(" / ")[0]}</span>
                   </div>
-                  <div className="premium-context-icon vm-intro-icon"><Icon size={26} strokeWidth={1.6} /></div>
-                </header>
+                  <header className="vv-folio" aria-label={screen.title}>
+                    <div className="vv-folio-main">
+                      <div className="vv-folio-kicker"><span className="vv-folio-mark"/> VESTARA — {screen.eyebrow}</div>
+                      <h1>{screen.title}<span aria-hidden="true">.</span></h1>
+                      <p>{screen.description}</p>
+                      <nav className="vv-folio-links" aria-label="Quick destinations">
+                        {navigation.map(link => (
+                          <button type="button" key={link.go} onClick={() => { setInitialSavingsProduct(null); setCurrentView(link.go); }}>
+                            <link.icon size={15} strokeWidth={1.8}/>{link.label}
+                          </button>
+                        ))}
+                      </nav>
+                    </div>
+                    <div className="vv-folio-aside" aria-hidden="true">
+                      <div className="vv-folio-aside-top"><span>VESTARA</span><span>YOUR MONEY, CONSIDERED</span></div>
+                      <span className="vv-folio-glyph"><Icon size={60} strokeWidth={1}/></span>
+                      <div className="vv-folio-aside-foot"><span>PERSONAL BANKING</span><strong>{number} / 16</strong></div>
+                    </div>
+                  </header>
+                </>
               );
             })()}
-            {currentView === "dashboard" && null}
             {currentView === "dashboard" && (
               <SandboxDashboard
                 balance={balanceData}
