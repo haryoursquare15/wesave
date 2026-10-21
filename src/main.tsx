@@ -16,6 +16,7 @@ import "./styles/v4-fixes.css";
 import "./styles/v4-dark-polish.css";
 import "./styles/home-polish.css";
 import "./styles/monochrome-banking.css";
+import "./styles/atelier-banking-layout.css";
 
 // Never show technical wording in error popups, wherever they come from.
 const originalError = sonnerToast.error;
