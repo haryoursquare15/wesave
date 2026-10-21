@@ -48,3 +48,5 @@ if (
     </BrowserRouter>
   );
 }
+
+import "./styles/vestara-editorial.css";
