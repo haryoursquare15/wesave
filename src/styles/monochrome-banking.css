@@ -1,0 +1,128 @@
+/* Vestara /app | Monochrome Banking System
+   Scoped presentation layer. All transaction, auth and banking logic stays intact. */
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap');
+.vestara-app.at-shell.v4-app {
+  --v4-bg:#f5f6f8;--v4-ink:#121927;--v4-body:#5f6978;--v4-muted:#85909e;
+  --v4-blue:#111b30;--v4-blue-2:#1c2a43;--v4-orange:#f07840;
+  --v4-border:#e7eaf0;--v4-white:#fff;
+  --background:220 18% 97%;--foreground:222 30% 12%;
+  --card:0 0% 100%;--card-foreground:222 30% 12%;
+  --popover:0 0% 100%;--popover-foreground:222 30% 12%;
+  --muted:220 17% 95%;--muted-foreground:218 11% 40%;
+  --border:220 15% 90%;--input:220 15% 90%;
+  background:#f5f6f8!important;color:#121927!important;
+  font-family:'Montserrat',sans-serif!important;letter-spacing:-.035em;
+}
+.vestara-app.at-shell.v4-app :is(button,input,select,textarea,h1,h2,h3,h4,p,span,label){font-family:inherit}
+.vestara-app.at-shell.v4-app .at-workspace{background:#f5f6f8!important;padding-top:32px}
+.vestara-app.at-shell.v4-app .at-page{max-width:1080px;gap:24px}
+.vestara-app.at-shell.v4-app :is(.at-header,.at-sidebar){background:#fff!important;border-color:#ebedf1!important;box-shadow:none!important}
+.vestara-app.at-shell.v4-app .at-header{min-height:76px}
+.vestara-app.at-shell.v4-app .at-header-inner{min-height:76px}
+.vestara-app.at-shell.v4-app .at-header-brand>span{color:#84909d!important;font-size:10px!important;letter-spacing:.03em}
+.vestara-app.at-shell.v4-app :is(.at-greeting h1,.v4-page-intro h1){color:#121927!important;font-weight:800!important;letter-spacing:-.055em!important}
+.vestara-app.at-shell.v4-app :is(.at-greeting p,.v4-page-intro p){color:#748091!important}
+.vestara-app.at-shell.v4-app :is(.at-balance-card,.premium-balance-card,.v4-balance-card){
+  background:#111b30!important;color:#fff!important;border:1px solid #1f2b42!important;
+  border-radius:25px!important;box-shadow:0 22px 48px -33px rgba(9,17,33,.55)!important;
+}
+.vestara-app.at-shell.v4-app :is(.at-balance-card,.premium-balance-card,.v4-balance-card) :is(h2,h3,strong,[class*=amount],[class*=balance-value]){color:#fff!important}
+.vestara-app.at-shell.v4-app :is(.at-balance-card,.premium-balance-card,.v4-balance-card) :is(p,small,span){color:#d5dce8}
+.vestara-app.at-shell.v4-app :is(.at-shortcut,.v4-service-tile,.v4-product,.premium-profile-row,.at-settings-section,.v4-service-children,.premium-service-page,.at-stat-card){
+  background:#fff!important;border:1px solid #e9ecf1!important;border-radius:19px!important;
+  box-shadow:none!important;
+}
+.vestara-app.at-shell.v4-app :is(.at-shortcut,.v4-service-tile,.v4-product,.premium-profile-row){transition:transform .2s,border-color .2s,box-shadow .2s}
+.vestara-app.at-shell.v4-app :is(.at-shortcut,.v4-service-tile,.v4-product,.premium-profile-row):hover{transform:translateY(-2px);border-color:#cfd5df!important;box-shadow:0 12px 25px -22px #15253d!important}
+.vestara-app.at-shell.v4-app :is(.at-shortcut-icon,.v4-service-icon,.premium-profile-row-icon){
+  background:#f0f2f6!important;color:#1c2a43!important;border-radius:14px!important;
+}
+.vestara-app.at-shell.v4-app :is(.v4-service-label,.v4-service-heading,.premium-profile-row-title,.at-shortcut strong){color:#172033!important;font-weight:700!important}
+.vestara-app.at-shell.v4-app :is(.v4-service-subtitle,.premium-profile-row-description){color:#7b8695!important}
+.vestara-app.at-shell.v4-app :is(button,[role=button]){transition:background-color .2s,color .2s,border-color .2s,transform .2s}
+.vestara-app.at-shell.v4-app :is(input:not([type=checkbox]):not([type=radio]),select,textarea){
+  border-radius:13px!important;border-color:#dfe4eb!important;background:#fff;color:#182236;
+}
+.vestara-app.at-shell.v4-app :is(input,select,textarea):focus-visible{outline:2px solid #e97a43;outline-offset:2px}
+.vestara-app.at-shell.v4-app :is(button[role=switch],[role=switch]){
+  width:49px!important;height:29px!important;min-width:49px;border-radius:999px!important;
+  background:#dce1e9!important;border:1px solid #c9d0da!important;
+  padding:3px!important;box-shadow:inset 0 1px 2px rgba(10,20,35,.06)!important;
+}
+.vestara-app.at-shell.v4-app :is(button[role=switch],[role=switch])[data-state=checked],
+.vestara-app.at-shell.v4-app :is(button[role=switch],[role=switch])[aria-checked=true]{
+  background:#18253d!important;border-color:#18253d!important;
+}
+.vestara-app.at-shell.v4-app [role=switch] > span{
+  width:21px!important;height:21px!important;background:#fff!important;border-radius:50%!important;
+  box-shadow:0 2px 5px rgba(0,0,0,.16)!important;
+}
+.vestara-app.at-shell.v4-app .v4-appearance-panel .v4-theme-options{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:3px;
+  background:#edf0f5!important;border:1px solid #e3e7ed!important;
+  border-radius:999px!important;padding:5px!important;
+}
+.vestara-app.at-shell.v4-app .v4-appearance-panel .v4-theme-option{
+  border-radius:999px!important;min-height:42px!important;font-weight:700!important;
+  color:#697586!important;background:transparent!important;
+}
+.vestara-app.at-shell.v4-app .v4-appearance-panel .v4-theme-option[aria-checked=true]{
+  background:#fff!important;color:#17223a!important;box-shadow:0 2px 8px rgba(18,28,44,.10)!important;
+}
+.vestara-app.at-shell.v4-app .v4-floating-nav{
+  border-radius:24px!important;background:rgba(255,255,255,.97)!important;
+  border:1px solid #e8ebf0!important;box-shadow:0 18px 40px -24px rgba(13,25,43,.4)!important;
+}
+.vestara-app.at-shell.v4-app .v4-floating-nav .vestara-bottom-tab{color:#818a98!important}
+.vestara-app.at-shell.v4-app .v4-floating-nav .vestara-bottom-tab[aria-current=page]{color:#15213a!important;font-weight:800!important}
+.vestara-app.at-shell.v4-app .v4-floating-nav .vestara-bottom-tab[aria-current=page]::after{background:#ed7943!important;height:3px}
+@media(min-width:960px){
+ .vestara-app.at-shell.v4-app .at-sidebar{padding:30px 16px!important}
+ .vestara-app.at-shell.v4-app .at-sidebar-section>button{border-radius:13px!important;min-height:48px!important;font-weight:650!important}
+ .vestara-app.at-shell.v4-app .at-sidebar-section>button[aria-current=page]{background:#15213a!important;color:#fff!important}
+ .vestara-app.at-shell.v4-app .at-sidebar-section>button[aria-current=page] svg{color:#f6a076!important}
+}
+@media(max-width:700px){
+ .vestara-app.at-shell.v4-app .at-workspace{padding:22px 16px 18px!important}
+ .vestara-app.at-shell.v4-app .at-header,.vestara-app.at-shell.v4-app .at-header-inner{min-height:64px!important}
+ .vestara-app.at-shell.v4-app :is(.at-balance-card,.premium-balance-card,.v4-balance-card){border-radius:23px!important}
+ .vestara-app.at-shell.v4-app .v4-floating-nav{margin-bottom:max(10px,env(safe-area-inset-bottom,0px))!important}
+}
+/* Dedicated dark surfaces, including descendants with legacy light !important overrides. */
+.dark .vestara-app.at-shell.v4-app{
+ --v4-bg:#0b111d;--v4-ink:#f3f5fa;--v4-body:#a5afbf;--v4-muted:#8e9aac;
+ --v4-border:#2b3548;--v4-white:#151e2d;
+ --background:221 37% 8%;--foreground:220 20% 96%;
+ --card:220 30% 12%;--card-foreground:220 20% 96%;
+ --popover:220 30% 12%;--popover-foreground:220 20% 96%;
+ --muted:219 25% 18%;--muted-foreground:217 14% 72%;
+ --border:218 25% 23%;--input:218 25% 23%;
+ background:#0b111d!important;color:#f3f5fa!important;
+ color-scheme:dark;
+}
+.dark .vestara-app.at-shell.v4-app :is(.at-workspace){background:#0b111d!important}
+.dark .vestara-app.at-shell.v4-app :is(.at-header,.at-sidebar,.at-shortcut,.v4-service-tile,.v4-product,.premium-profile-row,.at-settings-section,.v4-service-children,.premium-service-page,.at-stat-card,.v4-appearance-panel){
+ background:#151e2d!important;border-color:#2a3547!important;color:#f3f5fa!important;
+}
+.dark .vestara-app.at-shell.v4-app :is(.at-greeting h1,.v4-page-intro h1,.v4-service-label,.v4-service-heading,.premium-profile-row-title,.at-shortcut strong,h1,h2,h3,h4){color:#f3f5fa!important}
+.dark .vestara-app.at-shell.v4-app :is(.at-greeting p,.v4-page-intro p,.v4-service-subtitle,.premium-profile-row-description,.text-muted-foreground){color:#aab5c5!important}
+.dark .vestara-app.at-shell.v4-app :is(.at-shortcut-icon,.v4-service-icon,.premium-profile-row-icon){background:#263248!important;color:#dce6f5!important}
+.dark .vestara-app.at-shell.v4-app :is(.at-balance-card,.premium-balance-card,.v4-balance-card){background:#202c44!important;border-color:#34445f!important}
+.dark .vestara-app.at-shell.v4-app :is(input:not([type=checkbox]):not([type=radio]),select,textarea){
+ background:#1a2637!important;border-color:#344158!important;color:#f2f5fa!important;
+}
+.dark .vestara-app.at-shell.v4-app :is(input,textarea)::placeholder{color:#9da9b9!important}
+.dark .vestara-app.at-shell.v4-app :is(button[role=switch],[role=switch]){background:#3c485c!important;border-color:#4a5a70!important}
+.dark .vestara-app.at-shell.v4-app :is(button[role=switch],[role=switch])[data-state=checked],
+.dark .vestara-app.at-shell.v4-app :is(button[role=switch],[role=switch])[aria-checked=true]{background:#f0834b!important;border-color:#f0834b!important}
+.dark .vestara-app.at-shell.v4-app .v4-appearance-panel .v4-theme-options{background:#0e1726!important;border-color:#303e52!important}
+.dark .vestara-app.at-shell.v4-app .v4-appearance-panel .v4-theme-option{color:#bac5d5!important}
+.dark .vestara-app.at-shell.v4-app .v4-appearance-panel .v4-theme-option[aria-checked=true]{background:#303d54!important;color:#fff!important}
+.dark .vestara-app.at-shell.v4-app .v4-floating-nav{background:#182336!important;border-color:#344158!important}
+.dark .vestara-app.at-shell.v4-app .v4-floating-nav .vestara-bottom-tab{color:#aab6c7!important}
+.dark .vestara-app.at-shell.v4-app .v4-floating-nav .vestara-bottom-tab[aria-current=page]{color:#fff!important}
+.dark .vestara-app.at-shell.v4-app :is(.border,.border-b,.border-t){border-color:#303d50}
+.dark .vestara-app.at-shell.v4-app :is(.bg-white,.bg-background,.bg-card){background-color:#151e2d!important}
+.dark .vestara-app.at-shell.v4-app :is(.text-black,.text-gray-900,.text-slate-900){color:#f3f5fa!important}
+@media(min-width:960px){.dark .vestara-app.at-shell.v4-app .at-sidebar-section>button[aria-current=page]{background:#303f58!important;color:#fff!important}}
+@media(prefers-reduced-motion:reduce){.vestara-app.at-shell.v4-app *{transition-duration:.01ms!important;animation-duration:.01ms!important}}
