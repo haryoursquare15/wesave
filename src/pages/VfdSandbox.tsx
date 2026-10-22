@@ -52,29 +52,23 @@ interface UserBalance {
 type View = "dashboard" | "fund" | "transfer" | "withdraw" | "lock" | "history" | "ajo" | "target" | "goal" | "split" | "association" | "bills" | "card" | "kyc" | "mandates" | "insights" | "profile";
 type ScreenIntro = { eyebrow: string; title: string; description: string; icon: LucideIcon };
 const screenIntros: Partial<Record<View, ScreenIntro>> = {
-  fund: { eyebrow: "Wallet / 01", title: "Add money", description: "Your money starts here. Fund your Vestara account in a few simple steps.", icon: Wallet },
-  transfer: { eyebrow: "Payments / 02", title: "Send money", description: "Move money confidently, with every detail in your control.", icon: ArrowLeftRight },
-  withdraw: { eyebrow: "Wallet / 03", title: "Withdraw funds", description: "Move available funds to your linked bank account.", icon: Landmark },
-  history: { eyebrow: "Activity / 04", title: "Your money, in motion", description: "A clearer record of every deposit, transfer and payment.", icon: History },
-  lock: { eyebrow: "Wealth / 05", title: "Build what’s next", description: "Purposeful savings for all the things worth planning for.", icon: PiggyBank },
-  ajo: { eyebrow: "Community / 06", title: "Better together", description: "Save as a group, contribute with clarity and keep the circle moving.", icon: Users },
-  target: { eyebrow: "Wealth / 07", title: "Target savings", description: "A plan for the milestones ahead.", icon: Target },
-  goal: { eyebrow: "Wealth / 08", title: "Shared goals", description: "Give meaningful goals a place to grow.", icon: Target },
-  association: { eyebrow: "Community / 09", title: "Associations", description: "Where contributions, members and plans come together.", icon: Users },
-  split: { eyebrow: "Payments / 10", title: "Make it a shared bill", description: "The easy way to bring everyone into the payment.", icon: ReceiptText },
-  bills: { eyebrow: "Payments / 11", title: "Everyday essentials", description: "All the payments that keep your day moving.", icon: CreditCard },
-  card: { eyebrow: "Payments / 12", title: "Your cards", description: "A considered way to manage payment options.", icon: CreditCard },
-  kyc: { eyebrow: "Account / 13", title: "Account verification", description: "Keep your account details complete and protected.", icon: ShieldCheck },
-  mandates: { eyebrow: "Payments / 14", title: "Recurring payments", description: "Stay in control of the payments that happen automatically.", icon: Layers3 },
-  insights: { eyebrow: "Insights / 15", title: "Know your numbers", description: "Perspective on where your money goes and how it grows.", icon: ChartNoAxesCombined },
-  profile: { eyebrow: "Account / 16", title: "Made personal", description: "Your details, controls and preferences in one place.", icon: User },
+  fund: { eyebrow: "Wallet", title: "Add money", description: "Your money starts here. Fund your Vestara account in a few simple steps.", icon: Wallet },
+  transfer: { eyebrow: "Payments", title: "Send money", description: "Move money confidently, with every detail in your control.", icon: ArrowLeftRight },
+  withdraw: { eyebrow: "Wallet", title: "Withdraw funds", description: "Move available funds to your linked bank account.", icon: Landmark },
+  history: { eyebrow: "Activity", title: "Your money, in motion", description: "A clearer record of every deposit, transfer and payment.", icon: History },
+  lock: { eyebrow: "Wealth", title: "Build what’s next", description: "Purposeful savings for all the things worth planning for.", icon: PiggyBank },
+  ajo: { eyebrow: "Community", title: "Better together", description: "Save as a group, contribute with clarity and keep the circle moving.", icon: Users },
+  target: { eyebrow: "Wealth", title: "Target savings", description: "A plan for the milestones ahead.", icon: Target },
+  goal: { eyebrow: "Wealth", title: "Shared goals", description: "Give meaningful goals a place to grow.", icon: Target },
+  association: { eyebrow: "Community", title: "Associations", description: "Where contributions, members and plans come together.", icon: Users },
+  split: { eyebrow: "Payments", title: "Make it a shared bill", description: "The easy way to bring everyone into the payment.", icon: ReceiptText },
+  bills: { eyebrow: "Payments", title: "Everyday essentials", description: "All the payments that keep your day moving.", icon: CreditCard },
+  card: { eyebrow: "Payments", title: "Your cards", description: "A considered way to manage payment options.", icon: CreditCard },
+  kyc: { eyebrow: "Account", title: "Account verification", description: "Keep your account details complete and protected.", icon: ShieldCheck },
+  mandates: { eyebrow: "Payments", title: "Recurring payments", description: "Stay in control of the payments that happen automatically.", icon: Layers3 },
+  insights: { eyebrow: "Insights", title: "Know your numbers", description: "Perspective on where your money goes and how it grows.", icon: ChartNoAxesCombined },
+  profile: { eyebrow: "Account", title: "Made personal", description: "Your details, controls and preferences in one place.", icon: User },
 };
-const screenIndexes: Record<Exclude<View, "dashboard">, string> = {
-  fund:"01",transfer:"02",withdraw:"03",history:"04",lock:"05",ajo:"06",target:"07",goal:"08",
-  association:"09",split:"10",bills:"11",card:"12",kyc:"13",mandates:"14",insights:"15",profile:"16",
-};
-
-
 
 function ProductWrapper({ children, onBack }: { children: React.ReactNode; onBack: () => void }) {
   return (
@@ -552,11 +546,10 @@ function VfdSandboxInner() {
     <div data-view={currentView} className="vestara-app at-shell v4-app vm-app signature-shell h-[100dvh] flex flex-col overflow-hidden">
       {kycDone && <aside className="at-sidebar vm-sidebar signature-sidebar" aria-label="Main navigation">
         <div className="at-sidebar-brand vm-sidebar-brand">
-          <span className="vm-sidebar-emblem">V<span>.</span></span>
-          <div><img src={vestaraLogo} alt="Vestara" /><span>YOUR MONEY SPACE</span></div>
+          <div><img src={vestaraLogo} alt="Vestara" /></div>
         </div>
-        <div className="vm-sidebar-caption">A better relationship with your money.</div>
-        <div className="at-sidebar-section vm-sidebar-section"><span>01 / DISCOVER</span>
+        
+        <div className="at-sidebar-section vm-sidebar-section"><span>MAIN</span>
           {[
             {key:"dashboard",label:"Overview",icon:Home,action:() => setCurrentView("dashboard")},
             {key:"lock",label:"Savings",icon:PiggyBank,action:() => {setInitialSavingsProduct(null);setCurrentView("lock");}},
@@ -570,7 +563,7 @@ function VfdSandboxInner() {
             </button>
           ))}
         </div>
-        <div className="at-sidebar-section at-sidebar-more vm-sidebar-section"><span>02 / PERSONAL</span>
+        <div className="at-sidebar-section at-sidebar-more vm-sidebar-section"><span>ACCOUNT</span>
           <button type="button" onClick={() => setCurrentView("profile")} aria-current={currentView==="profile"?"page":undefined}><User size={19}/> My account</button>
           <button type="button" onClick={() => setCurrentView("ajo")} aria-current={currentView==="ajo"?"page":undefined}><Users size={19}/> Ajo & Esusu</button>
         </div>
@@ -580,16 +573,8 @@ function VfdSandboxInner() {
         showBack={currentView !== "dashboard"}
         onBack={goBack}
         right={
-          <Button
-            variant="ghost" size="icon"
-            aria-label="Open profile"
-            onClick={() => setCurrentView("profile")}
-            className="h-9 w-9 min-h-0 min-w-0 rounded-full bg-primary-soft text-primary text-sm font-semibold flex items-center justify-center active:scale-95 transition-transform"
-          >
-            <Avatar className="h-9 w-9">
-              <AvatarImage src={avatarUrl || undefined} alt="Your profile photo" className="object-cover" />
-              <AvatarFallback>{(cleanCustomerName(vfd.client?.full_name) || user?.email || "V").trim().charAt(0).toUpperCase()}</AvatarFallback>
-            </Avatar>
+          <Button variant="ghost" size="icon" aria-label="Open profile" onClick={() => setCurrentView("profile")} className="clean-account-trigger">
+            <User size={20} strokeWidth={1.7} />
           </Button>
         }
       />
@@ -615,40 +600,20 @@ function VfdSandboxInner() {
             {currentView !== "dashboard" && screenIntros[currentView] && (() => {
               const screen = screenIntros[currentView]!;
               const Icon = screen.icon;
-              const number = screenIndexes[currentView as Exclude<View, "dashboard">];
-              const navigation = [
-                { label: "Overview", go: "dashboard", icon: Home },
-                { label: "Send", go: "transfer", icon: ArrowUpRight },
-                { label: "Save", go: "lock", icon: PiggyBank },
-                { label: "Activity", go: "history", icon: History },
-              ] as const;
               return (
-                <>
-                  <div className="vv-breadcrumb">
-                    <button type="button" onClick={() => setCurrentView("dashboard")}><Home size={14}/> Workspace</button>
-                    <span aria-hidden="true">/</span>
-                    <span>{screen.eyebrow.split(" / ")[0]}</span>
-                  </div>
-                  <header className="vv-folio" aria-label={screen.title}>
-                    <div className="vv-folio-main">
-                      <div className="vv-folio-kicker"><span className="vv-folio-mark"/> VESTARA — {screen.eyebrow}</div>
-                      <h1>{screen.title}<span aria-hidden="true">.</span></h1>
+                <header className="clean-module-heading" aria-label={screen.title}>
+                  <button type="button" className="clean-module-back" onClick={() => setCurrentView("dashboard")}>
+                    <ArrowLeft size={15} strokeWidth={1.7}/> Back to overview
+                  </button>
+                  <div className="clean-module-title">
+                    <div>
+                      <span className="clean-module-category">{screen.eyebrow}</span>
+                      <h1>{screen.title}</h1>
                       <p>{screen.description}</p>
-                      <nav className="vv-folio-links" aria-label="Quick destinations">
-                        {navigation.map(link => (
-                          <button type="button" key={link.go} onClick={() => { setInitialSavingsProduct(null); setCurrentView(link.go); }}>
-                            <link.icon size={15} strokeWidth={1.8}/>{link.label}
-                          </button>
-                        ))}
-                      </nav>
                     </div>
-                    <div className="vv-folio-aside" aria-hidden="true">
-                      <div className="vv-folio-aside-top"><span>VESTARA</span><span>YOUR MONEY, CONSIDERED</span></div>
-                      <span className="vv-folio-glyph"><Icon size={60} strokeWidth={1}/></span>
-                      <div className="vv-folio-aside-foot"><span>PERSONAL BANKING</span><strong>{number} / 16</strong></div>
-                    </div>
-                  </header>
-                </>
+                    <span className="clean-module-icon" aria-hidden="true"><Icon size={24} strokeWidth={1.5}/></span>
+                  </div>
+                </header>
               );
             })()}
             {currentView === "dashboard" && (
@@ -759,7 +724,7 @@ function VfdSandboxInner() {
         )}
       </div>
       {kycDone && (
-        <nav aria-label="Main" className="vestara-bottom-nav at-bottom-nav v4-underline-nav v4-floating-nav vm-dock shrink-0 z-30">
+        <nav aria-label="Main" className="vestara-bottom-nav at-bottom-nav vm-dock clean-bottom-nav shrink-0 z-30">
           <div className="vestara-bottom-tabs vm-dock-tabs grid grid-cols-5">
             {([
               { label: "Home", icon: Home, active: currentView === "dashboard", go: () => setCurrentView("dashboard") },
