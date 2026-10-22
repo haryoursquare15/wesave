@@ -241,8 +241,8 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
   };
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center gap-3">
+    <div className="signature-transfer space-y-5">
+      <div className="signature-transfer-top flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={onBack}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
@@ -257,7 +257,7 @@ export function SandboxTransfer({ loading, accountNumber, banks, onLoadBanks, on
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          className="space-y-2"
+          className="signature-beneficiaries space-y-2"
         >
           <div className="flex items-center gap-2 px-1">
             <Users className="h-3.5 w-3.5 text-muted-foreground" />
