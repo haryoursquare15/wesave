@@ -1,0 +1,11 @@
+{
+  "expo": {
+    "name": "Vestara",
+    "slug": "vestara-expo-preview",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "ios": { "supportsTablet": false },
+    "android": { "softwareKeyboardLayoutMode": "resize" }
+  }
+}
