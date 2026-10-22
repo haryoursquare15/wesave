@@ -1,0 +1,310 @@
+@import url("https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap");
+/* VESTARA SIGNATURE — deliberate editorial banking system
+ * Last-loaded and scoped to /app. Features and payment state stay in the React components.
+ * Layers: warm-paper workspace, mineral-black cash stage, citron actions, clean ink modules.
+ */
+.vestara-app.signature-shell{
+  --sg-bg:#f5f4ef;--sg-surface:#fff;--sg-ink:#1b201e;--sg-muted:#777e76;
+  --sg-stroke:#dedfd7;--sg-inverse:#151d19;--sg-accent:#daed87;
+  --sg-accent-ink:#172218;--sg-subtle:#eff0e8;
+  --background:52 20% 96%;--foreground:150 8% 13%;--card:0 0% 100%;
+  --card-foreground:150 8% 13%;--muted:70 12% 93%;--muted-foreground:130 4% 42%;
+  --border:75 10% 85%;--input:75 10% 85%;--popover:0 0% 100%;--popover-foreground:150 8% 13%;
+  --primary:150 15% 12%;--primary-foreground:0 0% 100%;--ring:76 77% 68%;
+  background:var(--sg-bg)!important;color:var(--sg-ink)!important;
+  font-family:"Montserrat",sans-serif!important;font-feature-settings:"tnum" 1;
+}
+.signature-shell :is(h1,h2,h3,h4,p,label,button,input,select,textarea,small,strong,span){font-family:inherit}
+.signature-shell :is(button,a,input,textarea,select,[role=button]):focus-visible{outline:3px solid #a2cb43!important;outline-offset:3px!important}
+.signature-shell :is(button,a){touch-action:manipulation}
+.signature-shell .vm-workspace{background:var(--sg-bg)!important;padding:32px clamp(20px,4vw,70px) 110px!important;max-width:none!important;min-width:0;scrollbar-color:#c3c9bd transparent}
+.signature-shell .vm-app-page{max-width:1350px!important;width:100%;gap:30px!important;min-width:0}
+.signature-shell .vm-header{background:var(--sg-bg)!important;border-bottom:1px solid var(--sg-stroke)!important;min-height:76px!important;backdrop-filter:blur(16px)!important}
+.signature-shell .vm-header-inner{height:76px!important;min-height:76px!important;max-width:none!important;padding:12px clamp(20px,4vw,70px)!important}
+.signature-shell .vm-header-brand img{height:34px!important}
+.signature-shell .vm-header-edition{color:var(--sg-muted)!important;border-left-color:var(--sg-stroke)!important;letter-spacing:.11em!important}
+.signature-shell .vm-header-edition i{background:#88ad58!important}
+.signature-shell .vm-header-back,.signature-shell .vm-header-actions>button{background:var(--sg-surface)!important;border:1px solid var(--sg-stroke)!important;color:var(--sg-ink)!important}
+.signature-shell .vm-sidebar{background:#171e1a!important;border-right:1px solid #29362e!important;padding:32px 15px 24px!important}
+.signature-shell .vm-sidebar-emblem{background:var(--sg-accent)!important;color:#182419!important;border-radius:10px!important;font-family:Georgia,serif!important}
+.signature-shell .vm-sidebar-emblem span{color:#668d3d!important}
+.signature-shell .vm-sidebar-brand>div>span,.signature-shell .vm-sidebar-caption{color:#adb9ab!important}
+.signature-shell .vm-sidebar-section>span{color:#9aaa9e!important;letter-spacing:.19em!important}
+.signature-shell .vm-sidebar-section>button{min-height:46px!important;border-radius:7px!important;color:#c4d0c5!important;letter-spacing:-.015em!important}
+.signature-shell .vm-sidebar-section>button svg{color:#a6b4a7!important}
+.signature-shell .vm-sidebar-section>button:hover{background:#2c3830!important;color:#fff!important}
+.signature-shell .vm-sidebar-section>button[aria-current=page]{background:var(--sg-accent)!important;color:#1b251c!important}
+.signature-shell .vm-sidebar-section>button[aria-current=page] svg{color:#1b251c!important}
+.signature-shell .vm-sidebar-section .at-sidebar-active-dot{background:#416a35!important}
+.signature-shell .vm-sidebar-footer{color:#b4c2b2!important}
+.signature-shell .vm-sidebar-footer svg{color:var(--sg-accent)!important}
+.signature-shell .vm-dock{border-radius:13px!important;border:1px solid #424f45!important;background:#181f1b!important;box-shadow:0 8px 22px #0d140d28!important}
+.signature-shell .vm-dock .vm-dock-tab{color:#bdc9bc!important}
+.signature-shell .vm-dock [aria-current=page]{color:var(--sg-accent)!important}
+.signature-shell .vm-dock [aria-current=page] .vm-dock-icon{color:var(--sg-accent)!important}
+.signature-shell .vm-dock .vm-dock-caption{letter-spacing:.01em!important}
+/* Authentic component-level home reconstruction */
+.signature-shell .signature-dashboard{display:flex;flex-direction:column;gap:37px;width:100%;max-width:1350px;min-width:0;margin:0 auto}
+.signature-shell .signature-welcome{display:flex;justify-content:space-between;align-items:end;gap:25px;padding:10px 0 5px}
+.signature-shell .signature-eyebrow{font-size:9px;font-weight:800;letter-spacing:.17em;color:#66786b;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.signature-shell .signature-dot{width:7px;height:7px;background:#689557;display:inline-block;border-radius:50%}
+.signature-shell .signature-slash{color:#b4bcb0}
+.signature-shell .signature-greeting{font-size:12px;font-weight:600;color:#66776b;margin:23px 0 4px}
+.signature-shell .signature-welcome h1{font-size:clamp(37px,4.7vw,67px);line-height:1.07;letter-spacing:-.075em;font-weight:700;color:var(--sg-ink);margin:0}
+.signature-shell .signature-welcome h1 em{font-family:Georgia,serif!important;letter-spacing:-.07em;font-weight:400;color:#7a8d6c}
+.signature-shell .signature-welcome p{font-size:12px;color:var(--sg-muted);margin:13px 0 0;line-height:1.7}
+.signature-shell .signature-avatar-trigger{display:flex;align-items:center;gap:11px;padding:7px;border:1px solid var(--sg-stroke);border-radius:99px;background:var(--sg-surface);color:var(--sg-ink)}
+.signature-shell .signature-avatar{height:49px!important;width:49px!important}
+.signature-shell .signature-hero-grid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(270px,.85fr);gap:13px;align-items:stretch}
+.signature-shell .signature-money-panel{background:var(--sg-inverse);color:#fff;min-height:350px;border-radius:12px;padding:34px clamp(26px,3vw,44px) 28px;display:flex;flex-direction:column;justify-content:space-between;position:relative;isolation:isolate;overflow:hidden;min-width:0}
+.signature-shell .signature-money-top,.signature-shell .signature-account-top{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:9px;font-weight:800;letter-spacing:.18em;position:relative;z-index:1}
+.signature-shell .signature-money-top{color:#c0d1be}
+.signature-shell .signature-money-top>span:last-child{display:flex;align-items:center;gap:8px}
+.signature-shell .signature-money-center{position:relative;z-index:1;margin:38px 0 24px}
+.signature-shell .signature-balance-label{display:flex;align-items:center;gap:25px;color:#ccd9ce;font-size:12px}
+.signature-shell .signature-balance-label button{display:flex;align-items:center;gap:7px;color:#e8f0e8;background:#ffffff13;border:1px solid #ffffff27;border-radius:99px;padding:8px 12px;font-size:10px}
+.signature-shell .signature-big-money{font-size:clamp(36px,4.4vw,64px);font-weight:700;line-height:1.18;letter-spacing:-.074em;overflow-wrap:anywhere;margin:17px 0 8px;color:#f6fbf3}
+.signature-shell .signature-money-center p{font-size:11px;color:#aebbb1;line-height:1.7}
+.signature-shell .signature-money-bottom{display:flex;gap:11px;flex-wrap:wrap;position:relative;z-index:2}
+.signature-shell .signature-money-bottom button{display:inline-flex;align-items:center;justify-content:space-between;gap:24px;min-height:47px;padding:12px 17px;border-radius:6px;font-size:11px;font-weight:750;transition:transform .18s}
+.signature-shell .signature-money-bottom button:hover{transform:translateY(-2px)}
+.signature-shell .signature-primary-action{background:var(--sg-accent);color:#19251c}
+.signature-shell .signature-secondary-action{background:transparent;color:#f7fbf6;border:1px solid #667669}
+.signature-shell .signature-hero-monogram{position:absolute;right:-20px;top:15%;font:400 335px/.9 Georgia,serif;color:#ffffff09;pointer-events:none;user-select:none;z-index:0}
+.signature-shell .signature-account-panel{background:#e6eadb;border:1px solid #d6ddcc;border-radius:12px;min-height:350px;padding:30px clamp(22px,2.5vw,32px) 24px;display:flex;flex-direction:column;justify-content:space-between;gap:19px;min-width:0;color:#243427}
+.signature-shell .signature-account-top{color:#536e56}
+.signature-shell .signature-account-holder{display:flex;flex-direction:column;gap:8px}
+.signature-shell .signature-account-holder>span,.signature-shell .signature-account-copy>span{font-size:9px;letter-spacing:.15em;font-weight:750;color:#657969}
+.signature-shell .signature-account-holder strong{font-size:clamp(18px,1.8vw,25px);line-height:1.3;letter-spacing:-.045em;font-weight:700;overflow-wrap:anywhere;color:#1c3023}
+.signature-shell .signature-account-holder small{font-size:10px;color:#6b816f}
+.signature-shell .signature-account-copy{padding:17px 0 18px;border-top:1px solid #c3cfc0;border-bottom:1px solid #c3cfc0;display:flex;flex-direction:column;gap:10px}
+.signature-shell .signature-account-copy button{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:clamp(16px,1.8vw,24px);font-weight:750;letter-spacing:-.04em;text-align:left;overflow-wrap:anywhere;color:#1f3524}
+.signature-shell .signature-account-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:10px;color:#547159}
+.signature-shell .signature-account-foot span,.signature-shell .signature-account-foot button{display:flex;align-items:center;gap:7px}
+.signature-shell .signature-account-foot button{color:#1f3d24;font-weight:750}
+.signature-shell .signature-composition{display:grid;grid-template-columns:minmax(200px,.85fr) minmax(0,2fr);border:1px solid var(--sg-stroke);border-radius:10px;background:var(--sg-surface);overflow:hidden}
+.signature-shell .signature-composition-label{padding:25px;border-right:1px solid var(--sg-stroke);display:flex;flex-direction:column;gap:15px}
+.signature-shell .signature-composition-label>span,.signature-shell .signature-section-title>div>span,.signature-shell .signature-spend-control>div>span{font-size:9px;letter-spacing:.16em;font-weight:800;color:#778775}
+.signature-shell .signature-composition-label strong{font-size:18px;letter-spacing:-.05em;line-height:1.43;color:var(--sg-ink)}
+.signature-shell .signature-composition-items{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));min-width:0}
+.signature-shell .signature-composition-item{display:flex;flex-direction:column;gap:10px;padding:26px 18px;border-right:1px solid var(--sg-stroke);min-width:0}
+.signature-shell .signature-composition-item:last-child{border-right:0}
+.signature-shell .signature-composition-item>span{font-size:10px;white-space:nowrap;color:#748072;font-weight:650}
+.signature-shell .signature-composition-item>strong{font-size:clamp(16px,1.8vw,23px);letter-spacing:-.06em;color:var(--sg-ink);overflow-wrap:anywhere}
+.signature-shell .signature-composition-item>small{font-size:9px;color:#8f9a90}
+.signature-shell .signature-key{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:8px;background:#212f27}
+.signature-shell .signature-key-savings{background:#a5c65f}
+.signature-shell .signature-key-locked{background:#bac6c2}
+.signature-shell .signature-composition-bar{grid-column:1/-1;height:6px;display:flex;background:#e8ede1}
+.signature-shell .signature-bar-available{background:#212f27}
+.signature-shell .signature-bar-savings{background:#a5c65f}
+.signature-shell .signature-bar-locked{background:#bac6c2}
+.signature-shell .signature-bar-empty{width:100%;background:#e3e8dd}
+.signature-shell .signature-section{display:flex;flex-direction:column;gap:18px}
+.signature-shell .signature-section-title{display:flex;align-items:end;justify-content:space-between;gap:16px}
+.signature-shell .signature-section-title h2{font-size:clamp(23px,2.7vw,37px);font-weight:750;letter-spacing:-.06em;color:var(--sg-ink);margin:7px 0 0}
+.signature-shell .signature-section-title h2 em{font-family:Georgia,serif!important;font-weight:400;color:#768d71}
+.signature-shell .signature-section-title>p{font-size:11px;color:#838e83}
+.signature-shell .signature-section-title>button{color:#25492d;font-size:11px;display:flex;align-items:center;gap:9px;font-weight:750;padding:9px}
+.signature-shell .signature-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.signature-shell .signature-action-tile{background:var(--sg-surface);border:1px solid var(--sg-stroke);border-radius:9px;min-height:167px;text-align:left;padding:22px;display:flex;flex-direction:column;position:relative;transition:background .2s,transform .2s}
+.signature-shell .signature-action-tile:hover{background:#e9efdc;transform:translateY(-3px)}
+.signature-shell .signature-action-top{display:flex;justify-content:space-between;align-items:start;gap:8px;font-size:9px;font-weight:800;letter-spacing:.13em;color:#8b9787}
+.signature-shell .signature-action-top svg{color:#254332}
+.signature-shell .signature-action-copy{display:flex;flex-direction:column;gap:6px;margin-top:auto}
+.signature-shell .signature-action-copy strong{font-size:16px;letter-spacing:-.04em;font-weight:750;color:#1d2b21}
+.signature-shell .signature-action-copy small{font-size:10px;color:#758074}
+.signature-shell .signature-action-chevron{position:absolute;right:22px;bottom:24px;color:#98a598}
+.signature-shell .signature-feature-grid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(275px,.7fr);gap:13px;align-items:stretch}
+.signature-shell .signature-activity{background:var(--sg-surface);border:1px solid var(--sg-stroke);border-radius:10px;padding:27px;min-width:0}
+.signature-shell .signature-activity .signature-section-title h2{font-size:26px}
+.signature-shell .signature-transactions{margin-top:19px}
+.signature-shell .signature-transaction{border-top:1px solid var(--sg-stroke);width:100%;display:flex;align-items:center;gap:13px;text-align:left;min-height:68px}
+.signature-shell .signature-transaction-icon{display:grid;place-items:center;width:40px;height:40px;flex-shrink:0;border-radius:50%;background:#e3eddd;color:#31654a}
+.signature-shell .signature-transaction-icon.debit{background:#f0e9e4;color:#8b5a42}
+.signature-shell .signature-transaction-copy{display:flex;flex:1;min-width:0;flex-direction:column;gap:6px}
+.signature-shell .signature-transaction-copy strong{font-size:11px;font-weight:750;color:var(--sg-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.signature-shell .signature-transaction-copy small{color:var(--sg-muted);font-size:9px}
+.signature-shell .signature-transaction-money{font-size:12px;font-weight:700;color:var(--sg-ink);white-space:nowrap}
+.signature-shell .signature-transaction>svg:last-child{color:#94a396}
+.signature-shell .signature-activity-empty{min-height:195px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;gap:11px;color:var(--sg-muted);font-size:12px}
+.signature-shell .signature-activity-empty strong{color:var(--sg-ink);font-size:14px}
+.signature-shell .signature-activity-empty>button{color:#2e5734;display:flex;align-items:center;gap:7px;font-weight:750}
+.signature-shell .signature-feature{padding:28px;display:flex;flex-direction:column;justify-content:space-between;min-height:322px;background:var(--sg-accent);border-radius:10px;color:#1d281d;position:relative;overflow:hidden}
+.signature-shell .signature-feature:after{content:"";position:absolute;right:-80px;bottom:15%;width:270px;height:270px;border-radius:50%;border:1px solid #4b6e3933;box-shadow:0 0 0 32px #4b6e3910,0 0 0 64px #4b6e390a;pointer-events:none}
+.signature-shell .signature-feature-top{display:flex;align-items:center;justify-content:space-between;font-size:9px;letter-spacing:.16em;font-weight:850}
+.signature-shell .signature-feature-index{font-size:9px;font-weight:800;letter-spacing:.15em}
+.signature-shell .signature-feature h2{font-size:clamp(29px,3vw,41px);letter-spacing:-.07em;line-height:1.13;font-weight:750;margin:13px 0}
+.signature-shell .signature-feature h2 em{font-family:Georgia,serif!important;font-weight:400}
+.signature-shell .signature-feature p{font-size:11px;line-height:1.8;max-width:260px}
+.signature-shell .signature-feature>button{position:relative;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:14px;border-top:1px solid #2c492c57;padding-top:15px;font-size:12px;font-weight:850}
+.signature-shell .signature-journeys{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}
+.signature-shell .signature-journey{min-width:0;border:1px solid var(--sg-stroke);border-radius:9px;background:var(--sg-surface);padding:24px;display:grid;grid-template-columns:22px 43px minmax(0,1fr) 23px;align-items:center;gap:15px;text-align:left;transition:transform .2s,background .2s}
+.signature-shell .signature-journey:hover{transform:translateY(-2px);background:#edf1e7}
+.signature-shell .signature-journey-index{align-self:start;font-size:10px;color:#829183}
+.signature-shell .signature-journey-icon{width:43px;height:43px;border-radius:50%;display:grid;place-items:center;background:#e9efe2;color:#264630}
+.signature-shell .signature-journey-copy{display:flex;flex-direction:column;gap:7px;min-width:0}
+.signature-shell .signature-journey-copy small{font-size:9px;letter-spacing:.12em;color:#829183;font-weight:750}
+.signature-shell .signature-journey-copy strong{font-size:14px;color:var(--sg-ink);font-weight:750;letter-spacing:-.04em}
+.signature-shell .signature-journey-copy>span{font-size:10px;color:#778375;line-height:1.65}
+.signature-shell .signature-journey-arrow{align-self:start;color:#657769}
+.signature-shell .signature-spend-control{display:grid;grid-template-columns:minmax(185px,.65fr) minmax(0,1.6fr);gap:20px;background:#e9ece3;border:1px solid #dce2d7;border-radius:10px;padding:26px;min-width:0}
+.signature-shell .signature-spend-control h2{font-size:clamp(22px,2.4vw,29px);letter-spacing:-.06em;font-weight:750;margin:10px 0}
+.signature-shell .signature-spend-control p{font-size:11px;line-height:1.7;color:#758273}
+.signature-shell .signature-spend-control>*{min-width:0}
+/* Entire app: a unified editorial shell rather than disconnected component palettes */
+.signature-shell .vv-breadcrumb{display:flex;align-items:center;gap:8px;margin:0 0 -7px!important;color:#79887a!important;font-size:10px;font-weight:650}
+.signature-shell .vv-breadcrumb button{color:#426e42!important}
+.signature-shell .vv-folio{display:grid!important;grid-template-columns:minmax(0,1.35fr) minmax(210px,.45fr)!important;background:var(--sg-inverse)!important;border-radius:10px!important;border:0!important;overflow:hidden;min-height:245px!important;box-shadow:none!important}
+.signature-shell .vv-folio-main{padding:31px clamp(25px,3.2vw,48px)!important;background:transparent!important}
+.signature-shell .vv-folio-kicker{font-size:9px!important;letter-spacing:.17em!important;color:#c6ddc3!important}
+.signature-shell .vv-folio-mark{background:var(--sg-accent)!important}
+.signature-shell .vv-folio-main h1{color:#f9fcf8!important;font-size:clamp(34px,4vw,55px)!important;line-height:1.08!important;letter-spacing:-.07em!important;font-weight:750!important}
+.signature-shell .vv-folio-main h1 span{color:var(--sg-accent)!important}
+.signature-shell .vv-folio-main>p{color:#aec6af!important;line-height:1.7!important}
+.signature-shell .vv-folio-links{padding-top:22px!important;display:flex;gap:8px;flex-wrap:wrap}
+.signature-shell .vv-folio-links button{border:1px solid #72836d!important;border-radius:99px!important;background:#ffffff08!important;color:#e9f3e7!important;font-size:10px!important;padding:10px 15px!important;display:flex;align-items:center;gap:8px}
+.signature-shell .vv-folio-links button:hover{background:#d9ee91!important;color:#1a231d!important}
+.signature-shell .vv-folio-aside{background:var(--sg-accent)!important;border:0!important;display:flex;flex-direction:column;justify-content:space-between;min-height:245px!important;color:#1b2c1b!important;padding:25px!important}
+.signature-shell .vv-folio-aside:before,.signature-shell .vv-folio-aside:after{display:none!important}
+.signature-shell .vv-folio-aside-top,.signature-shell .vv-folio-aside-foot{color:#253b24!important}
+.signature-shell .vv-folio-glyph{color:#25432a!important}
+.signature-shell .vv-folio-aside-foot strong{color:#20341f!important}
+.signature-shell .vv-app-module{display:flex;flex-direction:column;gap:24px!important}
+.signature-shell .vv-app-module > :last-child{width:100%;min-width:0}
+.signature-shell .vv-app-module :is(.premium-savings,.premium-split,.premium-profile,.at-bills,.at-insights,.premium-service-page){color:var(--sg-ink)!important}
+.signature-shell .vv-app-module :is(.premium-savings,.premium-split,.premium-profile,.at-bills,.at-insights) :is(.bg-card,[class*="rounded-2xl"][class*="border"]){border-radius:10px!important;border-color:var(--sg-stroke)!important}
+.signature-shell .vv-app-module :is(.bg-card,.bg-muted\/30,.bg-muted\/50){background:var(--sg-surface)!important}
+.signature-shell .vv-app-module :is(.premium-savings,.premium-split,.at-bills,.at-insights) :is(.bg-gradient-ink,.bg-gradient-to-br){background-image:none!important}
+.signature-shell .vv-app-module .premium-savings .bg-gradient-ink{background:var(--sg-inverse)!important;color:#f4f9f1!important;border-radius:12px!important}
+.signature-shell .vv-app-module .premium-profile .at-profile-passport{background:var(--sg-inverse)!important;color:#fff!important;border:0!important;border-radius:12px!important}
+.signature-shell .vv-app-module .premium-profile-hub>button{background:var(--sg-surface)!important;border:1px solid var(--sg-stroke)!important;border-radius:10px!important;padding:21px!important}
+.signature-shell .vv-app-module .premium-profile-hub-glyph{background:#e6eddf!important;color:#29472d!important;border-radius:50%!important}
+.signature-shell .vv-app-module .premium-profile-row{border-radius:8px!important;background:var(--sg-surface)!important;border-color:var(--sg-stroke)!important}
+.signature-shell .vv-app-module .premium-profile-row-icon{background:#e9efe2!important;color:#26462d!important}
+.signature-shell .vv-app-module .premium-profile-heading{padding:0 0 14px;border-bottom:1px solid var(--sg-stroke)!important}
+.signature-shell .vv-app-module .premium-profile-heading>h1,.signature-shell .vv-app-module :is(.premium-savings-heading,.premium-split-heading,.premium-bills-heading)>h1{letter-spacing:-.06em!important;font-weight:750!important}
+.signature-shell .vv-app-module :is(input:not([type=checkbox]):not([type=radio]),select,textarea){background:var(--sg-surface)!important;color:var(--sg-ink)!important;border:1px solid var(--sg-stroke)!important;border-radius:7px!important;min-height:44px}
+.signature-shell .vv-app-module :is(button.bg-primary,button[class*="bg-primary"]:not([role=switch])){background:var(--sg-inverse)!important;color:#fff!important;border-radius:7px!important}
+.signature-shell .vv-app-module :is(.text-primary){color:#2c633b!important}
+.signature-shell .vv-app-module :is(.bg-primary\/5,.bg-primary\/10){background:#e8eee2!important}
+.signature-shell .vv-app-module [role=switch][data-state=checked]{background:#2c5332!important}
+.signature-shell .vv-app-module .v4-theme-options{background:#e7ece2!important;border:1px solid var(--sg-stroke)!important;border-radius:9px!important}
+.signature-shell .vv-app-module .v4-theme-options button{border-radius:7px!important}
+.signature-shell .vv-app-module .v4-theme-options button[aria-pressed=true]{background:var(--sg-inverse)!important;color:#fff!important}
+/* Responsive mobile is a first-class layout: no overflow and 44px touch targets */
+@media(min-width:960px){
+  .vestara-app.signature-shell{display:grid!important;grid-template-columns:248px minmax(0,1fr)!important;grid-template-rows:76px minmax(0,1fr)!important}
+  .signature-shell .vm-sidebar{grid-column:1!important;grid-row:1/3!important}
+  .signature-shell .vm-header{grid-column:2!important;grid-row:1!important}
+  .signature-shell .vm-workspace{grid-column:2!important;grid-row:2!important}
+}
+@media(max-width:1100px){
+  .signature-shell .signature-feature-grid{grid-template-columns:minmax(0,1fr)!important}
+  .signature-shell .signature-hero-grid{grid-template-columns:minmax(0,1.3fr) minmax(240px,.85fr)}
+  .signature-shell .signature-actions{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .signature-shell .signature-action-tile{min-height:135px}
+}
+@media(max-width:730px){
+  .signature-shell .vm-header,.signature-shell .vm-header-inner{min-height:63px!important;height:63px!important}
+  .signature-shell .vm-header-inner{padding:9px 17px!important}
+  .signature-shell .vm-header-edition{display:none!important}
+  .signature-shell .vm-sidebar{display:none!important}
+  .signature-shell .vm-workspace{padding:22px 15px 125px!important}
+  .signature-shell .vm-app-page{gap:22px!important}
+  .signature-shell .signature-dashboard{gap:29px}
+  .signature-shell .signature-welcome{align-items:start;padding:8px 0 0;gap:9px}
+  .signature-shell .signature-welcome h1{font-size:clamp(33px,8vw,47px)}
+  .signature-shell .signature-eyebrow{font-size:8px;gap:7px;line-height:1.7}
+  .signature-shell .signature-greeting{margin-top:14px;font-size:10px}
+  .signature-shell .signature-welcome p{font-size:10px}
+  .signature-shell .signature-avatar-trigger{padding:3px;gap:3px}
+  .signature-shell .signature-avatar{height:37px!important;width:37px!important}
+  .signature-shell .signature-avatar-trigger>svg{display:none}
+  .signature-shell .signature-hero-grid{grid-template-columns:minmax(0,1fr);gap:10px}
+  .signature-shell .signature-money-panel{padding:25px 24px 23px;min-height:307px}
+  .signature-shell .signature-money-center{margin:45px 0 28px}
+  .signature-shell .signature-big-money{font-size:clamp(33px,9vw,52px)}
+  .signature-shell .signature-money-top{font-size:8px}
+  .signature-shell .signature-money-bottom{gap:7px}
+  .signature-shell .signature-money-bottom button{min-height:43px;padding:10px 12px;font-size:10px;gap:13px}
+  .signature-shell .signature-account-panel{min-height:240px;padding:23px}
+  .signature-shell .signature-account-holder strong{font-size:20px}
+  .signature-shell .signature-account-copy{padding:14px 0}
+  .signature-shell .signature-composition{grid-template-columns:minmax(0,1fr)}
+  .signature-shell .signature-composition-label{border-right:0;border-bottom:1px solid var(--sg-stroke);padding:20px}
+  .signature-shell .signature-composition-label strong{font-size:16px}
+  .signature-shell .signature-composition-items{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .signature-shell .signature-composition-item{padding:18px 10px}
+  .signature-shell .signature-composition-item>span{font-size:8px;white-space:normal;line-height:1.6}
+  .signature-shell .signature-composition-item>strong{font-size:clamp(11px,3.5vw,17px)}
+  .signature-shell .signature-composition-item>small{font-size:8px}
+  .signature-shell .signature-section-title{align-items:start;flex-direction:column;gap:6px}
+  .signature-shell .signature-section-title h2{font-size:clamp(24px,6vw,33px)}
+  .signature-shell .signature-actions{gap:8px}
+  .signature-shell .signature-action-tile{padding:16px;min-height:135px}
+  .signature-shell .signature-action-copy strong{font-size:13px}
+  .signature-shell .signature-action-copy small{font-size:9px}
+  .signature-shell .signature-action-top{font-size:8px}
+  .signature-shell .signature-action-chevron{right:14px;bottom:16px}
+  .signature-shell .signature-activity{padding:18px}
+  .signature-shell .signature-activity .signature-section-title h2{font-size:23px}
+  .signature-shell .signature-feature{min-height:300px;padding:23px}
+  .signature-shell .signature-journeys{grid-template-columns:minmax(0,1fr)}
+  .signature-shell .signature-journey{grid-template-columns:18px 40px minmax(0,1fr) 20px;padding:17px;gap:9px}
+  .signature-shell .signature-spend-control{grid-template-columns:minmax(0,1fr);padding:20px}
+  .signature-shell .vv-folio{grid-template-columns:minmax(0,1fr)!important}
+  .signature-shell .vv-folio-main{padding:29px 24px!important}
+  .signature-shell .vv-folio-main h1{font-size:clamp(34px,8vw,46px)!important}
+  .signature-shell .vv-folio-aside{min-height:76px!important;flex-direction:row!important;align-items:center!important;padding:13px 23px!important}
+  .signature-shell .vv-folio-glyph{display:none!important}
+  .signature-shell .vv-folio-links{gap:5px}
+  .signature-shell .vv-folio-links button{font-size:9px!important;padding:9px 11px!important}
+  .signature-shell .vm-dock{width:calc(100% - 20px)!important;margin:0 10px max(9px,env(safe-area-inset-bottom,0px))!important}
+}
+@media(max-width:375px){
+  .signature-shell .vm-workspace{padding-left:12px!important;padding-right:12px!important}
+  .signature-shell .signature-big-money{font-size:31px}
+  .signature-shell .signature-composition-item{padding:15px 7px}
+  .signature-shell .signature-composition-item>strong{font-size:11px}
+  .signature-shell .signature-money-bottom button{font-size:9px}
+}
+/* Functional dark appearance; keep the semantic palette and legible emphasis */
+.dark .vestara-app.signature-shell{
+  --sg-bg:#101713;--sg-surface:#1b241e;--sg-ink:#f4f6ef;--sg-muted:#afbcb0;
+  --sg-stroke:#36453a;--sg-inverse:#19271e;--sg-accent:#d8ef84;--sg-subtle:#263228;
+  --background:145 18% 8%;--foreground:70 25% 96%;--card:145 15% 14%;
+  --card-foreground:70 25% 96%;--muted:140 10% 20%;--muted-foreground:130 10% 70%;
+  --border:140 13% 25%;--input:140 13% 25%;--popover:145 15% 14%;--popover-foreground:70 25% 96%;
+  --primary:76 77% 72%;--primary-foreground:145 15% 10%;
+  color:var(--sg-ink)!important;background:var(--sg-bg)!important
+}
+.dark .signature-shell .vm-workspace,.dark .signature-shell .vm-header{background:var(--sg-bg)!important;border-color:var(--sg-stroke)!important}
+.dark .signature-shell .signature-welcome h1,.dark .signature-shell .signature-composition-label strong,.dark .signature-shell .signature-section-title h2,.dark .signature-shell .signature-action-copy strong,.dark .signature-shell .signature-composition-item strong,.dark .signature-shell .signature-transaction-copy strong,.dark .signature-shell .signature-transaction-money,.dark .signature-shell .signature-journey-copy strong,.dark .signature-shell .signature-spend-control h2{color:var(--sg-ink)!important}
+.dark .signature-shell .signature-welcome h1 em,.dark .signature-shell .signature-section-title h2 em{color:#afc9a0!important}
+.dark .signature-shell .signature-composition,.dark .signature-shell .signature-action-tile,.dark .signature-shell .signature-activity,.dark .signature-shell .signature-journey{background:var(--sg-surface)!important;border-color:var(--sg-stroke)!important}
+.dark .signature-shell .signature-account-panel{background:#293b2c!important;border-color:#405342!important;color:#eff8ed!important}
+.dark .signature-shell .signature-account-holder strong,.dark .signature-shell .signature-account-copy button{color:#f4f9f1!important}
+.dark .signature-shell .signature-account-holder>span,.dark .signature-shell .signature-account-copy>span,.dark .signature-shell .signature-account-foot,.dark .signature-shell .signature-account-foot button,.dark .signature-shell .signature-account-top{color:#b8d1b7!important}
+.dark .signature-shell .signature-account-copy{border-color:#47614a!important}
+.dark .signature-shell .signature-account-holder small{color:#a9bfa8!important}
+.dark .signature-shell .signature-action-tile:hover,.dark .signature-shell .signature-journey:hover{background:#2a372d!important}
+.dark .signature-shell .signature-action-top svg{color:#d8ef84!important}
+.dark .signature-shell .signature-transaction{border-color:var(--sg-stroke)!important}
+.dark .signature-shell .signature-transaction-icon{background:#334936!important}
+.dark .signature-shell .signature-transaction-icon.debit{background:#46362b!important}
+.dark .signature-shell .signature-journey-icon{background:#334737!important;color:#d8ef84!important}
+.dark .signature-shell .signature-spend-control{background:#202f25!important;border-color:#405544!important}
+.dark .signature-shell .signature-composition-bar{background:#303d30!important}
+.dark .signature-shell .signature-account-foot button{color:#daecb7!important}
+.dark .signature-shell .vv-folio{background:var(--sg-inverse)!important}
+.dark .signature-shell .vv-folio-main h1{color:#f5fbf1!important}
+.dark .signature-shell .vv-app-module :is(.bg-card,.bg-muted\/30,.bg-muted\/50){background:var(--sg-surface)!important;color:var(--sg-ink)!important}
+.dark .signature-shell .vv-app-module :is(.premium-profile-hub>button,.premium-profile-row){background:var(--sg-surface)!important;border-color:var(--sg-stroke)!important}
+.dark .signature-shell .vv-app-module :is(.premium-savings,.premium-split,.premium-profile,.at-bills,.at-insights) :is(.bg-card,[class*="rounded-2xl"][class*="border"]){border-color:var(--sg-stroke)!important}
+.dark .signature-shell .vv-app-module :is(.text-primary){color:#c3e6a0!important}
+.dark .signature-shell .vv-app-module :is(.bg-primary\/5,.bg-primary\/10){background:#2e3c31!important}
+.dark .signature-shell .vv-app-module .v4-theme-options{background:#2d3a2e!important;border-color:#405341!important}
+.dark .signature-shell .vv-app-module :is(input:not([type=checkbox]):not([type=radio]),select,textarea){background:#222f25!important;color:#f7fcf5!important;border-color:#475c4b!important}
+.dark .signature-shell .vv-app-module :is(button.bg-primary,button[class*="bg-primary"]:not([role=switch])){background:var(--sg-accent)!important;color:#17261a!important}
+@media(prefers-reduced-motion:reduce){.signature-shell *, .signature-shell *:before,.signature-shell *:after{scroll-behavior:auto!important;animation-duration:.01ms!important;transition-duration:.01ms!important}}
