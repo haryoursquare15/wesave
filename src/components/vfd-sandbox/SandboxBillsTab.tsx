@@ -762,7 +762,7 @@ export function SandboxBillsTab({ onOpenSplit }: { onOpenSplit?: () => void } = 
   };
 
   return (
-    <div className="premium-bills at-bills space-y-4">
+    <div className="premium-bills at-bills signature-bills space-y-4">
       {/* Header */}
       {step !== "categories" && (
         <motion.div
