@@ -13,7 +13,7 @@ import { ProfilePictureUpload } from "@/components/settings/ProfilePictureUpload
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { SandboxHeader } from "@/components/vfd-sandbox/SandboxHeader";
 import vestaraLogo from "@/assets/vestara-logo-transparent.png";
-import { SandboxDashboard } from "@/components/vfd-sandbox/SandboxDashboard";
+import { VestaraSignatureDashboard } from "@/components/vfd-sandbox/VestaraSignatureDashboard";
 import { SandboxKYC } from "@/components/vfd-sandbox/SandboxKYC";
 import { SandboxSavings } from "@/components/vfd-sandbox/SandboxSavings";
 import { SandboxFund } from "@/components/vfd-sandbox/SandboxFund";
@@ -549,8 +549,8 @@ function VfdSandboxInner() {
   });
 
   return (
-    <div data-view={currentView} className="vestara-app at-shell v4-app vm-app h-[100dvh] flex flex-col overflow-hidden">
-      {kycDone && <aside className="at-sidebar vm-sidebar" aria-label="Main navigation">
+    <div data-view={currentView} className="vestara-app at-shell v4-app vm-app signature-shell h-[100dvh] flex flex-col overflow-hidden">
+      {kycDone && <aside className="at-sidebar vm-sidebar signature-sidebar" aria-label="Main navigation">
         <div className="at-sidebar-brand vm-sidebar-brand">
           <span className="vm-sidebar-emblem">V<span>.</span></span>
           <div><img src={vestaraLogo} alt="Vestara" /><span>YOUR MONEY SPACE</span></div>
@@ -596,7 +596,7 @@ function VfdSandboxInner() {
       <ProfilePictureUpload open={photoOpen} onOpenChange={setPhotoOpen} />
       {kycDone && <SandboxGroupInviteModal onAccepted={() => { /* downstream UIs poll on their own */ }} />}
       {kycDone && <SandboxSplitInviteModal onOpenSplit={() => { setCurrentView("split"); window.dispatchEvent(new Event("vestara:open-split")); }} />}
-      <div className="vestara-app-scroll at-workspace vm-workspace flex-1 overflow-y-auto overscroll-contain w-full mx-auto">
+      <div className="vestara-app-scroll at-workspace vm-workspace signature-workspace flex-1 overflow-y-auto overscroll-contain w-full mx-auto">
         {!kycDone ? (
           <SandboxKYC
             vfd={vfd}
@@ -609,7 +609,7 @@ function VfdSandboxInner() {
         ) : (
           <div
             key={currentView}
-            className={`premium-app-page at-page vm-app-page vv-app-page ${currentView === "dashboard" ? "vv-home-page" : "vv-app-module"}`}
+            className={`premium-app-page at-page vm-app-page vv-app-page signature-page ${currentView === "dashboard" ? "vv-home-page" : "vv-app-module"}`}
             data-vv-view={currentView}
           >
             {currentView !== "dashboard" && screenIntros[currentView] && (() => {
@@ -652,7 +652,7 @@ function VfdSandboxInner() {
               );
             })()}
             {currentView === "dashboard" && (
-              <SandboxDashboard
+              <VestaraSignatureDashboard
                 balance={balanceData}
                 avatarUrl={avatarUrl}
                 onNavigate={(v) => {
