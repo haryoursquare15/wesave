@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { ArrowDownLeft, ArrowRight, ArrowUpRight, BadgeCheck, Check, ChevronRight, Copy, CreditCard, Eye, EyeOff, History, Landmark, Plus, ReceiptText, ShieldCheck, Sparkles, Users, PiggyBank, Wallet, Target, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
-import { customerFirstName, cleanCustomerName } from "@/lib/customerName";
+import { cleanCustomerName } from "@/lib/customerName";
 import { describeTransaction } from "@/lib/transactionLabels";
 import { SpendLockCard } from "./SpendLockCard";
 
@@ -26,8 +26,8 @@ const journeys: {eyebrow:string;title:string;description:string;icon:LucideIcon;
 export function VestaraSignatureDashboard({ balance, onNavigate, recentTransactions = [], tier, upgradePending = false }: Props) {
  const [showBalance,setShowBalance] = useState(true);
  const [copied,setCopied] = useState(false);
- const firstName = customerFirstName(balance.fullName, "") || "there";
  const displayName = cleanCustomerName(balance.fullName?.trim()) || balance.fullName || "Account holder";
+ const headingName = displayName.replace(/\b[A-Z]{2,}\b/g, part => part[0] + part.slice(1).toLowerCase());
  const validNumber = !!balance.accountNumber && balance.accountNumber !== "—" && balance.accountNumber !== "1001695610";
  const sections = useMemo(() => [
    { label:"Available", amount:Math.max(0,Number(balance.availableBalance||0)), tone:"available" },
@@ -44,7 +44,7 @@ export function VestaraSignatureDashboard({ balance, onNavigate, recentTransacti
  return (
  <div className="signature-dashboard">
    <header className="signature-welcome">
-     <div className="signature-welcome-copy"><div className="signature-greeting">{greeting}, {firstName}</div><h1>Your overview</h1><p>Your money and everyday banking, all in one place.</p></div>
+     <div className="signature-welcome-copy"><div className="signature-greeting">{greeting}</div><h1>{headingName}</h1><p>Your money and everyday banking, all in one place.</p></div>
    </header>
    <div className="signature-hero-grid">
      <section className="signature-money-panel" aria-label="Your account balance">

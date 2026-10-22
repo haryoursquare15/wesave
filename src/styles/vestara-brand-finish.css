@@ -1,0 +1,465 @@
+/* Final /app layer: Vestara's navy, green and gold identity.
+   Kept separate from the historical themes so account flows remain untouched. */
+.vestara-app.at-shell.v4-app.vm-app.signature-shell {
+  --brand-navy:#102f52;
+  --brand-navy-deep:#0e2947;
+  --brand-green:#167c69;
+  --brand-gold:#c7a35d;
+  --sg-bg:#f6f8fa;
+  --sg-surface:#fff;
+  --sg-ink:#19344b;
+  --sg-muted:#687d8b;
+  --sg-stroke:#e0e8ec;
+  --sg-inverse:var(--brand-navy);
+  --sg-accent:var(--brand-gold);
+  --sg-accent-ink:var(--brand-navy-deep);
+  --sg-subtle:#edf4f3;
+  --vv-bg:var(--sg-bg);
+  --vv-paper:#fff;
+  --vv-ink:var(--sg-ink);
+  --vv-ink-2:#315266;
+  --vv-sub:var(--sg-muted);
+  --vv-line:var(--sg-stroke);
+  --vv-shade:#edf4f3;
+  --vv-accent:var(--brand-gold);
+  --vv-quiet:#8498a4;
+  --vv-up:var(--brand-green);
+  --vv-card:#fff;
+  --vm-bg:var(--sg-bg);
+  --vm-panel:#fff;
+  --vm-ink:var(--sg-ink);
+  --vm-plum:var(--brand-navy);
+  --vm-plum-2:#234663;
+  --vm-mauve:#edf4f3;
+  --vm-gold:var(--brand-gold);
+  --vm-saffron:var(--brand-gold);
+  --vm-stroke:var(--sg-stroke);
+  --vm-soft:var(--sg-subtle);
+  --vm-fog:var(--sg-muted);
+  --background:205 29% 98%;
+  --foreground:207 47% 20%;
+  --card:0 0% 100%;
+  --card-foreground:207 47% 20%;
+  --muted:200 26% 95%;
+  --muted-foreground:203 18% 45%;
+  --border:200 23% 89%;
+  --input:200 23% 89%;
+  --primary:167 70% 29%;
+  --primary-foreground:0 0% 100%;
+  --ring:167 70% 29%;
+  background:var(--sg-bg)!important;
+  color:var(--sg-ink)!important;
+}
+.vestara-app.signature-shell :is(button,a,input,textarea,select,[role=button]):focus-visible {
+  outline:2px solid var(--brand-green)!important;
+  outline-offset:3px!important;
+}
+.vestara-app.signature-shell .vm-header {
+  background:#fff!important;
+  border-bottom:1px solid var(--sg-stroke)!important;
+  box-shadow:none!important;
+}
+.vestara-app.signature-shell .vm-workspace {background:var(--sg-bg)!important}
+.vestara-app.signature-shell .vm-header-back,
+.vestara-app.signature-shell .vm-header-actions>button,
+.vestara-app.signature-shell .vm-header-actions [aria-label="Open profile"] {
+  background:#fff!important;
+  color:var(--brand-navy)!important;
+  border:1px solid #dbe5ea!important;
+  border-radius:11px!important;
+}
+.vestara-app.signature-shell .vm-header-actions>button:hover {background:#f1f6f7!important}
+
+/* Home: the authenticated customer's full name is the main title. */
+.vestara-app.signature-shell .signature-welcome {padding-top:3px;gap:10px}
+.vestara-app.signature-shell .signature-welcome-copy {min-width:0;max-width:100%}
+.vestara-app.signature-shell .signature-greeting {
+  color:var(--brand-green)!important;
+  font-size:12px!important;
+  font-weight:650!important;
+  margin:0 0 8px!important;
+}
+.vestara-app.signature-shell .signature-welcome h1 {
+  color:var(--brand-navy)!important;
+  font-size:clamp(28px,3.2vw,42px)!important;
+  line-height:1.17!important;
+  letter-spacing:-.055em!important;
+  font-weight:700!important;
+  text-wrap:balance;
+  overflow-wrap:anywhere;
+}
+.vestara-app.signature-shell .signature-welcome p {color:var(--sg-muted)!important}
+.vestara-app.signature-shell .signature-money-panel {
+  background:var(--brand-navy)!important;
+  border:1px solid #183b5c!important;
+  border-radius:14px!important;
+  box-shadow:0 15px 35px -31px rgba(16,47,82,.72);
+}
+.vestara-app.signature-shell .signature-money-top {color:#c5d6df!important}
+.vestara-app.signature-shell .signature-money-top>span:last-child svg {color:var(--brand-gold)!important}
+.vestara-app.signature-shell .signature-balance-label {color:#d3dfe6!important}
+.vestara-app.signature-shell .signature-balance-label button {
+  background:#ffffff0e!important;
+  border-color:#ffffff36!important;
+  color:#e1e9ed!important;
+}
+.vestara-app.signature-shell .signature-big-money {color:#fff!important}
+.vestara-app.signature-shell .signature-money-center p {color:#beccd7!important}
+.vestara-app.signature-shell .signature-primary-action {
+  background:var(--brand-gold)!important;
+  color:var(--brand-navy-deep)!important;
+  border-radius:8px!important;
+}
+.vestara-app.signature-shell .signature-secondary-action {
+  color:#fff!important;
+  border:1px solid #698094!important;
+  border-radius:8px!important;
+}
+.vestara-app.signature-shell .signature-account-panel {
+  background:#eaf3f2!important;
+  color:var(--brand-navy)!important;
+  border:1px solid #d5e5e2!important;
+  border-radius:14px!important;
+}
+.vestara-app.signature-shell .signature-account-top {color:var(--brand-green)!important}
+.vestara-app.signature-shell .signature-account-holder strong,
+.vestara-app.signature-shell .signature-account-copy button {color:var(--brand-navy)!important}
+.vestara-app.signature-shell .signature-account-holder :is(span,small),
+.vestara-app.signature-shell .signature-account-copy>span,
+.vestara-app.signature-shell .signature-account-foot {color:#537a79!important}
+.vestara-app.signature-shell .signature-account-copy {border-color:#c4d9d7!important}
+.vestara-app.signature-shell .signature-account-foot button {color:var(--brand-green)!important}
+.vestara-app.signature-shell .signature-key {background:var(--brand-navy)}
+.vestara-app.signature-shell .signature-key-savings,
+.vestara-app.signature-shell .signature-bar-savings {background:var(--brand-green)}
+.vestara-app.signature-shell .signature-key-locked,
+.vestara-app.signature-shell .signature-bar-locked {background:#a8bbc6}
+.vestara-app.signature-shell .signature-bar-available {background:var(--brand-navy)}
+.vestara-app.signature-shell .signature-composition-bar {background:#e7eeef}
+.vestara-app.signature-shell .signature-action-symbol,
+.vestara-app.signature-shell .signature-journey-icon,
+.vestara-app.signature-shell .signature-transaction-icon {
+  background:#eaf3f2!important;
+  color:var(--brand-green)!important;
+}
+.vestara-app.signature-shell .signature-transaction-icon.debit {background:#f4eeec!important;color:#9f6657!important}
+.vestara-app.signature-shell .signature-action-top svg,
+.vestara-app.signature-shell .signature-section-title>button,
+.vestara-app.signature-shell .signature-journey-arrow {color:var(--brand-green)!important}
+.vestara-app.signature-shell .signature-action-tile:hover,
+.vestara-app.signature-shell .signature-journey:hover {background:#f5f9f9!important}
+.vestara-app.signature-shell .signature-feature {
+  background:#176f68!important;
+  color:#fff!important;
+  border-radius:13px!important;
+}
+.vestara-app.signature-shell .signature-feature p {color:#d1e6e1!important}
+.vestara-app.signature-shell .signature-feature>button {color:#fff!important;border-color:#78a69f!important}
+.vestara-app.signature-shell .signature-spend-control {background:#edf4f6!important;border-color:#dce8ec!important}
+
+/* A clear hierarchy for sub-pages, rather than oversized editorial headings. */
+.vestara-app.signature-shell .clean-module-heading {padding-bottom:18px!important}
+.vestara-app.signature-shell .clean-module-back,
+.vestara-app.signature-shell .clean-module-category {color:var(--brand-green)!important}
+.vestara-app.signature-shell .clean-module-title h1 {color:var(--brand-navy)!important;font-size:clamp(28px,3vw,39px)!important}
+.vestara-app.signature-shell .clean-module-title p {color:var(--sg-muted)!important}
+.vestara-app.signature-shell .clean-module-icon {
+  background:#edf5f4!important;
+  color:var(--brand-green)!important;
+  border-color:#d3e5e1!important;
+  border-radius:12px!important;
+}
+.vestara-app.signature-shell .vv-app-module :is(.premium-profile-row-icon,.premium-profile-hub-glyph,.vm-setting-glyph) {
+  background:#eaf3f2!important;
+  color:var(--brand-green)!important;
+  border-radius:11px!important;
+}
+.vestara-app.signature-shell .vv-app-module :is(.text-primary) {color:var(--brand-green)!important}
+.vestara-app.signature-shell .vv-app-module :is(button.bg-primary,button[class*="bg-primary"]:not([role=switch])) {
+  background:var(--brand-navy)!important;
+  color:#fff!important;
+}
+.vestara-app.signature-shell .vv-app-module .v4-theme-options button[aria-pressed=true] {background:var(--brand-navy)!important;color:#fff!important}
+.vestara-app.signature-shell .vv-app-module .premium-profile-hub>button:hover,
+.vestara-app.signature-shell .vv-app-module .premium-profile-row:hover {background:#f3f8f8!important}
+.vestara-app.at-shell.v4-app.vm-app.signature-shell .signature-profile .premium-profile-hub>button:nth-child(2) .premium-profile-hub-glyph,
+.vestara-app.at-shell.v4-app.vm-app.signature-shell .signature-profile .premium-profile-hub>button .premium-profile-hub-glyph,
+.vestara-app.at-shell.v4-app.vm-app.signature-shell .at-settings-section .premium-profile-row-icon,
+.vestara-app.at-shell.v4-app.vm-app.signature-shell .at-settings-section[data-section=security] .premium-profile-row-icon {
+  background:#eaf3f2!important;
+  color:var(--brand-green)!important;
+  border-radius:11px!important;
+}
+.vestara-app.at-shell.v4-app.vm-app.signature-shell .signature-profile .premium-profile-setup {
+  border-left:3px solid var(--brand-gold)!important;
+}
+.vestara-app.at-shell.v4-app.vm-app.signature-shell .signature-profile .at-settings-section>h2 {
+  color:var(--brand-navy)!important;
+}
+
+/* Account identity: restore intentional contrast and give the actual name space. */
+.vestara-app.at-shell.v4-app.vm-app.signature-shell .vv-app-module .premium-profile .at-profile-passport.v4-profile-summary {
+  background:var(--brand-navy)!important;
+  background-image:none!important;
+  border:1px solid #224c6a!important;
+  border-top:3px solid var(--brand-gold)!important;
+  box-shadow:0 18px 35px -35px rgba(16,47,82,.85)!important;
+  border-radius:14px!important;
+  min-height:214px!important;
+  padding:23px 28px 20px!important;
+  color:#fff!important;
+}
+.vestara-app.signature-shell .signature-profile .at-profile-passport::after {display:none!important}
+.vestara-app.signature-shell .signature-profile .at-passport-marker {
+  color:#bad0df!important;
+  font-size:10px!important;
+  letter-spacing:.07em!important;
+  text-transform:none;
+}
+.vestara-app.signature-shell .signature-profile .at-passport-marker>span {
+  color:#bed1dc!important;
+}
+.vestara-app.signature-shell .signature-profile .at-passport-marker>span:last-child {color:#ead09b!important}
+.vestara-app.signature-shell .signature-profile .at-passport-content {
+  padding:19px 0 22px!important;
+  align-items:center!important;
+  gap:15px!important;
+}
+.vestara-app.signature-shell .signature-profile .at-passport-copy {flex:1;min-width:0}
+.vestara-app.signature-shell .signature-profile .at-passport-caption {
+  display:block!important;
+  margin-bottom:7px!important;
+  color:#a9c2d0!important;
+  font-size:10px!important;
+  font-weight:600!important;
+  letter-spacing:0!important;
+}
+.vestara-app.at-shell.v4-app.vm-app.signature-shell .signature-profile .at-passport-content .at-passport-copy h2 {
+  color:#fff!important;
+  font-family:Montserrat,Arial,sans-serif!important;
+  font-weight:700!important;
+  font-size:clamp(23px,2.8vw,32px)!important;
+  line-height:1.23!important;
+  letter-spacing:-.042em!important;
+  overflow-wrap:break-word;
+  text-wrap:pretty;
+}
+.vestara-app.at-shell.v4-app.vm-app.signature-shell .signature-profile .at-passport-copy p {
+  color:#d3e2ea!important;
+  font-size:11px!important;
+  line-height:1.5!important;
+  overflow-wrap:anywhere;
+  margin-top:9px!important;
+}
+.vestara-app.signature-shell .signature-profile .at-passport-avatar {
+  width:64px!important;
+  height:64px!important;
+  border:1px solid #668398!important;
+  box-shadow:none!important;
+}
+.vestara-app.signature-shell .signature-profile .at-passport-avatar [data-slot="avatar"] {width:56px!important;height:56px!important}
+.vestara-app.signature-shell .signature-profile .at-passport-avatar [data-slot="avatar-fallback"] {
+  background:#dceae8!important;
+  color:var(--brand-navy)!important;
+  font-family:Montserrat,Arial,sans-serif!important;
+  font-size:22px!important;
+}
+.vestara-app.signature-shell .signature-profile .at-passport-avatar>span:last-child {
+  background:var(--brand-green)!important;
+  border:2px solid var(--brand-navy)!important;
+  width:25px!important;height:25px!important;
+  color:#fff!important;
+}
+.vestara-app.signature-shell .signature-profile .at-passport-footer {
+  color:#b1c7d6!important;
+  border-color:#385b77!important;
+  font-size:10px!important;
+  letter-spacing:0!important;
+  font-weight:600!important;
+}
+
+/* Normal-sized, accessible switches, with no oversized ON/OFF capsules. */
+.vestara-app.at-shell.v4-app.vm-app.signature-shell .vm-switch[role=switch] {
+  width:46px!important;
+  min-width:46px!important;
+  height:26px!important;
+  padding:3px!important;
+  border-radius:999px!important;
+  border:1px solid #c8d5da!important;
+  background:#d9e2e6!important;
+  box-shadow:none!important;
+}
+.vestara-app.at-shell.v4-app.vm-app.signature-shell .vm-switch[role=switch][data-state=checked] {
+  background:var(--brand-green)!important;
+  border-color:var(--brand-green)!important;
+  box-shadow:none!important;
+}
+.vestara-app.signature-shell .vm-switch>.vm-switch-thumb {
+  width:18px!important;height:18px!important;min-width:18px!important;
+  border-radius:50%!important;
+  background:#fff!important;
+  box-shadow:0 1px 3px rgba(16,47,82,.18)!important;
+}
+.vestara-app.signature-shell .vm-switch[data-state=checked]>.vm-switch-thumb {transform:translateX(20px)!important}
+.vestara-app.signature-shell .vm-switch[data-state=unchecked]>.vm-switch-thumb {transform:translateX(0)!important}
+.vestara-app.signature-shell .vm-switch .vm-switch-tick,
+.vestara-app.signature-shell .vm-switch>.vm-switch-label {display:none!important}
+
+/* Active navigation changes only the icon and a fine underline, never its fill. */
+.vestara-app.signature-shell .vm-sidebar {
+  background:var(--brand-navy-deep)!important;
+  border-right:1px solid #264763!important;
+}
+.vestara-app.signature-shell .vm-sidebar-section>button,
+.vestara-app.signature-shell .vm-sidebar-section>button:hover,
+.vestara-app.signature-shell .vm-sidebar-section>button[aria-current=page] {
+  background:transparent!important;
+  color:#d5e1e9!important;
+  box-shadow:none!important;
+  border-radius:0!important;
+}
+.vestara-app.signature-shell .vm-sidebar-section>button[aria-current=page] {
+  border-bottom:2px solid var(--brand-gold)!important;
+}
+.vestara-app.signature-shell .vm-sidebar-section>button:not([aria-current=page]) {border-bottom:2px solid transparent!important}
+.vestara-app.signature-shell .vm-sidebar-section>button[aria-current=page] svg {color:var(--brand-gold)!important}
+.vestara-app.signature-shell .vm-sidebar-section .at-sidebar-active-dot {display:none!important}
+.vestara-app.signature-shell .vm-sidebar-footer svg {color:var(--brand-gold)!important}
+
+@media(max-width:959px) {
+  .vestara-app.at-shell.v4-app.vm-app.signature-shell .clean-bottom-nav {
+    position:fixed!important;
+    inset:auto auto max(12px,env(safe-area-inset-bottom,0px)) 50%!important;
+    transform:translate3d(-50%,0,0)!important;
+    width:min(520px,calc(100% - 28px))!important;
+    max-width:520px!important;
+    margin:0!important;
+    padding:5px 7px!important;
+    background:#fff!important;
+    border:1px solid #dbe5e9!important;
+    border-radius:17px!important;
+    box-shadow:0 14px 35px rgba(16,47,82,.13)!important;
+    z-index:70!important;
+  }
+  .vestara-app.signature-shell .clean-bottom-nav .vm-dock-tabs {min-height:61px!important}
+  .vestara-app.at-shell.v4-app.vm-app.signature-shell .clean-bottom-nav .vm-dock-tab,
+  .vestara-app.at-shell.v4-app.vm-app.signature-shell .clean-bottom-nav .vm-dock-tab:hover,
+  .vestara-app.at-shell.v4-app.vm-app.signature-shell .clean-bottom-nav .vm-dock-tab[aria-current=page] {
+    position:relative!important;
+    min-height:58px!important;
+    padding:6px 3px 9px!important;
+    border:0!important;
+    border-radius:10px!important;
+    background:transparent!important;
+    color:#778994!important;
+    box-shadow:none!important;
+  }
+  .vestara-app.signature-shell .clean-bottom-nav .vm-dock-tab .vm-dock-caption {
+    color:#778994!important;
+    font-size:10px!important;
+    font-weight:650!important;
+  }
+  .vestara-app.signature-shell .clean-bottom-nav .vm-dock-tab .vm-dock-icon {color:#8ea0a9!important;background:transparent!important}
+  .vestara-app.at-shell.v4-app.vm-app.signature-shell .clean-bottom-nav .vm-dock-tab[aria-current=page] .vm-dock-icon {
+    color:var(--brand-green)!important;
+  }
+  .vestara-app.at-shell.v4-app.vm-app.signature-shell .clean-bottom-nav .vm-dock-tab[aria-current=page]::after {
+    content:""!important;
+    display:block!important;
+    position:absolute!important;
+    width:23px!important;
+    height:2px!important;
+    background:var(--brand-gold)!important;
+    border:0!important;
+    border-radius:2px!important;
+    bottom:2px!important;
+    left:50%!important;
+    top:auto!important;
+    transform:translateX(-50%)!important;
+    box-shadow:none!important;
+    pointer-events:none!important;
+  }
+  .vestara-app.at-shell.v4-app.vm-app.signature-shell .clean-bottom-nav .vm-dock-tab:not([aria-current=page])::after {display:none!important}
+}
+
+@media(max-width:730px) {
+  .vestara-app.signature-shell .vm-workspace {padding:21px 15px 121px!important}
+  .vestara-app.signature-shell .vm-app-page {gap:21px!important}
+  .vestara-app.signature-shell .signature-dashboard {gap:23px!important}
+  .vestara-app.signature-shell .signature-welcome h1 {font-size:clamp(27px,7.2vw,34px)!important;line-height:1.18!important}
+  .vestara-app.signature-shell .signature-welcome p {font-size:11px!important;line-height:1.6!important}
+  .vestara-app.signature-shell .signature-money-panel {min-height:289px!important;padding:24px 22px!important}
+  .vestara-app.signature-shell .signature-money-center {margin:26px 0 18px!important}
+  .vestara-app.signature-shell .signature-money-bottom button {min-height:44px!important}
+  .vestara-app.signature-shell .signature-account-panel {min-height:224px!important;padding:22px!important}
+  .vestara-app.signature-shell .clean-module-heading {padding-bottom:17px!important}
+  .vestara-app.signature-shell .clean-module-back {margin-bottom:11px!important}
+  .vestara-app.signature-shell .clean-module-title h1 {font-size:30px!important}
+  .vestara-app.signature-shell .clean-module-icon {width:45px!important;height:45px!important}
+  .vestara-app.at-shell.v4-app.vm-app.signature-shell .vv-app-module .premium-profile .at-profile-passport.v4-profile-summary {
+    min-height:200px!important;
+    padding:19px 19px 17px!important;
+  }
+  .vestara-app.signature-shell .signature-profile .at-passport-content {gap:11px!important;padding:18px 0!important}
+  .vestara-app.at-shell.v4-app.vm-app.signature-shell .signature-profile .at-passport-content .at-passport-copy h2 {
+    font-size:clamp(21px,5.8vw,26px)!important;
+    line-height:1.21!important;
+  }
+  .vestara-app.signature-shell .signature-profile .at-passport-avatar {width:57px!important;height:57px!important}
+  .vestara-app.signature-shell .signature-profile .at-passport-avatar [data-slot="avatar"] {width:49px!important;height:49px!important}
+  .vestara-app.signature-shell .signature-profile .at-passport-footer {gap:8px;flex-wrap:wrap}
+}
+
+/* Preserve an equally legible dark appearance, with the same brand identity. */
+.dark .vestara-app.at-shell.v4-app.vm-app.signature-shell {
+  --sg-bg:#101c29;
+  --sg-surface:#182a39;
+  --sg-ink:#eef5f8;
+  --sg-muted:#adbfca;
+  --sg-stroke:#345063;
+  --sg-inverse:#123656;
+  --sg-subtle:#1d3543;
+  --vv-bg:var(--sg-bg);
+  --vv-paper:var(--sg-surface);
+  --vv-card:var(--sg-surface);
+  --vv-ink:var(--sg-ink);
+  --vv-sub:var(--sg-muted);
+  --vv-line:var(--sg-stroke);
+  --vm-bg:var(--sg-bg);
+  --vm-panel:var(--sg-surface);
+  --vm-ink:var(--sg-ink);
+  --vm-stroke:var(--sg-stroke);
+  --background:208 44% 11%;
+  --foreground:203 33% 96%;
+  --card:207 40% 16%;
+  --card-foreground:203 33% 96%;
+  --border:205 31% 30%;
+  --input:205 31% 30%;
+}
+.dark .vestara-app.signature-shell .vm-header {background:#142535!important}
+.dark .vestara-app.signature-shell .signature-welcome h1,
+.dark .vestara-app.signature-shell .clean-module-title h1 {color:#eef5f8!important}
+.dark .vestara-app.signature-shell .signature-account-panel {background:#173d4b!important;border-color:#345d6b!important}
+.dark .vestara-app.signature-shell .signature-account-holder strong,
+.dark .vestara-app.signature-shell .signature-account-copy button {color:#f4f8fb!important}
+.dark .vestara-app.signature-shell .signature-account-top,
+.dark .vestara-app.signature-shell .signature-account-foot button {color:#80d7bf!important}
+.dark .vestara-app.signature-shell .signature-account-holder :is(span,small),
+.dark .vestara-app.signature-shell .signature-account-copy>span,
+.dark .vestara-app.signature-shell .signature-account-foot {color:#b6d6d9!important}
+.dark .vestara-app.signature-shell .signature-action-symbol,
+.dark .vestara-app.signature-shell .signature-journey-icon {background:#25483f!important;color:#a1e0c8!important}
+.dark .vestara-app.signature-shell .signature-feature {background:#14584f!important}
+.dark .vestara-app.signature-shell .signature-spend-control {background:#1a3040!important;border-color:#345063!important}
+.dark .vestara-app.at-shell.v4-app.vm-app.signature-shell .signature-profile .at-settings-section>h2 {color:#eaf4f7!important}
+.dark .vestara-app.at-shell.v4-app.vm-app.signature-shell .at-settings-section .premium-profile-row-icon,
+.dark .vestara-app.at-shell.v4-app.vm-app.signature-shell .at-settings-section[data-section=security] .premium-profile-row-icon {
+  background:#24443f!important;
+  color:#9be0ce!important;
+}
+@media(max-width:959px) {
+  .dark .vestara-app.at-shell.v4-app.vm-app.signature-shell .clean-bottom-nav {background:#172c3e!important;border-color:#35536a!important}
+  .dark .vestara-app.signature-shell .clean-bottom-nav .vm-dock-tab .vm-dock-caption {color:#aebfc9!important}
+  .dark .vestara-app.signature-shell .clean-bottom-nav .vm-dock-tab .vm-dock-icon {color:#8fa5b3!important}
+  .dark .vestara-app.at-shell.v4-app.vm-app.signature-shell .clean-bottom-nav .vm-dock-tab[aria-current=page] .vm-dock-icon {color:#8bd6c0!important}
+}

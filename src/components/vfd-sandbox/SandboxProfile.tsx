@@ -363,6 +363,7 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
 
   const soon = (title: string) => { setSoonTitle(title); setSheet("soon"); };
   const name = cleanCustomerName(client?.full_name) || email?.split("@")[0] || "Vestara user";
+  const displayName = name.replace(/\b[A-Z]{2,}\b/g, part => part[0] + part.slice(1).toLowerCase());
   useEffect(() => { if (client?.full_name || avatarUrl) syncWelcome(cleanCustomerName(client?.full_name), avatarUrl); }, [client?.full_name, avatarUrl]);
   const tier = client?.tier ? `Tier ${String(client.tier).replace(/\D/g, "") || client.tier}` : "Tier 1";
 
@@ -384,13 +385,12 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
         <p>Personal information, security and preferences.</p>
       </div>
       <section className="at-profile-passport v4-profile-summary" aria-label="Your account identity">
-        <div className="at-passport-marker"><span>PERSONAL ACCOUNT</span><span>VESTARA</span></div>
+        <div className="at-passport-marker"><span>Your account</span><span>{tier}</span></div>
         <div className="at-passport-content">
           <div className="at-passport-copy">
             <span className="at-passport-caption">Account holder</span>
-            <h2>{name}</h2>
+            <h2>{displayName}</h2>
             <p>{email}</p>
-            <div className="at-passport-tier"><BadgeCheck size={15}/>{tier}</div>
           </div>
           <button type="button" className="at-passport-avatar" onClick={onChangePhoto} aria-label="Change profile photo">
             <Avatar className="h-16 w-16">
@@ -400,7 +400,7 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
             <span><Camera size={13}/></span>
           </button>
         </div>
-        <div className="at-passport-footer"><span>Manage your details securely</span><span>Account settings</span></div>
+        <div className="at-passport-footer"><span>Personal details</span><span>Secure banking</span></div>
       </section>
 
       <nav className="premium-profile-hub" aria-label="Account quick access">

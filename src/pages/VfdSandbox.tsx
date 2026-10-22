@@ -66,7 +66,7 @@ const screenIntros: Partial<Record<View, ScreenIntro>> = {
   kyc: { eyebrow: "Account", title: "Account verification", description: "Keep your account details complete and protected.", icon: ShieldCheck },
   mandates: { eyebrow: "Payments", title: "Recurring payments", description: "Stay in control of the payments that happen automatically.", icon: Layers3 },
   insights: { eyebrow: "Insights", title: "Know your numbers", description: "Perspective on where your money goes and how it grows.", icon: ChartNoAxesCombined },
-  profile: { eyebrow: "Account", title: "Made personal", description: "Your details, controls and preferences in one place.", icon: User },
+  profile: { eyebrow: "Your account", title: "Profile", description: "Manage your personal details, preferences and security.", icon: User },
 };
 
 function ProductWrapper({ children }: { children: React.ReactNode }) {
@@ -602,7 +602,7 @@ function VfdSandboxInner() {
               return (
                 <header className="clean-module-heading" aria-label={screen.title}>
                   <button type="button" className="clean-module-back" onClick={() => setCurrentView("dashboard")}>
-                    <ArrowLeft size={15} strokeWidth={1.7}/> Back to overview
+                    <ArrowLeft size={15} strokeWidth={1.7}/> Back to home
                   </button>
                   <div className="clean-module-title">
                     <div>
