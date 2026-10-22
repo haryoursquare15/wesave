@@ -4,7 +4,7 @@ import { press, spring } from "@/lib/motion";
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Wallet, Lock, Users, Target, Heart, Receipt, Send, LayoutGrid,
-  CreditCard, Eye, EyeOff, TrendingUp, Plus, ArrowDownLeft, ArrowUpRight, Banknote,
+  CreditCard, Eye, EyeOff, TrendingUp, Plus, ArrowDownLeft, ArrowUpRight, ArrowRight, Banknote,
   Shield, ChevronRight, ChevronLeft, PiggyBank,
   Clock, Copy, Check, Building2, Vault as VaultIcon, Zap, Gift, ShieldCheck,
 } from "lucide-react";
@@ -19,7 +19,6 @@ const serviceImagery = {
   save: "https://images.pexels.com/photos/30677594/pexels-photo-30677594.jpeg?auto=compress&cs=tinysrgb&w=950",
   ajo: "https://images.pexels.com/photos/17272256/pexels-photo-17272256.jpeg?auto=compress&cs=tinysrgb&w=900",
 };
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { describeTransaction } from "@/lib/transactionLabels";
 import { cleanCustomerName, customerFirstName } from "@/lib/customerName";
 import { supabase } from "@/integrations/supabase/client";
@@ -53,7 +52,6 @@ interface SandboxDashboardProps {
   recentTransactions?: Transaction[];
   tier?: string | null;
   upgradePending?: boolean;
-  avatarUrl?: string | null;
 }
 
 const TIER_INFO: Record<string, { short: string; daily: string }> = {
@@ -209,7 +207,7 @@ function getTxMeta(type: string) {
 }
 
 /* ─── Main Dashboard Component ─── */
-export function SandboxDashboard({ balance, onNavigate, recentTransactions = [], tier, upgradePending = false, avatarUrl }: SandboxDashboardProps) {
+export function SandboxDashboard({ balance, onNavigate, recentTransactions = [], tier, upgradePending = false }: SandboxDashboardProps) {
   const [showBalance, setShowBalance] = useState(true);
 
   const [copied, setCopied] = useState(false);
@@ -326,22 +324,14 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
     <div className="vm-dashboard">
       <header className="vm-welcome">
         <div>
-          <div className="vm-microline"><span className="vm-dot" /> THE VESTARA ACCOUNT <span className="vm-slash">/</span> OVERVIEW</div>
           <h1>{greeting}, <span>{firstName}.</span></h1>
           <p>Everything that matters, in one considered place.</p>
         </div>
-        <button className="vm-identity-link" type="button" onClick={() => onNavigate("profile")} aria-label="Open your profile">
-          <Avatar className="vm-identity-avatar">
-            <AvatarImage src={avatarUrl || undefined} alt="Your profile" />
-            <AvatarFallback>{firstName.charAt(0).toUpperCase()}</AvatarFallback>
-          </Avatar>
-          <ChevronRight size={19} />
-        </button>
       </header>
 
       <div className="vm-overview-grid">
         <section className="vm-balance-stage" aria-label="Your money overview">
-          <div className="vm-stage-top"><span>01 / YOUR MONEY</span><span className="vm-stage-chip"><span /> ACCOUNT OVERVIEW</span></div>
+          <div className="vm-stage-top"><span>YOUR MONEY</span><span className="vm-stage-chip"><span /> ACCOUNT OVERVIEW</span></div>
           <div className="vm-balance-block">
             <div className="vm-balance-label">
               <span>Total balance</span>
@@ -395,7 +385,7 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
       <section className="vv-allocation" aria-label="Balance allocation">
         <div className="vv-allocation-heading">
           <div>
-            <span className="vv-overline">A CLOSER LOOK / 01</span>
+            <span className="vv-overline">BALANCE BREAKDOWN</span>
             <h2>Where it all sits<span>.</span></h2>
             <p>A simple view of your available, saved and locked balances.</p>
           </div>
@@ -407,10 +397,10 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
           )) : <span className="vv-allocation-empty" />}
         </div>
         <div className="vv-allocation-legend">
-          {allocations.map((a, index) => (
+          {allocations.map((a) => (
             <div key={a.tone}>
               <span className={`vv-allocation-dot vv-allocation-${a.tone}`} />
-              <div><small>0{index + 1} / {a.label}</small><strong>{showBalance ? money(a.amount) : "••••••"}</strong></div>
+              <div><small>{a.label}</small><strong>{showBalance ? money(a.amount) : "••••••"}</strong></div>
               <span className="vv-allocation-percent">{allocationTotal > 0 && showBalance ? `${Math.round(a.amount / allocationTotal * 100)}%` : "—"}</span>
             </div>
           ))}
@@ -418,7 +408,7 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
       </section>
 
       <section className="vm-section vm-actions-section" aria-labelledby="vm-actions-title">
-        <div className="vm-section-top"><div><span className="vm-kicker">EVERYDAY BANKING</span><h2 id="vm-actions-title">Everyday, simplified.</h2></div><span className="vm-section-index">02 / 05</span></div>
+        <div className="vm-section-top"><div><span className="vm-kicker">EVERYDAY BANKING</span><h2 id="vm-actions-title">Everyday, simplified.</h2></div></div>
         <div className="vm-action-grid">
           {[
             { label: "Add money", desc: "Fund your account", icon: ArrowDownLeft, go: "fund" },
@@ -427,9 +417,8 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
             { label: "Pay bills", desc: "Everyday essentials", icon: Receipt, go: "bills" },
             { label: "Savings", desc: "Build tomorrow", icon: PiggyBank, go: "lock" },
             { label: "Statements", desc: "See your activity", icon: Clock, go: "history" },
-          ].map((action, index) => (
+          ].map((action) => (
             <button className="vm-action-item" key={action.label} type="button" onClick={() => { void haptic("light"); onNavigate(action.go); }}>
-              <span className="vm-action-number">0{index + 1}</span>
               <span className="vm-action-icon"><action.icon size={22} strokeWidth={1.65} /></span>
               <span className="vm-action-copy"><strong>{action.label}</strong><small>{action.desc}</small></span>
               <ArrowUpRight className="vm-action-arrow" size={17} />
@@ -472,9 +461,9 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
       </div>
 
       <section className="vm-section vm-services" id="home-services">
-        <div className="vm-section-top"><div><span className="vm-kicker">MORE POSSIBILITIES</span><h2>Banking that goes further.</h2></div><span className="vm-section-index">04 / 05</span></div>
+        <div className="vm-section-top"><div><span className="vm-kicker">MORE POSSIBILITIES</span><h2>Banking that goes further.</h2></div></div>
         <div className="vm-service-grid">
-          {serviceCategories.map((category, index) => {
+          {serviceCategories.map((category) => {
             const Icon = category.icon;
             const expanded = openCategory === category.key;
             return (
@@ -483,7 +472,6 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
                   if (category.navKey) { onNavigate(category.navKey); return; }
                   setOpenCategory(expanded ? null : category.key);
                 }}>
-                  <span className="vm-service-index">0{index + 1}</span>
                   <Icon size={31} strokeWidth={1.35} />
                   <strong>{category.label}</strong>
                   <small>{category.desc}</small>
@@ -513,7 +501,7 @@ export function SandboxDashboard({ balance, onNavigate, recentTransactions = [],
             const holding = holdings[product.key];
             return (
               <button className={"vm-product-card vm-product-" + index} type="button" key={product.key} onClick={() => onNavigate(product.routeKey)}>
-                <span className="vm-product-meta"><span>0{index + 1} / COLLECTION</span><Icon size={20} strokeWidth={1.6} /></span>
+                <span className="vm-product-meta"><span>SAVINGS PLAN</span><Icon size={20} strokeWidth={1.6} /></span>
                 <strong>{product.title}</strong>
                 <small>{product.subtitle}</small>
                 <span className="vm-product-bottom"><span>{holding ? showBalance ? "₦" + holding.total.toLocaleString("en-NG", { maximumFractionDigits: 2 }) + " invested" : "•••• invested" : "Explore plan"}</span><ArrowUpRight size={19} /></span>

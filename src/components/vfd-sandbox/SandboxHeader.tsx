@@ -31,7 +31,9 @@ export function SandboxHeader({ showBack = true, onBack, right }: SandboxHeaderP
             <ArrowLeft className="h-5 w-5" />
           </Button>
         )}
-        <div className="at-header-brand vm-header-brand flex-1 flex items-center"><img src={vestaraLogo} alt="Vestara" className="vestara-brand-logo h-8 w-auto max-w-[180px] object-contain" /><span className="vm-header-edition">PERSONAL BANKING <i /> EST. 2026</span></div>
+        <div className="at-header-brand vm-header-brand flex-1 flex items-center">
+          <img src={vestaraLogo} alt="Vestara" className="vestara-brand-logo h-8 w-auto max-w-[180px] object-contain" />
+        </div>
         <div className="vm-header-actions"><SandboxNotificationBell />
         {right}</div>
       </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from "react";
 import { syncWelcome } from "@/lib/welcomeCache";
 import { cleanCustomerName as __clean } from "@/lib/customerName";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -10,7 +10,6 @@ import { useToast } from "@/hooks/use-toast";
 import { LogOut, MessageCircle, Home, PiggyBank, CreditCard, ChartNoAxesCombined, User, ArrowUpRight, Wallet, Landmark, History, ShieldCheck, Users, Target, ReceiptText, ArrowLeftRight, Layers3, type LucideIcon } from "lucide-react";
 import { FluidLoader } from "@/components/FluidLoader";
 import { ProfilePictureUpload } from "@/components/settings/ProfilePictureUpload";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { SandboxHeader } from "@/components/vfd-sandbox/SandboxHeader";
 import vestaraLogo from "@/assets/vestara-logo-transparent.png";
 import { VestaraSignatureDashboard } from "@/components/vfd-sandbox/VestaraSignatureDashboard";
@@ -70,15 +69,9 @@ const screenIntros: Partial<Record<View, ScreenIntro>> = {
   profile: { eyebrow: "Account", title: "Made personal", description: "Your details, controls and preferences in one place.", icon: User },
 };
 
-function ProductWrapper({ children, onBack }: { children: React.ReactNode; onBack: () => void }) {
+function ProductWrapper({ children }: { children: React.ReactNode }) {
   return (
     <div className="premium-service-page space-y-4">
-      <button
-        onClick={onBack}
-        className="premium-service-back text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
-      >
-        <ArrowLeft className="h-3 w-3" /> Dashboard
-      </button>
       {children}
     </div>
   );
@@ -102,6 +95,12 @@ function VfdSandboxInner() {
   const [kycDone, setKycDone] = useState(false);
   const [clientChecked, setClientChecked] = useState(false);
   const [currentView, setCurrentView] = useState<View>("dashboard");
+  const workspaceRef = useRef<HTMLDivElement>(null);
+  // The workspace owns scrolling; keep each new destination at its beginning.
+  // This also prevents an apparent navigation jump when leaving a long page.
+  useLayoutEffect(() => {
+    if (workspaceRef.current) workspaceRef.current.scrollTop = 0;
+  }, [currentView]);
   const [initialSavingsProduct, setInitialSavingsProduct] = useState<string | null>(null);
   const [banks, setBanks] = useState<Array<{ code: string; name: string }>>([]);
   const [photoOpen, setPhotoOpen] = useState(false);
@@ -543,7 +542,7 @@ function VfdSandboxInner() {
   });
 
   return (
-    <div data-view={currentView} className="vestara-app at-shell v4-app vm-app signature-shell h-[100dvh] flex flex-col overflow-hidden">
+    <div data-view={currentView} className="vestara-app at-shell v4-app vm-app signature-shell h-[100dvh] min-h-0 flex flex-col overflow-hidden">
       {kycDone && <aside className="at-sidebar vm-sidebar signature-sidebar" aria-label="Main navigation">
         <div className="at-sidebar-brand vm-sidebar-brand">
           <div><img src={vestaraLogo} alt="Vestara" /></div>
@@ -581,7 +580,7 @@ function VfdSandboxInner() {
       <ProfilePictureUpload open={photoOpen} onOpenChange={setPhotoOpen} />
       {kycDone && <SandboxGroupInviteModal onAccepted={() => { /* downstream UIs poll on their own */ }} />}
       {kycDone && <SandboxSplitInviteModal onOpenSplit={() => { setCurrentView("split"); window.dispatchEvent(new Event("vestara:open-split")); }} />}
-      <div className="vestara-app-scroll at-workspace vm-workspace signature-workspace flex-1 overflow-y-auto overscroll-contain w-full mx-auto">
+      <main ref={workspaceRef} id="vestara-workspace" className="vestara-app-scroll at-workspace vm-workspace signature-workspace min-h-0 flex-1 overflow-y-auto overscroll-contain w-full mx-auto">
         {!kycDone ? (
           <SandboxKYC
             vfd={vfd}
@@ -619,7 +618,6 @@ function VfdSandboxInner() {
             {currentView === "dashboard" && (
               <VestaraSignatureDashboard
                 balance={balanceData}
-                avatarUrl={avatarUrl}
                 onNavigate={(v) => {
                   const [view, productCode] = String(v).split(":");
                   setInitialSavingsProduct(productCode || null);
@@ -686,14 +684,14 @@ function VfdSandboxInner() {
                 onBack={goBack}
               />
             )}
-            {currentView === "ajo" && <ProductWrapper onBack={goBack}><SandboxAjoTab /></ProductWrapper>}
-            {currentView === "target" && <ProductWrapper onBack={goBack}><SandboxTargetTab /></ProductWrapper>}
-            {currentView === "goal" && <ProductWrapper onBack={goBack}><SandboxGoalTab /></ProductWrapper>}
-            {currentView === "split" && <ProductWrapper onBack={goBack}><SandboxSplitTab /></ProductWrapper>}
-            {currentView === "association" && <ProductWrapper onBack={goBack}><SandboxAssociationTab /></ProductWrapper>}
-            {currentView === "bills" && <ProductWrapper onBack={goBack}><SandboxBillsTab /></ProductWrapper>}
-            {currentView === "card" && <ProductWrapper onBack={goBack}><SandboxCardTab /></ProductWrapper>}
-            {currentView === "mandates" && <ProductWrapper onBack={goBack}><SandboxMandatesTab /></ProductWrapper>}
+            {currentView === "ajo" && <ProductWrapper><SandboxAjoTab /></ProductWrapper>}
+            {currentView === "target" && <ProductWrapper><SandboxTargetTab /></ProductWrapper>}
+            {currentView === "goal" && <ProductWrapper><SandboxGoalTab /></ProductWrapper>}
+            {currentView === "split" && <ProductWrapper><SandboxSplitTab /></ProductWrapper>}
+            {currentView === "association" && <ProductWrapper><SandboxAssociationTab /></ProductWrapper>}
+            {currentView === "bills" && <ProductWrapper><SandboxBillsTab /></ProductWrapper>}
+            {currentView === "card" && <ProductWrapper><SandboxCardTab /></ProductWrapper>}
+            {currentView === "mandates" && <ProductWrapper><SandboxMandatesTab /></ProductWrapper>}
             <ComplaintsCenter />
             {currentView === "profile" && (
               <SandboxProfile
@@ -722,7 +720,7 @@ function VfdSandboxInner() {
             )}
           </div>
         )}
-      </div>
+      </main>
       {kycDone && (
         <nav aria-label="Main" className="vestara-bottom-nav at-bottom-nav vm-dock clean-bottom-nav shrink-0 z-30">
           <div className="vestara-bottom-tabs vm-dock-tabs grid grid-cols-5">
