@@ -722,6 +722,8 @@ function VfdSandboxInner() {
         )}
       </main>
       {kycDone && (
+        <>
+        <div className="clean-bottom-nav-scrim" aria-hidden="true" />
         <nav aria-label="Main" className="vestara-bottom-nav at-bottom-nav vm-dock clean-bottom-nav shrink-0 z-30">
           <div className="vestara-bottom-tabs vm-dock-tabs grid grid-cols-5">
             {([
@@ -743,6 +745,7 @@ function VfdSandboxInner() {
             ))}
           </div>
         </nav>
+        </>
       )}
     </div>
   );
