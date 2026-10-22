@@ -376,7 +376,7 @@ export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductC
   }, [visibleSavings]);
 
   return (
-    <div className="premium-savings at-savings space-y-5">
+    <div className="premium-savings at-savings signature-savings space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="premium-savings-heading at-savings-heading">
@@ -391,7 +391,7 @@ export function SandboxSavings({ userBalance, onRefresh, onBack, initialProductC
 
       {/* Navy hero */}
       {userBalance ? (
-        <div className="rounded-[20px] bg-gradient-ink text-ink-foreground p-5 space-y-3">
+        <div className="signature-savings-balance rounded-[20px] bg-gradient-ink text-ink-foreground p-5 space-y-3">
           <div>
             <p className="text-xs opacity-70">Total saved</p>
             <p className="text-3xl font-bold tabular-nums leading-tight">
