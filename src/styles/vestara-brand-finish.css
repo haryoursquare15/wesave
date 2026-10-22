@@ -196,6 +196,12 @@
 .vestara-app.at-shell.v4-app.vm-app.signature-shell .signature-profile .at-settings-section>h2 {
   color:var(--brand-navy)!important;
 }
+.vestara-app.at-shell.v4-app.vm-app.signature-shell .signature-profile .vm-settings-heading h2 {
+  color:var(--brand-navy)!important;
+  font-size:14px!important;
+  font-weight:750!important;
+  letter-spacing:-.025em!important;
+}
 
 /* Account identity: restore intentional contrast and give the actual name space. */
 .vestara-app.at-shell.v4-app.vm-app.signature-shell .vv-app-module .premium-profile .at-profile-passport.v4-profile-summary {
@@ -452,6 +458,7 @@
 .dark .vestara-app.signature-shell .signature-feature {background:#14584f!important}
 .dark .vestara-app.signature-shell .signature-spend-control {background:#1a3040!important;border-color:#345063!important}
 .dark .vestara-app.at-shell.v4-app.vm-app.signature-shell .signature-profile .at-settings-section>h2 {color:#eaf4f7!important}
+.dark .vestara-app.at-shell.v4-app.vm-app.signature-shell .signature-profile .vm-settings-heading h2 {color:#eaf4f7!important}
 .dark .vestara-app.at-shell.v4-app.vm-app.signature-shell .at-settings-section .premium-profile-row-icon,
 .dark .vestara-app.at-shell.v4-app.vm-app.signature-shell .at-settings-section[data-section=security] .premium-profile-row-icon {
   background:#24443f!important;

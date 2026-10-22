@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
-import { ArrowDownLeft, ArrowRight, ArrowUpRight, BadgeCheck, Check, ChevronRight, Copy, CreditCard, Eye, EyeOff, History, Landmark, Plus, ReceiptText, ShieldCheck, Sparkles, Users, PiggyBank, Wallet, Target, type LucideIcon } from "lucide-react";
+import { ArrowDownLeft, ArrowRight, ArrowUpRight, BadgeCheck, Check, ChevronRight, Copy, CreditCard, Eye, EyeOff, History, Landmark, Plus, ReceiptText, ShieldCheck, Sprout, Users, PiggyBank, Wallet, Target, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
-import { cleanCustomerName } from "@/lib/customerName";
+import { cleanCustomerName, customerFirstName } from "@/lib/customerName";
 import { describeTransaction } from "@/lib/transactionLabels";
 import { SpendLockCard } from "./SpendLockCard";
 
@@ -27,7 +27,7 @@ export function VestaraSignatureDashboard({ balance, onNavigate, recentTransacti
  const [showBalance,setShowBalance] = useState(true);
  const [copied,setCopied] = useState(false);
  const displayName = cleanCustomerName(balance.fullName?.trim()) || balance.fullName || "Account holder";
- const headingName = displayName.replace(/\b[A-Z]{2,}\b/g, part => part[0] + part.slice(1).toLowerCase());
+ const headingName = customerFirstName(balance.fullName, "") || "Welcome back";
  const validNumber = !!balance.accountNumber && balance.accountNumber !== "—" && balance.accountNumber !== "1001695610";
  const sections = useMemo(() => [
    { label:"Available", amount:Math.max(0,Number(balance.availableBalance||0)), tone:"available" },
@@ -63,7 +63,7 @@ export function VestaraSignatureDashboard({ balance, onNavigate, recentTransacti
    <section className="signature-section"><div className="signature-section-title"><div><span>Payments</span><h2>Quick actions</h2></div><p>Your most-used services, within easy reach.</p></div><div className="signature-actions">{actions.map(action=><button className="signature-action-tile" key={action.go} type="button" onClick={()=>onNavigate(action.go)}><span className="signature-action-symbol"><action.icon size={23} strokeWidth={1.6}/></span><span className="signature-action-copy"><strong>{action.label}</strong><small>{action.note}</small></span><ArrowUpRight className="signature-action-chevron" size={18}/></button>)}</div></section>
    <section className="signature-feature-grid">
      <div className="signature-activity"><div className="signature-section-title"><div><span>Transactions</span><h2>Recent activity</h2></div><button type="button" onClick={()=>onNavigate("history")}>See all <ArrowUpRight size={16}/></button></div>{recentTransactions.length ? <div className="signature-transactions">{recentTransactions.slice(0,5).map(tx=>{const item=describeTransaction(tx);return <button type="button" className="signature-transaction" key={tx.id} onClick={()=>onNavigate("history")}><span className={"signature-transaction-icon "+(item.isCredit?"credit":"debit")}>{item.isCredit?<ArrowDownLeft size={19}/>:<ArrowUpRight size={19}/>}</span><span className="signature-transaction-copy"><strong>{item.title}</strong><small>{new Date(tx.created_at).toLocaleDateString("en-NG",{day:"numeric",month:"short",year:"numeric"})}</small></span><strong className="signature-transaction-money">{showBalance?(item.isCredit?"+":"−")+shortMoney(tx.amount):"••••••"}</strong><ChevronRight size={15}/></button>})}</div> : <div className="signature-activity-empty"><History size={28} strokeWidth={1.3}/><strong>Your story starts here.</strong><p>Transactions will appear here once your account is in use.</p><button type="button" onClick={()=>onNavigate("fund")}>Add money <ArrowUpRight size={16}/></button></div>}</div>
-     <aside className="signature-feature"><div className="signature-feature-top"><span>Savings</span><Sparkles size={21} strokeWidth={1.4}/></div><div><h2>Save at your own pace.</h2><p>Choose a plan, set a goal and keep track of your progress.</p></div><button type="button" onClick={()=>onNavigate("lock")}>Start saving <ArrowUpRight size={19}/></button></aside>
+     <aside className="signature-feature"><div className="signature-feature-top"><span>Savings</span><Sprout size={22} strokeWidth={1.6}/></div><div><h2>Save at your own pace.</h2><p>Choose a plan, set a goal and keep track of your progress.</p></div><button type="button" onClick={()=>onNavigate("lock")}>Start saving <ArrowUpRight size={19}/></button></aside>
    </section>
    <section className="signature-section signature-explore"><div className="signature-section-title"><div><span>Explore</span><h2>More with Vestara</h2></div><button type="button" onClick={()=>onNavigate("insights")}>Money insights <ArrowUpRight size={16}/></button></div><div className="signature-journeys">{journeys.map(journey=><button type="button" className="signature-journey" key={journey.go} onClick={()=>onNavigate(journey.go)}><span className="signature-journey-icon"><journey.icon size={26} strokeWidth={1.5}/></span><span className="signature-journey-copy"><small>{journey.eyebrow}</small><strong>{journey.title}</strong><span>{journey.description}</span></span><span className="signature-journey-arrow"><ArrowUpRight size={21}/></span></button>)}</div></section>
    <section className="signature-spend-control"><div><span>Spending controls</span><h2>Stay in control</h2><p>Manage your spending limits and protections.</p></div><SpendLockCard /></section>
