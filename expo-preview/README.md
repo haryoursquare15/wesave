@@ -2,6 +2,8 @@
 
 This folder is a small **Expo Go WebView shell** for the existing Vestara banking website. It loads a deployed `/app`, preserving its current UI, dark theme, and login. It does **not** convert the Vite project into React Native or replace the existing Capacitor configuration.
 
+The project uses **Expo SDK 54**, which is compatible with the Expo Go version available from Apple's App Store. Newer SDKs need a separate iOS installation route.
+
 ## Open on your phone
 
 1. Install **Expo Go** on your phone.
