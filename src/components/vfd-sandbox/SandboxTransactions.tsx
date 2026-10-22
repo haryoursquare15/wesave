@@ -72,8 +72,8 @@ export function SandboxTransactions({ transactions, loading, onRefresh, onBack }
   };
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center gap-3">
+    <div className="signature-history space-y-5">
+      <div className="signature-history-top flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={onBack}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
@@ -101,7 +101,7 @@ export function SandboxTransactions({ transactions, loading, onRefresh, onBack }
           <p className="text-xs text-muted-foreground mt-1">Fund your account to get started</p>
         </motion.div>
       ) : (
-        <div className="space-y-2">
+        <div className="signature-history-records space-y-2">
           {transactions.map((tx, i) => {
             const { icon: Icon, bg, color } = getTxIcon(tx.transaction_type);
             const info = describeTransaction(tx);
@@ -114,7 +114,7 @@ export function SandboxTransactions({ transactions, loading, onRefresh, onBack }
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.03 }}
-                className="bg-card rounded-2xl border border-border shadow-sm p-3"
+                className="signature-history-record bg-card rounded-2xl border border-border shadow-sm p-3"
               >
                 <button
                   type="button"
