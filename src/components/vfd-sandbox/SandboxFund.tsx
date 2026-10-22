@@ -68,7 +68,7 @@ export function SandboxFund({
   };
 
   return (
-    <div className="space-y-5" aria-busy={loading}>
+    <div className="signature-fund space-y-5" aria-busy={loading}>
       {/* Header */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={goBack}>
@@ -100,7 +100,7 @@ export function SandboxFund({
                 <button
                   key={ch.id}
                   onClick={() => setChannel(ch.id)}
-                  className="w-full flex items-center gap-4 p-4 rounded-2xl border border-border/50 bg-card hover:border-primary/40 hover:bg-accent/30 transition-all text-left group"
+                  className="signature-fund-channel w-full flex items-center gap-4 p-4 rounded-2xl border border-border/50 bg-card hover:border-primary/40 hover:bg-accent/30 transition-all text-left group"
                 >
                   <div className="h-11 w-11 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/20 transition-colors">
                     <Icon className="h-5 w-5 text-primary" />
