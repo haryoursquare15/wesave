@@ -377,7 +377,7 @@ export function SandboxProfile({ userId, email, client, avatarUrl, banks = [], o
     : "Not set";
 
   return (
-    <div className="premium-profile at-profile space-y-6">
+    <div className="premium-profile at-profile signature-profile space-y-6">
       <div className="premium-profile-heading">
         <span><span className="premium-profile-heading-dot" /> ACCOUNT SETTINGS</span>
         <h1>Your profile</h1>
