@@ -133,7 +133,7 @@ export function SandboxSplitTab() {
     const remainingPayments = Math.max(Number(s.split_count) - paidCount, 0);
 
     return (
-      <div className="space-y-4">
+      <div className="signature-split-detail space-y-4">
         <button onClick={() => { setDetailId(null); setDetailData(null); }} className="text-sm text-primary flex items-center gap-1">
           <ArrowLeft className="h-3 w-3" /> Back to Splits
         </button>
@@ -341,7 +341,7 @@ export function SandboxSplitTab() {
   }
 
   return (
-    <div className="premium-split space-y-4">
+    <div className="premium-split signature-split space-y-4">
       <div className="flex items-center justify-between">
         <div className="premium-split-heading">
           <span>SHARED EXPENSES</span>
